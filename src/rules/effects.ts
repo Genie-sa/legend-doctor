@@ -30,6 +30,7 @@ import type {
   StateCandidate,
   StateUsage,
 } from "../analyze-source.js";
+import { isDependencyDrivenBrowserStorageEffect } from "./browser-storage-effect.js";
 
 export function classifyEffect(
   effect: EffectCandidate,
@@ -157,6 +158,19 @@ export function classifyEffect(
   if (
     !hasCleanup &&
     effect.owner &&
+    isDependencyDrivenBrowserStorageEffect(effect)
+  ) {
+    return {
+      action: "keep-effect",
+      confidence: "probable",
+      derivedState: null,
+      message: "Keep this React effect; it persists React dependencies to browser storage after commit.",
+    };
+  }
+
+  if (
+    !hasCleanup &&
+    effect.owner &&
     isDependencyDrivenExternalCommandEffect(
       effect,
       stateByValue,
@@ -240,7 +254,16 @@ function isDependencyDrivenExternalCommandEffect(
   useObservableBindings: ReadonlySet<string>
 ): boolean {
   const { callback, dependencies, owner } = effect;
-  if (!callback || !ts.isBlock(callback.body) || !dependencies?.elements.length || !owner) return false;
+  if (
+    !callback ||
+    !ts.isBlock(callback.body) ||
+    !dependencies?.elements.length ||
+    !owner ||
+    callback.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    callback.asteriskToken
+  ) {
+    return false;
+  }
 
   let readsLocalStateOrObservableSnapshot = false;
   for (const dependency of dependencies.elements) {

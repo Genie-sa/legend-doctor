@@ -3524,6 +3524,78 @@ test("keeps one dependency-driven external resource command in React", () => {
   assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect"]);
 });
 
+test("keeps dependency-driven browser-storage persistence in React", () => {
+  const effects = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Filters({ ready, workspaceId }: { ready: boolean; workspaceId: string }) {
+      const [query, setQuery] = useState("");
+      const [statuses, setStatuses] = useState<string[]>([]);
+      useEffect(() => {
+        if (!ready || globalThis.window === undefined) return;
+        globalThis.window.localStorage.setItem(
+          workspaceId + ":filters",
+          JSON.stringify({ query, statuses })
+        );
+        if (Object.keys(statuses).length > 0) {
+          sessionStorage.setItem("has-statuses", "true");
+        } else {
+          window.sessionStorage.removeItem("has-statuses");
+        }
+      }, [query, statuses, ready, workspaceId]);
+      return <input value={query} onChange={event => setQuery(event.target.value)} />;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), ["keep-effect"]);
+  assert.match(effects[0]?.message ?? "", /browser storage/i);
+});
+
+test("does not call storage hydration, scheduling, arbitrary work, or observable reactions persistence", () => {
+  const effects = analyzeSource(`
+    import { useEffect, useState } from "react";
+    import { useValue } from "@legendapp/state/react";
+    export function Hydrate({ value, value$ }: { value: string; value$: unknown }) {
+      const [stored, setStored] = useState("");
+      const observed = useValue(value$);
+      useEffect(() => {
+        const next = localStorage.getItem("value");
+        if (next) setStored(next);
+      }, [value]);
+      useEffect(() => { setTimeout(() => localStorage.setItem("value", value), 10); }, [value]);
+      useEffect(() => { localStorage.setItem("value", serialize(value)); }, [value]);
+      useEffect(() => { localStorage.setItem("value", value); report(value); }, [value]);
+      useEffect(async () => { localStorage.setItem("value", value); }, [value]);
+      useEffect(() => {
+        localStorage.setItem("value", value);
+        return () => localStorage.removeItem("value");
+      }, [value]);
+      useEffect(() => { localStorage.setItem("observed", JSON.stringify(observed)); }, [observed]);
+      return <output>{stored}</output>;
+    }
+    export function ShadowedStorage({ value }: { value: string }) {
+      const localStorage = { setItem: (_key: string, _value: string) => undefined };
+      useEffect(() => { localStorage.setItem("value", value); }, [value]);
+      return null;
+    }
+    export function ShadowedJson({ value }: { value: string }) {
+      const JSON = { stringify: (_value: unknown) => "custom" };
+      useEffect(() => { window.localStorage.setItem("value", JSON.stringify(value)); }, [value]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "keep-effect",
+    "use-observe-effect",
+    "keep-effect",
+    "review-effect",
+  ]);
+  assert.doesNotMatch(effects[7]?.message ?? "", /browser storage/i);
+});
+
 test("reviews local-state, helper, scheduled, multi-command, collection, and subscription effects", () => {
   const effects = analyzeSource(`
     import { useEffect, useState } from "react";
