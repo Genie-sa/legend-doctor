@@ -1,7 +1,11 @@
 import ts from "typescript";
 
 export interface HookImports {
+  batch: ReadonlySet<string>;
   hostComponents: ReadonlySet<string>;
+  legendNamespaces: ReadonlySet<string>;
+  observable: ReadonlySet<string>;
+  observableTypes: ReadonlySet<string>;
   reactNamespaces: ReadonlySet<string>;
   useEffect: ReadonlySet<string>;
   useObservable: ReadonlySet<string>;
@@ -14,8 +18,12 @@ const REACT_MODULE = "react";
 const LEGEND_REACT_MODULE = "@legendapp/state/react";
 
 export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
+  const batch = new Set<string>();
   const reactNamespaces = new Set<string>();
+  const legendNamespaces = new Set<string>();
   const hostComponents = new Set<string>();
+  const observable = new Set<string>();
+  const observableTypes = new Set<string>();
   const useEffect = new Set<string>();
   const useObservable = new Set<string>();
   const useObserveEffect = new Set<string>();
@@ -38,6 +46,14 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
     }
 
     const bindings = clause.namedBindings;
+    if (
+      moduleName === "@legendapp/state" &&
+      bindings &&
+      ts.isNamespaceImport(bindings)
+    ) {
+      legendNamespaces.add(bindings.name.text);
+      continue;
+    }
     if (moduleName === REACT_MODULE && bindings && ts.isNamespaceImport(bindings)) {
       reactNamespaces.add(bindings.name.text);
       continue;
@@ -61,10 +77,29 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
         if (importedName === "useObserveEffect") useObserveEffect.add(localName);
         if (importedName === "useValue") useValue.add(localName);
       }
+      if (moduleName === "@legendapp/state") {
+        if (importedName === "batch") batch.add(localName);
+        if (importedName === "observable") observable.add(localName);
+        if (importedName === "Observable" || importedName === "ObservableParam") {
+          observableTypes.add(localName);
+        }
+      }
     }
   }
 
-  return { hostComponents, reactNamespaces, useEffect, useObservable, useObserveEffect, useState, useValue };
+  return {
+    batch,
+    hostComponents,
+    legendNamespaces,
+    observable,
+    observableTypes,
+    reactNamespaces,
+    useEffect,
+    useObservable,
+    useObserveEffect,
+    useState,
+    useValue,
+  };
 }
 
 export function isImportedHookCall(

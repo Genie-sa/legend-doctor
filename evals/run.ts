@@ -4,7 +4,7 @@ import process from "node:process";
 
 import { analyzePath, createAnalysisContext } from "../src/analyze-path.js";
 import type { AnalysisReport, HookFinding } from "../src/types.js";
-import { goldCases, goldStateGroups, repositories } from "./corpus.js";
+import { goldCases, goldPracticeCases, goldStateGroups, repositories } from "./corpus.js";
 
 interface TargetResult {
   report: AnalysisReport;
@@ -115,6 +115,27 @@ async function main(): Promise<void> {
     }
   }
 
+  let practiceMatches = 0;
+  let practiceLabels = 0;
+  for (const gold of goldPracticeCases) {
+    const target = targets.get(gold.target);
+    if (!target) continue;
+    practiceLabels += 1;
+    const finding = target.report.practices.find(
+      candidate =>
+        candidate.location.file === path.normalize(gold.file) &&
+        candidate.location.line === gold.line &&
+        candidate.action === gold.action
+    );
+    if (finding) {
+      practiceMatches += 1;
+    } else {
+      failures.push(
+        `${gold.target}/${gold.file}:${gold.line}: expected ${gold.action} (${gold.rationale})`
+      );
+    }
+  }
+
   const precision = actualActionable === 0 ? 1 : correctActionable / actualActionable;
   const recall = expectedActionable === 0 ? 1 : correctActionable / expectedActionable;
   const actionLines = [...byAction.entries()]
@@ -130,6 +151,7 @@ async function main(): Promise<void> {
       `Matched ${matched}/${labeled} manually labeled hooks.`,
       `Known labeled misses: ${knownMisses}.`,
       `Matched ${groupMatches}/${groupLabels} grouped agent instructions.`,
+      `Matched ${practiceMatches}/${practiceLabels} Legend practice findings.`,
       `Actionable precision on labeled hooks: ${(precision * 100).toFixed(1)}% (${correctActionable}/${actualActionable}).`,
       `Actionable recall on labeled hooks: ${(recall * 100).toFixed(1)}% (${correctActionable}/${expectedActionable}).`,
       ...actionLines,

@@ -1,4 +1,4 @@
-import type { HookAction } from "../src/types.js";
+import type { HookAction, LegendPracticeAction } from "../src/types.js";
 
 export interface CorpusTarget {
   effects: number;
@@ -30,6 +30,14 @@ export interface GoldStateGroupCase {
   file: string;
   line: number;
   members: readonly string[] | null;
+  rationale: string;
+  target: string;
+}
+
+export interface GoldPracticeCase {
+  action: LegendPracticeAction;
+  file: string;
+  line: number;
   rationale: string;
   target: string;
 }
@@ -3665,3 +3673,76 @@ export const goldStateGroups = [
     target: "tree-map",
   },
 ] as const satisfies readonly GoldStateGroupCase[];
+
+export const goldPracticeCases = [
+  {
+    action: "batch-observable-writes",
+    file: "backend/api/stickers/keyboard.ts",
+    line: 103,
+    rationale: "Pinned stickers and keyboard mode publish as one user command.",
+    target: "memoria-src",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "backend/api/stickers/keyboard.ts",
+    line: 112,
+    rationale: "Resetting pinned stickers and mode is one atomic command.",
+    target: "memoria-src",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "backend/state/stickerRainStore.ts",
+    line: 11,
+    rationale: "Overlay identity and generating state start together.",
+    target: "memoria-src",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "backend/state/stickerRainStore.ts",
+    line: 22,
+    rationale: "Overlay identity and generating state clear together.",
+    target: "memoria-src",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "backend/utils/jobQueue.ts",
+    line: 64,
+    rationale: "Queued and active counts are one queue snapshot.",
+    target: "memoria-src",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "components/LocalAudioPlayer.tsx",
+    line: 257,
+    rationale: "One player failure publishes error, loading, and playback state together.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "components/LocalAudioPlayer.tsx",
+    line: 359,
+    rationale: "Clearing the player is one five-field state transition.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "hooks/usePlaylistSelection.ts",
+    line: 48,
+    rationale: "Selection anchor and focus change as one cursor transition.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "systems/LibraryState.ts",
+    line: 317,
+    rationale: "Tracks, artists, and albums are one normalized library snapshot.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "systems/LocalMusicState.ts",
+    line: 948,
+    rationale: "Starting a scan publishes one six-field status transition.",
+    target: "legend-music",
+  },
+] as const satisfies readonly GoldPracticeCase[];

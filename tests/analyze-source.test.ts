@@ -3471,6 +3471,22 @@ test("keeps effects that operate on committed refs", () => {
   );
 });
 
+test("keeps a forwarded ref snapshot in React post-commit timing", () => {
+  assert.deepEqual(
+    actions(`
+      import { type RefObject, useEffect, useState } from "react";
+      export function Grid({ containerRef }: { containerRef: RefObject<HTMLElement | null> }) {
+        const [container, setContainer] = useState<HTMLElement | null>(null);
+        useEffect(() => {
+          setContainer(containerRef.current);
+        }, [containerRef]);
+        return <VirtualGrid container={container} />;
+      }
+    `),
+    ["review-state", "keep-effect"]
+  );
+});
+
 test("reviews empty ref effects that intentionally capture a render snapshot", () => {
   assert.deepEqual(
     actions(`

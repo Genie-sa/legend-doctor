@@ -1,12 +1,12 @@
-import type { AnalysisReport, HookFinding } from "./types.js";
+import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
 
 export function formatTextReport(report: AnalysisReport, actionableOnly: boolean): string {
   const findings = actionableOnly
     ? agentFindings(report.findings)
     : report.findings;
-  const lines = findings.map(formatFinding);
+  const lines = [...findings.map(formatFinding), ...report.practices.map(formatPracticeFinding)];
   lines.push(
-    `Scanned ${report.files} files: ${report.hooks.states} useState, ${report.hooks.effects} useEffect, ${findings.length} shown.`
+    `Scanned ${report.files} files: ${report.hooks.states} useState, ${report.hooks.effects} useEffect, ${findings.length + report.practices.length} shown.`
   );
   return lines.join("\n");
 }
@@ -23,6 +23,11 @@ export function agentFindings(findings: readonly HookFinding[]): HookFinding[] {
 }
 
 function formatFinding(finding: HookFinding): string {
+  const { file, line, column } = finding.location;
+  return `${file}:${line}:${column} [${finding.action}] ${finding.message}`;
+}
+
+function formatPracticeFinding(finding: LegendPracticeFinding): string {
   const { file, line, column } = finding.location;
   return `${file}:${line}:${column} [${finding.action}] ${finding.message}`;
 }

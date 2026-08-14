@@ -1,6 +1,6 @@
 # Legend Doctor
 
-Static analysis that tells coding agents exactly how to optimize React `useState` and `useEffect` with Legend State.
+Static analysis that tells coding agents how to optimize React `useState`, `useEffect`, and Legend State usage.
 
 One command returns the hook, action, subscription boundary, evidence, and risk. The tool recommends code changes; the
 agent implements and verifies them.
@@ -13,6 +13,7 @@ agent implements and verifies them.
 | React `useEffect` | Exact action: keep, delete, event, lifecycle, or reaction |
 | Coupled state | One atomic model and one grouped instruction |
 | Render scope | Smallest proven subscriber: field, row, gate, or dialog |
+| Legend writes | Missing `batch()` across proven observable writes |
 | Proof | File, line, confidence, evidence, and review boundary |
 
 ### Value in numbers
@@ -23,6 +24,7 @@ agent implements and verifies them.
 | Open 1 dialog from a table | Page + table + dialog | 1 dialog subscriber |
 | Seed a 3-field draft | 3 React setters | 1 atomic observable write |
 | Teardown-only effect | 1 generic effect | 1 explicit lifecycle hook |
+| 6 consecutive observable writes | Up to 6 observer flushes | 1 batched publish |
 
 ## Measured accuracy
 
@@ -33,7 +35,8 @@ agent implements and verifies them.
 | Inventoried hooks | 1,747 |
 | Manual labels | 503 |
 | Grouped-model checks | 12/12 |
-| Unit tests | 219/219 |
+| Legend practice checks | 10/10 |
+| Unit tests | 234/234 |
 | Actionable precision | 100% (275/275) |
 | Actionable recall | 92.3% (275/298) |
 | `use-observable` recall | 93.4% (225/241) |
@@ -43,7 +46,7 @@ Memoria, Legend Music, Excalidraw, Expensify, Formbricks, and Outline.
 
 ## Agent workflow
 
-**Agent rule:** run Legend Doctor before and after every React state/effect optimization.
+**Agent rule:** run Legend Doctor before and after every React state, effect, or Legend observable optimization.
 
 ```bash
 npm install
@@ -256,6 +259,44 @@ useUnmount(() => tooltip.hide());
 ```
 
 **Result:** cleanup ownership is visible. The agent changes it only when once-only Legend lifecycle semantics are intended.
+
+### 5. Observable transaction: 3 publishes → 1
+
+**Before — observers may run after every write**
+
+```ts
+player$.error.set(message);
+player$.isLoading.set(false);
+player$.isPlaying.set(false);
+```
+
+**Finding**
+
+```text
+LocalAudioPlayer.tsx:257:7 [batch-observable-writes] Batch these 3 consecutive Legend
+observable writes so observers publish once; use batch(() => { ... }), or one parent
+.assign(...) when the fields share an object root.
+```
+
+**After — one observable transaction**
+
+```ts
+batch(() => {
+  player$.error.set(message);
+  player$.isLoading.set(false);
+  player$.isPlaying.set(false);
+});
+```
+
+When every field belongs to one observable object, this is shorter:
+
+```ts
+player$.assign({ error: message, isLoading: false, isPlaying: false });
+```
+
+**Result:** observers see one final player snapshot. The rule requires import-proven Legend observables, distinct write
+paths, one synchronous statement run, and no existing batch. It ignores Maps, animation values, repeated writes to the
+same path, `await`, and separated control flow.
 
 ## How findings are classified
 

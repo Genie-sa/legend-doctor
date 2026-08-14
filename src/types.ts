@@ -21,6 +21,8 @@ export type EffectAction =
 
 export type HookAction = StateAction | EffectAction;
 
+export type LegendPracticeAction = "batch-observable-writes";
+
 export interface SourceLocation {
   column: number;
   file: string;
@@ -48,6 +50,16 @@ export interface HookFinding {
   };
 }
 
+export interface LegendPracticeFinding {
+  action: LegendPracticeAction;
+  confidence: Confidence;
+  disposition: "change";
+  evidence: readonly string[];
+  location: SourceLocation;
+  message: string;
+  practice: "batch";
+}
+
 export interface AnalysisReport {
   files: number;
   findings: HookFinding[];
@@ -56,4 +68,5 @@ export interface AnalysisReport {
     states: number;
     total: number;
   };
+  practices: LegendPracticeFinding[];
 }

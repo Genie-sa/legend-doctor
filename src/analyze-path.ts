@@ -1,9 +1,10 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { analyzeLegendPractices } from "./analyze-legend-practices.js";
 import { analyzeSource } from "./analyze-source.js";
 import { buildSourceComponentIndex, type SourceComponentIndex } from "./source-components.js";
-import type { AnalysisReport, HookFinding } from "./types.js";
+import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
 
 const SOURCE_EXTENSIONS = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
 const IGNORED_DIRECTORIES = new Set([
@@ -45,6 +46,7 @@ export async function analyzePath(
   const files = targetStats.isDirectory() ? await collectSourceFiles(absoluteTarget) : [absoluteTarget];
   const context = sharedContext ?? await createAnalysisContext(analysisRoot);
   const findings: HookFinding[] = [];
+  const practices: LegendPracticeFinding[] = [];
   for (const file of files) {
     if (!SOURCE_EXTENSIONS.has(path.extname(file).toLowerCase())) continue;
     const sourceText = context.sources.get(file) ?? await readFile(file, "utf8");
@@ -55,6 +57,14 @@ export async function analyzePath(
         context.componentIndex.componentsFor(file)
       )
     );
+    if (sourceText.includes("@legendapp/state")) {
+      practices.push(
+        ...analyzeLegendPractices(
+          sourceText,
+          path.relative(analysisRoot, file) || path.basename(file)
+        )
+      );
+    }
   }
 
   const states = findings.filter(finding => finding.hook === "useState").length;
@@ -63,6 +73,7 @@ export async function analyzePath(
     files: files.length,
     findings,
     hooks: { effects, states, total: states + effects },
+    practices,
   };
 }
 

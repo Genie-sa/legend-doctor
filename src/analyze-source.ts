@@ -3918,7 +3918,8 @@ function classifyEffect(
   if (
     !hasCleanup &&
     effect.owner &&
-    callbackIsCommittedRefIntegration(effect.callback, effect.owner)
+    (callbackIsCommittedRefIntegration(effect.callback, effect.owner) ||
+      isCommittedPropRefSnapshot(effect, stateBySetter))
   ) {
     return committedRefEffect();
   }
@@ -3976,6 +3977,51 @@ function classifyEffect(
     derivedState: null,
     message: "Review this effect's causal owner before choosing React lifecycle, an event handler, or an observable reaction.",
   };
+}
+
+function isCommittedPropRefSnapshot(
+  effect: EffectCandidate,
+  stateBySetter: ReadonlyMap<string, StateCandidate>
+): boolean {
+  const { callback, dependencies, owner } = effect;
+  const dependency = dependencies?.elements[0];
+  if (
+    !callback ||
+    !owner ||
+    !ts.isBlock(callback.body) ||
+    callback.body.statements.length !== 1 ||
+    dependencies?.elements.length !== 1 ||
+    !dependency ||
+    !ts.isIdentifier(dependency)
+  ) {
+    return false;
+  }
+  const refName = dependency.text;
+  if (!parameterBindingNames(owner).has(refName)) return false;
+  const statement = callback.body.statements[0]!;
+  if (!ts.isExpressionStatement(statement)) return false;
+  const expression = unwrapTransparentExpression(statement.expression);
+  if (
+    !ts.isCallExpression(expression) ||
+    !ts.isIdentifier(expression.expression) ||
+    !stateBySetter.has(expression.expression.text) ||
+    expression.arguments.length !== 1
+  ) {
+    return false;
+  }
+  const argument = unwrapTransparentExpression(expression.arguments[0]!);
+  return (
+    ts.isPropertyAccessExpression(argument) &&
+    argument.name.text === "current" &&
+    ts.isIdentifier(argument.expression) &&
+    argument.expression.text === refName
+  );
+}
+
+function parameterBindingNames(owner: RuntimeFunctionLike): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const parameter of owner.parameters) collectBindingNames(parameter.name, names);
+  return names;
 }
 
 function isDependencyDrivenExternalCommandEffect(
