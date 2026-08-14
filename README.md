@@ -342,6 +342,15 @@ npm run typecheck
 npm test
 ```
 
+Rule ownership is split by feature so agents can work without loading the entire analyzer:
+
+| File | Owns |
+| --- | --- |
+| `src/analyze-source.ts` | Hook inventory, shared state evidence, and orchestration |
+| `src/rules/effects.ts` | `useEffect` classification and lifecycle rules |
+| `src/analyze-legend-practices.ts` | Legend read/write best practices |
+| `src/analysis-ast.ts` | Shared binding and expression proofs |
+
 Evaluation policy, pinned repositories, acceptance gates, and the full corpus command live in
 [evals/README.md](evals/README.md).
 
