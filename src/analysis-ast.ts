@@ -51,6 +51,14 @@ export function containsCallExpression(node: ts.Node): boolean {
   return found;
 }
 
+export function containsElementAccess(node: ts.Node): boolean {
+  let found = false;
+  visit(node, current => {
+    if (ts.isElementAccessExpression(current)) found = true;
+  });
+  return found;
+}
+
 export function hookCallName(call: ts.CallExpression): string | null {
   if (ts.isIdentifier(call.expression)) return call.expression.text;
   return ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : null;
@@ -136,6 +144,14 @@ export function localBindingNames(
   }
   if (owner.body) walk(owner.body);
   return names;
+}
+
+export function rootIdentifier(expression: ts.Expression): ts.Identifier | null {
+  let current = unwrapTransparentExpression(expression);
+  while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+    current = unwrapTransparentExpression(current.expression);
+  }
+  return ts.isIdentifier(current) ? current : null;
 }
 
 export function unwrapTransparentExpression(expression: ts.Expression): ts.Expression {

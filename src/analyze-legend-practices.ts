@@ -1,7 +1,13 @@
 import ts from "typescript";
 
-import { isNonProductionHarness } from "./ast.js";
+import {
+  containsElementAccess,
+  rootIdentifier,
+  unwrapTransparentExpression,
+} from "./analysis-ast.js";
+import { isNonProductionHarness, visit } from "./ast.js";
 import { collectHookImports, type HookImports } from "./imports.js";
+import { findObservableReadPractices } from "./rules/observable-reads.js";
 import type { LegendPracticeFinding } from "./types.js";
 
 interface ObservableWrite {
@@ -67,11 +73,7 @@ export function analyzeLegendPractices(
     flush();
   });
 
-  visit(sourceFile, node => {
-    if (!ts.isCallExpression(node)) return;
-    const receiver = directUseValueObservable(node, imports, observableBindings);
-    if (receiver) findings.push(directUseValueFinding(node, receiver, sourceFile, fileName));
-  });
+  findings.push(...findObservableReadPractices(sourceFile, fileName, imports, observableBindings));
 
   return findings.sort(
     (left, right) =>
@@ -79,67 +81,9 @@ export function analyzeLegendPractices(
   );
 }
 
-function directUseValueObservable(
-  call: ts.CallExpression,
-  imports: HookImports,
-  observableBindings: ReadonlySet<string>
-): ts.Expression | null {
-  if (
-    !ts.isIdentifier(call.expression) ||
-    !imports.useValue.has(call.expression.text) ||
-    call.arguments.length !== 1
-  ) {
-    return null;
-  }
-  const selector = call.arguments[0];
-  if (
-    !selector ||
-    (!ts.isArrowFunction(selector) && !ts.isFunctionExpression(selector)) ||
-    selector.parameters.length > 0 ||
-    ts.isBlock(selector.body)
-  ) {
-    return null;
-  }
-  const read = unwrapExpression(selector.body);
-  if (
-    !ts.isCallExpression(read) ||
-    read.arguments.length > 0 ||
-    !ts.isPropertyAccessExpression(read.expression) ||
-    read.expression.name.text !== "get"
-  ) {
-    return null;
-  }
-  const receiver = unwrapExpression(read.expression.expression);
-  if (containsElementAccess(receiver)) return null;
-  const root = rootIdentifier(receiver);
-  return root && observableBindings.has(root.text) ? receiver : null;
-}
-
-function directUseValueFinding(
-  call: ts.CallExpression,
-  receiver: ts.Expression,
-  sourceFile: ts.SourceFile,
-  fileName: string
-): LegendPracticeFinding {
-  const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
-  const path = receiver.getText(sourceFile);
-  return {
-    action: "pass-observable-to-use-value",
-    confidence: "certain",
-    disposition: "change",
-    evidence: [
-      "useValue selector only returns one zero-argument get() call",
-      `${path} is a proven Legend observable path`,
-    ],
-    location: { column: character + 1, file: fileName, line: line + 1 },
-    message: `Replace \`useValue(() => ${path}.get())\` with \`useValue(${path})\`; the direct observable form keeps the same subscription with less code.`,
-    practice: "reactivity",
-  };
-}
-
 function isSetStatement(statement: ts.Statement): boolean {
   if (!ts.isExpressionStatement(statement)) return false;
-  const expression = unwrapExpression(statement.expression);
+  const expression = unwrapTransparentExpression(statement.expression);
   return (
     ts.isCallExpression(expression) &&
     ts.isPropertyAccessExpression(expression.expression) &&
@@ -195,7 +139,7 @@ function recordDeclaration(counts: Map<string, number>, name: string): void {
 }
 
 function isObservableFactoryCall(expression: ts.Expression, imports: HookImports): boolean {
-  const value = unwrapExpression(expression);
+  const value = unwrapTransparentExpression(expression);
   if (!ts.isCallExpression(value)) return false;
   if (ts.isIdentifier(value.expression)) {
     return imports.observable.has(value.expression.text) || imports.useObservable.has(value.expression.text);
@@ -226,7 +170,7 @@ function observableWrite(
   sourceFile: ts.SourceFile
 ): ObservableWrite | null {
   if (!ts.isExpressionStatement(statement)) return null;
-  const expression = unwrapExpression(statement.expression);
+  const expression = unwrapTransparentExpression(statement.expression);
   if (
     !ts.isCallExpression(expression) ||
     !ts.isPropertyAccessExpression(expression.expression) ||
@@ -251,28 +195,12 @@ function observableWrite(
   };
 }
 
-function containsElementAccess(node: ts.Node): boolean {
-  let found = false;
-  visit(node, current => {
-    if (ts.isElementAccessExpression(current)) found = true;
-  });
-  return found;
-}
-
 function containsAwaitOrYield(node: ts.Node): boolean {
   let found = false;
   visit(node, current => {
     if (ts.isAwaitExpression(current) || ts.isYieldExpression(current)) found = true;
   });
   return found;
-}
-
-function rootIdentifier(expression: ts.Expression): ts.Identifier | null {
-  let current = unwrapExpression(expression);
-  while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
-    current = unwrapExpression(current.expression);
-  }
-  return ts.isIdentifier(current) ? current : null;
 }
 
 function isInsideBatch(call: ts.CallExpression, imports: HookImports): boolean {
@@ -363,23 +291,4 @@ function expressionReferencesIdentifier(expression: ts.Expression, name: string)
     if (ts.isIdentifier(node) && node.text === name) found = true;
   });
   return found;
-}
-
-function unwrapExpression(expression: ts.Expression): ts.Expression {
-  let current = expression;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isTypeAssertionExpression(current) ||
-    ts.isNonNullExpression(current) ||
-    ts.isSatisfiesExpression(current)
-  ) {
-    current = current.expression;
-  }
-  return current;
-}
-
-function visit(node: ts.Node, visitor: (node: ts.Node) => void): void {
-  visitor(node);
-  ts.forEachChild(node, child => visit(child, visitor));
 }

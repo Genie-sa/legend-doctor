@@ -117,6 +117,9 @@ async function main(): Promise<void> {
 
   let practiceMatches = 0;
   let practiceLabels = 0;
+  const labeledPractices = new Set(
+    goldPracticeCases.map(gold => practiceKey(gold.target, gold.file, gold.line, gold.action))
+  );
   for (const gold of goldPracticeCases) {
     const target = targets.get(gold.target);
     if (!target) continue;
@@ -133,6 +136,21 @@ async function main(): Promise<void> {
       failures.push(
         `${gold.target}/${gold.file}:${gold.line}: expected ${gold.action} (${gold.rationale})`
       );
+    }
+  }
+  let practicePredictions = 0;
+  for (const [targetId, target] of targets) {
+    for (const finding of target.report.practices) {
+      practicePredictions += 1;
+      if (
+        !labeledPractices.has(
+          practiceKey(targetId, finding.location.file, finding.location.line, finding.action)
+        )
+      ) {
+        failures.push(
+          `${targetId}/${finding.location.file}:${finding.location.line}: unexpected Legend practice ${finding.action}`
+        );
+      }
     }
   }
 
@@ -152,6 +170,7 @@ async function main(): Promise<void> {
       `Known labeled misses: ${knownMisses}.`,
       `Matched ${groupMatches}/${groupLabels} grouped agent instructions.`,
       `Matched ${practiceMatches}/${practiceLabels} Legend practice findings.`,
+      `Legend practice precision: ${practicePredictions === 0 ? "100.0" : ((practiceMatches / practicePredictions) * 100).toFixed(1)}% (${practiceMatches}/${practicePredictions}).`,
       `Actionable precision on labeled hooks: ${(precision * 100).toFixed(1)}% (${correctActionable}/${actualActionable}).`,
       `Actionable recall on labeled hooks: ${(recall * 100).toFixed(1)}% (${correctActionable}/${expectedActionable}).`,
       ...actionLines,
@@ -161,6 +180,10 @@ async function main(): Promise<void> {
     process.stderr.write(`${failures.map(failure => `- ${failure}`).join("\n")}\n`);
     process.exitCode = 1;
   }
+}
+
+function practiceKey(target: string, file: string, line: number, action: string): string {
+  return `${target}\0${path.normalize(file)}\0${line}\0${action}`;
 }
 
 function sameMembers(

@@ -152,6 +152,107 @@ test("keeps computed, shallow, dynamic, and unproven useValue selectors", () => 
   );
 });
 
+test("narrows a broad useValue binding to its only static child", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function Profile() {
+      const profile = useValue(profile$);
+      return <><h1>{profile.name}</h1><span>{profile.name.trim()}</span></>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "narrow-use-value-subscription");
+  assert.equal(finding?.confidence, "certain");
+  assert.match(finding?.message ?? "", /useValue\(profile\$\.name\)/);
+  assert.match(finding?.evidence.join(" ") ?? "", /2 raw-value reads/);
+});
+
+test("narrows a child used by a boolean projection", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ enabled: false, name: "Ada" });
+    export function Profile() {
+      const profile = useValue(profile$);
+      return <span>{!profile.enabled ? "off" : "on"}</span>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "narrow-use-value-subscription");
+  assert.match(finding?.message ?? "", /useValue\(profile\$\.enabled\)/);
+});
+
+test("narrows a single-property useValue destructure", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const theme$ = observable({ colors: { dark: { text: "black" }, light: { text: "white" } } });
+    export function Theme() {
+      const { dark: palette } = useValue(theme$.colors);
+      return <span>{palette.text}</span>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "narrow-use-value-subscription");
+  assert.match(finding?.message ?? "", /useValue\(theme\$\.colors\.dark\)/);
+});
+
+test("keeps broad useValue reads when the child subscription is not proven equivalent", () => {
+  const source = (body: string) => analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ name: "Ada", email: "ada@example.com", rows: [] as string[] });
+    export function Profile({ keyName }: { keyName: "name" }) {
+      const profile = useValue(profile$);
+      ${body}
+    }
+  `, "fixture.tsx");
+  for (const body of [
+    `return <span>{profile.name} {profile.email}</span>;`,
+    `return <span>{profile?.name}</span>;`,
+    `return <span>{profile[keyName]}</span>;`,
+    `return <Child profile={profile} />;`,
+    `profile.name = "Grace"; return <span>{profile.name}</span>;`,
+    `return <span>{profile.name()}</span>;`,
+    `function nested(profile: { name: string }) { return profile.name; } return <span>{profile.name}</span>;`,
+  ]) {
+    assert.deepEqual(source(body), [], body);
+  }
+});
+
+test("keeps array length as a selector concern rather than an observable child", () => {
+  assert.deepEqual(
+    analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const rows$ = observable(["one"]);
+      export function Count() {
+        const rows = useValue(rows$);
+        return <span>{rows.length}</span>;
+      }
+    `, "fixture.tsx"),
+    []
+  );
+});
+
+test("keeps multi-property, defaulted, and rest useValue destructures", () => {
+  const source = (binding: string) => analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function Profile() {
+      const ${binding} = useValue(profile$);
+      return null;
+    }
+  `, "fixture.tsx");
+  for (const binding of [
+    `{ name, email }`,
+    `{ name = "Unknown" }`,
+    `{ name, ...rest }`,
+  ]) {
+    assert.deepEqual(source(binding), [], binding);
+  }
+});
+
 test("recognizes namespace observable and batch calls", () => {
   assert.deepEqual(
     actions(`

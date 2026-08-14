@@ -14,7 +14,7 @@ agent implements and verifies them.
 | Coupled state | One atomic model and one grouped instruction |
 | Render scope | Smallest proven subscriber: field, row, gate, or dialog |
 | Legend writes | Exact transaction: one `.assign()` or one `batch()` |
-| Legend reads | Direct `useValue(observable)` when a selector only unwraps `.get()` |
+| Legend reads | Direct `useValue(observable)` and the lowest proven child subscription |
 | Proof | File, line, confidence, evidence, and review boundary |
 
 ### Value in numbers
@@ -36,8 +36,8 @@ agent implements and verifies them.
 | Inventoried hooks | 1,747 |
 | Manual labels | 503 |
 | Grouped-model checks | 12/12 |
-| Legend practice checks | 42/42 |
-| Unit tests | 247/247 |
+| Legend practice checks | 48/48 at 100% precision |
+| Unit tests | 254/254 |
 | Actionable precision | 100% (275/275) |
 | Actionable recall | 92.3% (275/298) |
 | `use-observable` recall | 93.4% (225/241) |
@@ -324,6 +324,33 @@ const accent = useValue(theme$.customColors.dark.accent.primary);
 **Result:** 1 callback and 1 `.get()` are removed. Computed selectors, shallow reads, dynamic paths, and unproven getters
 are left unchanged.
 
+### 7. Broad subscription → exact field
+
+**Before — every `profile$` child can invalidate this component**
+
+```ts
+const profile = useValue(profile$);
+return <Name>{profile.name}</Name>;
+```
+
+**Finding**
+
+```text
+Profile.tsx:18:19 [narrow-use-value-subscription] Narrow `profile` from
+`useValue(profile$)` to `useValue(profile$.name)` and bind the leaf value directly.
+```
+
+**After — only `profile$.name` is observed**
+
+```ts
+const name = useValue(profile$.name);
+return <Name>{name}</Name>;
+```
+
+**Result:** sibling updates such as `profile$.email.set(...)` no longer invalidate this component. The rule fires only
+when every read uses one static child. Multiple fields, dynamic keys, optional access, writes, calls, and raw object
+transport remain unchanged.
+
 ## How findings are classified
 
 | Disposition | Agent response |
@@ -348,7 +375,12 @@ Rule ownership is split by feature so agents can work without loading the entire
 | --- | --- |
 | `src/analyze-source.ts` | Hook inventory, shared state evidence, and orchestration |
 | `src/rules/effects.ts` | `useEffect` classification and lifecycle rules |
-| `src/analyze-legend-practices.ts` | Legend read/write best practices |
+| `src/rules/effect-drafts.ts` | Effect-synchronized editable draft rules |
+| `src/rules/deferred-reveal.ts` | Deferred reveal and render-gate rules |
+| `src/rules/keyed-selection.ts` | Scalar, Set, Map, and row-selection rules |
+| `src/rules/observable-reads.ts` | Direct and lowest-path `useValue` rules |
+| `src/rules/state-proofs.ts` | Shared state, JSX, callback, and subscription-boundary proofs |
+| `src/analyze-legend-practices.ts` | Legend write transactions and rule orchestration |
 | `src/analysis-ast.ts` | Shared binding and expression proofs |
 
 Evaluation policy, pinned repositories, acceptance gates, and the full corpus command live in

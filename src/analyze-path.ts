@@ -57,7 +57,8 @@ export async function analyzePath(
         context.sourceIndex.componentsFor(file)
       )
     );
-    const mayContainLegendPractice = /\.(?:get|set)\s*\(/.test(sourceText);
+    const mayContainLegendPractice =
+      /\.(?:get|set)\s*\(/.test(sourceText) || /\buseValue\s*\(/.test(sourceText);
     const importedObservables = mayContainLegendPractice
       ? context.sourceIndex.observablesFor(file)
       : new Set<string>();

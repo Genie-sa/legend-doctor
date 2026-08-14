@@ -126,6 +126,40 @@ test("uses cross-file observable provenance for direct useValue findings", async
   }
 });
 
+test("analyzes useValue-only files for the narrowest observable child", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-child-read-"));
+  try {
+    await mkdir(path.join(root, "state"), { recursive: true });
+    await writeFile(
+      path.join(root, "state", "profile.ts"),
+      `
+        import { observable } from "@legendapp/state";
+        export const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+      `,
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "screen.tsx"),
+      `
+        import { useValue } from "@legendapp/state/react";
+        import { profile$ } from "./state/profile";
+        export function Screen() {
+          const profile = useValue(profile$);
+          return <span>{profile.name}</span>;
+        }
+      `,
+      "utf8"
+    );
+
+    const report = await analyzePath(root);
+    assert.equal(report.practices.length, 1);
+    assert.equal(report.practices[0]?.action, "narrow-use-value-subscription");
+    assert.equal(report.practices[0]?.location.file, "screen.tsx");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("places an observable subscription at one resolved child call site", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-contract-"));
   await writeFile(
