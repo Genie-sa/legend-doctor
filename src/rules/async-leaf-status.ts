@@ -14,7 +14,7 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import { hasStateInitializer } from "./deferred-reveal.js";
+import { hasStateInitializer, isSafeProjectionExpression } from "./deferred-reveal.js";
 import {
   callbackIsEventRooted,
   isSafeJsxProjectionReference,
@@ -357,11 +357,12 @@ function hasSingleObservableLeafCallSite(
   ) {
     return false;
   }
+  const callSite = jsxCallSite(opening);
   if (
     usage.directRenderNodes.some(node =>
-      jsxOpeningAncestor(node, owner)?.getStart() !== valueSite ||
-      findAncestorUntil(node, isRuntimeFunctionLike, opening!) !== null ||
-      !isSafeJsxProjectionReference(node, owner)
+      !nodeWithin(node, callSite) ||
+      findAncestorUntil(node, isRuntimeFunctionLike, callSite) !== null ||
+      !isSafeLeafProjectionReference(node, owner)
     )
   ) {
     return false;
@@ -394,16 +395,31 @@ function hasSingleObservableLeafCallSite(
   return references.length === 1 && returned.some(expression => nodeWithin(references[0]!, expression));
 }
 
-function jsxOpeningAncestor(
+function jsxCallSite(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement
+): ts.Node {
+  return ts.isJsxOpeningElement(opening) ? opening.parent : opening;
+}
+
+function isSafeLeafProjectionReference(
   node: ts.Node,
   owner: RuntimeFunctionLike
-): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  return findAncestorUntil(
-    node,
-    (candidate): candidate is ts.JsxOpeningElement | ts.JsxSelfClosingElement =>
-      ts.isJsxOpeningElement(candidate) || ts.isJsxSelfClosingElement(candidate),
-    owner
-  );
+): boolean {
+  if (isSafeJsxProjectionReference(node, owner)) return true;
+  for (let current: ts.Node | undefined = node.parent; current && current !== owner; current = current.parent) {
+    if (ts.isConditionalExpression(current) && nodeWithin(node, current.condition)) {
+      return isSafeProjectionExpression(current.condition, node);
+    }
+    if (
+      ts.isBinaryExpression(current) &&
+      (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+        current.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
+      nodeWithin(node, current.left)
+    ) {
+      return isSafeProjectionExpression(current.left, node);
+    }
+  }
+  return false;
 }
 
 function nestedFunctionsAreJsxChildren(

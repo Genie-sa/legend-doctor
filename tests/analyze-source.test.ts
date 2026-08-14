@@ -1704,6 +1704,56 @@ test("isolates an async pending flag at one stable leaf without changing its com
   assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
+test("keeps async status label projections inside the same subscribed leaf", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function Form() {
+      const [saving, setSaving] = useState(false);
+      async function save() {
+        setSaving(true);
+        try { await persist(); } finally { setSaving(false); }
+      }
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <Button disabled={saving} onClick={save}>
+          {saving ? translate("Saving") : translate("Save")}
+        </Button>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /stable `Button` call site/);
+});
+
+test("does not fold unsafe or external async status projections into a leaf", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    export function UnsafeCondition() {
+      const [saving, setSaving] = useState(false);
+      async function save() { setSaving(true); await persist(); setSaving(false); }
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <Button loading={saving} onClick={save}>{track(saving) ? "Saving" : "Save"}</Button>
+      </main>;
+    }
+    export function SiblingRead() {
+      const [saving, setSaving] = useState(false);
+      async function save() { setSaving(true); await persist(); setSaving(false); }
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <Button loading={saving} onClick={save} /><output>{saving ? "Saving" : "Save"}</output>
+      </main>;
+    }
+    export function SelfGate() {
+      const [saving, setSaving] = useState(false);
+      async function save() { setSaving(true); await persist(); setSaving(false); }
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <button onClick={save}>Save</button>{saving && <Button loading={saving} />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  for (const finding of findings.filter(candidate => candidate.name === "saving")) {
+    assert.notEqual(finding.action, "use-observable");
+  }
+});
+
 test("traces an async pending command through an event-rooted submit helper", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
