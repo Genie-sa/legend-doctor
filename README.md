@@ -13,7 +13,7 @@ agent implements and verifies them.
 | React `useEffect` | Exact action: keep, delete, event, lifecycle, or reaction |
 | Coupled state | One atomic model and one grouped instruction |
 | Render scope | Smallest proven subscriber: field, row, gate, or dialog |
-| Legend writes | Missing `batch()` across proven observable writes |
+| Legend writes | Exact transaction: one `.assign()` or one `batch()` |
 | Proof | File, line, confidence, evidence, and review boundary |
 
 ### Value in numbers
@@ -24,7 +24,7 @@ agent implements and verifies them.
 | Open 1 dialog from a table | Page + table + dialog | 1 dialog subscriber |
 | Seed a 3-field draft | 3 React setters | 1 atomic observable write |
 | Teardown-only effect | 1 generic effect | 1 explicit lifecycle hook |
-| 6 consecutive observable writes | Up to 6 observer flushes | 1 batched publish |
+| 6 observable field writes | Up to 6 observer flushes | 1 `.assign()` or `batch()` |
 
 ## Measured accuracy
 
@@ -35,8 +35,8 @@ agent implements and verifies them.
 | Inventoried hooks | 1,747 |
 | Manual labels | 503 |
 | Grouped-model checks | 12/12 |
-| Legend practice checks | 15/15 |
-| Unit tests | 239/239 |
+| Legend practice checks | 31/31 |
+| Unit tests | 242/242 |
 | Actionable precision | 100% (275/275) |
 | Actionable recall | 92.3% (275/298) |
 | `use-observable` recall | 93.4% (225/241) |
@@ -260,7 +260,7 @@ useUnmount(() => tooltip.hide());
 
 **Result:** cleanup ownership is visible. The agent changes it only when once-only Legend lifecycle semantics are intended.
 
-### 5. Observable transaction: 3 publishes → 1
+### 5. Observable fields: 3 `.set()` calls → 1 `.assign()`
 
 **Before — observers may run after every write**
 
@@ -273,30 +273,30 @@ player$.isPlaying.set(false);
 **Finding**
 
 ```text
-LocalAudioPlayer.tsx:257:7 [batch-observable-writes] Batch these 3 consecutive Legend
-observable writes so observers publish once; use batch(() => { ... }), or one parent
-.assign(...) when the fields share an object root.
+LocalAudioPlayer.tsx:257:7 [assign-observable-fields] Replace 3 `.set()` calls with one
+`player$.assign(...)` for `error`, `isLoading`, `isPlaying`; observers publish once.
 ```
 
-**After — one observable transaction**
-
-```ts
-batch(() => {
-  player$.error.set(message);
-  player$.isLoading.set(false);
-  player$.isPlaying.set(false);
-});
-```
-
-When every field belongs to one observable object, this is shorter:
+**After — one shallow object transaction**
 
 ```ts
 player$.assign({ error: message, isLoading: false, isPlaying: false });
 ```
 
-**Result:** observers see one final player snapshot. The rule requires Legend observables proven locally or through a
-resolved project export, distinct write paths, one synchronous statement run, and no existing batch. It ignores tests,
-Maps, animation values, partial write runs, repeated writes to the same path, `await`, and separated control flow.
+When writes span objects or use updater functions, the tool keeps their evaluation semantics and emits
+`batch-observable-writes`:
+
+```ts
+batch(() => {
+  player$.isLoading.set(false);
+  session$.error.set(message);
+});
+```
+
+**Result:** observers see 1 final transaction. `.assign()` is used only for direct fields of 1 object whose values do not
+read that observable. Otherwise the result is `batch()`. The rule requires Legend observables proven locally or through
+a resolved project export. It ignores tests, Maps, animation values, partial write runs, repeated paths, `await`, and
+separated control flow.
 
 ## How findings are classified
 

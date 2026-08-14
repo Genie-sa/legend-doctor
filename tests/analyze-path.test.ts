@@ -86,7 +86,7 @@ test("uses cross-file observable provenance for batching findings", async () => 
 
     const report = await analyzePath(root);
     assert.equal(report.practices.length, 1);
-    assert.equal(report.practices[0]?.action, "batch-observable-writes");
+    assert.equal(report.practices[0]?.action, "assign-observable-fields");
     assert.equal(report.practices[0]?.location.file, "screen.ts");
   } finally {
     await rm(root, { force: true, recursive: true });

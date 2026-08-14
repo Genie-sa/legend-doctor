@@ -5,8 +5,12 @@ import { collectHookImports, type HookImports } from "./imports.js";
 import type { LegendPracticeFinding } from "./types.js";
 
 interface ObservableWrite {
+  argument: ts.Expression;
   call: ts.CallExpression;
+  parentPath: string | null;
   path: string;
+  property: string | null;
+  root: string;
 }
 
 export function analyzeLegendPractices(
@@ -44,7 +48,7 @@ export function analyzeLegendPractices(
     let runIsComplete = true;
     const flush = (): void => {
       if (runIsComplete && run.length >= 2 && hasDistinctNonOverlappingPaths(run)) {
-        findings.push(batchFinding(run, sourceFile, fileName));
+        findings.push(transactionFinding(run, sourceFile, fileName));
       }
       run = [];
       runIsComplete = true;
@@ -172,7 +176,15 @@ function observableWrite(
   if (containsElementAccess(receiver)) return null;
   const root = rootIdentifier(receiver);
   if (!root || !observableBindings.has(root.text)) return null;
-  return { call: expression, path: receiver.getText(sourceFile) };
+  const field = ts.isPropertyAccessExpression(receiver) ? receiver : null;
+  return {
+    argument: expression.arguments[0]!,
+    call: expression,
+    parentPath: field ? field.expression.getText(sourceFile) : null,
+    path: receiver.getText(sourceFile),
+    property: field?.name.text ?? null,
+    root: root.text,
+  };
 }
 
 function containsElementAccess(node: ts.Node): boolean {
@@ -227,13 +239,29 @@ function hasDistinctNonOverlappingPaths(writes: readonly ObservableWrite[]): boo
   );
 }
 
-function batchFinding(
+function transactionFinding(
   writes: readonly ObservableWrite[],
   sourceFile: ts.SourceFile,
   fileName: string
 ): LegendPracticeFinding {
   const first = writes[0]!;
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.call.getStart(sourceFile));
+  const assignTarget = commonAssignTarget(writes);
+  if (assignTarget) {
+    const fields = writes.map(write => `\`${write.property}\``).join(", ");
+    return {
+      action: "assign-observable-fields",
+      confidence: "probable",
+      disposition: "change",
+      evidence: [
+        `${writes.length} consecutive writes target direct fields of ${assignTarget}`,
+        "each value is independent of the updated observable and no control-flow boundary splits the writes",
+      ],
+      location: { column: character + 1, file: fileName, line: line + 1 },
+      message: `Replace ${writes.length} \`.set()\` calls with one \`${assignTarget}.assign(...)\` for ${fields}; observers publish once.`,
+      practice: "assign",
+    };
+  }
   return {
     action: "batch-observable-writes",
     confidence: "probable",
@@ -243,9 +271,34 @@ function batchFinding(
       "no await, yield, control-flow boundary, or existing batch surrounds the writes",
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
-    message: `Batch these ${writes.length} consecutive Legend observable writes so observers publish once; use \`batch(() => { ... })\`, or one parent \`.assign(...)\` when the fields share an object root.`,
+    message: `Wrap these ${writes.length} consecutive Legend observable writes in \`batch(() => { ... })\` so observers publish the transaction once.`,
     practice: "batch",
   };
+}
+
+function commonAssignTarget(writes: readonly ObservableWrite[]): string | null {
+  const target = writes[0]?.parentPath;
+  if (
+    !target ||
+    writes.some(write =>
+      write.parentPath !== target ||
+      write.property === null ||
+      ts.isArrowFunction(write.argument) ||
+      ts.isFunctionExpression(write.argument) ||
+      expressionReferencesIdentifier(write.argument, write.root)
+    )
+  ) {
+    return null;
+  }
+  return target;
+}
+
+function expressionReferencesIdentifier(expression: ts.Expression, name: string): boolean {
+  let found = false;
+  visit(expression, node => {
+    if (ts.isIdentifier(node) && node.text === name) found = true;
+  });
+  return found;
 }
 
 function unwrapExpression(expression: ts.Expression): ts.Expression {

@@ -7,7 +7,7 @@ function actions(source: string): string[] {
   return analyzeLegendPractices(source, "fixture.ts").map(finding => finding.action);
 }
 
-test("batches consecutive writes to distinct local observable paths", () => {
+test("assigns consecutive direct fields of one local observable", () => {
   const [finding] = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
     const player$ = observable({ loading: false, error: null as string | null });
@@ -16,9 +16,11 @@ test("batches consecutive writes to distinct local observable paths", () => {
       player$.loading.set(false);
     }
   `, "fixture.ts");
-  assert.equal(finding?.action, "batch-observable-writes");
+  assert.equal(finding?.action, "assign-observable-fields");
   assert.equal(finding?.location.line, 5);
   assert.match(finding?.message ?? "", /observers publish once/);
+  assert.match(finding?.message ?? "", /player\$\.assign/);
+  assert.match(finding?.message ?? "", /`error`, `loading`/);
 });
 
 test("recognizes typed observable parameters", () => {
@@ -30,7 +32,7 @@ test("recognizes typed observable parameters", () => {
         state$.value.set("");
       }
     `),
-    ["batch-observable-writes"]
+    ["assign-observable-fields"]
   );
 });
 
@@ -47,8 +49,49 @@ test("recognizes useObservable bindings", () => {
         return clear;
       }
     `),
+    ["assign-observable-fields"]
+  );
+});
+
+test("assigns direct fields under the same nested observable object", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    const player$ = observable({ status: { loading: false, error: "" } });
+    player$.status.loading.set(false);
+    player$.status.error.set("failed");
+  `, "fixture.ts");
+  assert.equal(finding?.action, "assign-observable-fields");
+  assert.match(finding?.message ?? "", /player\$\.status\.assign/);
+});
+
+test("uses batch when a transaction spans observable roots", () => {
+  assert.deepEqual(
+    actions(`
+      import { observable } from "@legendapp/state";
+      const player$ = observable({ loading: false });
+      const session$ = observable({ error: "" });
+      player$.loading.set(false);
+      session$.error.set("failed");
+    `),
     ["batch-observable-writes"]
   );
+});
+
+test("uses batch when assign would change updater or read ordering", () => {
+  for (const secondWrite of [
+    `state$.second.set(value => value + 1);`,
+    `state$.second.set(state$.first.get() + 1);`,
+  ]) {
+    assert.deepEqual(
+      actions(`
+        import { observable } from "@legendapp/state";
+        const state$ = observable({ first: 0, second: 0 });
+        state$.first.set(1);
+        ${secondWrite}
+      `),
+      ["batch-observable-writes"]
+    );
+  }
 });
 
 test("recognizes namespace observable and batch calls", () => {
