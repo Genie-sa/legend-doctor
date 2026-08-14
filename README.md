@@ -32,12 +32,12 @@ owner renders, where a subscription belongs, which states must move together, an
 | Analyzed app roots | 9 |
 | Pinned source targets | 92 |
 | Inventoried hooks | 1,738 |
-| Manual labels | 490 |
+| Manual labels | 493 |
 | Grouped-model checks | 12/12 |
-| Unit tests | 207/207 |
-| Actionable precision | 100% (264/264) |
-| Actionable recall | 91.0% (264/290) |
-| `use-observable` recall | 91.9% (215/234) |
+| Unit tests | 213/213 |
+| Actionable precision | 100% (270/270) |
+| Actionable recall | 92.2% (270/293) |
+| `use-observable` recall | 93.2% (221/237) |
 
 The corpus covers Tree Map, Tree Wallet, Memoria, Legend Music, Excalidraw, Expensify, Formbricks, and Outline. Repos and
 commits are pinned so source drift cannot improve the score accidentally.

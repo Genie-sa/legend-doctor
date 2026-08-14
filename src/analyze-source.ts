@@ -213,6 +213,14 @@ export function analyzeSource(
         isKeyedLeafScalarState(state, usage);
     })
   );
+  const keyedScalarSecondaryLeaves = new Set(
+    states.filter(state => {
+      const usage = usageByState.get(state);
+      return safeCommandStates.has(state) &&
+        (!statesWithCompanionWrites.has(state) || hasIndependentRepeatedEventWrite(state, usage)) &&
+        isKeyedScalarWithSecondaryLeaf(state, usage);
+    })
+  );
   const observableClusters = findObservableStateClusters(
     states,
     usageByState,
@@ -281,6 +289,7 @@ export function analyzeSource(
           deferredRevealStates.has(state),
           keyedLeafCollections.has(state),
           keyedLeafScalars.has(state),
+          keyedScalarSecondaryLeaves.has(state),
           siblingCut ?? null
         );
     const finding = findingFor(
@@ -1255,7 +1264,9 @@ function isSnapshotFallbackReference(reference: ts.Identifier, boundary: ts.Node
 
 function oneHopRenderProjectionReferences(
   owner: RuntimeFunctionLike,
-  renderNodes: readonly ts.Node[]
+  renderNodes: readonly ts.Node[],
+  isAllowedProjection: (expression: ts.Expression, reference: ts.Node) => boolean =
+    isSafeProjectionExpression
 ): readonly ts.Identifier[] | null {
   if (renderNodes.length === 0 || renderNodes.some(node => !ts.isIdentifier(node))) return null;
   const declarations = new Set(
@@ -1270,7 +1281,7 @@ function oneHopRenderProjectionReferences(
     !ts.isVariableDeclarationList(declaration.parent) ||
     (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
     bindingDeclarationCount(owner, declaration.name.text) !== 1 ||
-    !renderNodes.every(node => isSafeProjectionExpression(declaration.initializer!, node))
+    !renderNodes.every(node => isAllowedProjection(declaration.initializer!, node))
   ) {
     return null;
   }
@@ -2210,6 +2221,7 @@ function classifyState(
   isDeferredReveal: boolean,
   isKeyedLeafCollection: boolean,
   isKeyedLeafScalar: boolean,
+  isKeyedScalarWithSecondary: boolean,
   siblingRenderCut: SiblingRenderCut | null
 ): ClassifiedState {
   if (isNonProductionHarness(sourceFile.fileName)) {
@@ -2245,6 +2257,13 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace scalar row-selection state \`${state.valueName}\` with a component-lifetime observable; extract a stable-keyed row component and subscribe with a per-item \`useValue(() => ${state.valueName}$.get() === rowDiscriminator)\` selector, while event commands read or update the cursor without subscribing.`,
+    };
+  }
+  if (isKeyedScalarWithSecondary) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace keyed selection state \`${state.valueName}\` with a component-lifetime observable; keep repeated row events command-only, subscribe per row where equality is rendered, move selected-item or non-null projections into one footer or detail leaf, and snapshot event commands without subscribing.`,
     };
   }
   if (siblingRenderCut && usage.effectWrites === 0) {
@@ -4600,6 +4619,225 @@ function isKeyedLeafScalarState(
     usage.directRenderNodes.every(node => isRepeatedScalarKeyProjection(node, state));
 }
 
+function isKeyedScalarWithSecondaryLeaf(
+  state: StateCandidate,
+  usage: StateUsage | undefined
+): boolean {
+  if (
+    !usage ||
+    !hasSupportedKeyedSelectionInitializer(state) ||
+    stateMayHoldCallable(state) ||
+    jsxElementCount(state.owner) < 12 ||
+    usage.directRenderNodes.length === 0 ||
+    usage.localRenderReads !== usage.directRenderNodes.length ||
+    usage.effectReads > 0 ||
+    usage.effectWrites > 0 ||
+    usage.transportedOccurrences > 0 ||
+    usage.setterCalls === 0 ||
+    usage.setterReferences !== usage.setterCalls ||
+    usage.setterCallNodes.some(call =>
+      call.arguments.length !== 1 ||
+      !call.arguments[0] ||
+      !isPureExpression(call.arguments[0])
+    ) ||
+    usage.shadowed ||
+    usage.escaped ||
+    !hasOnlyEventCommandReads(state, new Set(usage.directRenderNodes))
+  ) {
+    return false;
+  }
+
+  const producer = repeatedScalarSelectionProducer(state, usage);
+  if (!producer) return false;
+
+  const secondaryNodes: ts.Node[] = [];
+  for (const node of usage.directRenderNodes) {
+    if (isRepeatedScalarKeyProjection(node, state)) {
+      if (nearestRepeatedRenderCall(node, state.owner) !== producer) return false;
+      continue;
+    }
+    secondaryNodes.push(node);
+  }
+  const secondaryReferences = oneHopRenderProjectionReferences(
+    state.owner,
+    secondaryNodes,
+    (initializer, reference) =>
+      isPureExpression(initializer) ||
+      (ts.isIdentifier(reference) && isSelectedItemLookup(initializer, reference))
+  );
+  if (!secondaryReferences) return false;
+
+  const renderReferences: ts.Identifier[] = [];
+  for (const reference of secondaryReferences) {
+    const callback = nearestNestedFunction(reference, state.owner);
+    if (callback) {
+      if (
+        (ts.isArrowFunction(callback) ||
+          ts.isFunctionDeclaration(callback) ||
+          ts.isFunctionExpression(callback)) &&
+        callbackIsEventRooted(callback, state.owner, reference.text, new Set())
+      ) {
+        continue;
+      }
+      return false;
+    }
+    if (findAncestorUntil(reference, isJsxNode, state.owner)) {
+      if (
+        nearestRepeatedRenderCall(reference, state.owner) ||
+        (isRenderGateReference(reference, state.owner) &&
+          !findAncestorUntil(reference, ts.isJsxAttribute, state.owner)) ||
+        !isSafeJsxProjectionReference(reference, state.owner, new Set(["cn"]))
+      ) {
+        return false;
+      }
+      renderReferences.push(reference);
+      continue;
+    }
+    if (isHookDependencyReference(reference, new Set(["useCallback"]))) {
+      const call = findAncestorUntil(reference, ts.isCallExpression, state.owner);
+      const candidate = call?.arguments[0];
+      if (
+        candidate &&
+        (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
+        callbackIsEventRooted(candidate, state.owner, reference.text, new Set())
+      ) {
+        continue;
+      }
+    }
+    return false;
+  }
+
+  const consumer = lowestCommonJsxSubtree(renderReferences, state.owner);
+  const producerReturn = findAncestorUntil(producer, ts.isReturnStatement, state.owner);
+  const consumerReturn = consumer
+    ? findAncestorUntil(consumer, ts.isReturnStatement, state.owner)
+    : null;
+  return !!consumer &&
+    jsxElementCountIn(consumer) / jsxElementCount(state.owner) <= 0.4 &&
+    producerReturn !== null &&
+    producerReturn === consumerReturn &&
+    !nodeWithin(producer, consumer) &&
+    !nodeWithin(consumer, producer);
+}
+
+function hasSupportedKeyedSelectionInitializer(state: StateCandidate): boolean {
+  if (hasDirectPrimitiveInitializer(state)) return true;
+  if (state.call.arguments.length !== 0) return false;
+  const type = state.call.typeArguments?.[0];
+  return !!type && primitiveScalarType(type);
+}
+
+function primitiveScalarType(type: ts.TypeNode): boolean {
+  if (ts.isParenthesizedTypeNode(type) || ts.isTypeOperatorNode(type)) {
+    return primitiveScalarType(type.type);
+  }
+  if (ts.isUnionTypeNode(type)) return type.types.every(primitiveScalarType);
+  if (ts.isLiteralTypeNode(type)) return true;
+  return [
+    ts.SyntaxKind.StringKeyword,
+    ts.SyntaxKind.NumberKeyword,
+    ts.SyntaxKind.BooleanKeyword,
+    ts.SyntaxKind.BigIntKeyword,
+    ts.SyntaxKind.NullKeyword,
+    ts.SyntaxKind.UndefinedKeyword,
+  ].includes(type.kind);
+}
+
+function repeatedScalarSelectionProducer(
+  state: StateCandidate,
+  usage: StateUsage
+): ts.CallExpression | null {
+  if (!state.setterName) return null;
+  const producers = new Set<ts.CallExpression>();
+  for (const call of usage.setterCallNodes) {
+    const repeated = nearestRepeatedRenderCall(call, state.owner);
+    const callback = repeated?.arguments[0];
+    const event = nearestNestedFunction(call, state.owner);
+    const argument = call.arguments[0];
+    if (
+      !repeated ||
+      !callback ||
+      (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+      !event ||
+      event === callback ||
+      (!ts.isArrowFunction(event) && !ts.isFunctionExpression(event)) ||
+      !argument ||
+      !callback.parameters.some(parameter =>
+        expressionDependsOnBinding(argument, parameter.name, callback)
+      ) ||
+      !repeatedRenderHasStableItemKey(callback) ||
+      !isInsideJsxEventCallback(call, state.owner) ||
+      !mutationRegionOnlyCallsStateSetters(event, new Set([state.setterName]))
+    ) {
+      continue;
+    }
+    producers.add(repeated);
+  }
+  return producers.size === 1 ? [...producers][0]! : null;
+}
+
+function isSelectedItemLookup(
+  initializer: ts.Expression,
+  stateReference: ts.Identifier
+): boolean {
+  let expression = unwrapTransparentExpression(initializer);
+  if (
+    ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
+    unwrapTransparentExpression(expression.right).kind === ts.SyntaxKind.NullKeyword
+  ) {
+    expression = unwrapTransparentExpression(expression.left);
+  }
+  if (
+    !ts.isCallExpression(expression) ||
+    !ts.isPropertyAccessExpression(expression.expression) ||
+    expression.expression.name.text !== "find" ||
+    expression.arguments.length !== 1
+  ) {
+    return false;
+  }
+  const callback = expression.arguments[0];
+  if (
+    !callback ||
+    (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+    ts.isBlock(callback.body) ||
+    callback.parameters.length !== 1
+  ) {
+    return false;
+  }
+  const comparison = unwrapTransparentExpression(callback.body);
+  if (
+    !ts.isBinaryExpression(comparison) ||
+    comparison.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    return false;
+  }
+  const left = unwrapTransparentExpression(comparison.left);
+  const right = unwrapTransparentExpression(comparison.right);
+  const other = left === stateReference
+    ? right
+    : right === stateReference
+      ? left
+      : null;
+  if (
+    !other ||
+    !expressionDependsOnBinding(other, callback.parameters[0]!.name, callback)
+  ) {
+    return false;
+  }
+  let stateReads = 0;
+  visit(initializer, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === stateReference.text &&
+      !isNonValueIdentifier(node)
+    ) {
+      stateReads += 1;
+    }
+  });
+  return stateReads === 1;
+}
+
 function isRepeatedScalarKeyProjection(
   node: ts.Node,
   state: StateCandidate
@@ -5070,6 +5308,7 @@ function isMembershipMountGate(node: ts.Node, callback: RuntimeFunctionLike): bo
         statementContainsReturn(current.thenStatement)) ||
       (ts.isConditionalExpression(current) &&
         nodeWithin(node, current.condition) &&
+        !findAncestorUntil(current, ts.isJsxAttribute, callback) &&
         (expressionIsNullish(current.whenTrue) || expressionIsNullish(current.whenFalse))) ||
       (ts.isBinaryExpression(current) &&
         (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||

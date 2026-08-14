@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,738 hooks across ninety-two source roots. The corpus currently contains 490
-manual hook labels, including thirty-two non-enforced opportunities (thirty currently missed), plus
+At the pinned commits, the analyzer inventories 1,738 hooks across ninety-two source roots. The corpus currently contains 493
+manual hook labels, including twenty-nine non-enforced opportunities (twenty-seven currently missed), plus
 twelve grouped-instruction labels that verify exact cluster membership. Run the eval for the current precision/recall
 table; do not copy a passing percentage into documentation because the score must change as known misses are added.
 
@@ -80,7 +80,9 @@ normalization; filtered intersections, cross-file normalization, mutable/escaped
 selection-driven list shape remain explicit recall cases rather than widening the detector without proof.
 Scalar row-selection labels additionally require strict equality to the current repeated item key or index, pure setter
 arguments, and event-only command reads. Derived row discriminators, effects, unstable keys, broadcasts, and selectors
-that control row existence remain review findings.
+that control row existence remain review findings. A keyed row command may also feed one separate footer or detail leaf
+when every secondary read resolves through one immutable projection, the leaf is at most 40% of the owner, and list shape
+is independent of the selection. Impure lookups, opaque render callbacks, fixed-key producers, and owner-wide fanout abstain.
 
 State-cluster evals score the unit the coding agent actually receives: one anchor plus the exact member set. Co-writing
 alone is insufficient. A grouped change requires compatible mutation paths, one payload plus visibility modes, resolved

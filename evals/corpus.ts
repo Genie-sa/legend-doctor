@@ -1157,6 +1157,15 @@ export const goldCases = [
     rationale: "Independent commands mutate the value while only one small descendant needs to subscribe.",
     target: "memoria-src",
   },
+  {
+    action: "use-observable",
+    file: "feature/settings/pages/TrackerSyncScreen.tsx",
+    hook: "useState",
+    line: 102,
+    name: "firstRun",
+    rationale: "Stable choice rows subscribe by key, the action button subscribes to the selected mode, and the start command snapshots the latest choice without rerendering the screen owner.",
+    target: "memoria-src",
+  },
   ...[
     ["feature/creative/pages/StickersScreen.tsx", 194, "introVisible"],
     ["feature/settings/pages/ContentScreen.tsx", 31, "introVisible"],
@@ -2124,9 +2133,20 @@ export const goldCases = [
     rationale: "Keyboard and pointer commands update one stable row cursor; rows should subscribe by their derived item index while Enter reads one non-tracking snapshot.",
     target: "tree-map",
   },
+  ...[
+    ["components/account-management/add-member-dialog.tsx", 39, "selected"],
+    ["components/account-management/link-account-dialog.tsx", 41, "selectedAccount"],
+  ].map(([file, line, name]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "Each account row needs only its selected projection while one confirmation control consumes the selected payload; independent row commands should not invalidate the dialog owner.",
+    target: "tree-map",
+  })),
   {
     action: "use-observable",
-    enforced: false,
     file: "components/challenges/your-challengers-sheet.tsx",
     hook: "useState",
     line: 27,
@@ -2933,7 +2953,6 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
-    enforced: false,
     file: "workflow-runs-table.tsx",
     hook: "useState",
     line: 42,
@@ -3366,7 +3385,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "AddAgentRuleSuggestionsTab.tsx",
     hook: "useState",
     line: 46,
