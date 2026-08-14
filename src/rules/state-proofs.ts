@@ -72,10 +72,17 @@ export function hasIndependentRenderCutWitness(
         return;
       }
       const name = descendant.tagName.getText();
-      hasIndependentComponent = localComponents.has(name) || sourceComponents.has(name);
+      hasIndependentComponent = isComponentBoundaryName(name) ||
+        localComponents.has(name) ||
+        sourceComponents.has(name);
     });
   });
   return hasIndependentComponent || independentElements >= 2;
+}
+
+function isComponentBoundaryName(name: string): boolean {
+  const member = name.slice(name.lastIndexOf(".") + 1);
+  return member !== "Fragment" && (name.includes(".") || /^[A-Z]/.test(name));
 }
 
 export function oneHopRenderProjectionReferences(

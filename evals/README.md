@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,914 hooks across 133 source roots. The corpus currently contains
-590 manual hook labels, including 22 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 1,929 hooks across 140 source roots. The corpus currently contains
+607 manual hook labels, including 22 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
 labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
@@ -45,6 +45,8 @@ from arbitrary returned calls and treat `useMount` as a probable lifecycle choic
 Deferred render-gate labels separately verify that scheduler effects and cleanup stay in React while only their
 one-shot boolean sink moves to a leaf observable. Projection labels require one bounded call-site render surface and an
 independent write path; reactive mutation lifecycles and custom-hook setter escapes are enforced hard negatives.
+Controlled-leaf and async-status labels may use an independent JSX component sibling as the render-cut witness even
+when its source is unresolved; fragments, ancestors, dead JSX, and repeated or unstable consumers do not qualify.
 Effect-synchronized draft labels preserve the original React effect, guard, dependencies, and timing while moving only
 a complete editable state cluster into one observable model. A migration also needs a structural render cut: raw JSX
 count alone is not proof, root-level cohesive controls stay in React, and deferred commands snapshot the observable once at

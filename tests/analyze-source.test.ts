@@ -548,6 +548,40 @@ test("uses independent host siblings as a controlled render-cut witness", () => 
   assert.equal(finding?.action, "use-observable");
 });
 
+test("uses an unresolved JSX component sibling as a controlled render-cut witness", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    import { SummaryPanel } from "./summary-panel";
+    function Field(_props: unknown) { return null; }
+    export function Form() {
+      const [value, setValue] = useState("");
+      const submit = () => save(value);
+      return <>
+        <Field value={value} onChange={setValue} />
+        <SummaryPanel onSubmit={submit} />
+      </>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+});
+
+test("does not treat a Fragment as an independent component boundary", () => {
+  const [finding] = analyzeSource(`
+    import React, { useState } from "react";
+    function Field(_props: unknown) { return null; }
+    export function Form() {
+      const [value, setValue] = useState("");
+      return <>
+        <Field value={value} onChange={setValue} />
+        <React.Fragment>
+          <button onClick={() => save(value)}>Save</button>
+        </React.Fragment>
+      </>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "review-state");
+});
+
 test("treats a local helper invoked by a JSX event as a deferred command", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
