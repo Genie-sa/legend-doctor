@@ -1,31 +1,30 @@
 # Legend Doctor
 
-Static analysis for coding agents that optimize React `useState` and `useEffect` with Legend State.
+Static analysis that tells coding agents exactly how to optimize React `useState` and `useEffect` with Legend State.
 
-Legend Doctor scans an app and returns file-level refactoring instructions. It finds where an observable can reduce
-owner renders, where a subscription belongs, which states must move together, and which React effects must stay intact.
+One command returns the hook, action, subscription boundary, evidence, and risk. The tool recommends code changes; the
+agent implements and verifies them.
 
 ## What it delivers
 
 | Input | Output |
 | --- | --- |
-| React `useState` | Keep, delete, move, use a ref, reuse an observable, or create an observable |
-| React `useEffect` | Keep, delete, move to an event, or use a Legend lifecycle/reaction hook |
-| Coupled state | One grouped model instead of several conflicting edits |
-| Render usage | The smallest proven subscriber: leaf, row selector, gate, or call-site wrapper |
-| Risk | File, line, confidence, evidence, and explicit review cases |
+| React `useState` | Exact action: keep, delete, move, ref, reuse, or observable |
+| React `useEffect` | Exact action: keep, delete, event, lifecycle, or reaction |
+| Coupled state | One atomic model and one grouped instruction |
+| Render scope | Smallest proven subscriber: field, row, gate, or dialog |
+| Proof | File, line, confidence, evidence, and review boundary |
 
-### Optimization value
+### Value in numbers
 
-| Pattern | Before | Target result |
-| --- | --- | --- |
-| Selected row | Owner and all rows render | At most the old and new row render |
-| Form draft | Every keystroke renders the form owner | Only subscribed fields and validation leaves render |
-| Modal payload | Opening a dialog renders its table/page owner | The dialog call-site subscriber renders |
-| Coupled state | Several independent edits risk split transitions | One atomic observable model |
-| React effect | Easy to change timing while refactoring | Cleanup, dependencies, and commit phase stay explicit |
+| Case | Before | After target |
+| --- | ---: | ---: |
+| Select 1 of 100 rows | 1 owner + 100 rows | Up to 2 changed row subscribers |
+| Open 1 dialog from a table | Page + table + dialog | 1 dialog subscriber |
+| Seed a 3-field draft | 3 React setters | 1 atomic observable write |
+| Teardown-only effect | 1 generic effect | 1 explicit lifecycle hook |
 
-## Current proof
+## Measured accuracy
 
 | Measure | Result |
 | --- | ---: |
@@ -39,8 +38,8 @@ owner renders, where a subscription belongs, which states must move together, an
 | Actionable recall | 92.2% (270/293) |
 | `use-observable` recall | 93.2% (221/237) |
 
-The corpus covers Tree Map, Tree Wallet, Memoria, Legend Music, Excalidraw, Expensify, Formbricks, and Outline. Repos and
-commits are pinned so source drift cannot improve the score accidentally.
+These are analyzer-evaluation results, not runtime benchmark claims. The pinned corpus covers Tree Map, Tree Wallet,
+Memoria, Legend Music, Excalidraw, Expensify, Formbricks, and Outline.
 
 ## Agent workflow
 
@@ -68,11 +67,27 @@ Use the result in this order:
 
 `--actionable` shows `change` and `candidate` findings. Omit it to include intentional `keep` findings.
 
+One JSON finding is enough for an agent to act:
+
+```json
+{
+  "action": "use-observable",
+  "disposition": "change",
+  "confidence": "probable",
+  "location": { "file": "accounts-page.tsx", "line": 18, "column": 35 },
+  "name": "deleteTarget",
+  "stateModel": {
+    "ownership": "local-observable",
+    "subscription": "leaf-use-value"
+  }
+}
+```
+
 ## Clear before and after
 
-### 1. Selected row: 100 rows → about 2 row renders
+### 1. Selected row: 101 render targets → up to 2
 
-**Before:** one cursor update invalidates the list owner and all 100 rows.
+**Before — scope: owner + 100 rows**
 
 ```jsx
 function Results({ rows }) {
@@ -88,7 +103,7 @@ function Results({ rows }) {
 }
 ```
 
-**Doctor says:**
+**Finding**
 
 ```text
 search.tsx:31:31 [use-observable] Replace scalar row-selection state `active` with a
@@ -96,7 +111,7 @@ component-lifetime observable; extract a stable-keyed row component and subscrib
 per-item `useValue(() => active$.get() === rowDiscriminator)` selector.
 ```
 
-**After:** the owner keeps one observable. Each row subscribes to one boolean.
+**After — scope: changed row selectors**
 
 ```jsx
 function Results({ rows }) {
@@ -112,11 +127,11 @@ function ResultRow({ row, index, active$ }) {
 }
 ```
 
-**Impact:** changing row 12 → row 13 can rerender 2 row subscribers instead of the owner plus 100 rows.
+**Result:** changing row 12 → 13 can update 2 boolean subscribers instead of invalidating 101 render targets.
 
-### 2. Dialog state: page render → dialog render
+### 2. Dialog state: page + table + dialog → dialog
 
-**Before:** opening a dialog rerenders the table, filters, toolbar, and dialog.
+**Before — scope: whole page**
 
 ```tsx
 function AccountsPage() {
@@ -135,14 +150,14 @@ function AccountsPage() {
 }
 ```
 
-**Doctor says:**
+**Finding**
 
 ```text
 accounts-page.tsx:18:35 [use-observable] Keep `deleteTarget` in a component-lifetime
 observable and subscribe at the single dialog call site. Keep table callbacks command-only.
 ```
 
-**After:** table commands update the observable; one stable wrapper subscribes for the dialog.
+**After — scope: one stable dialog wrapper**
 
 ```tsx
 function AccountsPage() {
@@ -168,23 +183,25 @@ function DeleteDialogState({ deleteTarget$ }) {
 }
 ```
 
-**Impact:** open and close update 1 dialog boundary instead of rebuilding the page and table.
+**Result:** open and close update 1 dialog boundary. The page and table remain command-only.
 
-### 3. Effect-synchronized draft: 2 setter calls → 1 atomic assignment
+### 3. Effect-synchronized draft: 3 setters → 1 write
 
-**Before:** mounting can render the sheet, run the effect, then render it again. Every edit renders it again.
+**Before — 3 React state writes**
 
 ```tsx
 const [name, setName] = useState("");
 const [color, setColor] = useState("");
+const [anchor, setAnchor] = useState<string | null>(null);
 
 useEffect(() => {
   setName(session.name);
   setColor(session.color);
+  setAnchor(session.anchor);
 }, [session]);
 ```
 
-**Doctor says:**
+**Finding**
 
 ```text
 SessionSheet.tsx:44:27 [use-observable] Replace the effect-synchronized React draft cluster
@@ -195,13 +212,13 @@ SessionSheet.tsx:53:3 [review-effect] Preserve this React synchronization effect
 dependency timing. Replace only its setter calls with one atomic observable assignment.
 ```
 
-**After:** keep the React effect and dependency timing. Change only its state sink.
+**After — 1 atomic observable write**
 
 ```tsx
-const draft$ = useObservable({ name: "", color: "" });
+const draft$ = useObservable({ name: "", color: "", anchor: null as string | null });
 
 useEffect(() => {
-  draft$.assign({ name: session.name, color: session.color });
+  draft$.set({ name: session.name, color: session.color, anchor: session.anchor });
 }, [session]);
 
 const save = () => submit(draft$.peek());
@@ -212,11 +229,12 @@ function NameField({ draft$ }) {
 }
 ```
 
-**Impact:** the synchronization write no longer forces a second owner render; edits update subscribed fields.
+**Result:** the effect keeps the same timing and dependencies. Its 3 writes become 1 transaction; edits update only
+subscribed fields.
 
-### 4. Teardown ownership: keep setup out, move cleanup
+### 4. Teardown-only effect: generic effect → explicit lifecycle
 
-**Before:** an empty-dependency effect exists only to return cleanup.
+**Before — 1 generic React effect**
 
 ```tsx
 useEffect(() => {
@@ -224,18 +242,20 @@ useEffect(() => {
 }, []);
 ```
 
-**Doctor says:**
+**Finding**
 
 ```text
 Tooltip.tsx:93:3 [use-unmount] Replace this teardown-only empty-dependency effect with
 `useUnmount` if once-only Legend lifecycle semantics are intended.
 ```
 
-**After:** lifecycle intent is explicit.
+**After — 1 explicit teardown hook**
 
 ```tsx
 useUnmount(() => tooltip.hide());
 ```
+
+**Result:** cleanup ownership is visible. The agent changes it only when once-only Legend lifecycle semantics are intended.
 
 ## How findings are classified
 
