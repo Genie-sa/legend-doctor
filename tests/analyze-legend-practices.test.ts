@@ -81,6 +81,16 @@ test("uses batch when assign would change updater or read ordering", () => {
   for (const secondWrite of [
     `state$.second.set(value => value + 1);`,
     `state$.second.set(state$.first.get() + 1);`,
+    `state$.second.set(deriveSecond());`,
+    `state$.second.set(new Widget());`,
+    `state$.second.set(source.value);`,
+    "state$.second.set(tag`value`);",
+    `state$.second.set({ ...source });`,
+    `state$.second.set(source + "");`,
+    `state$.second.set(+1n);`,
+    `state$.second.set(source = next);`,
+    `state$.second.set(++index);`,
+    `state$.second.set(delete source.value);`,
   ]) {
     assert.deepEqual(
       actions(`

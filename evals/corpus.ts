@@ -2144,15 +2144,14 @@ export const goldCases = [
     ["components/cockpit/pages/landowner-profile.tsx", 72, "logoOverride", "use-observable"],
     ["components/marketing/notification-preview.tsx", 20, "failedImageUrl", "review-state"],
     ["components/marketing/notification-preview.tsx", 119, "failedIconUrl", "use-observable"],
-    ["components/marketing/notification-preview.tsx", 120, "failedImageUrl", "use-observable"],
+    ["components/marketing/notification-preview.tsx", 120, "failedImageUrl", "review-state"],
   ].map(([file, line, name, action]) => ({
     action: action as "review-state" | "use-observable",
-    ...(line === 120 ? { enforced: false as const } : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 20
+    rationale: line === 20 || line === 120
       ? "The same alias gates two disjoint image instances, so one bounded leaf subscription is not proven."
       : "A unique immutable projection carries the state to one stable visual leaf without effects or companion React writes.",
     target: "tree-map",
@@ -3956,10 +3955,10 @@ export const goldPracticeCases = [
     target: "memoria-src",
   },
   {
-    action: "assign-observable-fields",
+    action: "batch-observable-writes",
     file: "backend/utils/jobQueue.ts",
     line: 64,
-    rationale: "Queued and active counts are one queue snapshot.",
+    rationale: "Queued and active counts are one queue snapshot; batching preserves sequential property evaluation.",
     target: "memoria-src",
   },
   {
@@ -4096,10 +4095,10 @@ export const goldPracticeCases = [
     target: "legend-music",
   },
   {
-    action: "assign-observable-fields",
+    action: "batch-observable-writes",
     file: "systems/LibraryState.ts",
     line: 317,
-    rationale: "Tracks, artists, and albums are one normalized library snapshot.",
+    rationale: "Tracks, artists, and albums are one normalized library snapshot; batching preserves sequential helper evaluation.",
     target: "legend-music",
   },
   {
@@ -4145,17 +4144,17 @@ export const goldPracticeCases = [
     target: "legend-music",
   },
   {
-    action: "assign-observable-fields",
+    action: "batch-observable-writes",
     file: "components/LocalAudioPlayer.tsx",
     line: 1112,
-    rationale: "A successful load publishes duration, loading, and error fields together.",
+    rationale: "A successful load publishes duration, loading, and error fields together while preserving property evaluation order.",
     target: "legend-music",
   },
   {
-    action: "assign-observable-fields",
+    action: "batch-observable-writes",
     file: "components/LocalAudioPlayer.tsx",
     line: 1123,
-    rationale: "A native load error publishes error, loading, and playback fields together.",
+    rationale: "A native load error publishes error, loading, and playback fields together while preserving property evaluation order.",
     target: "legend-music",
   },
   {
@@ -4173,10 +4172,10 @@ export const goldPracticeCases = [
     target: "legend-music",
   },
   {
-    action: "assign-observable-fields",
+    action: "batch-observable-writes",
     file: "systems/LibraryState.ts",
     line: 395,
-    rationale: "Restoring a library snapshot publishes four direct library fields together.",
+    rationale: "Restoring a library snapshot publishes four fields together while preserving sequential helper evaluation.",
     target: "legend-music",
   },
   {
@@ -4194,10 +4193,10 @@ export const goldPracticeCases = [
     target: "legend-music",
   },
   {
-    action: "assign-observable-fields",
+    action: "batch-observable-writes",
     file: "systems/LocalMusicState.ts",
     line: 866,
-    rationale: "Scan completion publishes track total and progress on one state object.",
+    rationale: "Scan completion publishes track total and progress together while preserving sequential property evaluation.",
     target: "legend-music",
   },
   {
