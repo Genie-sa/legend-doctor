@@ -41,23 +41,19 @@ export function analyzeLegendPractices(
       : ts.ScriptKind.TS
   );
   const imports = collectHookImports(sourceFile);
-  const findings = [...findLegacyUseValuePractices(sourceFile, fileName, imports)];
-  if (
+  const lacksObservableSources =
     imports.observable.size === 0 &&
     imports.useObservable.size === 0 &&
     imports.observableTypes.size === 0 &&
     importedObservables.size === 0 &&
-    importedObservableFactories.size === 0
-  ) {
-    return findings;
-  }
-
-  const observableBindings = collectObservableBindings(
-    sourceFile,
-    imports,
-    importedObservables,
-    importedObservableFactories
-  );
+    importedObservableFactories.size === 0;
+  const observableBindings = lacksObservableSources
+    ? new Set<string>()
+    : collectObservableBindings(sourceFile, imports, importedObservables, importedObservableFactories);
+  const findings = [
+    ...findLegacyUseValuePractices(sourceFile, fileName, imports, observableBindings),
+  ];
+  if (lacksObservableSources) return findings;
   if (observableBindings.size === 0) return findings;
 
   visit(sourceFile, node => {

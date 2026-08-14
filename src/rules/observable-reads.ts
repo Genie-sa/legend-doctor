@@ -139,7 +139,13 @@ function directUseValueObservable(
   observableBindings: ReadonlySet<string>
 ): ts.Expression | null {
   if (!isUseValueCall(call, imports)) return null;
-  const selector = call.arguments[0]!;
+  return directObservableSelectorPath(call.arguments[0]!, observableBindings);
+}
+
+export function directObservableSelectorPath(
+  selector: ts.Expression,
+  observableBindings: ReadonlySet<string>
+): ts.Expression | null {
   if (
     (!ts.isArrowFunction(selector) && !ts.isFunctionExpression(selector)) ||
     selector.parameters.length > 0 ||

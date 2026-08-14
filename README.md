@@ -20,7 +20,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
 | Whole-object clone writes | Direct child `.set()` on the changed path |
 | Multiple Legend writes | One `.assign()` or `batch()` transaction |
-| Legacy `useSelector` / `use$` | `useValue` with the same arguments |
+| Legacy `useSelector` / `use$` | `useValue`, narrowed when the selector is one direct `.get()` |
 | Every finding | File, line, action, confidence, evidence, and boundary |
 
 Measured on pinned real applications:
@@ -31,7 +31,7 @@ Measured on pinned real applications:
 | Source targets | 133 |
 | Hooks analyzed | 1,914 |
 | Manual labels | 590 |
-| Unit tests | 300/300 |
+| Unit tests | 301/301 |
 | Actionable precision | 100% (328/328) |
 | Actionable recall | 94.8% (328/346) |
 | Legend practice precision | 100% (68/68) |
@@ -192,15 +192,17 @@ optional access, assertion boundaries, calls, writes, and raw object transport s
 Before:
 
 ```tsx
-import { useSelector } from "@legendapp/state/react";
+import { useSelector, use$ } from "@legendapp/state/react";
 const name = useSelector(profile$.name);
+const email = use$(() => profile$.email.get());
+const fullName = use$(() => `${profile$.first.get()} ${profile$.last.get()}`);
 ```
 
 Output:
 
 ```text
 Profile.tsx:18 [replace-legacy-use-value] Replace `useSelector(...)` with
-`useValue(...)`; preserve the arguments unchanged.
+`useValue(profile$.name)`.
 ```
 
 After:
@@ -208,7 +210,11 @@ After:
 ```tsx
 import { useValue } from "@legendapp/state/react";
 const name = useValue(profile$.name);
+const email = useValue(profile$.email);
+const fullName = useValue(() => `${profile$.first.get()} ${profile$.last.get()}`);
 ```
+
+Use the observable directly for one static `.get()`. Keep a callback only when it computes a value from multiple reads.
 
 ### 4. Whole-object clone → direct child write
 

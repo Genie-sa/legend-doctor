@@ -85,8 +85,10 @@ full-app impact must remain zero in applications that do not import Legend State
 Direct-reactivity labels replace only an exact `useValue(() => observablePath.get())` selector with
 `useValue(observablePath)`. The path must be statically addressed and proven as Legend State through a local declaration
 or resolved export. Computed selectors, shallow reads, dynamic element access, and unproven getters abstain.
-Legacy-hook labels replace calls imported as `useSelector` or `use$` from `@legendapp/state/react` with `useValue`,
-preserving every argument. Named aliases and namespace imports are resolved; unrelated and shadowed functions abstain.
+Legacy-hook labels replace calls imported as `useSelector` or `use$` from `@legendapp/state/react` with `useValue`.
+An exact zero-argument `.get()` on a proven static observable path becomes the direct `useValue(path)` form; computed,
+dynamic, and unproven selectors preserve their callback. Named aliases and namespace imports are resolved; unrelated and
+shadowed functions abstain.
 Non-tracking snapshot labels replace zero-argument `.get()` with `.peek()` only inside a direct React state initializer,
 React effect, or uniquely event-rooted command. Render reads, Legend tracking callbacks, mixed-use handlers, nested
 unknown callbacks, shallow reads, dynamic paths, and unproven getters abstain.

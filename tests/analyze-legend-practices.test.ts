@@ -55,19 +55,47 @@ test("recognizes useObservable bindings", () => {
 
 test("replaces legacy Legend React selectors with useValue", () => {
   const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
     import { useSelector as select, use$ } from "@legendapp/state/react";
-    export function Profile({ profile$ }) {
+    const profile$ = observable({ email: "", first: "", last: "", name: "" });
+    export function Profile() {
       const name = select(profile$.name);
       const email = use$(() => profile$.email.get());
-      return <span>{name}{email}</span>;
+      const fullName = use$(() => profile$.first.get() + profile$.last.get());
+      return <span>{name}{email}{fullName}</span>;
     }
   `, "fixture.tsx");
   assert.deepEqual(
     findings.map(finding => finding.action),
-    ["replace-legacy-use-value", "replace-legacy-use-value"]
+    ["replace-legacy-use-value", "replace-legacy-use-value", "replace-legacy-use-value"]
   );
   assert.ok(findings.every(finding => finding.confidence === "certain"));
-  assert.match(findings[0]?.message ?? "", /preserve the arguments unchanged/);
+  assert.match(findings[0]?.message ?? "", /useValue\(profile\$\.name\)/);
+  assert.match(findings[1]?.message ?? "", /useValue\(profile\$\.email\)/);
+  assert.match(findings[1]?.message ?? "", /pass the proven observable path directly/);
+  assert.match(findings[2]?.message ?? "", /useValue\(\(\) => profile\$\.first\.get\(\) \+ profile\$\.last\.get\(\)\)/);
+  assert.match(findings[2]?.message ?? "", /preserve the selector arguments/);
+});
+
+test("keeps legacy callbacks when a direct observable path is not proven", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { use$ } from "@legendapp/state/react";
+    const records$ = observable({ first: { name: "" } });
+    declare const source: { get(): string };
+    export function Screen({ id }: { id: "first" }) {
+      use$(() => records$[id].get());
+      use$(() => records$.first.get(true));
+      use$(() => source.get());
+      return null;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.length, 3);
+  for (const finding of findings) {
+    assert.equal(finding.action, "replace-legacy-use-value");
+    assert.match(finding.message, /preserve the selector arguments/);
+    assert.doesNotMatch(finding.message, /pass the proven observable path directly/);
+  }
 });
 
 test("replaces namespace legacy selectors without matching unrelated functions", () => {
