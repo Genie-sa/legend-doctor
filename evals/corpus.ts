@@ -1631,17 +1631,31 @@ export const goldCases = [
   ...[
     ["components/Playlist.tsx", 103, "isDragOver", "use-observable"],
     ["components/JumpSearchMenuDropdown/hooks.ts", 153, "highlightedIndex", "use-observable"],
-    ["components/MediaLibrary/Sidebar.tsx", 66, "tempPlaylistName", "move-state-down"],
     ["components/MediaLibrary/Sidebar.tsx", 67, "activeNativeDropPlaylistId", "use-observable"],
-    ["components/MediaLibrary/Sidebar.tsx", 69, "editingPlaylistName", "move-state-down"],
   ].map(([file, line, name, action]) => ({
-    action: action as "move-state-down" | "use-observable",
+    action: action as "use-observable",
     ...(line === 67 ? {} : { enforced: false as const }),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
     rationale: "A hot large owner can keep a stable handle while the exact row or drop surface subscribes.",
+    target: "legend-music",
+  })),
+  ...[
+    [65, "tempPlaylistId"],
+    [66, "tempPlaylistName"],
+    [68, "editingPlaylistId"],
+    [69, "editingPlaylistName"],
+  ].map(([line, name]) => ({
+    action: "use-observable" as const,
+    enforced: false as const,
+    file: "components/MediaLibrary/Sidebar.tsx",
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale:
+      "The id and name form one create-or-rename transaction across the header, alternate platform rows, and async finalizer; migrate each pair as one owner-lifetime observable model with leaf subscriptions.",
     target: "legend-music",
   })),
   {
