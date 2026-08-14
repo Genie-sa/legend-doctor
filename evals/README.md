@@ -12,7 +12,7 @@ Pinned repositories:
 - `Radwan-Albahrani/memoria`
 - `LegendApp/legend-music`
 - `excalidraw/excalidraw`
-- `Expensify/App`: focused address, address-search, controlled-form, event-command, list-render, validation, task, workspace, payment-form, HR-sync, video-control, signer-document, Chronos, and domain targets
+- `Expensify/App`: focused address, controlled-form, async-status, Promise-chain, navigation-effect, animation-lifecycle, list-render, validation, task, workspace, payment-form, HR-sync, video-control, signer-document, Chronos, and domain targets
 - `formbricks/formbricks`: focused controlled-form, draft, chart-form, element-editor, webhook, billing, segment, tag, integration, async-status, and survey-URL targets
 - `outline/outline`: focused API-key, controlled-form, document-copy, export-form, and icon-picker targets
 
@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,818 hooks across 109 source roots. The corpus currently contains
-543 manual hook labels, including twenty-five non-enforced opportunities (twenty-three currently missed), plus twelve
+At the pinned commits, the analyzer inventories 1,837 hooks across 114 source roots. The corpus currently contains
+554 manual hook labels, including 27 non-enforced opportunities (25 currently missed), plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-one real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, seven non-tracking snapshot labels, and five narrow child-write
 labels. Run the eval for the current precision/recall table. If the root README publishes those metrics, update them only
