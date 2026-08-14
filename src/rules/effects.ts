@@ -313,12 +313,11 @@ function isDependencyDrivenExternalCommandEffect(
     nestedCalls.some(candidate => !call.arguments.some(argument => nodeWithin(candidate, argument))) ||
     nestedCalls.some(candidate => {
       const root = callRootIdentifier(candidate.expression);
-      return (
-        root === null ||
-        isCallbackDrivenCall(candidate) ||
-        bindingDeclarationCount(owner, root) !== 0 ||
-        (!moduleScopeBindings.has(root) && !KNOWN_GLOBAL_OBJECTS.has(root))
-      );
+      if (root === null || isCallbackDrivenCall(candidate)) return true;
+      if (bindingDeclarationCount(owner, root) !== 0) {
+        return !isImportedTranslationArgument(candidate, owner, dependencies);
+      }
+      return !moduleScopeBindings.has(root) && !KNOWN_GLOBAL_OBJECTS.has(root);
     }) ||
     isSubscriptionCall(call) ||
     call.arguments.some(containsFunctionLike)
@@ -336,6 +335,63 @@ function isDependencyDrivenExternalCommandEffect(
   if (isCallbackDrivenCall(call)) return false;
   const root = callRootIdentifier(callee);
   return root !== null && !["console", "Math", "Promise"].includes(root);
+}
+
+function isImportedTranslationArgument(
+  call: ts.CallExpression,
+  owner: RuntimeFunctionLike,
+  dependencies: ts.ArrayLiteralExpression
+): boolean {
+  if (!ts.isIdentifier(call.expression) || !owner.body) return false;
+  const localName = call.expression.text;
+  if (!dependencies.elements.some(element => ts.isIdentifier(element) && element.text === localName)) {
+    return false;
+  }
+
+  let hookName: string | null = null;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (
+      hookName !== null ||
+      !ts.isVariableDeclaration(node) ||
+      !ts.isObjectBindingPattern(node.name) ||
+      !node.initializer ||
+      !ts.isCallExpression(node.initializer) ||
+      !ts.isVariableDeclarationList(node.parent) ||
+      (node.parent.flags & ts.NodeFlags.Const) === 0
+    ) {
+      return;
+    }
+    const binding = node.name.elements.find(element => {
+      const sourceName = element.propertyName ?? element.name;
+      return (
+        !element.dotDotDotToken &&
+        ts.isIdentifier(element.name) &&
+        element.name.text === localName &&
+        ts.isIdentifier(sourceName) &&
+        sourceName.text === "t"
+      );
+    });
+    if (binding && ts.isIdentifier(node.initializer.expression)) {
+      hookName = node.initializer.expression.text;
+    }
+  });
+  return (
+    hookName !== null &&
+    bindingDeclarationCount(owner, hookName) === 0 &&
+    owner.getSourceFile().statements.some(
+      statement =>
+        ts.isImportDeclaration(statement) &&
+        ts.isStringLiteral(statement.moduleSpecifier) &&
+        statement.moduleSpecifier.text === "react-i18next" &&
+        statement.importClause?.namedBindings !== undefined &&
+        ts.isNamedImports(statement.importClause.namedBindings) &&
+        statement.importClause.namedBindings.elements.some(
+          specifier =>
+            specifier.name.text === hookName &&
+            (specifier.propertyName?.text ?? specifier.name.text) === "useTranslation"
+        )
+    )
+  );
 }
 
 function containsFunctionLike(node: ts.Node): boolean {

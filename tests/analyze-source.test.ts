@@ -4238,6 +4238,71 @@ test("keeps one dependency-driven external resource command in React", () => {
   assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect", "keep-effect"]);
 });
 
+test("keeps one translated external notification in React", () => {
+  const effects = analyzeSource(`
+    import { useEffect } from "react";
+    import { useTranslation, useTranslation as useI18n } from "react-i18next";
+    import { toast } from "sonner";
+    export function Users({ count, error }: { count: number; error: Error | null }) {
+      const { t } = useTranslation();
+      useEffect(() => {
+        if (error) toast.error(t("Could not load {{count}} users", { count }));
+      }, [t, count, error]);
+      return null;
+    }
+    export function Groups({ error }: { error: Error | null }) {
+      const { t: translate } = useI18n();
+      useEffect(() => {
+        if (error) toast.error(translate("Could not load groups"));
+      }, [translate, error]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect"]);
+});
+
+test("does not trust local formatters or lookalike translation hooks in external effects", () => {
+  const effects = analyzeSource(`
+    import { useEffect } from "react";
+    import { useTranslation as useLookalike } from "./translations";
+    import { useTranslation } from "react-i18next";
+    import { toast } from "sonner";
+    export function LocalFormatter({ error }: { error: Error | null }) {
+      const t = (message: string) => message;
+      useEffect(() => { if (error) toast.error(t("Failed")); }, [t, error]);
+      return null;
+    }
+    export function LookalikeHook({ error }: { error: Error | null }) {
+      const { t } = useLookalike();
+      useEffect(() => { if (error) toast.error(t("Failed")); }, [t, error]);
+      return null;
+    }
+    export function MissingDependency({ error }: { error: Error | null }) {
+      const { t } = useTranslation();
+      useEffect(() => { if (error) toast.error(t("Failed")); }, [error]);
+      return null;
+    }
+    export function ShadowedHook({ error }: { error: Error | null }) {
+      const useTranslation = () => ({ t: (message: string) => message });
+      const { t } = useTranslation();
+      useEffect(() => { if (error) toast.error(t("Failed")); }, [t, error]);
+      return null;
+    }
+    export function ArbitraryPreparation({ error }: { error: Error | null }) {
+      const { t } = useTranslation();
+      useEffect(() => { if (error) toast.error(t(buildMessage(error))); }, [t, error]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+  ]);
+});
+
 test("keeps dependency-driven browser-storage persistence in React", () => {
   const effects = analyzeSource(`
     import { useEffect, useState } from "react";

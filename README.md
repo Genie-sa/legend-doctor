@@ -28,10 +28,10 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 9 |
-| Source targets | 148 |
-| Hooks analyzed | 1,944 |
-| Manual labels | 620 |
-| Unit tests | 308/308 |
+| Source targets | 157 |
+| Hooks analyzed | 1,969 |
+| Manual labels | 629 |
+| Unit tests | 310/310 |
 | Actionable precision | 100% (341/341) |
 | Actionable recall | 95.3% (341/358) |
 | Legend practice precision | 100% (68/68) |
@@ -214,7 +214,8 @@ const email = useValue(profile$.email);
 const fullName = useValue(() => `${profile$.first.get()} ${profile$.last.get()}`);
 ```
 
-Use the observable directly for one static `.get()`. Keep a callback only when it computes a value from multiple reads.
+Use the observable directly when you need its raw value. Use a callback only for a derived value that transforms or combines observable reads.
+Never pass an already-read value: `useValue(profile$.name.get())` cannot establish the subscription.
 
 ### 4. Whole-object clone → direct child write
 
