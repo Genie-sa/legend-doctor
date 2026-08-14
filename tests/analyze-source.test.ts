@@ -56,6 +56,80 @@ test("recognizes standard boolean controlled-child callbacks", () => {
   }
 });
 
+test("recognizes descriptive value-transition callbacks on controlled leaves", () => {
+  for (const callback of ["onInputChange", "onSelectCover", "onDashboardNameChange"]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      function Field(_props: unknown) { return null; }
+      function Preview() { return null; }
+      export function Form() {
+        const [value, setValue] = useState("");
+        const submit = () => save(value);
+        return <main>
+          <Field value={value} ${callback}={setValue} />
+          <Preview />
+          <button onClick={submit}>Save</button>
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.equal(finding?.action, "use-observable", callback);
+  }
+});
+
+test("moves call-site-owned custom controlled state into that leaf", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    function Filter(_props: unknown) { return null; }
+    function Preview() { return null; }
+    export function Header() {
+      const [open, setOpen] = useState(false);
+      return <main>
+        <Filter open={open} onOpenChange={() => setOpen(!open)} />
+        <Preview />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "move-state-down");
+});
+
+test("does not split custom controlled fields that share one validation projection", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function Field(_props: unknown) { return null; }
+    function Submit(_props: unknown) { return null; }
+    function Preview() { return null; }
+    export function Form() {
+      const [title, setTitle] = useState("");
+      const [message, setMessage] = useState("");
+      const valid = title.trim().length > 0 && message.trim().length > 0;
+      const submit = () => save(title, message);
+      return <main>
+        <Field value={title} onChangeTitle={setTitle} />
+        <Field value={message} onChangeMessage={setMessage} />
+        <Submit disabled={!valid} onClick={submit} />
+        <Preview />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.filter(finding => finding.action === "use-observable").length, 0);
+});
+
+test("does not treat arbitrary callback props as controlled value transitions", () => {
+  for (const callback of ["onClick", "onSubmit", "register", "renderValue"]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      function Field(_props: unknown) { return null; }
+      function Preview() { return null; }
+      export function Form() {
+        const [value, setValue] = useState("");
+        const submit = () => save(value);
+        return <main><Field value={value} ${callback}={setValue} /><Preview /><button onClick={submit} /></main>;
+      }
+    `, "fixture.tsx");
+    assert.notEqual(finding?.action, "use-observable", callback);
+  }
+});
+
 test("isolates a direct inline controlled-input setter", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

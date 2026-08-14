@@ -2346,7 +2346,7 @@ function classifyState(
       message: `Replace \`${state.valueName}\` with a component-lifetime observable and extract one stable call-site leaf wrapper around \`${target}\` (never define it inline); subscribe there, pass the same prop snapshot, and adapt owner commands to mutate without subscribing.`,
     };
   }
-  if (
+  const controlledLeafCut =
     !isCustomHookOwner(state.owner) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
@@ -2360,13 +2360,23 @@ function classifyState(
     (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
     hasSafeCommands &&
     hasOnlyEventCommandReads(state) &&
-    hasControlledLeafRenderCut(state, usage, localComponents, sourceComponents)
-  ) {
+    controlledLeafRenderCut(state, usage, localComponents, sourceComponents);
+  if (controlledLeafCut) {
     const target = [...usage.valueTargets][0] ?? "the controlled child";
+    const controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlledLeafCut.opening)
+      ? controlledLeafCut.opening.parent
+      : controlledLeafCut.opening;
+    if (stateReferencesConfinedTo(state, controlledSubtree)) {
+      return {
+        action: "move-state-down",
+        confidence: "probable",
+        message: `Extract one stable local wrapper around \`${target}\` and move React state \`${state.valueName}\` into it; every value read and command is confined to that controlled leaf.`,
+      };
+    }
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace controlled state \`${state.valueName}\` with an owner-scoped observable and wrap \`${target}\` in a stable leaf subscriber; keep its value callback API unchanged and use non-tracking reads in submit or commit commands.`,
+      message: `Replace controlled state \`${state.valueName}\` with an owner-scoped observable and wrap \`${target}\` in a stable leaf subscriber; keep its value callback API unchanged and use non-tracking reads in submit or commit commands, snapshotting once at command entry before deferred work.`,
     };
   }
   const controlledProjectionCut = !isCustomHookOwner(state.owner) &&
@@ -2595,14 +2605,17 @@ function setterOwnedByValueCallSite(
     });
 }
 
-function hasControlledLeafRenderCut(
+function controlledLeafRenderCut(
   state: StateCandidate,
   usage: StateUsage,
   localComponents: ReadonlySet<string>,
   sourceComponents: ReadonlySet<string>
-): boolean {
-  const callSite = controlledLeafCallSite(state, usage);
-  if (!callSite) return false;
+): {
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
+  returned: ts.Expression;
+} | null {
+  const callSite = controlledLeafCallSite(state, usage, isValueTransitionProp);
+  if (!callSite) return null;
   const controlled = callSite.opening;
   const controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlled) ? controlled.parent : controlled;
   return hasIndependentRenderCutWitness(
@@ -2610,7 +2623,7 @@ function hasControlledLeafRenderCut(
     [controlledSubtree],
     localComponents,
     sourceComponents
-  );
+  ) ? callSite : null;
 }
 
 function controlledLeafProjectionCut(
@@ -2655,7 +2668,8 @@ function controlledLeafProjectionCut(
 
 function controlledLeafCallSite(
   state: StateCandidate,
-  usage: StateUsage
+  usage: StateUsage,
+  isInteractionProp: (name: string) => boolean = isControlledInteractionProp
 ): {
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
   returned: ts.Expression;
@@ -2677,13 +2691,34 @@ function controlledLeafCallSite(
     directBranchReturnCallSite(usage, state.owner);
   if (
     !callSite ||
-    (!hasDirectInteractionSetter(callSite.opening, state.setterName) &&
-      !hasInlineInteractionSetter(callSite.opening, state, usage) &&
-      !hasInteractionSetterAdapter(callSite.opening, state, usage))
+    (!hasDirectInteractionSetter(callSite.opening, state.setterName, isInteractionProp) &&
+      !hasInlineInteractionSetter(callSite.opening, state, usage, isInteractionProp) &&
+      !hasInteractionSetterAdapter(callSite.opening, state, usage, isInteractionProp))
   ) {
     return null;
   }
   return callSite;
+}
+
+function stateReferencesConfinedTo(
+  state: StateCandidate,
+  boundary: ts.Node
+): boolean {
+  if (!state.owner.body) return false;
+  let confined = true;
+  visit(state.owner.body, node => {
+    if (
+      !confined ||
+      !ts.isIdentifier(node) ||
+      (node.text !== state.valueName && node.text !== state.setterName) ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (!nodeWithin(node, boundary)) confined = false;
+  });
+  return confined;
 }
 
 function ownerHasRefBackedRenderRead(owner: RuntimeFunctionLike): boolean {
@@ -2898,11 +2933,12 @@ function callbackIsEventRooted(
 
 function hasDirectInteractionSetter(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
-  setterName: string
+  setterName: string,
+  isInteractionProp: (name: string) => boolean = isControlledInteractionProp
 ): boolean {
   return opening.attributes.properties.some(attribute =>
     ts.isJsxAttribute(attribute) &&
-    isControlledInteractionProp(attribute.name.getText()) &&
+    isInteractionProp(attribute.name.getText()) &&
     attribute.initializer !== undefined &&
     ts.isJsxExpression(attribute.initializer) &&
     attribute.initializer.expression !== undefined &&
@@ -2914,7 +2950,8 @@ function hasDirectInteractionSetter(
 function hasInlineInteractionSetter(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   state: StateCandidate,
-  usage: StateUsage
+  usage: StateUsage,
+  isInteractionProp: (name: string) => boolean = isControlledInteractionProp
 ): boolean {
   if (
     !state.setterName ||
@@ -2928,7 +2965,7 @@ function hasInlineInteractionSetter(
     const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner);
     if (
       !attribute ||
-      !isControlledInteractionProp(attribute.name.getText()) ||
+      !isInteractionProp(attribute.name.getText()) ||
       attribute.parent?.parent !== opening ||
       !attribute.initializer ||
       !ts.isJsxExpression(attribute.initializer)
@@ -2949,7 +2986,8 @@ function hasInlineInteractionSetter(
 function hasInteractionSetterAdapter(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   state: StateCandidate,
-  usage: StateUsage
+  usage: StateUsage,
+  isInteractionProp: (name: string) => boolean = isControlledInteractionProp
 ): boolean {
   if (
     !state.setterName ||
@@ -2976,7 +3014,7 @@ function hasInteractionSetterAdapter(
   if (!name) return false;
   const interaction = opening.attributes.properties.some(attribute =>
     ts.isJsxAttribute(attribute) &&
-    isControlledInteractionProp(attribute.name.getText()) &&
+    isInteractionProp(attribute.name.getText()) &&
     attribute.initializer !== undefined &&
     ts.isJsxExpression(attribute.initializer) &&
     attribute.initializer.expression !== undefined &&
@@ -2993,6 +3031,12 @@ function hasInteractionSetterAdapter(
 
 function isControlledInteractionProp(name: string): boolean {
   return /^(?:onChange|onChangeText|onCheckedChange|onSelect|onToggle|onValueChange)$/.test(name);
+}
+
+function isValueTransitionProp(name: string): boolean {
+  return isControlledInteractionProp(name) ||
+    /^on(?:Change|Select|Toggle|Update)[A-Z][A-Za-z0-9]*$/.test(name) ||
+    /^on[A-Z][A-Za-z0-9]*(?:Change|Select|Toggle|Update)$/.test(name);
 }
 
 function containsCallExpression(node: ts.Node): boolean {

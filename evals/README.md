@@ -29,7 +29,7 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,738 hooks across ninety-two source roots. The corpus currently contains 493
+At the pinned commits, the analyzer inventories 1,741 hooks across ninety-five source roots. The corpus currently contains 500
 manual hook labels, including twenty-nine non-enforced opportunities (twenty-seven currently missed), plus
 twelve grouped-instruction labels that verify exact cluster membership. Run the eval for the current precision/recall
 table; do not copy a passing percentage into documentation because the score must change as known misses are added.
@@ -74,6 +74,11 @@ stored JSX, state-controlled returns, and value transport to alternate branches 
 An exact call-free controlled edit may prove an independent high-frequency path even when a separate reset or close
 command co-writes sibling state. Direct setter transport for coupled range fields, normalization calls, scheduled work,
 and callbacks that issue any second command remain hard negatives so atomic workflows are not split opportunistically.
+A resolved custom controlled leaf may use a descriptive value-transition callback such as `onInputChange`,
+`onSelectCover`, or `onOpenChange`. This broader callback grammar applies only when one stable call site owns the
+complete value surface and existing command, companion-write, effect, and render-cut proofs pass. State wholly confined
+to that leaf stays React state and moves down; owner commands keep observable ownership above a leaf subscriber.
+Arbitrary callbacks, shared validation projections, and unresolved normalization remain review findings.
 Keyed-selection labels require stable item-derived row keys, membership that changes row presentation rather than row
 existence, and independently placed summary subscribers. Array-backed selection may use one immutable local `Set`
 normalization; filtered intersections, cross-file normalization, mutable/escaped aliases, aggregate broadcasts, and

@@ -29,14 +29,14 @@ agent implements and verifies them.
 | Measure | Result |
 | --- | ---: |
 | Analyzed app roots | 9 |
-| Pinned source targets | 92 |
-| Inventoried hooks | 1,738 |
-| Manual labels | 493 |
+| Pinned source targets | 95 |
+| Inventoried hooks | 1,741 |
+| Manual labels | 500 |
 | Grouped-model checks | 12/12 |
-| Unit tests | 213/213 |
-| Actionable precision | 100% (270/270) |
-| Actionable recall | 92.2% (270/293) |
-| `use-observable` recall | 93.2% (221/237) |
+| Unit tests | 217/217 |
+| Actionable precision | 100% (275/275) |
+| Actionable recall | 92.3% (275/298) |
+| `use-observable` recall | 93.4% (225/241) |
 
 These are analyzer-evaluation results, not runtime benchmark claims. The pinned corpus covers Tree Map, Tree Wallet,
 Memoria, Legend Music, Excalidraw, Expensify, Formbricks, and Outline.
