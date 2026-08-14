@@ -28,9 +28,9 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 9 |
-| Source targets | 141 |
-| Hooks analyzed | 1,930 |
-| Manual labels | 608 |
+| Source targets | 144 |
+| Hooks analyzed | 1,938 |
+| Manual labels | 616 |
 | Unit tests | 304/304 |
 | Actionable precision | 100% (337/337) |
 | Actionable recall | 94.9% (337/355) |

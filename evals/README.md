@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,930 hooks across 141 source roots. The corpus currently contains
-608 manual hook labels, including 22 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 1,938 hooks across 144 source roots. The corpus currently contains
+616 manual hook labels, including 23 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
 labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
@@ -74,9 +74,10 @@ synchronization effect remains unchanged; opaque helpers, multiple consumers, re
 Companion writes block per-state isolation even when another event independently opens the leaf: splitting a later
 payload/visibility transition across React and Legend would lose the original atomic workflow transaction. Those cases
 remain review until the complete state machine can be modeled and emitted as one grouped observable instruction.
-Dependency-driven external effects stay in React when one standalone command follows non-state dependencies. Local-state
-synchronization, observable snapshots, cleanup, timers, collection callbacks, local helpers, and multi-command effects do
-not enter this rule.
+Dependency-driven external effects stay in React when one standalone command follows non-state dependencies. The command
+may contain one imported, module-scope, or known-global argument builder. Local-state synchronization, observable
+snapshots, cleanup, timers, collection callbacks, owner-local or unresolved builders, and multi-command effects do not
+enter this rule.
 Legend transaction labels require two or more consecutive `.set()` calls on distinct observable paths proven by a local
 Legend factory/type or a resolved project export. Direct fields of one object use `.assign()` only when their values do
 not read that observable and are not updater functions; multiple roots and ordering-sensitive values use `batch()`.

@@ -19,6 +19,7 @@ import {
   findAncestorUntil,
   isNonProductionHarness,
   nearestNestedFunction,
+  nodeWithin,
   type RuntimeFunctionLike,
   visit,
   visitSkippingNestedFunctions,
@@ -175,7 +176,8 @@ export function classifyEffect(
       effect,
       stateByValue,
       useValueBindings,
-      useObservableBindings
+      useObservableBindings,
+      moduleScopeBindings
     )
   ) {
     return {
@@ -251,7 +253,8 @@ function isDependencyDrivenExternalCommandEffect(
   effect: EffectCandidate,
   stateByValue: ReadonlyMap<string, StateCandidate>,
   useValueBindings: ReadonlySet<string>,
-  useObservableBindings: ReadonlySet<string>
+  useObservableBindings: ReadonlySet<string>,
+  moduleScopeBindings: ReadonlySet<string>
 ): boolean {
   const { callback, dependencies, owner } = effect;
   if (
@@ -281,9 +284,13 @@ function isDependencyDrivenExternalCommandEffect(
   if (readsLocalStateOrObservableSnapshot) return false;
 
   const calls: ts.CallExpression[] = [];
+  const commands: ts.CallExpression[] = [];
   let hasOtherMutation = false;
   visitSkippingNestedFunctions(callback.body, callback, node => {
-    if (ts.isCallExpression(node)) calls.push(node);
+    if (ts.isCallExpression(node)) {
+      calls.push(node);
+      if (isStandaloneEffectCommand(node, callback)) commands.push(node);
+    }
     if (
       ts.isAwaitExpression(node) ||
       ts.isYieldExpression(node) ||
@@ -297,13 +304,24 @@ function isDependencyDrivenExternalCommandEffect(
       hasOtherMutation = true;
     }
   });
-  if (hasOtherMutation || calls.length !== 1) return false;
+  if (hasOtherMutation || commands.length !== 1) return false;
 
-  const call = calls[0]!;
+  const call = commands[0]!;
+  const nestedCalls = calls.filter(candidate => candidate !== call);
   if (
+    nestedCalls.length > 1 ||
+    nestedCalls.some(candidate => !call.arguments.some(argument => nodeWithin(candidate, argument))) ||
+    nestedCalls.some(candidate => {
+      const root = callRootIdentifier(candidate.expression);
+      return (
+        root === null ||
+        isCallbackDrivenCall(candidate) ||
+        bindingDeclarationCount(owner, root) !== 0 ||
+        (!moduleScopeBindings.has(root) && !KNOWN_GLOBAL_OBJECTS.has(root))
+      );
+    }) ||
     isSubscriptionCall(call) ||
-    !isStandaloneEffectCommand(call, callback) ||
-    call.arguments.some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument))
+    call.arguments.some(containsFunctionLike)
   ) {
     return false;
   }
@@ -315,14 +333,24 @@ function isDependencyDrivenExternalCommandEffect(
     );
   }
   if (!ts.isPropertyAccessExpression(callee) && !ts.isElementAccessExpression(callee)) return false;
-  if (
-    ts.isPropertyAccessExpression(callee) &&
-    /^(?:addEventListener|every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/.test(callee.name.text)
-  ) {
-    return false;
-  }
+  if (isCallbackDrivenCall(call)) return false;
   const root = callRootIdentifier(callee);
   return root !== null && !["console", "Math", "Promise"].includes(root);
+}
+
+function containsFunctionLike(node: ts.Node): boolean {
+  let found = false;
+  visit(node, candidate => {
+    if (ts.isFunctionLike(candidate)) found = true;
+  });
+  return found;
+}
+
+function isCallbackDrivenCall(call: ts.CallExpression): boolean {
+  return (
+    ts.isPropertyAccessExpression(call.expression) &&
+    /^(?:addEventListener|every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/.test(call.expression.name.text)
+  );
 }
 
 function isStandaloneEffectCommand(

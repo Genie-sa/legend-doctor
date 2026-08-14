@@ -4079,7 +4079,7 @@ test("reviews setup-only empty effects because useMount changes Strict Mode sema
 test("keeps one dependency-driven external resource command in React", () => {
   const effects = analyzeSource(`
     import { useEffect } from "react";
-    import { openWorkspace } from "./workspace";
+    import { cacheKey, openWorkspace } from "./workspace";
     export function Workspace({ policyId }: { policyId: string | null }) {
       useEffect(() => {
         if (!policyId) return;
@@ -4093,8 +4093,14 @@ test("keeps one dependency-driven external resource command in React", () => {
       }, [client, enabled]);
       return null;
     }
+    export function Cache({ client, id }: { client: { invalidate: (input: unknown) => void }; id: string }) {
+      useEffect(() => {
+        client.invalidate({ key: cacheKey(id) });
+      }, [client, id]);
+      return null;
+    }
   `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect"]);
+  assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect", "keep-effect"]);
 });
 
 test("keeps dependency-driven browser-storage persistence in React", () => {
@@ -4172,7 +4178,7 @@ test("does not call storage hydration, scheduling, arbitrary work, or observable
 test("reviews local-state, helper, scheduled, multi-command, collection, and subscription effects", () => {
   const effects = analyzeSource(`
     import { useEffect, useState } from "react";
-    import { fetchResource, reportResource, subscribeToResource } from "./resource";
+    import { fetchResource, reportResource, resources, subscribeToResource } from "./resource";
     export function Screen({ id }: { id: string }) {
       const [query, setQuery] = useState("");
       const load = () => fetchResource(id);
@@ -4182,10 +4188,18 @@ test("reviews local-state, helper, scheduled, multi-command, collection, and sub
       useEffect(() => { fetchResource(id); reportResource(id); }, [id]);
       useEffect(() => { [id].forEach(value => fetchResource(value)); }, [id]);
       useEffect(() => { subscribeToResource(id); }, [id]);
+      useEffect(() => { animation.set(withRepeat(withTiming(id))); }, [animation, id]);
+      useEffect(() => { const key = resourceKey(id); fetchResource(key); }, [id]);
+      useEffect(() => { fetchResource(resources.map(resource => resource + id)); }, [id]);
+      useEffect(() => { fetchResource({ id, resolve: () => id }); }, [id]);
       return <input value={query} onChange={event => setQuery(event.target.value)} />;
     }
   `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
   assert.deepEqual(effects.map(finding => finding.action), [
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
     "review-effect",
     "review-effect",
     "review-effect",
