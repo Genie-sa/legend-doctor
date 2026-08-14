@@ -53,6 +53,45 @@ test("recognizes useObservable bindings", () => {
   );
 });
 
+test("replaces legacy Legend React selectors with useValue", () => {
+  const findings = analyzeLegendPractices(`
+    import { useSelector as select, use$ } from "@legendapp/state/react";
+    export function Profile({ profile$ }) {
+      const name = select(profile$.name);
+      const email = use$(() => profile$.email.get());
+      return <span>{name}{email}</span>;
+    }
+  `, "fixture.tsx");
+  assert.deepEqual(
+    findings.map(finding => finding.action),
+    ["replace-legacy-use-value", "replace-legacy-use-value"]
+  );
+  assert.ok(findings.every(finding => finding.confidence === "certain"));
+  assert.match(findings[0]?.message ?? "", /preserve the arguments unchanged/);
+});
+
+test("replaces namespace legacy selectors without matching unrelated functions", () => {
+  assert.deepEqual(
+    actions(`
+      import * as LegendReact from "@legendapp/state/react";
+      export function Profile({ profile$ }) {
+        return LegendReact.useSelector(profile$.name) + LegendReact.use$(() => profile$.email.get());
+      }
+    `),
+    ["replace-legacy-use-value", "replace-legacy-use-value"]
+  );
+  for (const source of [
+    `function useSelector(value: unknown) { return value; } useSelector(source);`,
+    `import { useSelector } from "other-state"; useSelector(source);`,
+    `import { useSelector } from "@legendapp/state/react";
+     function Screen(useSelector) { return useSelector(source); }`,
+    `import * as LegendReact from "@legendapp/state/react";
+     function Screen(LegendReact) { return LegendReact.useSelector(source); }`,
+  ]) {
+    assert.deepEqual(actions(source), [], source);
+  }
+});
+
 test("assigns direct fields under the same nested observable object", () => {
   const [finding] = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";

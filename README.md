@@ -20,6 +20,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
 | Whole-object clone writes | Direct child `.set()` on the changed path |
 | Multiple Legend writes | One `.assign()` or `batch()` transaction |
+| Legacy `useSelector` / `use$` | `useValue` with the same arguments |
 | Every finding | File, line, action, confidence, evidence, and boundary |
 
 Measured on pinned real applications:
@@ -27,13 +28,13 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 9 |
-| Source targets | 127 |
-| Hooks analyzed | 1,893 |
-| Manual labels | 583 |
-| Unit tests | 297/297 |
-| Actionable precision | 100% (320/320) |
-| Actionable recall | 94.7% (320/338) |
-| Legend practice precision | 100% (67/67) |
+| Source targets | 133 |
+| Hooks analyzed | 1,914 |
+| Manual labels | 590 |
+| Unit tests | 300/300 |
+| Actionable precision | 100% (328/328) |
+| Actionable recall | 94.8% (328/346) |
+| Legend practice precision | 100% (68/68) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, and Outline.
@@ -183,6 +184,31 @@ return <Name>{name}</Name>;
 
 The rule follows nested children and selects the deepest static path shared by every read. Divergent fields, dynamic or
 optional access, assertion boundaries, calls, writes, and raw object transport stay unchanged.
+
+### Legacy hook → `useValue`
+
+[Legend State recommends this migration](https://legendapp.com/open-source/state/v3/react/react-api/#usevalue).
+
+Before:
+
+```tsx
+import { useSelector } from "@legendapp/state/react";
+const name = useSelector(profile$.name);
+```
+
+Output:
+
+```text
+Profile.tsx:18 [replace-legacy-use-value] Replace `useSelector(...)` with
+`useValue(...)`; preserve the arguments unchanged.
+```
+
+After:
+
+```tsx
+import { useValue } from "@legendapp/state/react";
+const name = useValue(profile$.name);
+```
 
 ### 4. Whole-object clone → direct child write
 

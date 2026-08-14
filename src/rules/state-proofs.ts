@@ -27,6 +27,57 @@ import {
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
 
+export function hasIndependentRenderCutWitness(
+  returned: ts.Expression,
+  excluded: readonly ts.Node[],
+  localComponents: ReadonlySet<string>,
+  sourceComponents: ReadonlySet<string>
+): boolean {
+  let hasIndependentComponent = false;
+  let independentElements = 0;
+  visitSkippingNestedRuntimeFunctions(returned, node => {
+    if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) return;
+    const candidateSubtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node;
+    const independent = excluded.every(subtree =>
+      candidateSubtree !== subtree &&
+      !nodeWithin(candidateSubtree, subtree) &&
+      !nodeWithin(subtree, candidateSubtree)
+    );
+    if (!independent) return;
+    for (
+      let current: ts.Node | undefined = candidateSubtree.parent;
+      current && current !== returned;
+      current = current.parent
+    ) {
+      if (
+        (ts.isJsxElement(current) ||
+          ts.isJsxFragment(current) ||
+          ts.isJsxSelfClosingElement(current)) &&
+        excluded.every(subtree =>
+          current !== subtree &&
+          !nodeWithin(current, subtree) &&
+          !nodeWithin(subtree, current)
+        )
+      ) {
+        return;
+      }
+    }
+    independentElements += 1;
+    if (hasIndependentComponent) return;
+    visit(candidateSubtree, descendant => {
+      if (
+        hasIndependentComponent ||
+        (!ts.isJsxOpeningElement(descendant) && !ts.isJsxSelfClosingElement(descendant))
+      ) {
+        return;
+      }
+      const name = descendant.tagName.getText();
+      hasIndependentComponent = localComponents.has(name) || sourceComponents.has(name);
+    });
+  });
+  return hasIndependentComponent || independentElements >= 2;
+}
+
 export function oneHopRenderProjectionReferences(
   owner: RuntimeFunctionLike,
   renderNodes: readonly ts.Node[],

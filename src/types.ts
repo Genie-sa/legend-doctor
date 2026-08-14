@@ -27,6 +27,7 @@ export type LegendPracticeAction =
   | "narrow-observable-write"
   | "narrow-use-value-subscription"
   | "pass-observable-to-use-value"
+  | "replace-legacy-use-value"
   | "use-peek-for-snapshot";
 
 export interface SourceLocation {

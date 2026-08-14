@@ -4,6 +4,8 @@ export interface HookImports {
   batch: ReadonlySet<string>;
   hostComponents: ReadonlySet<string>;
   legendNamespaces: ReadonlySet<string>;
+  legendReactNamespaces: ReadonlySet<string>;
+  legacyUseValue: ReadonlySet<string>;
   observable: ReadonlySet<string>;
   observableTypes: ReadonlySet<string>;
   reactNamespaces: ReadonlySet<string>;
@@ -21,6 +23,8 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   const batch = new Set<string>();
   const reactNamespaces = new Set<string>();
   const legendNamespaces = new Set<string>();
+  const legendReactNamespaces = new Set<string>();
+  const legacyUseValue = new Set<string>();
   const hostComponents = new Set<string>();
   const observable = new Set<string>();
   const observableTypes = new Set<string>();
@@ -54,6 +58,10 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
       legendNamespaces.add(bindings.name.text);
       continue;
     }
+    if (moduleName === LEGEND_REACT_MODULE && bindings && ts.isNamespaceImport(bindings)) {
+      legendReactNamespaces.add(bindings.name.text);
+      continue;
+    }
     if (moduleName === REACT_MODULE && bindings && ts.isNamespaceImport(bindings)) {
       reactNamespaces.add(bindings.name.text);
       continue;
@@ -73,6 +81,9 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
         if (importedName === "useEffect") useEffect.add(localName);
       }
       if (moduleName === LEGEND_REACT_MODULE) {
+        if (importedName === "useSelector" || importedName === "use$") {
+          legacyUseValue.add(localName);
+        }
         if (importedName === "useObservable") useObservable.add(localName);
         if (importedName === "useObserveEffect") useObserveEffect.add(localName);
         if (importedName === "useValue") useValue.add(localName);
@@ -91,6 +102,8 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
     batch,
     hostComponents,
     legendNamespaces,
+    legendReactNamespaces,
+    legacyUseValue,
     observable,
     observableTypes,
     reactNamespaces,

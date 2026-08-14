@@ -2203,6 +2203,24 @@ test("does not isolate async status without one broad stable leaf", () => {
   }
 });
 
+test("isolates async status in a compact owner with an independent render cut", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
+    export function CompactForm() {
+      const [saving, setSaving] = useState(false);
+      async function save() { setSaving(true); await persist(); setSaving(false); }
+      return <form onSubmit={save}>
+        <Header />
+        <Fields />
+        <LoadingButton loading={saving} />
+      </form>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /independent owner content/);
+});
+
 test("does not treat a lazy or indirect initializer as a direct primitive", () => {
   const findings = analyzeSource(`
     import { useState } from "react";

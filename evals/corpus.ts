@@ -593,6 +593,30 @@ export const repositories = [
         states: 4,
       },
       {
+        effects: 1,
+        id: "formbricks-survey-analysis-cta",
+        root: "apps/web/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx",
+        states: 7,
+      },
+      {
+        effects: 0,
+        id: "formbricks-dashboard-control",
+        root: "apps/web/modules/ee/analysis/dashboards/components/dashboard-control-bar.tsx",
+        states: 3,
+      },
+      {
+        effects: 0,
+        id: "formbricks-contact-control",
+        root: "apps/web/modules/ee/contacts/[contactId]/components/contact-control-bar.tsx",
+        states: 4,
+      },
+      {
+        effects: 0,
+        id: "formbricks-delete-team",
+        root: "apps/web/modules/ee/teams/team-list/components/team-settings/delete-team.tsx",
+        states: 2,
+      },
+      {
         effects: 0,
         id: "formbricks-edit-attribute",
         root: "apps/web/modules/ee/contacts/attributes/components/edit-attribute-modal.tsx",
@@ -773,6 +797,18 @@ export const repositories = [
         id: "outline-authentication-provider",
         root: "app/scenes/Login/components/AuthenticationProvider.tsx",
         states: 3,
+      },
+      {
+        effects: 1,
+        id: "outline-authentication-settings",
+        root: "app/scenes/Settings/Authentication.tsx",
+        states: 2,
+      },
+      {
+        effects: 0,
+        id: "outline-export-csv",
+        root: "app/scenes/Settings/components/ExportCSV.tsx",
+        states: 1,
       },
       {
         effects: 2,
@@ -1254,6 +1290,15 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
+    file: "components/companies/companies-grid-view-container.tsx",
+    hook: "useState",
+    line: 28,
+    name: "isGeneratingReport",
+    rationale: "Only the report action in CompaniesHeader renders this pending interval; the table and page content remain independent of it.",
+    target: "tree-map",
+  },
+  {
+    action: "use-observable",
     file: "components/cockpit/activity-log.tsx",
     hook: "useState",
     line: 56,
@@ -1538,7 +1583,6 @@ export const goldCases = [
     ["components/species-management/species-management-page.tsx", 164, "selectedOpen"],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
-    enforced: false as const,
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -3254,6 +3298,30 @@ export const goldCases = [
     rationale: "The first pending transition is an independent event-rooted write immediately before awaited work, and one stable status leaf can subscribe without changing the command, await, or later close/reset transitions.",
     target: target as string,
   })),
+  ...[
+    ["formbricks-survey-analysis-cta", "SurveyAnalysisCTA.tsx", 66, "isResetting"],
+    ["formbricks-dashboard-control", "dashboard-control-bar.tsx", 53, "isDeleting"],
+    ["formbricks-contact-control", "contact-control-bar.tsx", 47, "isDeletingPerson"],
+    ["formbricks-delete-team", "delete-team.tsx", 23, "isDeleting"],
+    ["outline-authentication-settings", "Authentication.tsx", 335, "isSaving"],
+  ].map(([target, file, line, name]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "One stable control or dialog owns the pending surface while independently rendered siblings prove a material owner cut; preserve the exact async start and completion boundaries.",
+    target: target as string,
+  })),
+  {
+    action: "keep-state",
+    file: "ExportCSV.tsx",
+    hook: "useState",
+    line: 30,
+    name: "isExporting",
+    rationale: "The export button is the complete one-element owner, so replacing its cohesive React state cannot create a smaller subscription boundary.",
+    target: "outline-export-csv",
+  },
   {
     action: "review-state",
     file: "chart-dropdown-menu.tsx",
@@ -3530,12 +3598,12 @@ export const goldCases = [
     [68, "isModifyTripLoading"],
     [69, "isTripSupportLoading"],
   ].map(([line, name]) => ({
-    action: "review-state" as const,
+    action: "use-observable" as const,
     file: "TripDetailsPage.tsx",
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "This low-frequency link status already belongs to a compact menu owner and also affects item presentation, so an observable wrapper has no proven material render cut.",
+    rationale: "One menu item owns the complete pending surface while independent reservation details remain outside its subscriber, so link completion need not invalidate the trip screen.",
     target: "expensify-trip-details",
   })),
   {
@@ -4235,6 +4303,13 @@ export const goldStateGroups = [
 ] as const satisfies readonly GoldStateGroupCase[];
 
 export const goldPracticeCases = [
+  {
+    action: "replace-legacy-use-value",
+    file: "legend-kit/react-native/windowDimensions.tsx",
+    line: 40,
+    rationale: "Legend State documents useValue as the supported replacement for the legacy useSelector hook, with the observable argument unchanged.",
+    target: "legend-music",
+  },
   {
     action: "use-peek-for-snapshot",
     file: "feature/discover/pages/DiscoverFiltersScreen.tsx",

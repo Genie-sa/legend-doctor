@@ -7,6 +7,7 @@ import {
 } from "./analysis-ast.js";
 import { isNonProductionHarness, visit } from "./ast.js";
 import { collectHookImports, type HookImports } from "./imports.js";
+import { findLegacyUseValuePractices } from "./rules/legacy-use-value.js";
 import { findObservableCloneWritePractices } from "./rules/observable-clone-writes.js";
 import {
   findObservableReadPractices,
@@ -40,6 +41,7 @@ export function analyzeLegendPractices(
       : ts.ScriptKind.TS
   );
   const imports = collectHookImports(sourceFile);
+  const findings = [...findLegacyUseValuePractices(sourceFile, fileName, imports)];
   if (
     imports.observable.size === 0 &&
     imports.useObservable.size === 0 &&
@@ -47,7 +49,7 @@ export function analyzeLegendPractices(
     importedObservables.size === 0 &&
     importedObservableFactories.size === 0
   ) {
-    return [];
+    return findings;
   }
 
   const observableBindings = collectObservableBindings(
@@ -56,9 +58,8 @@ export function analyzeLegendPractices(
     importedObservables,
     importedObservableFactories
   );
-  if (observableBindings.size === 0) return [];
+  if (observableBindings.size === 0) return findings;
 
-  const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, node => {
     if (!ts.isBlock(node) && !ts.isSourceFile(node)) return;
     let run: ObservableWrite[] = [];

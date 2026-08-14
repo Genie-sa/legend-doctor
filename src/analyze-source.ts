@@ -53,6 +53,7 @@ import {
   callbackIsEventRooted,
   expressionDependsOnBinding,
   hasDirectPrimitiveInitializer,
+  hasIndependentRenderCutWitness,
   hasOnlyEventCommandReads,
   isDirectPrimitiveExpression,
   isHookDependencyReference,
@@ -235,7 +236,13 @@ export function analyzeSource(
   );
   const statesWithCompanionWrites = findStatesWithCompanionWrites(states);
   const independentStateWrites = findIndependentStateWrites(states);
-  const asyncLeafStatuses = findAsyncLeafStatuses(states, usageByState, safeCommandStates);
+  const asyncLeafStatuses = findAsyncLeafStatuses(
+    states,
+    usageByState,
+    safeCommandStates,
+    localComponents,
+    sourceComponents
+  );
   const siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();
   for (const state of states) {
     const usage = usageByState.get(state);
@@ -1584,7 +1591,7 @@ function classifyState(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${target}\` call site in a leaf subscriber; preserve the event command's async completion boundary exactly, changing only the true/false writes so pending transitions do not invalidate the broad owner.`,
+      message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${target}\` call site in a leaf subscriber; preserve the event command's async completion boundary exactly, changing only the true/false writes so pending transitions do not invalidate independent owner content.`,
     };
   }
   if (
@@ -2128,67 +2135,6 @@ function controlledProjectionRenderReferences(
   }
   return renderReferences.length > 0 ? renderReferences : null;
 }
-
-function hasIndependentRenderCutWitness(
-  returned: ts.Expression,
-  excluded: readonly ts.Node[],
-  localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>
-): boolean {
-  let hasIndependentComponent = false;
-  let independentElements = 0;
-  visitSkippingNestedRuntimeFunctions(returned, node => {
-    if (
-      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      (() => {
-        const candidateSubtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node;
-        const independent = excluded.every(subtree =>
-          candidateSubtree !== subtree &&
-          !nodeWithin(candidateSubtree, subtree) &&
-          !nodeWithin(subtree, candidateSubtree)
-        );
-        if (!independent) return false;
-        for (
-          let current: ts.Node | undefined = candidateSubtree.parent;
-          current && current !== returned;
-          current = current.parent
-        ) {
-          if (
-            (ts.isJsxElement(current) ||
-              ts.isJsxFragment(current) ||
-              ts.isJsxSelfClosingElement(current)) &&
-            excluded.every(subtree =>
-              current !== subtree &&
-              !nodeWithin(current, subtree) &&
-              !nodeWithin(subtree, current)
-            )
-          ) {
-            return false;
-          }
-        }
-        return true;
-      })()
-    ) {
-      independentElements += 1;
-      if (!hasIndependentComponent) {
-        const candidateSubtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node;
-        visit(candidateSubtree, descendant => {
-          if (
-            hasIndependentComponent ||
-            (!ts.isJsxOpeningElement(descendant) && !ts.isJsxSelfClosingElement(descendant))
-          ) {
-            return;
-          }
-          const name = descendant.tagName.getText();
-          hasIndependentComponent = localComponents.has(name) || sourceComponents.has(name);
-        });
-      }
-    }
-  });
-  return hasIndependentComponent || independentElements >= 2;
-}
-
-
 
 function hasDirectInteractionSetter(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,

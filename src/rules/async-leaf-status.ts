@@ -17,6 +17,7 @@ import {
 import { hasStateInitializer, isSafeProjectionExpression } from "./deferred-reveal.js";
 import {
   callbackIsEventRooted,
+  hasIndependentRenderCutWitness,
   isSafeJsxProjectionReference,
   jsxElementCount,
   nearestRepeatedRenderCall,
@@ -25,7 +26,9 @@ import {
 export function findAsyncLeafStatuses(
   states: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  safeCommandStates: ReadonlySet<StateCandidate>
+  safeCommandStates: ReadonlySet<StateCandidate>,
+  localComponents: ReadonlySet<string>,
+  sourceComponents: ReadonlySet<string>
 ): ReadonlySet<StateCandidate> {
   const result = new Set<StateCandidate>();
   for (const state of states) {
@@ -35,7 +38,6 @@ export function findAsyncLeafStatuses(
       !hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
       !safeCommandStates.has(state) ||
       !usage ||
-      jsxElementCount(state.owner) < 12 ||
       usage.localRenderReads !== usage.directRenderNodes.length ||
       usage.effectReads !== 0 ||
       usage.effectWrites !== 0 ||
@@ -49,12 +51,24 @@ export function findAsyncLeafStatuses(
       usage.setterUsesPreviousValue ||
       usage.shadowed ||
       usage.escaped ||
-      !hasSingleObservableLeafCallSite(usage, state.owner) ||
       !usage.setterCallNodes.every(call =>
         call.arguments.length === 1 &&
         (call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword ||
           call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword)
       )
+    ) {
+      continue;
+    }
+    const leaf = asyncLeafCallSite(usage, state.owner);
+    if (
+      !leaf ||
+      (jsxElementCount(state.owner) < 12 &&
+        !hasIndependentRenderCutWitness(
+          leaf.returned,
+          [leaf.boundary],
+          localComponents,
+          sourceComponents
+        ))
     ) {
       continue;
     }
@@ -333,12 +347,12 @@ function containsEarlyExit(root: ts.Node, before: number): boolean {
   return found;
 }
 
-function hasSingleObservableLeafCallSite(
+function asyncLeafCallSite(
   usage: StateUsage,
   owner: RuntimeFunctionLike
-): boolean {
+): { boundary: ts.Node; returned: ts.Expression } | null {
   const valueSite = [...usage.valueTransportSites][0];
-  if (valueSite === undefined || !owner.body) return false;
+  if (valueSite === undefined || !owner.body) return null;
 
   let opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | null = null;
   visit(owner.body, node => {
@@ -355,7 +369,7 @@ function hasSingleObservableLeafCallSite(
     nearestRepeatedRenderCall(opening, owner) ||
     !nestedFunctionsAreJsxChildren(opening, owner)
   ) {
-    return false;
+    return null;
   }
   const callSite = jsxCallSite(opening);
   if (
@@ -365,10 +379,11 @@ function hasSingleObservableLeafCallSite(
       !isSafeLeafProjectionReference(node, owner)
     )
   ) {
-    return false;
+    return null;
   }
   const returned = returnedExpressions(owner);
-  if (returned.some(expression => nodeWithin(opening!, expression))) return true;
+  const directReturn = returned.find(expression => nodeWithin(opening!, expression));
+  if (directReturn) return { boundary: callSite, returned: directReturn };
 
   const declaration = findAncestorUntil(opening, ts.isVariableDeclaration, owner);
   if (
@@ -378,7 +393,7 @@ function hasSingleObservableLeafCallSite(
     (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
     bindingDeclarationCount(owner, declaration.name.text) !== 1
   ) {
-    return false;
+    return null;
   }
   const references: ts.Identifier[] = [];
   visit(owner.body, node => {
@@ -392,7 +407,9 @@ function hasSingleObservableLeafCallSite(
       references.push(node);
     }
   });
-  return references.length === 1 && returned.some(expression => nodeWithin(references[0]!, expression));
+  if (references.length !== 1) return null;
+  const aliasReturn = returned.find(expression => nodeWithin(references[0]!, expression));
+  return aliasReturn ? { boundary: references[0]!, returned: aliasReturn } : null;
 }
 
 function jsxCallSite(

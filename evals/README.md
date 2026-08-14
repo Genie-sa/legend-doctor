@@ -29,11 +29,12 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,893 hooks across 127 source roots. The corpus currently contains
-583 manual hook labels, including 24 non-enforced opportunities (22 currently missed), plus twelve
+At the pinned commits, the analyzer inventories 1,914 hooks across 133 source roots. The corpus currently contains
+590 manual hook labels, including 22 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
-labels. Run the eval for the current precision/recall table. If the root README publishes those metrics, update them only
+labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
+the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
@@ -52,7 +53,9 @@ list-data construction, or owner control flow remain review findings. Async work
 unproven edit paths also remain review findings.
 Async pending labels require a literal-false flag whose pending transition in an event command reaches awaited work
 before any owner-state write or early exit and renders through one proven runtime status leaf. The same leaf may consume
-the flag through loading props and pure label or icon selection. Non-mutating validation,
+the flag through loading props and pure label or icon selection. A broad owner qualifies directly; a compact owner must
+have independently rendered content outside the status leaf, while a cohesive one-control owner remains React state.
+Non-mutating validation,
 routing guards, and bounded synchronous command preparation may precede that boundary. Observable ownership stays above
 state-independent conditional branches, while a local subscriber wraps the exact existing call site. The command, await
 boundary, error handling, and
@@ -82,6 +85,8 @@ full-app impact must remain zero in applications that do not import Legend State
 Direct-reactivity labels replace only an exact `useValue(() => observablePath.get())` selector with
 `useValue(observablePath)`. The path must be statically addressed and proven as Legend State through a local declaration
 or resolved export. Computed selectors, shallow reads, dynamic element access, and unproven getters abstain.
+Legacy-hook labels replace calls imported as `useSelector` or `use$` from `@legendapp/state/react` with `useValue`,
+preserving every argument. Named aliases and namespace imports are resolved; unrelated and shadowed functions abstain.
 Non-tracking snapshot labels replace zero-argument `.get()` with `.peek()` only inside a direct React state initializer,
 React effect, or uniquely event-rooted command. Render reads, Legend tracking callbacks, mixed-use handlers, nested
 unknown callbacks, shallow reads, dynamic paths, and unproven getters abstain.
