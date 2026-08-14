@@ -41,6 +41,12 @@ export const repositories = [
     targets: [
       { effects: 105, id: "tree-map", root: "apps/tree-map/src", states: 547 },
       {
+        effects: 1,
+        id: "tree-map-page-tracker",
+        root: "apps/tree-map/src/components/posthog-page-tracker.tsx",
+        states: 0,
+      },
+      {
         effects: 82,
         id: "tree-wallet",
         root: "isolated-apps/tree-wallet-mobile/src",
@@ -250,6 +256,12 @@ export const repositories = [
         effects: 2,
         id: "expensify-dynamic-plan-type",
         root: "src/pages/workspace/DynamicWorkspaceOverviewPlanTypePage.tsx",
+        states: 1,
+      },
+      {
+        effects: 3,
+        id: "expensify-add-card-feed",
+        root: "src/pages/workspace/companyCards/addNew/DynamicAddNewCardPage.tsx",
         states: 1,
       },
       {
@@ -609,6 +621,12 @@ export const repositories = [
         id: "outline-starred-link",
         root: "app/components/Sidebar/components/StarredLink.tsx",
         states: 1,
+      },
+      {
+        effects: 1,
+        id: "outline-documents-loader",
+        root: "app/components/DocumentsLoader.tsx",
+        states: 0,
       },
       {
         effects: 2,
@@ -2426,12 +2444,12 @@ export const goldCases = [
     target: "expensify-dynamic-task",
   },
   {
-    action: "review-effect",
+    action: "keep-effect",
     file: "DynamicNewTaskPage.tsx",
     hook: "useEffect",
     line: 78,
     name: null,
-    rationale: "The route task synchronization remains a React effect and is unrelated to the local validation leaf.",
+    rationale: "The route task synchronization is one external command keyed by route state and remains a React effect.",
     target: "expensify-dynamic-task",
   },
   ...[
@@ -2539,12 +2557,12 @@ export const goldCases = [
     target: "expensify-workspace-overview",
   })),
   {
-    action: "review-effect",
+    action: "keep-effect",
     file: "WorkspaceOverviewPage.tsx",
     hook: "useEffect",
     line: 280,
     name: null,
-    rationale: "This effect synchronizes an external workspace signal and is not replaced by the delete-flow presentation observable.",
+    rationale: "This effect issues one committed-ref command when the external workspace signal changes and remains in React.",
     target: "expensify-workspace-overview",
   },
   {
@@ -3226,7 +3244,6 @@ export const goldCases = [
   },
   {
     action: "keep-effect",
-    enforced: false,
     file: "CardSection.tsx",
     hook: "useEffect",
     line: 195,
@@ -3245,7 +3262,6 @@ export const goldCases = [
   },
   {
     action: "keep-effect",
-    enforced: false,
     file: "DynamicWorkspaceOverviewPlanTypePage.tsx",
     hook: "useEffect",
     line: 57,
@@ -3372,7 +3388,6 @@ export const goldCases = [
   },
   {
     action: "keep-effect",
-    enforced: false,
     file: "StarredLink.tsx",
     hook: "useEffect",
     line: 408,
@@ -3542,6 +3557,19 @@ export const goldCases = [
     rationale: "The number form owns editing while the save command snapshots the value; header and navigation work stay outside the subscriber.",
     target: "expensify-create-tax-value",
   },
+  ...[
+    ["tree-map-page-tracker", "posthog-page-tracker.tsx", 19, "Page-view analytics follows external route and account identity."],
+    ["expensify-add-card-feed", "DynamicAddNewCardPage.tsx", 77, "Opening the external card-feed resource follows workspace policy identity."],
+    ["outline-documents-loader", "DocumentsLoader.tsx", 12, "Document loading follows the external collection and enabled inputs."],
+].map(([target, file, line, rationale]) => ({
+    action: "keep-effect" as const,
+    file: file as string,
+    hook: "useEffect" as const,
+    line: line as number,
+    name: null,
+    rationale: `${rationale} React owns this dependency-driven external resource lifecycle.`,
+    target: target as string,
+  })),
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [

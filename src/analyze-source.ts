@@ -3944,6 +3944,24 @@ function classifyEffect(
     }
   }
 
+  if (
+    !hasCleanup &&
+    effect.owner &&
+    isDependencyDrivenExternalCommandEffect(
+      effect,
+      stateByValue,
+      useValueBindings,
+      useObservableBindings
+    )
+  ) {
+    return {
+      action: "keep-effect",
+      confidence: "probable",
+      derivedState: null,
+      message: "Keep this React effect; one external command follows React dependencies and is not an observable reaction.",
+    };
+  }
+
   if (hasCleanup) {
     return {
       action: "keep-effect",
@@ -3958,6 +3976,94 @@ function classifyEffect(
     derivedState: null,
     message: "Review this effect's causal owner before choosing React lifecycle, an event handler, or an observable reaction.",
   };
+}
+
+function isDependencyDrivenExternalCommandEffect(
+  effect: EffectCandidate,
+  stateByValue: ReadonlyMap<string, StateCandidate>,
+  useValueBindings: ReadonlySet<string>,
+  useObservableBindings: ReadonlySet<string>
+): boolean {
+  const { callback, dependencies, owner } = effect;
+  if (!callback || !ts.isBlock(callback.body) || !dependencies?.elements.length || !owner) return false;
+
+  let readsLocalStateOrObservableSnapshot = false;
+  for (const dependency of dependencies.elements) {
+    visit(dependency, node => {
+      if (
+        ts.isIdentifier(node) &&
+        (stateByValue.has(node.text) ||
+          useValueBindings.has(node.text) ||
+          useObservableBindings.has(node.text))
+      ) {
+        readsLocalStateOrObservableSnapshot = true;
+      }
+    });
+  }
+  if (readsLocalStateOrObservableSnapshot) return false;
+
+  const calls: ts.CallExpression[] = [];
+  let hasOtherMutation = false;
+  visitSkippingNestedFunctions(callback.body, callback, node => {
+    if (ts.isCallExpression(node)) calls.push(node);
+    if (
+      ts.isAwaitExpression(node) ||
+      ts.isYieldExpression(node) ||
+      ts.isNewExpression(node) ||
+      ts.isDeleteExpression(node) ||
+      ts.isPostfixUnaryExpression(node) ||
+      (ts.isPrefixUnaryExpression(node) &&
+        (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)) ||
+      (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind))
+    ) {
+      hasOtherMutation = true;
+    }
+  });
+  if (hasOtherMutation || calls.length !== 1) return false;
+
+  const call = calls[0]!;
+  if (
+    isSubscriptionCall(call) ||
+    !isStandaloneEffectCommand(call, callback) ||
+    call.arguments.some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument))
+  ) {
+    return false;
+  }
+  const callee = call.expression;
+  if (ts.isIdentifier(callee)) {
+    return (
+      bindingDeclarationCount(owner, callee.text) === 0 &&
+      !/^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|queueMicrotask)$/.test(callee.text)
+    );
+  }
+  if (!ts.isPropertyAccessExpression(callee) && !ts.isElementAccessExpression(callee)) return false;
+  if (
+    ts.isPropertyAccessExpression(callee) &&
+    /^(?:addEventListener|every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/.test(callee.name.text)
+  ) {
+    return false;
+  }
+  const root = callRootIdentifier(callee);
+  return root !== null && !["console", "Math", "Promise"].includes(root);
+}
+
+function isStandaloneEffectCommand(
+  call: ts.CallExpression,
+  callback: ts.ArrowFunction | ts.FunctionExpression
+): boolean {
+  let current: ts.Node = call;
+  while (
+    current.parent !== callback.body &&
+    (ts.isParenthesizedExpression(current.parent) ||
+      ts.isAsExpression(current.parent) ||
+      ts.isTypeAssertionExpression(current.parent) ||
+      ts.isSatisfiesExpression(current.parent) ||
+      ts.isNonNullExpression(current.parent) ||
+      ts.isVoidExpression(current.parent))
+  ) {
+    current = current.parent;
+  }
+  return ts.isExpressionStatement(current.parent) && current.parent.expression === current;
 }
 
 function committedRefEffect(): ClassifiedEffect {

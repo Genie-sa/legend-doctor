@@ -3406,6 +3406,53 @@ test("reviews setup-only empty effects because useMount changes Strict Mode sema
   );
 });
 
+test("keeps one dependency-driven external resource command in React", () => {
+  const effects = analyzeSource(`
+    import { useEffect } from "react";
+    import { openWorkspace } from "./workspace";
+    export function Workspace({ policyId }: { policyId: string | null }) {
+      useEffect(() => {
+        if (!policyId) return;
+        openWorkspace(policyId);
+      }, [policyId]);
+      return null;
+    }
+    export function Documents({ client, enabled }: { client: { fetch: () => void }; enabled: boolean }) {
+      useEffect(() => {
+        if (enabled) void client.fetch();
+      }, [client, enabled]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect"]);
+});
+
+test("reviews local-state, helper, scheduled, multi-command, collection, and subscription effects", () => {
+  const effects = analyzeSource(`
+    import { useEffect, useState } from "react";
+    import { fetchResource, reportResource, subscribeToResource } from "./resource";
+    export function Screen({ id }: { id: string }) {
+      const [query, setQuery] = useState("");
+      const load = () => fetchResource(id);
+      useEffect(() => { fetchResource(query); }, [query]);
+      useEffect(() => { load(); }, [load]);
+      useEffect(() => { setTimeout(() => fetchResource(id), 10); }, [id]);
+      useEffect(() => { fetchResource(id); reportResource(id); }, [id]);
+      useEffect(() => { [id].forEach(value => fetchResource(value)); }, [id]);
+      useEffect(() => { subscribeToResource(id); }, [id]);
+      return <input value={query} onChange={event => setQuery(event.target.value)} />;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+  ]);
+});
+
 test("keeps effects that operate on committed refs", () => {
   assert.deepEqual(
     actions(`

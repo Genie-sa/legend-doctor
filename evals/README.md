@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,741 hooks across ninety-five source roots. The corpus currently contains 500
-manual hook labels, including twenty-nine non-enforced opportunities (twenty-seven currently missed), plus
+At the pinned commits, the analyzer inventories 1,747 hooks across ninety-eight source roots. The corpus currently contains 503
+manual hook labels, including twenty-six non-enforced opportunities (twenty-four currently missed), plus
 twelve grouped-instruction labels that verify exact cluster membership. Run the eval for the current precision/recall
 table; do not copy a passing percentage into documentation because the score must change as known misses are added.
 
@@ -65,6 +65,9 @@ synchronization effect remains unchanged; opaque helpers, multiple consumers, re
 Companion writes block per-state isolation even when another event independently opens the leaf: splitting a later
 payload/visibility transition across React and Legend would lose the original atomic workflow transaction. Those cases
 remain review until the complete state machine can be modeled and emitted as one grouped observable instruction.
+Dependency-driven external effects stay in React when one standalone command follows non-state dependencies. Local-state
+synchronization, observable snapshots, cleanup, timers, collection callbacks, local helpers, and multi-command effects do
+not enter this rule.
 Controlled-input labels require one direct value/callback leaf and either no other render read or one complete pure
 validation projection in a disjoint sibling leaf. A separate rendered sibling proves that the owner cut is material.
 The observable stays at the owner across state-independent conditional branches; ref-backed validity, repeated

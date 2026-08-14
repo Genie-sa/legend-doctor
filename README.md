@@ -29,11 +29,11 @@ agent implements and verifies them.
 | Measure | Result |
 | --- | ---: |
 | Analyzed app roots | 9 |
-| Pinned source targets | 95 |
-| Inventoried hooks | 1,741 |
-| Manual labels | 500 |
+| Pinned source targets | 98 |
+| Inventoried hooks | 1,747 |
+| Manual labels | 503 |
 | Grouped-model checks | 12/12 |
-| Unit tests | 217/217 |
+| Unit tests | 219/219 |
 | Actionable precision | 100% (275/275) |
 | Actionable recall | 92.3% (275/298) |
 | `use-observable` recall | 93.4% (225/241) |
