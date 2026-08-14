@@ -1874,6 +1874,90 @@ test("traces an async pending command through an event-rooted submit helper", ()
   assert.equal(finding?.action, "use-observable");
 });
 
+test("traces async pending state through a direct JSX event adapter", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    import { useForm } from "react-hook-form";
+    function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
+    export function DirectAdapter() {
+      const [saving, setSaving] = useState(false);
+      const { handleSubmit } = useForm();
+      const save = async () => {
+        setSaving(true);
+        try { await persist(); } finally { setSaving(false); }
+      };
+      return <form onSubmit={handleSubmit(save)}><Header /><Fields /><LoadingButton loading={saving} /></form>;
+    }
+    export function InlineAdapter() {
+      const [saving, setSaving] = useState(false);
+      const form = useForm();
+      const save = async () => {
+        setSaving(true);
+        try { await persist(); } finally { setSaving(false); }
+      };
+      return <form onSubmit={event => { event.preventDefault(); form.handleSubmit(save)(); }}>
+        <Header /><Fields /><LoadingButton loading={saving} />
+      </form>;
+    }
+    export function DestructuredAlias() {
+      const [saving, setSaving] = useState(false);
+      const form = useForm();
+      const { handleSubmit } = form;
+      const save = async () => {
+        setSaving(true);
+        try { await persist(); } finally { setSaving(false); }
+      };
+      return <form onSubmit={handleSubmit(save)}><Header /><Fields /><LoadingButton loading={saving} /></form>;
+    }
+  `, "fixture.tsx").filter(finding => finding.name === "saving");
+  assert.deepEqual(
+    findings.map(finding => finding.action),
+    ["use-observable", "use-observable", "use-observable"]
+  );
+});
+
+test("does not treat deferred or non-event callback adapters as event roots", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    import { useForm } from "react-hook-form";
+    function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
+    export function Deferred() {
+      const [saving, setSaving] = useState(false);
+      const { handleSubmit } = useForm();
+      const save = async () => { setSaving(true); await persist(); setSaving(false); };
+      return <form onSubmit={() => setTimeout(() => handleSubmit(save)(), 0)}>
+        <Header /><Fields /><LoadingButton loading={saving} />
+      </form>;
+    }
+    export function NonEvent() {
+      const [saving, setSaving] = useState(false);
+      const { handleSubmit } = useForm();
+      const save = async () => { setSaving(true); await persist(); setSaving(false); };
+      return <Form submit={handleSubmit(save)}><Header /><Fields /><LoadingButton loading={saving} /></Form>;
+    }
+    export function UnknownAdapter({ invokeNow }: { invokeNow: (submit: () => Promise<void>) => () => void }) {
+      const [saving, setSaving] = useState(false);
+      const save = async () => { setSaving(true); await persist(); setSaving(false); };
+      return <form onSubmit={invokeNow(save)}><Header /><Fields /><LoadingButton loading={saving} /></form>;
+    }
+    export function WrongReactHookFormMethod() {
+      const [saving, setSaving] = useState(false);
+      const { reset } = useForm();
+      const save = async () => { setSaving(true); await persist(); setSaving(false); };
+      return <form onSubmit={reset(save)}><Header /><Fields /><LoadingButton loading={saving} /></form>;
+    }
+    export function ShadowedFactory({ useForm }: { useForm: () => { handleSubmit: Function } }) {
+      const [saving, setSaving] = useState(false);
+      const { handleSubmit } = useForm();
+      const save = async () => { setSaving(true); await persist(); setSaving(false); };
+      return <form onSubmit={handleSubmit(save)}><Header /><Fields /><LoadingButton loading={saving} /></form>;
+    }
+  `, "fixture.tsx").filter(finding => finding.name === "saving");
+  for (const finding of findings) {
+    assert.doesNotMatch(finding.message, /async pending flag/);
+  }
+});
+
 test("isolates a Promise-chain status rendered through one reachable JSX callback leaf", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

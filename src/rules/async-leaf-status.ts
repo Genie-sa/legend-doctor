@@ -4,6 +4,7 @@ import {
   bindingDeclarationCount,
   isDeclarationName,
   isNonValueIdentifier,
+  unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import {
@@ -18,6 +19,7 @@ import { hasStateInitializer, isSafeProjectionExpression } from "./deferred-reve
 import {
   callbackIsEventRooted,
   hasIndependentRenderCutWitness,
+  isHookDependencyReference,
   isSafeJsxProjectionReference,
   jsxElementCount,
   nearestRepeatedRenderCall,
@@ -94,7 +96,7 @@ export function findAsyncLeafStatuses(
       (!ts.isArrowFunction(region) &&
         !ts.isFunctionDeclaration(region) &&
         !ts.isFunctionExpression(region)) ||
-      !callbackIsEventRooted(region, state.owner, "", new Set()) ||
+      !asyncCallbackIsEventRooted(region, state.owner) ||
       usage.setterCallNodes.some(call => {
         const candidate = asyncCommandRegion(call, state.owner);
         if (candidate === region) return false;
@@ -103,7 +105,7 @@ export function findAsyncLeafStatuses(
             !ts.isFunctionDeclaration(candidate) &&
             !ts.isFunctionExpression(candidate)) ||
           call.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword ||
-          !callbackIsEventRooted(candidate, state.owner, "", new Set())
+          !asyncCallbackIsEventRooted(candidate, state.owner)
         );
       })
     ) {
@@ -134,6 +136,151 @@ export function findAsyncLeafStatuses(
     }
   }
   return { cohesive, isolated };
+}
+
+function asyncCallbackIsEventRooted(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  owner: RuntimeFunctionLike
+): boolean {
+  return callbackIsEventRooted(callback, owner, "", new Set()) ||
+    callbackIsDirectEventAdapter(callback, owner);
+}
+
+function callbackIsDirectEventAdapter(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  owner: RuntimeFunctionLike
+): boolean {
+  const name = ts.isFunctionDeclaration(callback)
+    ? callback.name?.text
+    : ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
+      ? callback.parent.name.text
+      : undefined;
+  if (!name || !owner.body || bindingDeclarationCount(owner, name) !== 1) return false;
+
+  let referenced = false;
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node) ||
+      isHookDependencyReference(node, new Set(["useCallback"]))
+    ) {
+      return;
+    }
+    referenced = true;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
+    const expression = attribute?.initializer && ts.isJsxExpression(attribute.initializer)
+      ? attribute.initializer.expression
+      : null;
+    if (!attribute || !/^on[A-Z]/.test(attribute.name.getText()) || !expression) {
+      safe = false;
+      return;
+    }
+    const eventHandler = unwrapTransparentExpression(expression);
+    const adapter = directEventAdapterCall(node, eventHandler);
+    if (adapter && isReactHookFormSubmitAdapter(adapter, owner)) {
+      return;
+    }
+    safe = false;
+  });
+  return referenced && safe;
+}
+
+function directEventAdapterCall(
+  reference: ts.Identifier,
+  eventHandler: ts.Expression
+): ts.CallExpression | null {
+  let adapter: ts.CallExpression | null = null;
+  for (
+    let current: ts.Node | undefined = reference.parent;
+    current && current !== eventHandler;
+    current = current.parent
+  ) {
+    if (isRuntimeFunctionLike(current)) return null;
+    if (
+      !adapter &&
+      ts.isCallExpression(current) &&
+      current.arguments.some(argument => nodeWithin(reference, argument))
+    ) {
+      adapter = current;
+    }
+  }
+  return adapter ?? (ts.isCallExpression(eventHandler) &&
+    eventHandler.arguments.some(argument => nodeWithin(reference, argument))
+    ? eventHandler
+    : null);
+}
+
+function isReactHookFormSubmitAdapter(
+  call: ts.CallExpression,
+  owner: RuntimeFunctionLike
+): boolean {
+  const callee = unwrapTransparentExpression(call.expression);
+  if (ts.isIdentifier(callee)) {
+    return bindingDeclarationCount(owner, callee.text) === 1 &&
+      ownerHasReactHookFormBinding(owner, callee.text, true);
+  }
+  return ts.isPropertyAccessExpression(callee) &&
+    callee.name.text === "handleSubmit" &&
+    ts.isIdentifier(callee.expression) &&
+    bindingDeclarationCount(owner, callee.expression.text) === 1 &&
+    ownerHasReactHookFormBinding(owner, callee.expression.text, false);
+}
+
+function ownerHasReactHookFormBinding(
+  owner: RuntimeFunctionLike,
+  localName: string,
+  destructuredHandleSubmit: boolean
+): boolean {
+  if (!owner.body) return false;
+  let matched = false;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (matched || !ts.isVariableDeclaration(node) || !node.initializer) return;
+    if (destructuredHandleSubmit) {
+      if (!ts.isObjectBindingPattern(node.name)) return;
+      const element = node.name.elements.find(candidate =>
+        ts.isIdentifier(candidate.name) &&
+        candidate.name.text === localName &&
+        (candidate.propertyName
+          ? ts.isIdentifier(candidate.propertyName) && candidate.propertyName.text === "handleSubmit"
+          : candidate.name.text === "handleSubmit")
+      );
+      if (!element) return;
+    } else if (!ts.isIdentifier(node.name) || node.name.text !== localName) {
+      return;
+    }
+    const initializer = unwrapTransparentExpression(node.initializer);
+    matched = isReactHookFormFactoryCall(initializer, owner) ||
+      (destructuredHandleSubmit &&
+        ts.isIdentifier(initializer) &&
+        bindingDeclarationCount(owner, initializer.text) === 1 &&
+        ownerHasReactHookFormBinding(owner, initializer.text, false));
+  });
+  return matched;
+}
+
+function isReactHookFormFactoryCall(
+  expression: ts.Expression,
+  owner: RuntimeFunctionLike
+): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (!ts.isCallExpression(value)) return false;
+  const callee = unwrapTransparentExpression(value.expression);
+  if (!ts.isIdentifier(callee) || bindingDeclarationCount(owner, callee.text) !== 0) return false;
+  return expression.getSourceFile().statements.some(statement =>
+    ts.isImportDeclaration(statement) &&
+    ts.isStringLiteral(statement.moduleSpecifier) &&
+    statement.moduleSpecifier.text === "react-hook-form" &&
+    !!statement.importClause?.namedBindings &&
+    ts.isNamedImports(statement.importClause.namedBindings) &&
+    statement.importClause.namedBindings.elements.some(specifier =>
+      specifier.name.text === callee.text &&
+      ["useForm", "useFormContext"].includes(specifier.propertyName?.text ?? specifier.name.text)
+    )
+  );
 }
 
 function asyncCommandRegion(

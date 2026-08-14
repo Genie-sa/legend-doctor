@@ -401,6 +401,30 @@ export const repositories = [
     name: "formbricks",
     targets: [
       {
+        effects: 0,
+        id: "formbricks-create-organization-modal",
+        root: "apps/web/modules/organization/components/CreateOrganizationModal/index.tsx",
+        states: 1,
+      },
+      {
+        effects: 0,
+        id: "formbricks-setup-create-organization",
+        root: "apps/web/modules/setup/organization/create/components/create-organization.tsx",
+        states: 1,
+      },
+      {
+        effects: 0,
+        id: "formbricks-action-settings",
+        root: "apps/web/modules/workspaces/settings/(setup)/components/ActionSettingsTab.tsx",
+        states: 3,
+      },
+      {
+        effects: 0,
+        id: "formbricks-save-segment",
+        root: "apps/web/modules/ui/components/save-as-new-segment-modal/index.tsx",
+        states: 1,
+      },
+      {
         effects: 1,
         id: "formbricks-copy-survey-modal",
         root: "apps/web/modules/survey/list/components/copy-survey-modal.tsx",
@@ -4262,6 +4286,46 @@ export const goldCases = [
     rationale: `The async flag's prop and label or icon projections are contained by one stable ${leaf} leaf; preserve the command boundary and subscribe only there.`,
     target: target as string,
   })),
+  ...[
+    [
+      "formbricks-create-organization-modal",
+      "index.tsx",
+      36,
+      "loading",
+      "React Hook Form's submit adapter reaches one awaited create command, while only the submit button renders its pending interval.",
+    ],
+    [
+      "formbricks-setup-create-organization",
+      "create-organization.tsx",
+      23,
+      "isSubmitting",
+      "The inline React Hook Form submit adapter owns one pending interval whose button leaf is independent of the form fields and heading.",
+    ],
+    [
+      "formbricks-action-settings",
+      "ActionSettingsTab.tsx",
+      53,
+      "isUpdatingAction",
+      "React Hook Form invokes the update command from the form event, and only the stable save button consumes its pending state.",
+    ],
+  ].map(([target, file, line, name, rationale]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: rationale as string,
+    target: target as string,
+  })),
+  {
+    action: "review-state",
+    file: "index.tsx",
+    hook: "useState",
+    line: 55,
+    name: "isLoading",
+    rationale: "Nested create/update commands repeat the loading transition and co-write external segment state, so the strict single-command pending proof abstains.",
+    target: "formbricks-save-segment",
+  },
   {
     action: "review-state",
     file: "Invite.tsx",

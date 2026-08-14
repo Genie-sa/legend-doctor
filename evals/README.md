@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,938 hooks across 144 source roots. The corpus currently contains
-616 manual hook labels, including 23 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 1,944 hooks across 148 source roots. The corpus currently contains
+620 manual hook labels, including 23 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
 labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
@@ -63,6 +63,8 @@ state-independent conditional branches, while a local subscriber wraps the exact
 boundary, error handling, and
 later close/reset writes stay unchanged; mutation-owned status, fanout, scheduled callbacks, and nonliteral writes
 remain review findings. Exact async status in a cohesive control emits `keep-state` because no smaller subscription exists.
+React Hook Form's imported `handleSubmit` is a proven event adapter for this rule; arbitrary functions called while
+building an `onSubmit` prop remain unknown because they may execute the callback during render.
 Presentation-gate labels keep observable ownership above a condition and replace the complete controlling expression
 with an always-mounted subscriber; this prevents dead subscriptions when the selected child starts hidden. Gate
 conditions must be side-effect free, confined to one strict subtree, and independent of repeated-list shape or effects.

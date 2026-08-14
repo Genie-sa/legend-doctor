@@ -28,12 +28,12 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 9 |
-| Source targets | 144 |
-| Hooks analyzed | 1,938 |
-| Manual labels | 616 |
-| Unit tests | 304/304 |
-| Actionable precision | 100% (337/337) |
-| Actionable recall | 94.9% (337/355) |
+| Source targets | 148 |
+| Hooks analyzed | 1,944 |
+| Manual labels | 620 |
+| Unit tests | 306/306 |
+| Actionable precision | 100% (340/340) |
+| Actionable recall | 95.0% (340/358) |
 | Legend practice precision | 100% (68/68) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -339,6 +339,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/analyze-source.ts` | Hook inventory, evidence, orchestration |
 | `src/rules/effects.ts` | Effect and lifecycle rules |
 | `src/rules/effect-drafts.ts` | Effect-synchronized drafts |
+| `src/rules/async-leaf-status.ts` | Event-owned async status leaves |
 | `src/rules/deferred-reveal.ts` | Deferred reveal and render gates |
 | `src/rules/keyed-selection.ts` | Row and collection selection |
 | `src/rules/observable-clone-writes.ts` | Narrow child writes without parent cloning |
