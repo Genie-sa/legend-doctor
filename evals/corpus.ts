@@ -348,6 +348,12 @@ export const repositories = [
     targets: [
       {
         effects: 1,
+        id: "formbricks-copy-survey-modal",
+        root: "apps/web/modules/survey/list/components/copy-survey-modal.tsx",
+        states: 2,
+      },
+      {
+        effects: 1,
         id: "formbricks-bulk-options",
         root: "apps/web/modules/survey/editor/components/bulk-edit-options-modal.tsx",
         states: 2,
@@ -3355,7 +3361,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "ImportSpreadsheet.tsx",
     hook: "useState",
     line: 56,
@@ -3913,6 +3918,27 @@ export const goldCases = [
     rationale: `${rationale} React owns this dependency-driven external resource lifecycle.`,
     target: target as string,
   })),
+  ...[
+    [48, "workspaces", "The asynchronous effect owns the workspace collection, which also drives options and submit error reporting."],
+    [49, "workspacesLoading", "The dependency-driven Promise chain swaps the complete modal body, not one event-owned presentation leaf."],
+  ].map(([line, name, rationale]) => ({
+    action: "review-state" as const,
+    file: "copy-survey-modal.tsx",
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: rationale as string,
+    target: "formbricks-copy-survey-modal",
+  })),
+  {
+    action: "review-effect",
+    file: "copy-survey-modal.tsx",
+    hook: "useEffect",
+    line: 56,
+    name: null,
+    rationale: "The effect follows modal and workspace inputs, resets form state, loads data, and owns the Promise lifecycle.",
+    target: "formbricks-copy-survey-modal",
+  },
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [

@@ -1685,7 +1685,7 @@ test("isolates direct primitive state at one stable call-site leaf", () => {
   );
 });
 
-test("isolates an async pending flag at one stable leaf without changing its await boundary", () => {
+test("isolates an async pending flag at one stable leaf without changing its completion boundary", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
@@ -1701,7 +1701,7 @@ test("isolates an async pending flag at one stable leaf without changing its awa
     }
   `, "fixture.tsx");
   assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /await boundary/);
+  assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("traces an async pending command through an event-rooted submit helper", () => {
@@ -1723,6 +1723,75 @@ test("traces an async pending command through an event-rooted submit helper", ()
   assert.equal(finding?.action, "use-observable");
 });
 
+test("isolates a Promise-chain status rendered through one reachable JSX callback leaf", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
+    export function Importer() {
+      const [reading, setReading] = useState(false);
+      function read() {
+        setReading(true);
+        loadFile().then(parseFile).catch(reportError).finally(() => setReading(false));
+      }
+      const picker = <FilePicker>{() => <LoadingButton loading={reading} />}</FilePicker>;
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <button onClick={read}>Read</button>{picker}
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /async completion boundary/);
+});
+
+test("requires a Promise-chain leaf alias to be live, unique, and non-repeated", () => {
+  for (const render of [
+    `const picker = <LoadingButton loading={reading} />; return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />{picker}{picker}</main>;`,
+    `const picker = <LoadingButton loading={reading} />; return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions /></main>;`,
+    `return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />{rows.map(row => <LoadingButton key={row.id} loading={reading} />)}</main>;`,
+  ]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      export function Importer({ rows }: { rows: Array<{ id: string }> }) {
+        const [reading, setReading] = useState(false);
+        function read() {
+          setReading(true);
+          loadFile().finally(() => setReading(false));
+        }
+        ${render}
+      }
+    `, "fixture.tsx");
+    assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+  }
+});
+
+test("does not flatten timers or unrelated Promise continuations into one async command", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
+    export function Timer() {
+      const [reading, setReading] = useState(false);
+      const read = () => {
+        setReading(true);
+        setTimeout(() => loadFile().finally(() => setReading(false)), 10);
+      };
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <button onClick={read}>Read</button><LoadingButton loading={reading} />
+      </main>;
+    }
+    export function SplitCommands() {
+      const [reading, setReading] = useState(false);
+      const read = () => setReading(true);
+      const finish = () => loadFile().finally(() => setReading(false));
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <button onClick={read}>Read</button><button onClick={finish}>Finish</button><LoadingButton loading={reading} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  for (const finding of findings.filter(candidate => candidate.name === "reading")) {
+    assert.doesNotMatch(finding.message, /async pending flag/);
+  }
+});
+
 test("isolates async status after non-mutating validation guards", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
@@ -1741,7 +1810,7 @@ test("isolates async status after non-mutating validation guards", () => {
     }
   `, "fixture.tsx");
   assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /await boundary/);
+  assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("keeps async status ownership above a state-independent conditional leaf", () => {
@@ -1759,7 +1828,7 @@ test("keeps async status ownership above a state-independent conditional leaf", 
     }
   `, "fixture.tsx");
   assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /await boundary/);
+  assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("does not isolate async status when another owner update starts the command", () => {

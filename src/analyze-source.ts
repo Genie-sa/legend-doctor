@@ -27,6 +27,7 @@ import {
   visitSkippingNestedRuntimeFunctions,
 } from "./ast.js";
 import { collectHookImports, isImportedHookCall, isLocalHookCall, type HookImports } from "./imports.js";
+import { findAsyncLeafStatuses } from "./rules/async-leaf-status.js";
 import {
   commonRenderGateSubtree,
   findDeferredRevealStates,
@@ -1126,110 +1127,6 @@ function findStatesWithIndependentDirectEventWrites(
   return result;
 }
 
-function findAsyncLeafStatuses(
-  states: readonly StateCandidate[],
-  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  safeCommandStates: ReadonlySet<StateCandidate>
-): ReadonlySet<StateCandidate> {
-  const result = new Set<StateCandidate>();
-  for (const state of states) {
-    const usage = usageByState.get(state);
-    if (
-      !state.setterName ||
-      !hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
-      !safeCommandStates.has(state) ||
-      !usage ||
-      usage.setterCallNodes.length < 2 ||
-      usage.setterReferences !== usage.setterCalls ||
-      usage.setterUsesPreviousValue ||
-      usage.shadowed ||
-      usage.escaped ||
-      !usage.setterCallNodes.every(call =>
-        call.arguments.length === 1 &&
-        (call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword ||
-          call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword)
-      )
-    ) {
-      continue;
-    }
-
-    const regions = usage.setterCallNodes.map(call => nearestMutationFunction(call, state.owner));
-    const region = regions[0];
-    if (
-      !region ||
-      region === state.owner ||
-      regions.some(candidate => candidate !== region) ||
-      (!ts.isArrowFunction(region) &&
-        !ts.isFunctionDeclaration(region) &&
-        !ts.isFunctionExpression(region)) ||
-      !callbackIsEventRooted(region, state.owner, "", new Set())
-    ) {
-      continue;
-    }
-
-    const pendingStart = usage.setterCallNodes.find(call =>
-      call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword &&
-      startsAwaitedCommandSegment(call)
-    );
-    const ownerSetters = new Set(
-      states
-        .filter(candidate => candidate.owner === state.owner && candidate.setterName)
-        .map(candidate => candidate.setterName!)
-    );
-    if (
-      pendingStart &&
-      !hasEarlierOwnerStateWrite(region, pendingStart, ownerSetters) &&
-      usage.setterCallNodes.some(call =>
-        call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword &&
-        call.getStart() > pendingStart.getStart()
-      )
-    ) {
-      result.add(state);
-    }
-  }
-  return result;
-}
-
-function hasEarlierOwnerStateWrite(
-  region: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  pendingStart: ts.CallExpression,
-  ownerSetters: ReadonlySet<string>
-): boolean {
-  if (!region.body) return true;
-  let found = false;
-  visitSkippingNestedRuntimeFunctions(region.body, node => {
-    if (
-      node.getStart() < pendingStart.getStart() &&
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      ownerSetters.has(node.expression.text)
-    ) {
-      found = true;
-    }
-  });
-  return found;
-}
-
-function startsAwaitedCommandSegment(call: ts.CallExpression): boolean {
-  const statement = call.parent;
-  const block = statement.parent;
-  if (
-    !ts.isExpressionStatement(statement) ||
-    !ts.isBlock(block) ||
-    block.statements.length < 2
-  ) {
-    return false;
-  }
-  const index = block.statements.indexOf(statement);
-  const next = index >= 0 ? block.statements[index + 1] : undefined;
-  if (!next) return false;
-  let containsAwait = false;
-  visitSkippingNestedRuntimeFunctions(next, node => {
-    if (ts.isAwaitExpression(node)) containsAwait = true;
-  });
-  return containsAwait;
-}
-
 function findStateSubtreeClusters(
   subtreeByState: ReadonlyMap<StateCandidate, StateSubtree>,
   statesWithCompanionWrites: ReadonlySet<StateCandidate>
@@ -1658,26 +1555,12 @@ function classifyState(
   }
   const directCallSite = directUniqueReturnCallSite(usage, state.owner);
   const branchCallSite = directBranchReturnCallSite(usage, state.owner);
-  if (
-    isAsyncLeafStatus &&
-    jsxElementCount(state.owner) >= 12 &&
-    usage.localRenderReads === 0 &&
-    usage.effectReads === 0 &&
-    usage.effectWrites === 0 &&
-    usage.deferredReads === 0 &&
-    usage.transportedOccurrences > 0 &&
-    usage.valueTransportSites.size === 1 &&
-    usage.valueTargets.size === 1 &&
-    directCallSite !== null &&
-    !usage.repeatedValueTransport &&
-    !usage.shadowed &&
-    !usage.escaped
-  ) {
+  if (isAsyncLeafStatus) {
     const target = [...usage.valueTargets][0] ?? "the pending control";
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${target}\` call site in a leaf subscriber; preserve the event command and its await boundary exactly, changing only the true/false writes so pending transitions do not invalidate the broad owner.`,
+      message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${target}\` call site in a leaf subscriber; preserve the event command's async completion boundary exactly, changing only the true/false writes so pending transitions do not invalidate the broad owner.`,
     };
   }
   if (

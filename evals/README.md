@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,837 hooks across 114 source roots. The corpus currently contains
-554 manual hook labels, including 27 non-enforced opportunities (25 currently missed), plus twelve
+At the pinned commits, the analyzer inventories 1,840 hooks across 115 source roots. The corpus currently contains
+557 manual hook labels, including 26 non-enforced opportunities (24 currently missed), plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-one real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, seven non-tracking snapshot labels, and five narrow child-write
 labels. Run the eval for the current precision/recall table. If the root README publishes those metrics, update them only
