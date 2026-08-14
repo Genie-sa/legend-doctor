@@ -338,7 +338,8 @@ export function analyzeSource(
           independentStateWrites.directEventWrites.has(state),
           independentStateWrites.visibilitySetterTransports.has(state),
           reactiveMutationAffectedStates.has(state),
-          asyncLeafStatuses.has(state),
+          asyncLeafStatuses.isolated.has(state),
+          asyncLeafStatuses.cohesive.has(state),
           deferredRevealStates.has(state),
           keyedSelections.collectionStates.has(state),
           keyedSelections.scalarStates.has(state),
@@ -1511,6 +1512,7 @@ function classifyState(
   hasIndependentVisibilitySetterTransport: boolean,
   hasReactiveMutationPath: boolean,
   isAsyncLeafStatus: boolean,
+  isCohesiveAsyncStatus: boolean,
   isDeferredReveal: boolean,
   isKeyedLeafCollection: boolean,
   isKeyedLeafScalar: boolean,
@@ -1592,6 +1594,13 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${target}\` call site in a leaf subscriber; preserve the event command's async completion boundary exactly, changing only the true/false writes so pending transitions do not invalidate independent owner content.`,
+    };
+  }
+  if (isCohesiveAsyncStatus) {
+    return {
+      action: "keep-state",
+      confidence: "certain",
+      message: `Keep async pending flag \`${state.valueName}\` as React state; its exact status consumer is already the cohesive owner boundary, so an observable cannot narrow rendering.`,
     };
   }
   if (

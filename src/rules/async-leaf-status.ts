@@ -23,14 +23,20 @@ import {
   nearestRepeatedRenderCall,
 } from "./state-proofs.js";
 
+export interface AsyncLeafStatusAnalysis {
+  cohesive: ReadonlySet<StateCandidate>;
+  isolated: ReadonlySet<StateCandidate>;
+}
+
 export function findAsyncLeafStatuses(
   states: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   safeCommandStates: ReadonlySet<StateCandidate>,
   localComponents: ReadonlySet<string>,
   sourceComponents: ReadonlySet<string>
-): ReadonlySet<StateCandidate> {
-  const result = new Set<StateCandidate>();
+): AsyncLeafStatusAnalysis {
+  const cohesive = new Set<StateCandidate>();
+  const isolated = new Set<StateCandidate>();
   for (const state of states) {
     const usage = usageByState.get(state);
     if (
@@ -60,18 +66,16 @@ export function findAsyncLeafStatuses(
       continue;
     }
     const leaf = asyncLeafCallSite(usage, state.owner);
-    if (
-      !leaf ||
-      (jsxElementCount(state.owner) < 12 &&
-        !hasIndependentRenderCutWitness(
-          leaf.returned,
-          [leaf.boundary],
-          localComponents,
-          sourceComponents
-        ))
-    ) {
+    if (!leaf) {
       continue;
     }
+    const hasRenderCut = jsxElementCount(state.owner) >= 12 ||
+      hasIndependentRenderCutWitness(
+        leaf.returned,
+        [leaf.boundary],
+        localComponents,
+        sourceComponents
+      );
 
     const ownerSetters = new Set(
       states
@@ -126,10 +130,10 @@ export function findAsyncLeafStatuses(
         call.getStart() > pendingStart.getStart()
       )
     ) {
-      result.add(state);
+      (hasRenderCut ? isolated : cohesive).add(state);
     }
   }
-  return result;
+  return { cohesive, isolated };
 }
 
 function asyncCommandRegion(

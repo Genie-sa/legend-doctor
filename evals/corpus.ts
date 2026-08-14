@@ -784,6 +784,12 @@ export const repositories = [
         root: "apps/web/modules/ee/unify-feedback/topics-subtopics/components/taxonomy-display/taxonomy-tree.tsx",
         states: 4,
       },
+      {
+        effects: 0,
+        id: "formbricks-saml-button",
+        root: "apps/web/modules/ee/sso/components/saml-button.tsx",
+        states: 1,
+      },
     ],
     url: "https://github.com/formbricks/formbricks.git",
   },
@@ -3363,6 +3369,15 @@ export const goldCases = [
     name: "isExporting",
     rationale: "The export button is the complete one-element owner, so replacing its cohesive React state cannot create a smaller subscription boundary.",
     target: "outline-export-csv",
+  },
+  {
+    action: "keep-state",
+    file: "saml-button.tsx",
+    hook: "useState",
+    line: 21,
+    name: "isLoading",
+    rationale: "The exact SAML pending transaction renders through the complete button owner, so an observable cannot create a smaller subscription boundary.",
+    target: "formbricks-saml-button",
   },
   {
     action: "review-state",

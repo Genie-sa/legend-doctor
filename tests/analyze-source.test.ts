@@ -2237,6 +2237,22 @@ test("does not isolate async status without one broad stable leaf", () => {
   }
 });
 
+test("keeps exact async status in React when the owner is already the status leaf", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function SaveButton() {
+      const [saving, setSaving] = useState(false);
+      async function save() {
+        setSaving(true);
+        try { await persist(); } finally { setSaving(false); }
+      }
+      return <Button loading={saving} onClick={save}>Save</Button>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "keep-state");
+  assert.match(finding?.message ?? "", /cohesive owner boundary/);
+});
+
 test("isolates async status in a compact owner with an independent render cut", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

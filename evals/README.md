@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,929 hooks across 140 source roots. The corpus currently contains
-607 manual hook labels, including 22 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 1,930 hooks across 141 source roots. The corpus currently contains
+608 manual hook labels, including 22 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
 labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
@@ -61,8 +61,8 @@ Non-mutating validation,
 routing guards, and bounded synchronous command preparation may precede that boundary. Observable ownership stays above
 state-independent conditional branches, while a local subscriber wraps the exact existing call site. The command, await
 boundary, error handling, and
-later close/reset writes stay unchanged; mutation-owned status, fanout, scheduled callbacks, nonliteral writes, and
-cohesive small controls remain review findings.
+later close/reset writes stay unchanged; mutation-owned status, fanout, scheduled callbacks, and nonliteral writes
+remain review findings. Exact async status in a cohesive control emits `keep-state` because no smaller subscription exists.
 Presentation-gate labels keep observable ownership above a condition and replace the complete controlling expression
 with an always-mounted subscriber; this prevents dead subscriptions when the selected child starts hidden. Gate
 conditions must be side-effect free, confined to one strict subtree, and independent of repeated-list shape or effects.
