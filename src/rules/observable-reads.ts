@@ -206,8 +206,7 @@ function narrowUseValueFinding(
     return null;
   }
 
-  let property: string | null = null;
-  let reads = 0;
+  const paths: (readonly string[])[] = [];
   let unsafe = false;
   visit(owner.body, node => {
     if (
@@ -223,37 +222,52 @@ function narrowUseValueFinding(
       unsafe = true;
       return;
     }
-    const access = node.parent;
-    if (
-      !ts.isPropertyAccessExpression(access) ||
-      access.expression !== node ||
-      access.questionDotToken ||
-      propertyAccessIsExecutableOrWritten(access)
-    ) {
+    const path = staticRawValuePath(node);
+    if (!path) {
       unsafe = true;
       return;
     }
-    if (RESERVED_OBSERVABLE_MEMBERS.has(access.name.text)) {
-      unsafe = true;
-      return;
-    }
-    property ??= access.name.text;
-    if (property !== access.name.text) {
-      unsafe = true;
-      return;
-    }
-    reads += 1;
+    paths.push(path);
   });
-  if (unsafe || reads === 0 || !property) return null;
+  if (unsafe || paths.length === 0) return null;
+  const commonPath = paths.slice(1).reduce(commonPathPrefix, paths[0]!);
+  if (commonPath.length === 0) return null;
   return narrowFinding(
     declaration,
     observable,
-    property,
+    commonPath.join("."),
     localName,
-    reads,
+    paths.length,
     sourceFile,
     fileName
   );
+}
+
+function staticRawValuePath(reference: ts.Identifier): readonly string[] | null {
+  const path: string[] = [];
+  let current: ts.Expression = reference;
+  while (true) {
+    const parent = current.parent;
+    if (ts.isParenthesizedExpression(parent) && parent.expression === current) {
+      current = parent;
+      continue;
+    }
+    if (ts.isElementAccessExpression(parent) && parent.expression === current) return null;
+    if (!ts.isPropertyAccessExpression(parent) || parent.expression !== current) break;
+    if (parent.questionDotToken || propertyAccessIsWritten(parent)) return null;
+    if (RESERVED_OBSERVABLE_MEMBERS.has(parent.name.text) || propertyAccessIsExecutable(parent)) {
+      return path.length > 0 ? path : null;
+    }
+    path.push(parent.name.text);
+    current = parent;
+  }
+  return path.length > 0 ? path : null;
+}
+
+function commonPathPrefix(left: readonly string[], right: readonly string[]): readonly string[] {
+  let length = 0;
+  while (length < left.length && length < right.length && left[length] === right[length]) length += 1;
+  return left.slice(0, length);
 }
 
 function narrowObjectBindingFinding(
@@ -335,12 +349,18 @@ function provenObservablePath(
   return root && observableBindings.has(root.text) ? path : null;
 }
 
-function propertyAccessIsExecutableOrWritten(access: ts.PropertyAccessExpression): boolean {
+function propertyAccessIsExecutable(access: ts.PropertyAccessExpression): boolean {
   const parent = access.parent;
   return (
     (ts.isCallExpression(parent) && parent.expression === access) ||
     (ts.isNewExpression(parent) && parent.expression === access) ||
-    (ts.isTaggedTemplateExpression(parent) && parent.tag === access) ||
+    (ts.isTaggedTemplateExpression(parent) && parent.tag === access)
+  );
+}
+
+function propertyAccessIsWritten(access: ts.PropertyAccessExpression): boolean {
+  const parent = access.parent;
+  return (
     (ts.isBinaryExpression(parent) && parent.left === access && isAssignmentOperator(parent.operatorToken.kind)) ||
     (ts.isPrefixUnaryExpression(parent) &&
       parent.operand === access &&

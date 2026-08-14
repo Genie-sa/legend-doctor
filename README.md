@@ -29,7 +29,7 @@ Measured on pinned real applications:
 | Source targets | 109 |
 | Hooks analyzed | 1,818 |
 | Manual labels | 543 |
-| Unit tests | 265/265 |
+| Unit tests | 268/268 |
 | Actionable precision | 100% (288/288) |
 | Actionable recall | 93.2% (288/309) |
 | Legend practice precision | 100% (55/55) |
@@ -180,8 +180,8 @@ const name = useValue(profile$.name);
 return <Name>{name}</Name>;
 ```
 
-The rule requires one static child path. Multiple fields, dynamic keys, optional access, calls, writes, and raw object
-transport stay unchanged.
+The rule follows nested children and selects the deepest static path shared by every read. Divergent fields, dynamic or
+optional access, assertion boundaries, calls, writes, and raw object transport stay unchanged.
 
 ### 4. Multiple writes → one publication
 

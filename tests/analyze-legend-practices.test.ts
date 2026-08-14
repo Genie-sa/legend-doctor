@@ -277,6 +277,48 @@ test("narrows a broad useValue binding to its only static child", () => {
   assert.match(finding?.evidence.join(" ") ?? "", /2 raw-value reads/);
 });
 
+test("narrows useValue to the deepest shared static observable path", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ contact: { name: "Ada", email: "ada@example.com" } });
+    export function Profile() {
+      const profile = useValue(profile$);
+      return <><h1>{profile.contact.name}</h1><span>{profile.contact.name.trim()}</span></>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "narrow-use-value-subscription");
+  assert.match(finding?.message ?? "", /useValue\(profile\$\.contact\.name\)/);
+  assert.match(finding?.message ?? "", /profile\.contact\.name/);
+});
+
+test("uses the deepest common path when sibling leaves are read", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ contact: { name: "Ada", email: "ada@example.com" } });
+    export function Profile() {
+      const profile = useValue(profile$);
+      return <span>{profile.contact.name} {profile.contact.email}</span>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "narrow-use-value-subscription");
+  assert.match(finding?.message ?? "", /useValue\(profile\$\.contact\)/);
+});
+
+test("stops narrowing at a TypeScript assertion boundary", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ contact: { name: "Ada" } as { name: string } | null });
+    export function Profile() {
+      const profile = useValue(profile$);
+      return <span>{(profile.contact!).name}</span>;
+    }
+  `, "fixture.tsx");
+  assert.match(finding?.message ?? "", /useValue\(profile\$\.contact\)/);
+});
+
 test("narrows a child used by a boolean projection", () => {
   const [finding] = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
@@ -321,7 +363,11 @@ test("keeps broad useValue reads when the child subscription is not proven equiv
     `return <span>{profile[keyName]}</span>;`,
     `return <Child profile={profile} />;`,
     `profile.name = "Grace"; return <span>{profile.name}</span>;`,
+    `profile.contact.name = "Grace"; return <span>{profile.contact.name}</span>;`,
+    `delete profile.contact.name; return <span>{String(profile.contact)}</span>;`,
     `return <span>{profile.name()}</span>;`,
+    `return <span>{profile.contact?.name}</span>;`,
+    `return <span>{profile.contact[keyName]}</span>;`,
     `function nested(profile: { name: string }) { return profile.name; } return <span>{profile.name}</span>;`,
   ]) {
     assert.deepEqual(source(body), [], body);
