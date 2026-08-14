@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,876 hooks across 124 source roots. The corpus currently contains
-572 manual hook labels, including 25 non-enforced opportunities (23 currently missed), plus twelve
+At the pinned commits, the analyzer inventories 1,893 hooks across 127 source roots. The corpus currently contains
+583 manual hook labels, including 24 non-enforced opportunities (22 currently missed), plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
 labels. Run the eval for the current precision/recall table. If the root README publishes those metrics, update them only
@@ -94,6 +94,9 @@ stored JSX, state-controlled returns, and value transport to alternate branches 
 An exact call-free controlled edit may prove an independent high-frequency path even when a separate reset or close
 command co-writes sibling state. Direct setter transport for coupled range fields, normalization calls, scheduled work,
 and callbacks that issue any second command remain hard negatives so atomic workflows are not split opportunistically.
+A parent-owned visibility flag may still isolate one dialog or popover when that exact child exposes a direct
+`onOpenChange` callback or a paired `open`/`setOpen` API. Parent payload transactions keep their ordering, the observable
+keeps the parent's lifetime, and only the child wrapper subscribes. Self-gates and arbitrary setter props remain review.
 A resolved custom controlled leaf may use a descriptive value-transition callback such as `onInputChange`,
 `onSelectCover`, or `onOpenChange`. This broader callback grammar applies only when one stable call site owns the
 complete value surface and existing command, companion-write, effect, and render-cut proofs pass. State wholly confined

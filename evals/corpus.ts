@@ -618,6 +618,24 @@ export const repositories = [
       },
       {
         effects: 0,
+        id: "formbricks-edit-api-keys",
+        root: "apps/web/modules/organization/settings/api-keys/components/edit-api-keys.tsx",
+        states: 6,
+      },
+      {
+        effects: 0,
+        id: "formbricks-editor-card-menu",
+        root: "apps/web/modules/survey/editor/components/editor-card-menu.tsx",
+        states: 2,
+      },
+      {
+        effects: 3,
+        id: "formbricks-language-view",
+        root: "apps/web/modules/survey/multi-language-surveys/components/language-view.tsx",
+        states: 6,
+      },
+      {
+        effects: 0,
         id: "formbricks-organization-actions",
         root: "apps/web/modules/organization/settings/teams/components/edit-memberships/organization-actions.tsx",
         states: 3,
@@ -1431,7 +1449,6 @@ export const goldCases = [
   },
   ...[
     ["components/tree-actions/change-labels-page.tsx", 45, "direction"],
-    ["components/operations/deliveries-table.tsx", 43, "signatureModalOpen"],
     ["routes/(app)/_private/_map/gift-trees/scheduled-history/index.tsx", 29, "rescheduleOpen"],
   ].map(([file, line, name]) => ({
     action: "review-state" as const,
@@ -1473,12 +1490,12 @@ export const goldCases = [
     target: "memoria-src",
   },
   {
-    action: "review-state",
+    action: "use-observable",
     file: "components/companies/report-period-picker.tsx",
     hook: "useState",
     line: 73,
     name: "calendarOpen",
-    rationale: "The calendar state is intertwined with the picker callback and has no independently proven render cut.",
+    rationale: "The Popover owns an independent onOpenChange path, so its leaf can subscribe without invalidating the timeline owner.",
     target: "tree-map",
   },
   ...[
@@ -1497,14 +1514,25 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
-    enforced: false,
     file: "components/account-management/create-api-key-dialog.tsx",
     hook: "useState",
     line: 47,
     name: "closeWarningOpen",
-    rationale: "This call-site isolation is manually valid, but the analyzer intentionally does not infer independent command paths through named helpers.",
+    rationale: "The AlertDialog owns an independent visibility callback while parent reset commands retain observable ownership and their atomic ordering.",
     target: "tree-map",
   },
+  ...[
+    ["components/operations/deliveries-table.tsx", 43, "signatureModalOpen"],
+    ["components/operations/deliveries-table.tsx", 45, "alertModalOpen"],
+  ].map(([file, line, name]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "The payload-opening transaction remains in the table owner, while the mounted modal has an independent visibility callback and is the only value subscriber.",
+    target: "tree-map",
+  })),
   ...[
     ["components/species-management/species-management-page.tsx", 163, "mergeOpen"],
     ["components/species-management/species-management-page.tsx", 164, "selectedOpen"],
@@ -3187,6 +3215,26 @@ export const goldCases = [
     rationale: "Row commands select one ID while a single drawer can subscribe, resolve the matching run from its ordinary prop snapshot, and avoid rerendering the table.",
     target: "formbricks-workflow-runs",
   },
+  ...[
+    ["formbricks-chart-menu", "chart-dropdown-menu.tsx", 32, "isDeleteDialogOpen"],
+    ["formbricks-dashboard-menu", "dashboard-dropdown-menu.tsx", 33, "isDeleteDialogOpen"],
+    ["formbricks-quotas-card", "quotas-card.tsx", 76, "isQuotaModalOpen"],
+    ["formbricks-quotas-card", "quotas-card.tsx", 81, "openCreateQuotaConfirmationModal"],
+    ["formbricks-feedback-source-menu", "feedback-source-row-dropdown.tsx", 43, "isDeleteDialogOpen"],
+    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 73, "isAddAPIKeyModalOpen"],
+    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 74, "isDeleteKeyModalOpen"],
+    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 79, "viewPermissionsOpen"],
+    ["formbricks-editor-card-menu", "editor-card-menu.tsx", 77, "logicWarningModal"],
+    ["formbricks-language-view", "language-view.tsx", 79, "translationModalOpen"],
+  ].map(([target, file, line, name]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "A parent command may open the workflow with companion data, but the one receiving modal has an independent visibility callback; retain owner lifetime and subscribe only at that leaf.",
+    target: target as string,
+  })),
   ...[
     ["formbricks-manage-airtable", "ManageIntegration.tsx", 51, "isDeleting"],
     ["formbricks-chart-menu", "chart-dropdown-menu.tsx", 34, "isDuplicating"],

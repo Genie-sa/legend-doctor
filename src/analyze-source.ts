@@ -234,7 +234,7 @@ export function analyzeSource(
     usageByState
   );
   const statesWithCompanionWrites = findStatesWithCompanionWrites(states);
-  const statesWithIndependentDirectEventWrites = findStatesWithIndependentDirectEventWrites(states);
+  const independentStateWrites = findIndependentStateWrites(states);
   const asyncLeafStatuses = findAsyncLeafStatuses(states, usageByState, safeCommandStates);
   const siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();
   for (const state of states) {
@@ -328,7 +328,8 @@ export function analyzeSource(
           safeCommandStates.has(state),
           observableSelectionOwners.has(state.owner),
           statesWithCompanionWrites.has(state),
-          statesWithIndependentDirectEventWrites.has(state),
+          independentStateWrites.directEventWrites.has(state),
+          independentStateWrites.visibilitySetterTransports.has(state),
           reactiveMutationAffectedStates.has(state),
           asyncLeafStatuses.has(state),
           deferredRevealStates.has(state),
@@ -1075,10 +1076,14 @@ function findStatesWithCompanionWrites(
   return result;
 }
 
-function findStatesWithIndependentDirectEventWrites(
+function findIndependentStateWrites(
   states: readonly StateCandidate[]
-): ReadonlySet<StateCandidate> {
-  const result = new Set<StateCandidate>();
+): {
+  directEventWrites: ReadonlySet<StateCandidate>;
+  visibilitySetterTransports: ReadonlySet<StateCandidate>;
+} {
+  const directEventWrites = new Set<StateCandidate>();
+  const visibilitySetterTransports = new Set<StateCandidate>();
   const byOwner = new Map<RuntimeFunctionLike, Map<string, StateCandidate>>();
   for (const state of states) {
     if (!state.setterName) continue;
@@ -1094,15 +1099,27 @@ function findStatesWithIndependentDirectEventWrites(
     visitSkippingNestedRuntimeFunctions(returned, node => {
       if (
         !ts.isJsxAttribute(node) ||
-        !/^on[A-Z]/.test(node.name.getText()) ||
         !node.initializer ||
         !ts.isJsxExpression(node.initializer) ||
         !node.initializer.expression
       ) {
         return;
       }
+      if (ts.isIdentifier(node.initializer.expression)) {
+        const state = bySetter.get(node.initializer.expression.text);
+        const opening = node.parent.parent;
+        if (
+          state &&
+          hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) &&
+          (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
+          isVisibilityTransitionAttribute(opening, node.name.getText(), state.valueName)
+        ) {
+          visibilitySetterTransports.add(state);
+        }
+        return;
+      }
+      if (!/^on[A-Z]/.test(node.name.getText())) return;
       const controlledInteraction = isControlledInteractionProp(node.name.getText());
-      if (ts.isIdentifier(node.initializer.expression)) return;
       if (
         !ts.isArrowFunction(node.initializer.expression) &&
         !ts.isFunctionExpression(node.initializer.expression)
@@ -1126,10 +1143,10 @@ function findStatesWithIndependentDirectEventWrites(
         return;
       }
       const state = bySetter.get(expression.expression.text);
-      if (state) result.add(state);
+      if (state) directEventWrites.add(state);
     });
   }
-  return result;
+  return { directEventWrites, visibilitySetterTransports };
 }
 
 function findStateSubtreeClusters(
@@ -1484,6 +1501,7 @@ function classifyState(
   belongsToObservableSelection: boolean,
   hasCompanionWrites: boolean,
   hasIndependentDirectEventWrite: boolean,
+  hasIndependentVisibilitySetterTransport: boolean,
   hasReactiveMutationPath: boolean,
   isAsyncLeafStatus: boolean,
   isDeferredReveal: boolean,
@@ -1583,7 +1601,9 @@ function classifyState(
       sourceComponents.has([...usage.valueTargets][0] ?? "")) &&
     branchCallSite !== null &&
     !usage.repeatedValueTransport &&
-    (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
+    (!hasCompanionWrites ||
+      hasIndependentDirectEventWrite ||
+      hasIndependentVisibilitySetterTransport) &&
     hasSafeCommands &&
     hasDirectPrimitiveInitializer(state) &&
     !stateMayHoldCallable(state) &&
@@ -1597,7 +1617,7 @@ function classifyState(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace \`${state.valueName}\` with a component-lifetime observable and extract one stable call-site leaf wrapper around \`${target}\` (never define it inline); subscribe there, pass the same prop snapshot, and adapt owner commands to mutate without subscribing.`,
+      message: `Replace \`${state.valueName}\` with a component-lifetime observable and extract one stable call-site leaf wrapper around \`${target}\` (never define it inline); subscribe there, pass the same prop snapshot, and adapt every command-only setter call or prop to mutate without subscribing.`,
     };
   }
   if (
@@ -2284,6 +2304,24 @@ function isValueTransitionAttribute(
   valueName: string
 ): boolean {
   return isValueTransitionProp(name) || isPairedSetterProp(opening, name, valueName);
+}
+
+function isVisibilityTransitionAttribute(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  name: string,
+  valueName: string
+): boolean {
+  if (/^on(?:Open|Visible|Visibility)Change$/.test(name)) return true;
+  if (!isPairedSetterProp(opening, name, valueName)) return false;
+  return opening.attributes.properties.some(attribute =>
+    ts.isJsxAttribute(attribute) &&
+    /^(?:isOpen|isVisible|open|visible)$/.test(attribute.name.getText()) &&
+    attribute.initializer !== undefined &&
+    ts.isJsxExpression(attribute.initializer) &&
+    attribute.initializer.expression !== undefined &&
+    ts.isIdentifier(attribute.initializer.expression) &&
+    attribute.initializer.expression.text === valueName
+  );
 }
 
 function isPairedSetterProp(

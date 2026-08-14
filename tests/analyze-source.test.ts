@@ -2345,6 +2345,62 @@ test("keeps observable ownership when a sibling command opens one exact leaf", (
   );
 });
 
+test("isolates a child-controlled close path from a coupled parent opener", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    interface Item { id: string }
+    function Dialog(_props: unknown) { return null; }
+    export function Screen({ item }: { item: Item }) {
+      const [target, setTarget] = useState<Item | null>(null);
+      const [open, setOpen] = useState(false);
+      const show = () => { setTarget(item); setOpen(true); };
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={show}>Open</button>
+        <Dialog target={target} open={open} setOpen={setOpen} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "open")?.action, "use-observable");
+  assert.equal(findings.find(finding => finding.name === "target")?.action, "review-state");
+});
+
+test("does not put a subscriber inside its own false visibility gate", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    interface Item { id: string }
+    function Dialog(_props: unknown) { return null; }
+    export function Screen({ item }: { item: Item }) {
+      const [target, setTarget] = useState<Item | null>(null);
+      const [open, setOpen] = useState(false);
+      const show = () => { setTarget(item); setOpen(true); };
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={show}>Open</button>
+        {open && <Dialog target={target} open={open} setOpen={setOpen} />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  const open = findings.find(finding => finding.name === "open");
+  assert.equal(open?.action, "review-state");
+});
+
+test("does not treat arbitrary direct setter props as independent child commands", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function Registry(_props: unknown) { return null; }
+    export function Screen() {
+      const [dirty, setDirty] = useState(false);
+      const [open, setOpen] = useState(false);
+      const show = () => { setDirty(true); setOpen(true); };
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={show}>Open</button>
+        <Registry value={open} register={setOpen} />
+        <output>{String(dirty)}</output>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "open")?.action, "review-state");
+});
+
 test("does not infer an independent write through a helper-hidden companion update", () => {
   assert.deepEqual(
     actions(`
