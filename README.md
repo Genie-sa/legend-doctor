@@ -17,6 +17,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | `useEffect` | Keep, move to event, mount, unmount, or observable reaction |
 | Coupled fields | One grouped model and one atomic migration |
 | Broad subscriptions | Lowest proven observable path |
+| Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
 | Multiple Legend writes | One `.assign()` or `batch()` transaction |
 | Every finding | File, line, action, confidence, evidence, and boundary |
 
@@ -28,10 +29,10 @@ Measured on pinned real applications:
 | Source targets | 109 |
 | Hooks analyzed | 1,818 |
 | Manual labels | 543 |
-| Unit tests | 261/261 |
+| Unit tests | 265/265 |
 | Actionable precision | 100% (288/288) |
 | Actionable recall | 93.2% (288/309) |
-| Legend practice precision | 100% (48/48) |
+| Legend practice precision | 100% (55/55) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, and Outline.
@@ -207,7 +208,31 @@ player$.assign({ error: message, isLoading: false, isPlaying: false });
 
 The tool uses `batch()` when writes span observables or `.assign()` would change evaluation semantics.
 
-### 5. Teardown effect → explicit lifecycle
+### 5. Command read → non-tracking snapshot
+
+Before:
+
+```tsx
+const onSave = () => save(profile$.name.get());
+```
+
+Output:
+
+```text
+Profile.tsx:24 [use-peek-for-snapshot] Replace `profile$.name.get()` with
+`profile$.name.peek()`; this code path needs a snapshot, not a reactive dependency.
+```
+
+After:
+
+```tsx
+const onSave = () => save(profile$.name.peek());
+```
+
+The rule is limited to proven React snapshots and event commands. Render reads, Legend reactions, unknown callbacks,
+dynamic paths, and shallow `get(true)` stay unchanged.
+
+### 6. Teardown effect → explicit lifecycle
 
 Before:
 

@@ -3893,6 +3893,34 @@ export const goldStateGroups = [
 
 export const goldPracticeCases = [
   {
+    action: "use-peek-for-snapshot",
+    file: "feature/discover/pages/DiscoverFiltersScreen.tsx",
+    line: 39,
+    rationale: "The React state initializer takes one non-reactive snapshot of the committed filter store.",
+    target: "memoria-src",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    file: "feature/discover/pages/DiscoverScreen.tsx",
+    line: 120,
+    rationale: "The genre-chip event reads the current store value to build one command payload; it is not a reactive selector.",
+    target: "memoria-src",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    file: "feature/insights/pages/HistoryFiltersScreen.tsx",
+    line: 71,
+    rationale: "The Done event snapshots the live search value while committing the filter draft.",
+    target: "memoria-src",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    file: "feature/library/pages/LibraryFiltersScreen.tsx",
+    line: 77,
+    rationale: "The React state initializer clones one non-reactive snapshot of the committed library filters.",
+    target: "memoria-src",
+  },
+  {
     action: "batch-observable-writes",
     file: "backend/api/data/sync/queries.ts",
     line: 146,
@@ -4002,6 +4030,27 @@ export const goldPracticeCases = [
     file: "components/LocalAudioPlayer.tsx",
     line: 257,
     rationale: "One player failure publishes error, loading, and playback state together.",
+    target: "legend-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    file: "components/NativeSidebar.tsx",
+    line: 53,
+    rationale: "The React effect compares one current observable snapshot before synchronizing the local selection handle.",
+    target: "legend-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    file: "components/TitleBar.tsx",
+    line: 31,
+    rationale: "The hover event checks the current preference without creating a Legend dependency.",
+    target: "legend-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    file: "components/TitleBar.tsx",
+    line: 39,
+    rationale: "The hover-leave event checks the current preference without creating a Legend dependency.",
     target: "legend-music",
   },
   {

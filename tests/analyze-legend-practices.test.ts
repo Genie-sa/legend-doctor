@@ -122,6 +122,115 @@ test("uses cross-file observable provenance for direct useValue", () => {
   );
 });
 
+test("uses peek for proven non-tracking React snapshots and event commands", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useEffect, useState } from "react";
+    import { useObservable } from "@legendapp/state/react";
+    const settings$ = observable({ name: "Ada", open: false });
+    export function Profile() {
+      const local$ = useObservable({ selected: 0 });
+      const [initial] = useState(() => settings$.name.get());
+      useEffect(() => {
+        report(settings$.open.get());
+      }, []);
+      const handleSave = () => {
+        save(settings$.name.get(), local$.selected.get());
+      };
+      return <button onClick={handleSave}>{initial}</button>;
+    }
+  `, "fixture.tsx");
+  const peekFindings = findings.filter(finding => finding.action === "use-peek-for-snapshot");
+  assert.equal(peekFindings.length, 4);
+  assert.ok(peekFindings.every(finding => finding.confidence === "probable"));
+  assert.match(peekFindings[0]?.message ?? "", /\.peek\(\)/);
+});
+
+test("uses peek for aliased React hooks and direct JSX event callbacks", () => {
+  assert.deepEqual(
+    analyzeLegendPractices(`
+      import * as React from "react";
+      import { observable } from "@legendapp/state";
+      const state$ = observable({ value: 1 });
+      export function Screen() {
+        React.useEffect(() => consume(state$.value.get()), []);
+        return <button onClick={() => consume(state$.value.get())}>Read</button>;
+      }
+    `, "fixture.tsx").map(finding => finding.action),
+    ["use-peek-for-snapshot", "use-peek-for-snapshot"]
+  );
+});
+
+test("keeps get in tracking, render, shallow, and ambiguous callbacks", () => {
+  const sources = [
+    `
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const state$ = observable({ value: 1 });
+      export function Screen() {
+        const value = useValue(() => state$.value.get() + 1);
+        return <span>{value}</span>;
+      }
+    `,
+    `
+      import { observable, observe } from "@legendapp/state";
+      const state$ = observable({ value: 1 });
+      observe(() => consume(state$.value.get()));
+    `,
+    `
+      import { observable } from "@legendapp/state";
+      const state$ = observable({ value: 1 });
+      export function Screen() {
+        return <span>{state$.value.get()}</span>;
+      }
+    `,
+    `
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const state$ = observable({ rows: [] as string[] });
+      export function Screen() {
+        const rows = useValue(() => state$.rows.get(true));
+        return <span>{rows.length}</span>;
+      }
+    `,
+    `
+      import { observable } from "@legendapp/state";
+      const state$ = observable({ value: 1 });
+      export function Screen() {
+        const read = () => state$.value.get();
+        subscribe(read);
+        return <button onClick={read}>Read</button>;
+      }
+    `,
+    `
+      import { observable } from "@legendapp/state";
+      const state$ = observable({ value: 1 });
+      export function Screen() {
+        return <button onClick={() => schedule(() => consume(state$.value.get()))}>Read</button>;
+      }
+    `,
+  ];
+  for (const source of sources) {
+    assert.equal(
+      analyzeLegendPractices(source, "fixture.tsx").some(
+        finding => finding.action === "use-peek-for-snapshot"
+      ),
+      false,
+      source
+    );
+  }
+});
+
+test("uses cross-file observable provenance for event snapshots", () => {
+  const findings = analyzeLegendPractices(`
+    import { profile$ } from "./store";
+    export function Profile() {
+      return <button onClick={() => save(profile$.name.get())}>Save</button>;
+    }
+  `, "fixture.tsx", new Set(["profile$"]));
+  assert.deepEqual(findings.map(finding => finding.action), ["use-peek-for-snapshot"]);
+});
+
 test("keeps computed, shallow, dynamic, and unproven useValue selectors", () => {
   const source = (selector: string) => analyzeLegendPractices(`
     import { observable } from "@legendapp/state";

@@ -9,9 +9,10 @@ import {
   rootIdentifier,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
-import { findAncestor, isRuntimeFunctionLike, visit } from "../ast.js";
-import type { HookImports } from "../imports.js";
+import { findAncestor, isRuntimeFunctionLike, type RuntimeFunctionLike, visit } from "../ast.js";
+import { isImportedHookCall, type HookImports } from "../imports.js";
 import type { LegendPracticeFinding } from "../types.js";
+import { callbackIsEventRooted } from "./state-proofs.js";
 
 const RESERVED_OBSERVABLE_MEMBERS = new Set([
   "assign",
@@ -39,6 +40,10 @@ export function findObservableReadPractices(
     if (ts.isCallExpression(node)) {
       const receiver = directUseValueObservable(node, imports, observableBindings);
       if (receiver) findings.push(directUseValueFinding(node, receiver, sourceFile, fileName));
+      const snapshotReceiver = nonTrackingSnapshotObservable(node, imports, observableBindings);
+      if (snapshotReceiver) {
+        findings.push(nonTrackingSnapshotFinding(node, snapshotReceiver, sourceFile, fileName));
+      }
     }
     if (ts.isVariableDeclaration(node)) {
       const finding = narrowUseValueFinding(node, imports, observableBindings, sourceFile, fileName);
@@ -46,6 +51,86 @@ export function findObservableReadPractices(
     }
   });
   return findings;
+}
+
+function nonTrackingSnapshotObservable(
+  call: ts.CallExpression,
+  imports: HookImports,
+  observableBindings: ReadonlySet<string>
+): ts.Expression | null {
+  if (
+    call.arguments.length > 0 ||
+    !ts.isPropertyAccessExpression(call.expression) ||
+    call.expression.name.text !== "get"
+  ) {
+    return null;
+  }
+  const observable = provenObservablePath(call.expression.expression, observableBindings);
+  if (!observable) return null;
+  const callback = findAncestor(call, isRuntimeFunctionLike);
+  return callback && isProvenNonTrackingCallback(callback, imports) ? observable : null;
+}
+
+function isProvenNonTrackingCallback(
+  callback: RuntimeFunctionLike,
+  imports: HookImports
+): boolean {
+  if (!ts.isArrowFunction(callback) && !ts.isFunctionDeclaration(callback) && !ts.isFunctionExpression(callback)) {
+    return false;
+  }
+  if (isDirectReactCallback(callback, imports, "useEffect")) return true;
+  if (isDirectReactCallback(callback, imports, "useState")) return true;
+
+  const owner = findAncestor(callback, isRuntimeFunctionLike);
+  if (!owner) return false;
+  if (isDirectJsxEventCallback(callback)) return true;
+  return callbackIsEventRooted(callback, owner, "", new Set());
+}
+
+function isDirectReactCallback(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  imports: HookImports,
+  hook: "useEffect" | "useState"
+): boolean {
+  const parent = callback.parent;
+  if (!ts.isCallExpression(parent) || parent.arguments[0] !== callback) return false;
+  return isImportedHookCall(
+    parent,
+    hook === "useEffect" ? imports.useEffect : imports.useState,
+    imports.reactNamespaces,
+    hook
+  );
+}
+
+function isDirectJsxEventCallback(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression
+): boolean {
+  const expression = callback.parent;
+  if (!ts.isJsxExpression(expression) || expression.expression !== callback) return false;
+  const attribute = expression.parent;
+  return ts.isJsxAttribute(attribute) && /^on[A-Z]/.test(attribute.name.getText());
+}
+
+function nonTrackingSnapshotFinding(
+  call: ts.CallExpression,
+  observable: ts.Expression,
+  sourceFile: ts.SourceFile,
+  fileName: string
+): LegendPracticeFinding {
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
+  const path = observable.getText(sourceFile);
+  return {
+    action: "use-peek-for-snapshot",
+    confidence: "probable",
+    disposition: "change",
+    evidence: [
+      `${path}.get() reads a proven Legend observable path`,
+      "the read is owned by a React snapshot or a uniquely event-rooted command, not a Legend tracking context",
+    ],
+    location: { column: character + 1, file: fileName, line: line + 1 },
+    message: `Replace \`${path}.get()\` with \`${path}.peek()\`; this code path needs a snapshot, not a reactive dependency.`,
+    practice: "reactivity",
+  };
 }
 
 function directUseValueObservable(

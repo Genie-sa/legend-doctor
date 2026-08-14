@@ -25,7 +25,8 @@ export type LegendPracticeAction =
   | "assign-observable-fields"
   | "batch-observable-writes"
   | "narrow-use-value-subscription"
-  | "pass-observable-to-use-value";
+  | "pass-observable-to-use-value"
+  | "use-peek-for-snapshot";
 
 export interface SourceLocation {
   column: number;
