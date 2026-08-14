@@ -1,0 +1,25 @@
+{
+  "name": "legend-doctor",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Agent-first React hook triage for Legend State",
+  "type": "module",
+  "bin": {
+    "legend-doctor": "./dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "eval": "npm run build && node dist/evals/run.js",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
