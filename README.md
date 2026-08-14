@@ -35,8 +35,8 @@ agent implements and verifies them.
 | Inventoried hooks | 1,747 |
 | Manual labels | 503 |
 | Grouped-model checks | 12/12 |
-| Legend practice checks | 10/10 |
-| Unit tests | 234/234 |
+| Legend practice checks | 15/15 |
+| Unit tests | 239/239 |
 | Actionable precision | 100% (275/275) |
 | Actionable recall | 92.3% (275/298) |
 | `use-observable` recall | 93.4% (225/241) |
@@ -294,9 +294,9 @@ When every field belongs to one observable object, this is shorter:
 player$.assign({ error: message, isLoading: false, isPlaying: false });
 ```
 
-**Result:** observers see one final player snapshot. The rule requires import-proven Legend observables, distinct write
-paths, one synchronous statement run, and no existing batch. It ignores Maps, animation values, repeated writes to the
-same path, `await`, and separated control flow.
+**Result:** observers see one final player snapshot. The rule requires Legend observables proven locally or through a
+resolved project export, distinct write paths, one synchronous statement run, and no existing batch. It ignores tests,
+Maps, animation values, partial write runs, repeated writes to the same path, `await`, and separated control flow.
 
 ## How findings are classified
 

@@ -3677,6 +3677,13 @@ export const goldStateGroups = [
 export const goldPracticeCases = [
   {
     action: "batch-observable-writes",
+    file: "backend/api/data/sync/queries.ts",
+    line: 146,
+    rationale: "One cloud-sync result publishes its timestamp and compatibility flag together.",
+    target: "memoria-src",
+  },
+  {
+    action: "batch-observable-writes",
     file: "backend/api/stickers/keyboard.ts",
     line: 103,
     rationale: "Pinned stickers and keyboard mode publish as one user command.",
@@ -3715,6 +3722,34 @@ export const goldPracticeCases = [
     file: "components/LocalAudioPlayer.tsx",
     line: 257,
     rationale: "One player failure publishes error, loading, and playback state together.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "components/JumpSearchMenuDropdown/hooks.ts",
+    line: 32,
+    rationale: "Local and shared search-open flags represent one dropdown transition.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "components/MediaLibrary/TrackList.tsx",
+    line: 155,
+    rationale: "Changing the sort field and its default direction is one list transition.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "components/Unregistered.tsx",
+    line: 27,
+    rationale: "Selecting the account page and opening settings is one navigation transition.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "hooks/usePlaylistSelection.ts",
+    line: 43,
+    rationale: "Selection membership and its shared nonempty flag publish together.",
     target: "legend-music",
   },
   {

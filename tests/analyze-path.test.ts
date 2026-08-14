@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -58,6 +58,39 @@ test("shares application import provenance with a focused file analysis", async 
   assert.equal(contextual.files, 1);
   assert.equal(contextual.findings[0]?.location.file, "Screen.tsx");
   assert.equal(contextual.findings[0]?.action, "use-observable");
+});
+
+test("uses cross-file observable provenance for batching findings", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-import-"));
+  try {
+    await mkdir(path.join(root, "state"), { recursive: true });
+    await writeFile(
+      path.join(root, "state", "player.ts"),
+      `
+        import { observable } from "@legendapp/state";
+        export const player$ = observable({ loading: false, error: null as string | null });
+      `,
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "screen.ts"),
+      `
+        import { player$ } from "./state/player";
+        export function fail(message: string) {
+          player$.error.set(message);
+          player$.loading.set(false);
+        }
+      `,
+      "utf8"
+    );
+
+    const report = await analyzePath(root);
+    assert.equal(report.practices.length, 1);
+    assert.equal(report.practices[0]?.action, "batch-observable-writes");
+    assert.equal(report.practices[0]?.location.file, "screen.ts");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
 });
 
 test("places an observable subscription at one resolved child call site", async () => {

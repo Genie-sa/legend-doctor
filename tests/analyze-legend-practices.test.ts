@@ -90,6 +90,33 @@ test("does not infer Legend observables from dollar names or set syntax", () => 
   );
 });
 
+test("does not recommend a partial batch beside an unproven set call", () => {
+  assert.deepEqual(
+    actions(`
+      import { observable } from "@legendapp/state";
+      const state$ = observable({ first: "", second: "" });
+      export function reset(external: { set(value: string): void }) {
+        external.set("start");
+        state$.first.set("one");
+        state$.second.set("two");
+      }
+    `),
+    []
+  );
+});
+
+test("does not recommend production migrations in tests, stories, or demos", () => {
+  const source = `
+    import { observable } from "@legendapp/state";
+    const state$ = observable({ first: "", second: "" });
+    state$.first.set("one");
+    state$.second.set("two");
+  `;
+  for (const fileName of ["store.test.ts", "__tests__/store.ts", "stories/store.ts"]) {
+    assert.deepEqual(analyzeLegendPractices(source, fileName), [], fileName);
+  }
+});
+
 test("does not batch repeated writes to the same observable path", () => {
   assert.deepEqual(
     actions(`

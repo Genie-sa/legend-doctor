@@ -1,5 +1,6 @@
 import ts from "typescript";
 
+import { isNonProductionHarness } from "./ast.js";
 import { collectHookImports, type HookImports } from "./imports.js";
 import type { LegendPracticeFinding } from "./types.js";
 
@@ -10,8 +11,10 @@ interface ObservableWrite {
 
 export function analyzeLegendPractices(
   sourceText: string,
-  fileName: string
+  fileName: string,
+  importedObservables: ReadonlySet<string> = new Set()
 ): LegendPracticeFinding[] {
+  if (isNonProductionHarness(fileName)) return [];
   const sourceFile = ts.createSourceFile(
     fileName,
     sourceText,
@@ -25,29 +28,34 @@ export function analyzeLegendPractices(
   if (
     imports.observable.size === 0 &&
     imports.useObservable.size === 0 &&
-    imports.observableTypes.size === 0
+    imports.observableTypes.size === 0 &&
+    importedObservables.size === 0
   ) {
     return [];
   }
 
-  const observableBindings = collectObservableBindings(sourceFile, imports);
+  const observableBindings = collectObservableBindings(sourceFile, imports, importedObservables);
   if (observableBindings.size === 0) return [];
 
   const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, node => {
     if (!ts.isBlock(node) && !ts.isSourceFile(node)) return;
     let run: ObservableWrite[] = [];
+    let runIsComplete = true;
     const flush = (): void => {
-      if (run.length >= 2 && hasDistinctNonOverlappingPaths(run)) {
+      if (runIsComplete && run.length >= 2 && hasDistinctNonOverlappingPaths(run)) {
         findings.push(batchFinding(run, sourceFile, fileName));
       }
       run = [];
+      runIsComplete = true;
     };
 
     for (const statement of node.statements) {
       const write = observableWrite(statement, observableBindings, sourceFile);
       if (write && !isInsideBatch(write.call, imports)) {
         run.push(write);
+      } else if (isSetStatement(statement)) {
+        runIsComplete = false;
       } else {
         flush();
       }
@@ -61,13 +69,32 @@ export function analyzeLegendPractices(
   );
 }
 
+function isSetStatement(statement: ts.Statement): boolean {
+  if (!ts.isExpressionStatement(statement)) return false;
+  const expression = unwrapExpression(statement.expression);
+  return (
+    ts.isCallExpression(expression) &&
+    ts.isPropertyAccessExpression(expression.expression) &&
+    expression.expression.name.text === "set"
+  );
+}
+
 function collectObservableBindings(
   sourceFile: ts.SourceFile,
-  imports: HookImports
+  imports: HookImports,
+  importedObservables: ReadonlySet<string>
 ): ReadonlySet<string> {
   const declarations = new Map<string, number>();
-  const candidates = new Set<string>();
+  const candidates = new Set(importedObservables);
   visit(sourceFile, node => {
+    if (ts.isImportClause(node) && node.name) {
+      recordDeclaration(declarations, node.name.text);
+      return;
+    }
+    if (ts.isImportSpecifier(node)) {
+      recordDeclaration(declarations, node.name.text);
+      return;
+    }
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
       recordDeclaration(declarations, node.name.text);
       if (

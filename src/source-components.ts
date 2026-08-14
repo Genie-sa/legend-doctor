@@ -20,30 +20,35 @@ interface ModuleRecord {
   componentDeclarations: ReadonlyMap<string, ComponentFunction>;
   imports: ReadonlyMap<string, ImportBinding>;
   localExports: ReadonlyMap<string, string>;
+  observableDeclarations: ReadonlySet<string>;
   reexports: ReadonlyMap<string, ReexportBinding>;
   starExports: readonly string[];
 }
 
-export interface SourceComponentIndex {
+export interface SourceIndex {
   componentsFor(file: string): ReadonlySet<string>;
+  observablesFor(file: string): ReadonlySet<string>;
 }
 
-interface ResolvedComponent {
+interface ResolvedSymbol {
   file: string;
   localName: string;
 }
 
-export function buildSourceComponentIndex(
+type SourceSymbolKind = "component" | "observable";
+
+export function buildSourceIndex(
   root: string,
   sources: ReadonlyMap<string, string>
-): SourceComponentIndex {
+): SourceIndex {
   const records = new Map<string, ModuleRecord>();
   for (const [file, source] of sources) {
     records.set(normalizeFile(file), moduleRecord(source, file));
   }
 
   const compilerContexts = new Map<string, CompilerContext>();
-  const resolvedByImporter = new Map<string, ReadonlyMap<string, ResolvedComponent>>();
+  const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const observablesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
 
   function resolveModule(importer: string, specifier: string): string | null {
     const { cache, options } = compilerContextFor(importer, root, compilerContexts);
@@ -59,12 +64,13 @@ export function buildSourceComponentIndex(
     return records.has(resolved) ? resolved : null;
   }
 
-  function exportedComponent(
+  function exportedSymbol(
     file: string,
     exportName: string,
+    kind: SourceSymbolKind,
     visited: ReadonlySet<string>,
     depth: number
-  ): ResolvedComponent | null {
+  ): ResolvedSymbol | null {
     if (depth > 8) return null;
     const key = `${file}\0${exportName}`;
     if (visited.has(key)) return null;
@@ -73,20 +79,27 @@ export function buildSourceComponentIndex(
     const nextVisited = new Set(visited).add(key);
 
     const localName = record.localExports.get(exportName);
-    if (localName && record.componentDeclarations.has(localName)) return { file, localName };
+    if (
+      localName &&
+      (kind === "component"
+        ? record.componentDeclarations.has(localName)
+        : record.observableDeclarations.has(localName))
+    ) {
+      return { file, localName };
+    }
 
     const reexport = record.reexports.get(exportName);
     if (reexport) {
       const target = resolveModule(file, reexport.moduleSpecifier);
       return target
-        ? exportedComponent(target, reexport.importedName, nextVisited, depth + 1)
+        ? exportedSymbol(target, reexport.importedName, kind, nextVisited, depth + 1)
         : null;
     }
 
     const matches = record.starExports.flatMap(specifier => {
       const target = resolveModule(file, specifier);
       const component = target
-        ? exportedComponent(target, exportName, nextVisited, depth + 1)
+        ? exportedSymbol(target, exportName, kind, nextVisited, depth + 1)
         : null;
       return component ? [component] : [];
     });
@@ -94,27 +107,31 @@ export function buildSourceComponentIndex(
     return unique.size === 1 ? unique.values().next().value ?? null : null;
   }
 
-  function resolvedFor(file: string): ReadonlyMap<string, ResolvedComponent> {
+  function resolvedFor(file: string, kind: SourceSymbolKind): ReadonlyMap<string, ResolvedSymbol> {
     const importer = normalizeFile(file);
-    const cached = resolvedByImporter.get(importer);
+    const cache = kind === "component" ? componentsByImporter : observablesByImporter;
+    const cached = cache.get(importer);
     if (cached) return cached;
-    const components = new Map<string, ResolvedComponent>();
+    const symbols = new Map<string, ResolvedSymbol>();
     const record = records.get(importer);
     if (record) {
       for (const [localName, binding] of record.imports) {
-        if (!isSemanticComponentName(localName)) continue;
+        if (kind === "component" && !isSemanticComponentName(localName)) continue;
         const target = resolveModule(importer, binding.moduleSpecifier);
-        const component = target
-          ? exportedComponent(target, binding.importedName, new Set(), 0)
+        const symbol = target
+          ? exportedSymbol(target, binding.importedName, kind, new Set(), 0)
           : null;
-        if (component) components.set(localName, component);
+        if (symbol) symbols.set(localName, symbol);
       }
     }
-    resolvedByImporter.set(importer, components);
-    return components;
+    cache.set(importer, symbols);
+    return symbols;
   }
 
-  return { componentsFor: file => new Set(resolvedFor(file).keys()) };
+  return {
+    componentsFor: file => new Set(resolvedFor(file, "component").keys()),
+    observablesFor: file => new Set(resolvedFor(file, "observable").keys()),
+  };
 }
 
 interface CompilerContext {
@@ -156,8 +173,31 @@ function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
   const componentDeclarations = new Map<string, ComponentFunction>();
   const imports = new Map<string, ImportBinding>();
   const localExports = new Map<string, string>();
+  const observableDeclarations = new Set<string>();
   const reexports = new Map<string, ReexportBinding>();
   const starExports: string[] = [];
+  const observableFactories = new Set<string>();
+  const legendNamespaces = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== "@legendapp/state"
+    ) {
+      continue;
+    }
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings)) {
+      legendNamespaces.add(bindings.name.text);
+    } else if (bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        if ((element.propertyName?.text ?? element.name.text) === "observable") {
+          observableFactories.add(element.name.text);
+        }
+      }
+    }
+  }
 
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement)) {
@@ -182,6 +222,14 @@ function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
     }
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.initializer &&
+          isObservableInitializer(declaration.initializer, observableFactories, legendNamespaces)
+        ) {
+          observableDeclarations.add(declaration.name.text);
+          if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
+        }
         if (
           ts.isIdentifier(declaration.name) &&
           isSemanticComponentName(declaration.name.text) &&
@@ -240,7 +288,44 @@ function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
     }
   }
 
-  return { componentDeclarations, imports, localExports, reexports, starExports };
+  return {
+    componentDeclarations,
+    imports,
+    localExports,
+    observableDeclarations,
+    reexports,
+    starExports,
+  };
+}
+
+function isObservableInitializer(
+  expression: ts.Expression,
+  factories: ReadonlySet<string>,
+  namespaces: ReadonlySet<string>
+): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (!ts.isCallExpression(value)) return false;
+  if (ts.isIdentifier(value.expression)) return factories.has(value.expression.text);
+  return (
+    ts.isPropertyAccessExpression(value.expression) &&
+    ts.isIdentifier(value.expression.expression) &&
+    namespaces.has(value.expression.expression.text) &&
+    value.expression.name.text === "observable"
+  );
+}
+
+function unwrapTransparentExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
 }
 
 function compilerOptionsFor(root: string): ts.CompilerOptions {

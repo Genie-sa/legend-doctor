@@ -48,6 +48,12 @@ export function isRuntimeFunctionLike(node: ts.Node): node is RuntimeFunctionLik
   );
 }
 
+export function isNonProductionHarness(fileName: string): boolean {
+  return /(?:^|\/)(?:__tests__|stories|demos)(?:\/|$)|\.(?:spec|test|stories?)\.[cm]?[jt]sx?$/i.test(
+    fileName.split(path.sep).join("/")
+  );
+}
+
 export function nearestNestedFunction(
   node: ts.Node,
   owner: RuntimeFunctionLike

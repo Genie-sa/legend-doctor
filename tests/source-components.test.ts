@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { buildSourceComponentIndex } from "../src/source-components.js";
+import { buildSourceIndex } from "../src/source-components.js";
 
 async function withProject(
   files: Readonly<Record<string, string>>,
@@ -34,7 +34,7 @@ test("resolves named, default, and barrel-exported source components", async () 
       "screen.tsx": 'import { DefaultLeaf, NamedLeaf } from "./feature"; export function Screen() { return <><DefaultLeaf /><NamedLeaf /></>; }',
     },
     (root, sources) => {
-      const components = buildSourceComponentIndex(root, sources).componentsFor(path.join(root, "screen.tsx"));
+      const components = buildSourceIndex(root, sources).componentsFor(path.join(root, "screen.tsx"));
       assert.deepEqual([...components].sort(), ["DefaultLeaf", "NamedLeaf"]);
     }
   );
@@ -48,7 +48,7 @@ test("indexes shared UI components as provenance without deciding leaf safety", 
       "screen.tsx": 'import { Calendar } from "./components/ui/calendar"; import { DropdownMenu } from "./components/ui/dropdown-menu"; export function Screen() { return <><Calendar /><DropdownMenu /></>; }',
     },
     (root, sources) => {
-      const components = buildSourceComponentIndex(root, sources).componentsFor(path.join(root, "screen.tsx"));
+      const components = buildSourceIndex(root, sources).componentsFor(path.join(root, "screen.tsx"));
       assert.deepEqual([...components].sort(), ["Calendar", "DropdownMenu"]);
     }
   );
@@ -63,9 +63,46 @@ test("resolves each import with its nearest application tsconfig", async () => {
       "apps/web/src/Screen.tsx": 'import { Leaf } from "@/Leaf"; export function Screen() { return <Leaf open={false} />; }',
     },
     (root, sources) => {
-      const components = buildSourceComponentIndex(root, sources)
+      const components = buildSourceIndex(root, sources)
         .componentsFor(path.join(root, "apps/web/src/Screen.tsx"));
       assert.deepEqual([...components], ["Leaf"]);
+    }
+  );
+});
+
+test("resolves exported Legend observables through aliases and barrels", async () => {
+  await withProject(
+    {
+      "state/player.ts": `
+        import { observable as createObservable } from "@legendapp/state";
+        export const player$ = createObservable({ loading: false, error: null });
+        export const map$ = new Map();
+      `,
+      "state/index.ts": 'export { player$ as playback$ } from "./player";',
+      "screen.ts": 'import { playback$ as audio$ } from "./state";',
+    },
+    (root, sources) => {
+      const observables = buildSourceIndex(root, sources)
+        .observablesFor(path.join(root, "screen.ts"));
+      assert.deepEqual([...observables], ["audio$"]);
+    }
+  );
+});
+
+test("does not infer exported observables from names or unrelated factories", async () => {
+  await withProject(
+    {
+      "state.ts": `
+        const observable = makeStore;
+        export const fake$ = observable({ first: "", second: "" });
+        export const map$ = new Map();
+      `,
+      "screen.ts": 'import { fake$, map$ } from "./state";',
+    },
+    (root, sources) => {
+      const observables = buildSourceIndex(root, sources)
+        .observablesFor(path.join(root, "screen.ts"));
+      assert.deepEqual([...observables], []);
     }
   );
 });

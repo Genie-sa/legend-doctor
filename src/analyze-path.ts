@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { analyzeLegendPractices } from "./analyze-legend-practices.js";
 import { analyzeSource } from "./analyze-source.js";
-import { buildSourceComponentIndex, type SourceComponentIndex } from "./source-components.js";
+import { buildSourceIndex, type SourceIndex } from "./source-components.js";
 import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
 
 const SOURCE_EXTENSIONS = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
@@ -19,7 +19,7 @@ const IGNORED_DIRECTORIES = new Set([
 ]);
 
 export interface AnalysisContext {
-  componentIndex: SourceComponentIndex;
+  sourceIndex: SourceIndex;
   root: string;
   sources: ReadonlyMap<string, string>;
 }
@@ -30,7 +30,7 @@ export async function createAnalysisContext(rootPath: string): Promise<AnalysisC
   const sources = new Map<string, string>();
   for (const file of files) sources.set(file, await readFile(file, "utf8"));
   return {
-    componentIndex: buildSourceComponentIndex(root, sources),
+    sourceIndex: buildSourceIndex(root, sources),
     root,
     sources,
   };
@@ -54,14 +54,22 @@ export async function analyzePath(
       ...analyzeSource(
         sourceText,
         path.relative(analysisRoot, file) || path.basename(file),
-        context.componentIndex.componentsFor(file)
+        context.sourceIndex.componentsFor(file)
       )
     );
-    if (sourceText.includes("@legendapp/state")) {
+    const mayContainObservableWrite = /\.set\s*\(/.test(sourceText);
+    const importedObservables = mayContainObservableWrite
+      ? context.sourceIndex.observablesFor(file)
+      : new Set<string>();
+    if (
+      mayContainObservableWrite &&
+      (sourceText.includes("@legendapp/state") || importedObservables.size > 0)
+    ) {
       practices.push(
         ...analyzeLegendPractices(
           sourceText,
-          path.relative(analysisRoot, file) || path.basename(file)
+          path.relative(analysisRoot, file) || path.basename(file),
+          importedObservables
         )
       );
     }

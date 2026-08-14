@@ -5,6 +5,7 @@ import ts from "typescript";
 import {
   findAncestor,
   findAncestorUntil,
+  isNonProductionHarness,
   isRuntimeFunctionLike,
   nearestNestedFunction,
   nodeWithin,
@@ -3814,12 +3815,6 @@ function hasUnstableSubtreeLifetime(node: JsxSubtreeNode, boundary: ts.Node): bo
     }
   }
   return false;
-}
-
-function isNonProductionHarness(fileName: string): boolean {
-  return /(?:^|\/)(?:__tests__|stories|demos)(?:\/|$)|\.(?:spec|test|stories?)\.[cm]?[jt]sx?$/i.test(
-    fileName.split(path.sep).join("/")
-  );
 }
 
 function classifyEffect(
