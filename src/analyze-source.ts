@@ -1711,6 +1711,37 @@ function classifyState(
       message: `Replace \`${state.valueName}\` with a component-lifetime observable and extract one stable call-site leaf wrapper around \`${target}\` (never define it inline); subscribe there, pass the same prop snapshot, and adapt owner commands to mutate without subscribing.`,
     };
   }
+  if (
+    !isCustomHookOwner(state.owner) &&
+    jsxElementCount(state.owner) >= 12 &&
+    usage.localRenderReads === 0 &&
+    usage.effectReads === 0 &&
+    usage.effectWrites === 0 &&
+    usage.deferredReads === 0 &&
+    usage.transportedOccurrences > 0 &&
+    usage.valueTransportSites.size === 1 &&
+    usage.valueTargets.size === 1 &&
+    (localComponents.has([...usage.valueTargets][0] ?? "") ||
+      sourceComponents.has([...usage.valueTargets][0] ?? "")) &&
+    branchCallSite !== null &&
+    (directCallSite === null || usage.unstableTransport) &&
+    !usage.repeatedValueTransport &&
+    !hasCompanionWrites &&
+    hasSafeCommands &&
+    hasDirectPrimitiveInitializer(state) &&
+    !stateMayHoldCallable(state) &&
+    setterOwnedByValueTransitionCallSite(state, usage) &&
+    !usage.setterUsesPreviousValue &&
+    !usage.shadowed &&
+    !usage.escaped
+  ) {
+    const target = [...usage.valueTargets][0] ?? "the receiving child";
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace call-site-owned state \`${state.valueName}\` with a component-lifetime observable and wrap the branch-local \`${target}\` call site in a leaf subscriber; keep ownership at this owner so alternate returns and conditional mounts preserve the existing state lifetime.`,
+    };
+  }
   const controlledLeafCut =
     !isCustomHookOwner(state.owner) &&
     usage.localRenderReads === 0 &&
@@ -1907,7 +1938,7 @@ function classifyState(
     usage.deferredReads === 0 &&
     usage.valueTargets.size === 1 &&
     usage.valueTransportSites.size === 1 &&
-    setterOwnedByValueCallSite(usage, state.owner) &&
+    setterOwnedByValueTransitionCallSite(state, usage) &&
     directUniqueReturnCallSite(usage, state.owner) !== null &&
     !hasCompanionWrites &&
     usage.effectWrites === 0 &&
@@ -1968,6 +1999,43 @@ function setterOwnedByValueCallSite(
       const attribute = findAncestorUntil(call, ts.isJsxAttribute, owner);
       return attribute !== null && jsxTransportSite(attribute) === valueSite;
     });
+}
+
+function setterOwnedByValueTransitionCallSite(
+  state: StateCandidate,
+  usage: StateUsage
+): boolean {
+  const setterName = state.setterName;
+  if (!setterName || !setterOwnedByValueCallSite(usage, state.owner)) return false;
+  if (usage.setterCalls > 0) {
+    return usage.setterCallNodes.every(call => {
+      const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner);
+      const opening = attribute?.parent.parent;
+      return attribute !== null &&
+        opening !== undefined &&
+        (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
+        isValueTransitionAttribute(opening, attribute.name.getText(), state.valueName);
+    });
+  }
+
+  const valueSite = [...usage.valueTransportSites][0];
+  if (valueSite === undefined || !state.owner.body) return false;
+  let transition = false;
+  visitSkippingNestedRuntimeFunctions(state.owner.body, node => {
+    if (
+      !transition &&
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      node.getStart() === valueSite &&
+      hasDirectInteractionSetter(
+        node,
+        setterName,
+        name => isValueTransitionAttribute(node, name, state.valueName)
+      )
+    ) {
+      transition = true;
+    }
+  });
+  return transition;
 }
 
 function controlledLeafRenderCut(
@@ -2054,11 +2122,13 @@ function controlledLeafCallSite(
   }
   const callSite = directUniqueReturnCallSite(usage, state.owner) ??
     directBranchReturnCallSite(usage, state.owner);
+  if (!callSite) return null;
+  const isStateInteractionProp = (name: string): boolean =>
+    isInteractionProp(name) || isPairedSetterProp(callSite.opening, name, state.valueName);
   if (
-    !callSite ||
-    (!hasDirectInteractionSetter(callSite.opening, state.setterName, isInteractionProp) &&
-      !hasInlineInteractionSetter(callSite.opening, state, usage, isInteractionProp) &&
-      !hasInteractionSetterAdapter(callSite.opening, state, usage, isInteractionProp))
+    !hasDirectInteractionSetter(callSite.opening, state.setterName, isStateInteractionProp) &&
+      !hasInlineInteractionSetter(callSite.opening, state, usage, isStateInteractionProp) &&
+      !hasInteractionSetterAdapter(callSite.opening, state, usage, isStateInteractionProp)
   ) {
     return null;
   }
@@ -2298,6 +2368,40 @@ function isValueTransitionProp(name: string): boolean {
     /^on[A-Z][A-Za-z0-9]*(?:Change|Select|Toggle|Update)$/.test(name);
 }
 
+function isValueTransitionAttribute(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  name: string,
+  valueName: string
+): boolean {
+  return isValueTransitionProp(name) || isPairedSetterProp(opening, name, valueName);
+}
+
+function isPairedSetterProp(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | undefined,
+  name: string,
+  valueName: string
+): boolean {
+  const setter = /^set([A-Z][A-Za-z0-9]*)$/.exec(name)?.[1];
+  if (!opening || !setter) return false;
+  const normalizedSetter = normalizeStatePropName(setter);
+  return opening.attributes.properties.some(attribute => {
+    if (
+      !ts.isJsxAttribute(attribute) ||
+      !attribute.initializer ||
+      !ts.isJsxExpression(attribute.initializer) ||
+      !attribute.initializer.expression ||
+      !ts.isIdentifier(attribute.initializer.expression) ||
+      attribute.initializer.expression.text !== valueName
+    ) {
+      return false;
+    }
+    return normalizeStatePropName(attribute.name.getText()) === normalizedSetter;
+  });
+}
+
+function normalizeStatePropName(name: string): string {
+  return name.replace(/^is(?=[A-Z])/, "").toLowerCase();
+}
 
 function directUniqueReturnCallSite(
   usage: StateUsage,

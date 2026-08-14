@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,747 hooks across ninety-eight source roots. The corpus currently contains
-503 manual hook labels, including twenty-six non-enforced opportunities (twenty-four currently missed), plus twelve
+At the pinned commits, the analyzer inventories 1,787 hooks across 104 source roots. The corpus currently contains
+523 manual hook labels, including twenty-seven non-enforced opportunities (twenty-five currently missed), plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-one real Legend transaction labels, and eleven
 direct-reactivity labels. Run the eval for the
 current precision/recall table; do not copy a passing percentage into documentation because the score must change as
@@ -93,7 +93,10 @@ A resolved custom controlled leaf may use a descriptive value-transition callbac
 `onSelectCover`, or `onOpenChange`. This broader callback grammar applies only when one stable call site owns the
 complete value surface and existing command, companion-write, effect, and render-cut proofs pass. State wholly confined
 to that leaf stays React state and moves down; owner commands keep observable ownership above a leaf subscriber.
-Arbitrary callbacks, shared validation projections, and unresolved normalization remain review findings.
+Call-site-owned state below alternate returns or state-independent conditional mounts also keeps observable ownership at
+the owner, because moving React state down would change reset lifetime. Direct `setValue`-style child APIs count as value
+transitions; arbitrary callbacks, shared validation projections, repeated children, and unresolved normalization remain
+review findings.
 Keyed-selection labels require stable item-derived row keys, membership that changes row presentation rather than row
 existence, and independently placed summary subscribers. Array-backed selection may use one immutable local `Set`
 normalization; filtered intersections, cross-file normalization, mutable/escaped aliases, aggregate broadcasts, and

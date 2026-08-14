@@ -92,6 +92,103 @@ test("moves call-site-owned custom controlled state into that leaf", () => {
   assert.equal(finding?.action, "move-state-down");
 });
 
+test("keeps call-site-owned state above a conditionally mounted controlled leaf", () => {
+  for (const alternateReturn of [false, true]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      function Menu(_props: unknown) { return null; }
+      function Alternative() { return null; }
+      export function Toolbar({ compact, enabled }: { compact: boolean; enabled: boolean }) {
+        const [open, setOpen] = useState(false);
+        ${alternateReturn ? "if (compact) return <Alternative />;" : ""}
+        return <main>
+          <Header /><Summary /><Search /><Filters /><Actions /><Help />
+          {enabled && <Menu open={open} onOpenChange={setOpen} />}
+          <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.equal(finding?.action, "use-observable");
+    assert.match(finding?.message ?? "", /keep ownership at this owner/i);
+  }
+});
+
+test("does not isolate call-site-owned state when it controls the child mount", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    function Menu(_props: unknown) { return null; }
+    export function Toolbar() {
+      const [open, setOpen] = useState(false);
+      return <main>
+        <Header /><Summary /><Search /><Filters /><Actions /><Help />
+        {open && <Menu open={open} onOpenChange={setOpen} />}
+        <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.notEqual(finding?.action, "use-observable");
+});
+
+test("does not isolate call-site-owned state in repeated controlled leaves", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    function Menu(_props: unknown) { return null; }
+    export function Toolbar({ rows }: { rows: Array<{ id: string }> }) {
+      const [open, setOpen] = useState(false);
+      return <main>
+        <Header /><Summary /><Search /><Filters /><Actions /><Help />
+        {rows.map(row => <Menu key={row.id} open={open} onOpenChange={setOpen} />)}
+        <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.doesNotMatch(finding?.message ?? "", /branch-local `Menu` call site/);
+});
+
+test("does not treat an arbitrary setter prop as call-site-owned state", () => {
+  for (const callback of ["register", "setCache"]) {
+    for (const conditional of [false, true]) {
+      const [finding] = analyzeSource(`
+        import { useState } from "react";
+        function Registry(_props: unknown) { return null; }
+        function Alternative() { return null; }
+        export function Screen({ compact }: { compact: boolean }) {
+          const [value, setValue] = useState(false);
+          ${conditional ? "if (compact) return <Alternative />;" : ""}
+          return <main>
+            <Header /><Summary /><Search /><Filters /><Actions /><Help />
+            <Registry value={value} ${callback}={setValue} />
+            <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
+          </main>;
+        }
+      `, "fixture.tsx");
+      assert.notEqual(
+        finding?.action,
+        conditional ? "use-observable" : "move-state-down",
+        `${callback}/${conditional}`
+      );
+    }
+  }
+});
+
+test("recognizes explicit setter props as value-transition APIs", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    function Editor(_props: unknown) { return null; }
+    function Alternative() { return null; }
+    export function Form({ compact }: { compact: boolean }) {
+      const [firstRender, setFirstRender] = useState(true);
+      if (compact) return <Alternative />;
+      return <main>
+        <Header /><Summary /><Search /><Filters /><Actions /><Help />
+        <Editor firstRender={firstRender} setFirstRender={setFirstRender} />
+        <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+});
+
 test("does not split custom controlled fields that share one validation projection", () => {
   const findings = analyzeSource(`
     import { useState } from "react";
@@ -2117,7 +2214,7 @@ test("does not move controlled state from an owner that is already a small leaf"
   );
 });
 
-test("does not move shared state into repeated or conditional child instances", () => {
+test("keeps conditional child state at the owner and rejects multiple instances", () => {
   assert.deepEqual(
     actions(`
       import { useState } from "react";
@@ -2129,7 +2226,7 @@ test("does not move shared state into repeated or conditional child instances", 
         </main>;
       }
     `),
-    ["review-state"]
+    ["use-observable"]
   );
   assert.deepEqual(
     actions(`
