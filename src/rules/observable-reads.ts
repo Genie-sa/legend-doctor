@@ -14,7 +14,7 @@ import { isImportedHookCall, type HookImports } from "../imports.js";
 import type { LegendPracticeFinding } from "../types.js";
 import { callbackIsEventRooted } from "./state-proofs.js";
 
-const RESERVED_OBSERVABLE_MEMBERS = new Set([
+export const RESERVED_OBSERVABLE_MEMBERS = new Set([
   "assign",
   "delete",
   "fire",

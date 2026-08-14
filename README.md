@@ -18,6 +18,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Coupled fields | One grouped model and one atomic migration |
 | Broad subscriptions | Lowest proven observable path |
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
+| Whole-object clone writes | Direct child `.set()` on the changed path |
 | Multiple Legend writes | One `.assign()` or `batch()` transaction |
 | Every finding | File, line, action, confidence, evidence, and boundary |
 
@@ -29,10 +30,10 @@ Measured on pinned real applications:
 | Source targets | 109 |
 | Hooks analyzed | 1,818 |
 | Manual labels | 543 |
-| Unit tests | 268/268 |
+| Unit tests | 271/271 |
 | Actionable precision | 100% (288/288) |
 | Actionable recall | 93.5% (288/308) |
-| Legend practice precision | 100% (55/55) |
+| Legend practice precision | 100% (60/60) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, and Outline.
@@ -183,7 +184,35 @@ return <Name>{name}</Name>;
 The rule follows nested children and selects the deepest static path shared by every read. Divergent fields, dynamic or
 optional access, assertion boundaries, calls, writes, and raw object transport stay unchanged.
 
-### 4. Multiple writes → one publication
+### 4. Whole-object clone → direct child write
+
+Before: one field update clones and replaces every sibling.
+
+```ts
+const current = profile$.peek();
+profile$.set({ ...current, name });
+```
+
+Output:
+
+```text
+profile.ts:24 [narrow-observable-write] Replace the whole-object clone with
+`profile$.name.set(name)`.
+```
+
+After:
+
+```ts
+profile$.name.set(name);
+```
+
+For keyed records, the same rule targets the changed entry:
+
+```ts
+records$[recordId].set(record);
+```
+
+### 5. Multiple writes → one publication
 
 Before:
 
@@ -208,7 +237,7 @@ player$.assign({ error: message, isLoading: false, isPlaying: false });
 
 The tool uses `batch()` when writes span observables or `.assign()` would change evaluation semantics.
 
-### 5. Command read → non-tracking snapshot
+### 6. Command read → non-tracking snapshot
 
 Before:
 
@@ -232,7 +261,7 @@ const onSave = () => save(profile$.name.peek());
 The rule is limited to proven React snapshots and event commands. Render reads, Legend reactions, unknown callbacks,
 dynamic paths, and shallow `get(true)` stay unchanged.
 
-### 6. Teardown effect → explicit lifecycle
+### 7. Teardown effect → explicit lifecycle
 
 Before:
 
@@ -280,9 +309,10 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/effect-drafts.ts` | Effect-synchronized drafts |
 | `src/rules/deferred-reveal.ts` | Deferred reveal and render gates |
 | `src/rules/keyed-selection.ts` | Row and collection selection |
+| `src/rules/observable-clone-writes.ts` | Narrow child writes without parent cloning |
 | `src/rules/observable-reads.ts` | Direct and lowest-path reads |
 | `src/rules/state-proofs.ts` | Shared state and JSX proofs |
-| `src/analyze-legend-practices.ts` | Legend write transactions |
+| `src/analyze-legend-practices.ts` | Legend practice orchestration and write transactions |
 
 Pinned repositories, labels, and acceptance gates live in [evals/README.md](evals/README.md).
 

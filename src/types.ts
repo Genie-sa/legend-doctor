@@ -24,6 +24,7 @@ export type HookAction = StateAction | EffectAction;
 export type LegendPracticeAction =
   | "assign-observable-fields"
   | "batch-observable-writes"
+  | "narrow-observable-write"
   | "narrow-use-value-subscription"
   | "pass-observable-to-use-value"
   | "use-peek-for-snapshot";

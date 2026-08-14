@@ -119,6 +119,59 @@ test("passes a proven observable directly to useValue", () => {
   assert.match(finding?.message ?? "", /useValue\(theme\$\.accent\)/);
 });
 
+test("writes one changed object field through the narrowest observable child", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function rename(name: string) {
+      const current = profile$.peek();
+      profile$.set({ ...current, name });
+    }
+  `, "fixture.ts");
+  assert.deepEqual(findings.map(finding => finding.action), ["narrow-observable-write"]);
+  assert.match(findings[0]?.message ?? "", /profile\$\.name\.set\(name\)/);
+});
+
+test("writes one dynamic record entry without cloning its parent object", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    const rows$ = observable<Record<string, { name: string }>>({});
+    export function updateRow(id: string, row: { name: string }) {
+      const rows = rows$.peek() ?? {};
+      rows$.set({ ...rows, [id]: row });
+    }
+  `, "fixture.ts");
+  assert.deepEqual(findings.map(finding => finding.action), ["narrow-observable-write"]);
+  assert.match(findings[0]?.message ?? "", /rows\$\[id\]\.set\(row\)/);
+});
+
+test("keeps clone writes whose snapshot or replacement path is not equivalent", () => {
+  const sources = [
+    `const current = profile$.get(); profile$.set({ ...current, name });`,
+    `const current = other$.peek(); profile$.set({ ...current, name });`,
+    `const current = profile$.peek(); profile$.set({ ...current, name, email });`,
+    `const current = profile$.peek(); mutate(current); profile$.set({ ...current, name });`,
+    `const current = profile$.peek(); current.email = "changed"; profile$.set({ ...current, name });`,
+    `const current = profile$.peek(); current.tags.push("changed"); profile$.set({ ...current, name });`,
+    `const current = profile$.peek(); await pause(); profile$.set({ ...current, name });`,
+    `const current = profile$.peek(); profile$.set({ ...current, ...updates });`,
+    `const current = profile$.peek(); profile$.set({ ...current, get: name });`,
+    `const current = profile$.peek(); profile$.set({ ...current, [computeKey()]: name });`,
+  ];
+  for (const body of sources) {
+    assert.deepEqual(
+      analyzeLegendPractices(`
+        import { observable } from "@legendapp/state";
+        const profile$ = observable({ name: "Ada", email: "ada@example.com", tags: [] as string[] });
+        const other$ = observable({ name: "Grace", email: "grace@example.com" });
+        export async function rename(name: string, updates: { name: string }) { ${body} }
+      `, "fixture.ts").filter(finding => finding.action === "narrow-observable-write"),
+      [],
+      body
+    );
+  }
+});
+
 test("uses cross-file observable provenance for direct useValue", () => {
   assert.deepEqual(
     analyzeLegendPractices(`

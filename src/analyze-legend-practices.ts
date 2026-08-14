@@ -7,6 +7,7 @@ import {
 } from "./analysis-ast.js";
 import { isNonProductionHarness, visit } from "./ast.js";
 import { collectHookImports, type HookImports } from "./imports.js";
+import { findObservableCloneWritePractices } from "./rules/observable-clone-writes.js";
 import { findObservableReadPractices } from "./rules/observable-reads.js";
 import type { LegendPracticeFinding } from "./types.js";
 
@@ -74,6 +75,7 @@ export function analyzeLegendPractices(
   });
 
   findings.push(...findObservableReadPractices(sourceFile, fileName, imports, observableBindings));
+  findings.push(...findObservableCloneWritePractices(sourceFile, fileName, observableBindings));
 
   return findings.sort(
     (left, right) =>

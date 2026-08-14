@@ -3969,6 +3969,20 @@ export const goldPracticeCases = [
     target: "memoria-src",
   },
   {
+    action: "narrow-observable-write",
+    file: "backend/api/library/mediaDetailLive.ts",
+    line: 115,
+    rationale: "The aggregate patch changes one season entry, so writing that keyed child avoids cloning and replacing the complete patch map.",
+    target: "memoria-src",
+  },
+  {
+    action: "narrow-observable-write",
+    file: "backend/api/library/mediaDetailLive.ts",
+    line: 123,
+    rationale: "Dropping one event changes one keyed record entry and does not require replacing the complete event map.",
+    target: "memoria-src",
+  },
+  {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 272,
@@ -4011,6 +4025,20 @@ export const goldPracticeCases = [
     target: "memoria-src",
   },
   {
+    action: "narrow-observable-write",
+    file: "backend/api/library/userMediaStore.ts",
+    line: 74,
+    rationale: "An optimistic patch replaces one media entry; the synced observable supports a keyed child write without cloning the full shared map.",
+    target: "memoria-src",
+  },
+  {
+    action: "narrow-observable-write",
+    file: "backend/api/library/userMediaStore.ts",
+    line: 147,
+    rationale: "Seeding one media row is a keyed child update, so the complete user-media map should not be cloned and replaced.",
+    target: "memoria-src",
+  },
+  {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/userMediaStore.ts",
     line: 61,
@@ -4029,6 +4057,13 @@ export const goldPracticeCases = [
     file: "components/LocalAudioPlayer.tsx",
     line: 257,
     rationale: "One player failure publishes error, loading, and playback state together.",
+    target: "legend-music",
+  },
+  {
+    action: "narrow-observable-write",
+    file: "components/LocalAudioPlayer.tsx",
+    line: 245,
+    rationale: "Hydration changes only the current track thumbnail, so the thumbnail child can update without cloning and replacing the complete track.",
     target: "legend-music",
   },
   {

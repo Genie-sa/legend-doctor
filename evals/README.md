@@ -32,9 +32,9 @@ Acceptance targets for the first useful release:
 At the pinned commits, the analyzer inventories 1,818 hooks across 109 source roots. The corpus currently contains
 543 manual hook labels, including twenty-five non-enforced opportunities (twenty-three currently missed), plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-one real Legend transaction labels, eleven direct
-`useValue` labels, six lowest-path subscription labels, and seven non-tracking snapshot labels. Run the eval for the
-current precision/recall table. If the root README publishes those metrics, update them only from a fresh full eval so
-the numbers stay synchronized as known misses are added.
+`useValue` labels, six lowest-path subscription labels, seven non-tracking snapshot labels, and five narrow child-write
+labels. Run the eval for the current precision/recall table. If the root README publishes those metrics, update them only
+from a fresh full eval so the numbers stay synchronized as known misses are added.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
 resolution is provenance rather than proof of leaf ownership; production migrations are not emitted for tests; state
