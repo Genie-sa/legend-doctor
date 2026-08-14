@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,840 hooks across 115 source roots. The corpus currently contains
-557 manual hook labels, including 26 non-enforced opportunities (24 currently missed), plus twelve
+At the pinned commits, the analyzer inventories 1,850 hooks across 117 source roots. The corpus currently contains
+562 manual hook labels, including 26 non-enforced opportunities (24 currently missed), plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-one real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, seven non-tracking snapshot labels, and five narrow child-write
 labels. Run the eval for the current precision/recall table. If the root README publishes those metrics, update them only
@@ -50,10 +50,11 @@ count alone is not proof, root-level cohesive controls stay in React, and deferr
 command entry. One-hop immutable aliases are audited before promotion; aliases that feed hooks, queries, lifecycle,
 list-data construction, or owner control flow remain review findings. Async work, cleanup, partial clusters, and
 unproven edit paths also remain review findings.
-Async pending labels require a literal-false flag whose pending transition in an event command is immediately followed
-by awaited work, has no earlier owner-state write, and renders through one proven runtime status leaf. Non-mutating
-validation or routing guards may precede that transition. Observable ownership stays above state-independent conditional
-branches, while a local subscriber wraps the exact existing call site. The command, await boundary, error handling, and
+Async pending labels require a literal-false flag whose pending transition in an event command reaches awaited work
+before any owner-state write or early exit and renders through one proven runtime status leaf. Non-mutating validation,
+routing guards, and bounded synchronous command preparation may precede that boundary. Observable ownership stays above
+state-independent conditional branches, while a local subscriber wraps the exact existing call site. The command, await
+boundary, error handling, and
 later close/reset writes stay unchanged; mutation-owned status, fanout, scheduled callbacks, nonliteral writes, and
 cohesive small controls remain review findings.
 Presentation-gate labels keep observable ownership above a condition and replace the complete controlling expression

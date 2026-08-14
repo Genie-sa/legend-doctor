@@ -4,7 +4,6 @@ import {
   bindingDeclarationCount,
   hookCallName,
   isDeclarationName,
-  isDirectJsxAttributeExpression,
   isInsideJsxAttribute,
   isNonValueIdentifier,
   unwrapTransparentExpression,
@@ -204,7 +203,7 @@ export function callbackIsEventRooted(
     if (
       attribute &&
       /^on[A-Z]/.test(attribute.name.getText()) &&
-      isDirectJsxAttributeExpression(attribute, node)
+      isJsxEventHandlerReference(attribute, node)
     ) {
       return;
     }
@@ -221,6 +220,32 @@ export function callbackIsEventRooted(
     safe = false;
   });
   return referenced && safe;
+}
+
+function isJsxEventHandlerReference(
+  attribute: ts.JsxAttribute,
+  reference: ts.Identifier
+): boolean {
+  const initializer = attribute.initializer;
+  if (
+    !initializer ||
+    !ts.isJsxExpression(initializer) ||
+    !initializer.expression
+  ) {
+    return false;
+  }
+  return isConditionalHandlerBranch(initializer.expression, reference);
+}
+
+function isConditionalHandlerBranch(
+  expression: ts.Expression,
+  reference: ts.Identifier
+): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (value === reference) return true;
+  return ts.isConditionalExpression(value) &&
+    (isConditionalHandlerBranch(value.whenTrue, reference) ||
+      isConditionalHandlerBranch(value.whenFalse, reference));
 }
 
 export function isSafeJsxProjectionReference(

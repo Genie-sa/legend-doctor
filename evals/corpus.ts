@@ -315,6 +315,12 @@ export const repositories = [
         states: 3,
       },
       {
+        effects: 1,
+        id: "expensify-import-multi-level-tags",
+        root: "src/pages/workspace/tags/ImportMultiLevelTagsSettingsPage.tsx",
+        states: 1,
+      },
+      {
         effects: 0,
         id: "expensify-trip-details",
         root: "src/pages/Travel/TripDetailsPage.tsx",
@@ -483,6 +489,12 @@ export const repositories = [
         id: "formbricks-survey-list",
         root: "apps/web/modules/survey/list/components/survey-list.tsx",
         states: 3,
+      },
+      {
+        effects: 0,
+        id: "formbricks-survey-dropdown",
+        root: "apps/web/modules/survey/list/components/survey-dropdown-menu.tsx",
+        states: 8,
       },
       {
         effects: 2,
@@ -1623,6 +1635,15 @@ export const goldCases = [
     target: "tree-map",
   })),
   {
+    action: "use-observable",
+    file: "app/(private)/settings/feedback.tsx",
+    hook: "useState",
+    line: 45,
+    name: "rating",
+    rationale: "Rating writes are row-keyed commands; row equality, submit validity, and the submit snapshot can consume one owner-lifetime observable without rerendering the feedback screen.",
+    target: "tree-wallet",
+  },
+  {
     action: "move-state-down",
     file: "app/(private)/settings/feedback.tsx",
     hook: "useState",
@@ -1972,18 +1993,24 @@ export const goldCases = [
     rationale: "The direct input edit is independent while submit or save reads remain event snapshots; an owner observable narrows keystroke invalidation to the controlled field and its complete validation leaf.",
     target: target as string,
   })),
-  ...[
-    ["formbricks-create-team", "create-team-modal.tsx", 31, "isLoading", "Submission status coordinates the asynchronous create workflow and the form controls rather than one independent input edit path."],
-    ["formbricks-mapping-field", "mapping-field.tsx", 84, "isEditingFixed", "Editing mode controls which field branch exists, so it remains workflow state rather than the independently editable value leaf."],
-  ].map(([target, file, line, name, rationale]) => ({
-    action: "review-state" as const,
-    file: file as string,
-    hook: "useState" as const,
-    line: line as number,
-    name: name as string,
-    rationale: rationale as string,
-    target: target as string,
-  })),
+  {
+    action: "use-observable",
+    file: "create-team-modal.tsx",
+    hook: "useState",
+    line: 31,
+    name: "isLoading",
+    rationale: "The true pending transition reaches its awaited create command before any other owner state changes, and only the submit button subscribes.",
+    target: "formbricks-create-team",
+  },
+  {
+    action: "review-state",
+    file: "mapping-field.tsx",
+    hook: "useState",
+    line: 84,
+    name: "isEditingFixed",
+    rationale: "Editing mode controls which field branch exists, so it remains workflow state rather than the independently editable value leaf.",
+    target: "formbricks-mapping-field",
+  },
   {
     action: "use-observable",
     enforced: false,
@@ -3080,7 +3107,7 @@ export const goldCases = [
   ...[
     [106, "records", "review-state", true],
     [120, "selectedIds", "use-observable", false],
-    [122, "isDeleting", "review-state", true],
+    [122, "isDeleting", "use-observable", true],
   ].map(([line, name, action, enforced]) => ({
     action: action as "review-state" | "use-observable",
     enforced: enforced as boolean,
@@ -3092,7 +3119,7 @@ export const goldCases = [
       ? "Independent row toggles make this a real keyed selection model; row membership and toolbar summaries can subscribe separately while refresh commands reset it atomically."
       : line === 106
         ? "Records are the rendered list data and are replaced by refresh and pagination workflows, not a row-local selection model."
-        : "Deletion status is owned by the asynchronous mutation workflow and its dialog controls rather than an independent leaf update.",
+        : "The true pending transition reaches chunk deletion before any other owner state changes, and only the delete dialog subscribes; preserve its existing finally boundary.",
     target: "formbricks-feedback-records",
   })),
   {
@@ -3368,6 +3395,33 @@ export const goldCases = [
     rationale: "One Promise-chain command owns the literal reading interval, and only the choose-file button needs to subscribe while the broader importer stays stable.",
     target: "expensify-import-spreadsheet",
   },
+  {
+    action: "use-observable",
+    file: "ImportMultiLevelTagsSettingsPage.tsx",
+    hook: "useState",
+    line: 54,
+    name: "isImportingTags",
+    rationale: "A conditionally selected event command starts one pending interval before its first await, and only the footer button subscribes; close and reset behavior stays in the owner.",
+    target: "expensify-import-multi-level-tags",
+  },
+  {
+    action: "use-mount",
+    file: "ImportMultiLevelTagsSettingsPage.tsx",
+    hook: "useEffect",
+    line: 59,
+    name: null,
+    rationale: "This setup-only effect writes fixed imported configuration flags and captures no owner-local value; useMount is appropriate when suppressing development replay is intentional.",
+    target: "expensify-import-multi-level-tags",
+  },
+  {
+    action: "use-observable",
+    file: "survey-dropdown-menu.tsx",
+    hook: "useState",
+    line: 81,
+    name: "isArchiving",
+    rationale: "The pending transition reaches the archive request before any other owner state changes, and only the archive confirmation button subscribes.",
+    target: "formbricks-survey-dropdown",
+  },
   ...[
     [68, "isModifyTripLoading"],
     [69, "isTripSupportLoading"],
@@ -3527,6 +3581,15 @@ export const goldCases = [
     name: null,
     rationale: "The effect synchronizes card disclosure with changing survey inputs and should retain React timing.",
     target: "formbricks-when-to-send",
+  },
+  {
+    action: "use-observable",
+    file: "selected-row-settings.tsx",
+    hook: "useState",
+    line: 40,
+    name: "isDeleting",
+    rationale: "The true pending transition reaches chunk deletion before any other owner state changes, and only DeleteDialog subscribes; the existing finally block remains intact.",
+    target: "formbricks-selected-row-settings",
   },
   {
     action: "use-observable",

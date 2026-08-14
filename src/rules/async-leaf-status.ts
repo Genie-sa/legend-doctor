@@ -17,6 +17,7 @@ import {
 import { hasStateInitializer } from "./deferred-reveal.js";
 import {
   callbackIsEventRooted,
+  isSafeJsxProjectionReference,
   jsxElementCount,
   nearestRepeatedRenderCall,
 } from "./state-proofs.js";
@@ -35,7 +36,7 @@ export function findAsyncLeafStatuses(
       !safeCommandStates.has(state) ||
       !usage ||
       jsxElementCount(state.owner) < 12 ||
-      usage.localRenderReads !== 0 ||
+      usage.localRenderReads !== usage.directRenderNodes.length ||
       usage.effectReads !== 0 ||
       usage.effectWrites !== 0 ||
       usage.deferredReads !== 0 ||
@@ -58,36 +59,56 @@ export function findAsyncLeafStatuses(
       continue;
     }
 
-    const regions = usage.setterCallNodes.map(call => asyncCommandRegion(call, state.owner));
-    const region = regions[0];
-    if (
-      !region ||
-      region === state.owner ||
-      regions.some(candidate => candidate !== region) ||
-      (!ts.isArrowFunction(region) &&
-        !ts.isFunctionDeclaration(region) &&
-        !ts.isFunctionExpression(region)) ||
-      !callbackIsEventRooted(region, state.owner, "", new Set())
-    ) {
-      continue;
-    }
-
-    const pendingStart = usage.setterCallNodes.find(call =>
-      call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword &&
-      nearestMutationFunction(call, state.owner) === region &&
-      (startsAwaitedCommandSegment(call) ||
-        startsPromiseCommandSegment(call, usage.setterCallNodes))
-    );
     const ownerSetters = new Set(
       states
         .filter(candidate => candidate.owner === state.owner && candidate.setterName)
         .map(candidate => candidate.setterName!)
     );
+    const trueCalls = usage.setterCallNodes.filter(
+      call => call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword
+    );
+    const pendingStart = trueCalls.length === 1 ? trueCalls[0]! : null;
+    const region = pendingStart ? asyncCommandRegion(pendingStart, state.owner) : null;
     if (
-      pendingStart &&
-      !hasEarlierOwnerStateWrite(region, pendingStart, ownerSetters) &&
+      !pendingStart ||
+      !region ||
+      region === state.owner ||
+      (!ts.isArrowFunction(region) &&
+        !ts.isFunctionDeclaration(region) &&
+        !ts.isFunctionExpression(region)) ||
+      !callbackIsEventRooted(region, state.owner, "", new Set()) ||
+      usage.setterCallNodes.some(call => {
+        const candidate = asyncCommandRegion(call, state.owner);
+        if (candidate === region) return false;
+        return (
+          (!ts.isArrowFunction(candidate) &&
+            !ts.isFunctionDeclaration(candidate) &&
+            !ts.isFunctionExpression(candidate)) ||
+          call.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword ||
+          !callbackIsEventRooted(candidate, state.owner, "", new Set())
+        );
+      })
+    ) {
+      continue;
+    }
+
+    if (
+      nearestMutationFunction(pendingStart, state.owner) === region &&
+      startsAsyncCommandSegment(
+        pendingStart,
+        usage.setterCallNodes,
+        ownerSetters,
+        state.owner
+      ) &&
+      !hasEarlierOwnerStateWrite(
+        region,
+        pendingStart,
+        ownerSetters,
+        state.owner
+      ) &&
       usage.setterCallNodes.some(call =>
         call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword &&
+        asyncCommandRegion(call, state.owner) === region &&
         call.getStart() > pendingStart.getStart()
       )
     ) {
@@ -124,37 +145,70 @@ function isPromiseContinuationCallback(region: RuntimeFunctionLike): boolean {
     ["then", "catch", "finally"].includes(call.expression.name.text);
 }
 
-function startsAwaitedCommandSegment(call: ts.CallExpression): boolean {
-  const statement = call.parent;
-  const block = statement.parent;
-  if (!ts.isExpressionStatement(statement) || !ts.isBlock(block)) return false;
-  const index = block.statements.indexOf(statement);
-  const next = index >= 0 ? block.statements[index + 1] : undefined;
-  if (!next) return false;
-  let containsAwait = false;
-  visitSkippingNestedRuntimeFunctions(next, node => {
-    if (ts.isAwaitExpression(node)) containsAwait = true;
-  });
-  return containsAwait;
-}
-
-function startsPromiseCommandSegment(
+function startsAsyncCommandSegment(
   call: ts.CallExpression,
-  setterCalls: readonly ts.CallExpression[]
+  setterCalls: readonly ts.CallExpression[],
+  ownerSetters: ReadonlySet<string>,
+  owner: RuntimeFunctionLike
 ): boolean {
   const statement = call.parent;
   const block = statement.parent;
   if (!ts.isExpressionStatement(statement) || !ts.isBlock(block)) return false;
   const index = block.statements.indexOf(statement);
-  const next = index >= 0 ? block.statements[index + 1] : undefined;
-  return !!next && setterCalls.some(candidate => {
+  if (index < 0) return false;
+
+  for (const candidate of block.statements.slice(index + 1)) {
+    const awaitPosition = firstAwaitPosition(candidate);
+    const promiseBoundary = containsPromiseCompletionReset(candidate, setterCalls);
+    const boundary = awaitPosition ?? (promiseBoundary ? candidate.end : null);
+    if (boundary !== null) {
+      return !containsOwnerStateWrite(
+        candidate,
+        boundary,
+        ownerSetters,
+        owner,
+        new Set(),
+        awaitPosition === null
+      ) && !containsEarlyExit(candidate, boundary);
+    }
     if (
-      candidate.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword ||
-      !nodeWithin(candidate, next)
+      containsOwnerStateWrite(
+        candidate,
+        candidate.end,
+        ownerSetters,
+        owner,
+        new Set()
+      ) ||
+      containsEarlyExit(candidate, candidate.end)
     ) {
       return false;
     }
-    const continuation = findAncestorUntil(candidate, isRuntimeFunctionLike, next);
+  }
+  return false;
+}
+
+function firstAwaitPosition(statement: ts.Statement): number | null {
+  let position: number | null = null;
+  visitSkippingNestedRuntimeFunctions(statement, node => {
+    if (ts.isAwaitExpression(node) && (position === null || node.getStart() < position)) {
+      position = node.getStart();
+    }
+  });
+  return position;
+}
+
+function containsPromiseCompletionReset(
+  statement: ts.Statement,
+  setterCalls: readonly ts.CallExpression[]
+): boolean {
+  return setterCalls.some(candidate => {
+    if (
+      candidate.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword ||
+      !nodeWithin(candidate, statement)
+    ) {
+      return false;
+    }
+    const continuation = findAncestorUntil(candidate, isRuntimeFunctionLike, statement);
     return continuation !== null && isPromiseContinuationCallback(continuation);
   });
 }
@@ -162,20 +216,120 @@ function startsPromiseCommandSegment(
 function hasEarlierOwnerStateWrite(
   region: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   pendingStart: ts.CallExpression,
-  ownerSetters: ReadonlySet<string>
+  ownerSetters: ReadonlySet<string>,
+  owner: RuntimeFunctionLike
 ): boolean {
   if (!region.body) return true;
+  return containsOwnerStateWrite(
+    region.body,
+    pendingStart.getStart(),
+    ownerSetters,
+    owner,
+    new Set()
+  );
+}
+
+function containsOwnerStateWrite(
+  root: ts.Node,
+  before: number,
+  ownerSetters: ReadonlySet<string>,
+  owner: RuntimeFunctionLike,
+  seen: ReadonlySet<string>,
+  skipPromiseContinuations = false
+): boolean {
   let found = false;
-  visitSkippingNestedRuntimeFunctions(region.body, node => {
+  const scan = (node: ts.Node): void => {
+    if (found || node.getStart() >= before) return;
+    if (isRuntimeFunctionLike(node) && node !== root) return;
+    if (ts.isCallExpression(node)) {
+      if (ts.isIdentifier(node.expression)) {
+        if (ownerSetters.has(node.expression.text)) {
+          found = true;
+          return;
+        }
+        const helper = localFunctionBinding(owner, node.expression.text);
+        if (helper?.body && !seen.has(node.expression.text)) {
+          const nextSeen = new Set(seen).add(node.expression.text);
+          if (
+            containsOwnerStateWrite(
+              helper.body,
+              helper.body.end,
+              ownerSetters,
+              owner,
+              nextSeen
+            )
+          ) {
+            found = true;
+            return;
+          }
+        }
+      }
+      for (const argument of node.arguments) {
+        if (
+          (ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) &&
+          (!skipPromiseContinuations || !isPromiseContinuationCallback(argument)) &&
+          containsOwnerStateWrite(
+            argument.body,
+            argument.body.end,
+            ownerSetters,
+            owner,
+            seen,
+            skipPromiseContinuations
+          )
+        ) {
+          found = true;
+          return;
+        }
+      }
+    }
+    node.forEachChild(scan);
+  };
+  scan(root);
+  return found;
+}
+
+function localFunctionBinding(
+  owner: RuntimeFunctionLike,
+  name: string
+): ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null {
+  if (!owner.body || bindingDeclarationCount(owner, name) !== 1) return null;
+  let result: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null = null;
+  visit(owner.body, node => {
+    if (result) return;
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
+      result = node;
+      return;
+    }
     if (
-      node.getStart() < pendingStart.getStart() &&
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      ownerSetters.has(node.expression.text)
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name &&
+      node.initializer &&
+      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
     ) {
-      found = true;
+      result = node.initializer;
     }
   });
+  return result;
+}
+
+function containsEarlyExit(root: ts.Node, before: number): boolean {
+  let found = false;
+  const scan = (node: ts.Node): void => {
+    if (found || node.getStart() >= before) return;
+    if (isRuntimeFunctionLike(node) && node !== root) return;
+    if (
+      ts.isReturnStatement(node) ||
+      ts.isThrowStatement(node) ||
+      ts.isBreakStatement(node) ||
+      ts.isContinueStatement(node)
+    ) {
+      found = true;
+      return;
+    }
+    node.forEachChild(scan);
+  };
+  scan(root);
   return found;
 }
 
@@ -184,8 +338,7 @@ function hasSingleObservableLeafCallSite(
   owner: RuntimeFunctionLike
 ): boolean {
   const valueSite = [...usage.valueTransportSites][0];
-  const returned = uniqueReturnedExpression(owner);
-  if (valueSite === undefined || !owner.body || !returned) return false;
+  if (valueSite === undefined || !owner.body) return false;
 
   let opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | null = null;
   visit(owner.body, node => {
@@ -204,7 +357,17 @@ function hasSingleObservableLeafCallSite(
   ) {
     return false;
   }
-  if (nodeWithin(opening, returned)) return true;
+  if (
+    usage.directRenderNodes.some(node =>
+      jsxOpeningAncestor(node, owner)?.getStart() !== valueSite ||
+      findAncestorUntil(node, isRuntimeFunctionLike, opening!) !== null ||
+      !isSafeJsxProjectionReference(node, owner)
+    )
+  ) {
+    return false;
+  }
+  const returned = returnedExpressions(owner);
+  if (returned.some(expression => nodeWithin(opening!, expression))) return true;
 
   const declaration = findAncestorUntil(opening, ts.isVariableDeclaration, owner);
   if (
@@ -228,7 +391,19 @@ function hasSingleObservableLeafCallSite(
       references.push(node);
     }
   });
-  return references.length === 1 && nodeWithin(references[0]!, returned);
+  return references.length === 1 && returned.some(expression => nodeWithin(references[0]!, expression));
+}
+
+function jsxOpeningAncestor(
+  node: ts.Node,
+  owner: RuntimeFunctionLike
+): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
+  return findAncestorUntil(
+    node,
+    (candidate): candidate is ts.JsxOpeningElement | ts.JsxSelfClosingElement =>
+      ts.isJsxOpeningElement(candidate) || ts.isJsxSelfClosingElement(candidate),
+    owner
+  );
 }
 
 function nestedFunctionsAreJsxChildren(
@@ -249,11 +424,11 @@ function nestedFunctionsAreJsxChildren(
   return true;
 }
 
-function uniqueReturnedExpression(owner: RuntimeFunctionLike): ts.Expression | null {
-  if (!owner.body) return null;
+function returnedExpressions(owner: RuntimeFunctionLike): readonly ts.Expression[] {
+  if (!owner.body) return [];
   const expressions: ts.Expression[] = [];
   visitSkippingNestedRuntimeFunctions(owner.body, node => {
     if (ts.isReturnStatement(node) && node.expression) expressions.push(node.expression);
   });
-  return expressions.length === 1 ? expressions[0]! : null;
+  return expressions;
 }
