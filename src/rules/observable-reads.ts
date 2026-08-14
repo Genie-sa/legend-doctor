@@ -38,8 +38,8 @@ export function findObservableReadPractices(
   const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, node => {
     if (ts.isCallExpression(node)) {
-      const receiver = directUseValueObservable(node, imports, observableBindings);
-      if (receiver) findings.push(directUseValueFinding(node, receiver, sourceFile, fileName));
+      const directInput = directUseValueInput(node, imports, observableBindings);
+      if (directInput) findings.push(directUseValueFinding(node, directInput, sourceFile, fileName));
       const snapshotReceiver = nonTrackingSnapshotObservable(node, imports, observableBindings);
       if (snapshotReceiver) {
         findings.push(nonTrackingSnapshotFinding(node, snapshotReceiver, sourceFile, fileName));
@@ -133,13 +133,24 @@ function nonTrackingSnapshotFinding(
   };
 }
 
-function directUseValueObservable(
+interface DirectUseValueInput {
+  kind: "eager-read" | "selector";
+  observable: ts.Expression;
+}
+
+function directUseValueInput(
   call: ts.CallExpression,
   imports: HookImports,
   observableBindings: ReadonlySet<string>
-): ts.Expression | null {
-  if (!isUseValueCall(call, imports)) return null;
-  return directObservableSelectorPath(call.arguments[0]!, observableBindings);
+): DirectUseValueInput | null {
+  if (!isUseValueCall(call, imports) || call.arguments.length < 1 || call.arguments.length > 2) {
+    return null;
+  }
+  const input = call.arguments[0]!;
+  const eagerObservable = directObservableReadPath(input, observableBindings);
+  if (eagerObservable) return { kind: "eager-read", observable: eagerObservable };
+  const selectorObservable = directObservableSelectorPath(input, observableBindings);
+  return selectorObservable ? { kind: "selector", observable: selectorObservable } : null;
 }
 
 export function directObservableSelectorPath(
@@ -153,11 +164,21 @@ export function directObservableSelectorPath(
   ) {
     return null;
   }
-  const read = unwrapTransparentExpression(selector.body);
+  return directObservableReadPath(selector.body, observableBindings);
+}
+
+function directObservableReadPath(
+  expression: ts.Expression,
+  observableBindings: ReadonlySet<string>
+): ts.Expression | null {
+  const read = unwrapTransparentExpression(expression);
   if (
     !ts.isCallExpression(read) ||
     read.arguments.length > 0 ||
+    (read.typeArguments?.length ?? 0) > 0 ||
+    read.questionDotToken ||
     !ts.isPropertyAccessExpression(read.expression) ||
+    read.expression.questionDotToken ||
     read.expression.name.text !== "get"
   ) {
     return null;
@@ -167,22 +188,34 @@ export function directObservableSelectorPath(
 
 function directUseValueFinding(
   call: ts.CallExpression,
-  receiver: ts.Expression,
+  input: DirectUseValueInput,
   sourceFile: ts.SourceFile,
   fileName: string
 ): LegendPracticeFinding {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
-  const path = receiver.getText(sourceFile);
+  const path = input.observable.getText(sourceFile);
+  const typeArguments = call.typeArguments?.length
+    ? `<${call.typeArguments.map(argument => argument.getText(sourceFile)).join(", ")}>`
+    : "";
+  const hook = `${call.expression.getText(sourceFile)}${typeArguments}`;
+  const current = `${hook}(${call.arguments.map(argument => argument.getText(sourceFile)).join(", ")})`;
+  const replacement = `${hook}(${[
+    path,
+    ...call.arguments.slice(1).map(argument => argument.getText(sourceFile)),
+  ].join(", ")})`;
+  const eager = input.kind === "eager-read";
   return {
     action: "pass-observable-to-use-value",
     confidence: "certain",
     disposition: "change",
     evidence: [
-      "useValue selector only returns one zero-argument get() call",
+      eager
+        ? "the observable is read with get() before useValue can subscribe"
+        : "useValue selector only returns one zero-argument get() call",
       `${path} is a proven Legend observable path`,
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
-    message: `Replace \`useValue(() => ${path}.get())\` with \`useValue(${path})\`; the direct observable form keeps the same subscription with less code.`,
+    message: `Replace \`${current}\` with \`${replacement}\`; the direct observable form ${eager ? "establishes the missing leaf subscription" : "keeps the same subscription with less code"}.`,
     practice: "reactivity",
   };
 }
@@ -195,7 +228,14 @@ function narrowUseValueFinding(
   fileName: string
 ): LegendPracticeFinding | null {
   const call = declaration.initializer;
-  if (!call || !ts.isCallExpression(call) || !isUseValueCall(call, imports)) return null;
+  if (
+    !call ||
+    !ts.isCallExpression(call) ||
+    call.arguments.length !== 1 ||
+    !isUseValueCall(call, imports)
+  ) {
+    return null;
+  }
   const observable = provenObservablePath(call.arguments[0]!, observableBindings);
   if (!observable) return null;
 
@@ -341,9 +381,19 @@ function narrowFinding(
 }
 
 function isUseValueCall(call: ts.CallExpression, imports: HookImports): boolean {
-  return call.arguments.length === 1 &&
-    ts.isIdentifier(call.expression) &&
-    imports.useValue.has(call.expression.text);
+  if (
+    !isImportedHookCall(
+      call,
+      imports.useValue,
+      imports.legendReactNamespaces,
+      "useValue"
+    )
+  ) {
+    return false;
+  }
+  const binding = rootIdentifier(call.expression);
+  const owner = findAncestor(call, isRuntimeFunctionLike);
+  return !binding || !owner || bindingDeclarationCount(owner, binding.text) === 0;
 }
 
 function provenObservablePath(
@@ -356,6 +406,11 @@ function provenObservablePath(
     containsElementAccess(path)
   ) {
     return null;
+  }
+  let current: ts.Expression = path;
+  while (ts.isPropertyAccessExpression(current)) {
+    if (current.questionDotToken || RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) return null;
+    current = current.expression;
   }
   const root = rootIdentifier(path);
   return root && observableBindings.has(root.text) ? path : null;

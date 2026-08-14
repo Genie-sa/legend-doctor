@@ -186,6 +186,79 @@ test("passes a proven observable directly to useValue", () => {
   assert.match(finding?.message ?? "", /useValue\(theme\$\.accent\)/);
 });
 
+test("passes an eagerly read observable directly to useValue", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue as read } from "@legendapp/state/react";
+    const profile$ = observable({ name: "Ada", avatar: Promise.resolve("ada.png") });
+    export function Profile() {
+      const name = read(profile$.name.get());
+      const avatar = read(profile$.avatar.get(), { suspense: true });
+      return <span>{name}{avatar}</span>;
+    }
+  `, "fixture.tsx");
+  assert.deepEqual(
+    findings.map(finding => finding.action),
+    ["pass-observable-to-use-value", "pass-observable-to-use-value"]
+  );
+  assert.match(findings[0]?.message ?? "", /read\(profile\$\.name\)/);
+  assert.match(
+    findings[1]?.message ?? "",
+    /read\(profile\$\.avatar, \{ suspense: true \}\)/
+  );
+  assert.match(findings[0]?.evidence.join(" ") ?? "", /before useValue can subscribe/);
+});
+
+test("preserves useValue types and options when simplifying one direct get selector", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import * as LegendReact from "@legendapp/state/react";
+    const profile$ = observable({ avatar: Promise.resolve("ada.png") });
+    export function Profile() {
+      return LegendReact.useValue<Promise<string>>(
+        () => profile$.avatar.get(),
+        { suspense: true }
+      );
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "pass-observable-to-use-value");
+  assert.match(
+    finding?.message ?? "",
+    /LegendReact\.useValue<Promise<string>>\(profile\$\.avatar, \{ suspense: true \}\)/
+  );
+});
+
+test("keeps eager useValue inputs that are not one proven static get", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ name: "Ada", rows: ["one"] });
+    const external = { get: () => "outside" };
+    const key = "name" as const;
+    useValue(profile$.name.peek());
+    useValue(profile$.rows.get(true));
+    useValue(profile$[key].get());
+    useValue(external.get());
+    useValue(profile$.name?.get());
+    useValue(profile$.name.get<string>());
+    useValue(profile$.get.get());
+    useValue(profile$.name.get(), {}, "extra");
+  `, "fixture.tsx");
+  assert.deepEqual(findings, []);
+});
+
+test("keeps eager reads passed to a shadowing useValue binding", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ name: "Ada" });
+    export function Profile(useValue: (value: string) => string) {
+      return useValue(profile$.name.get());
+    }
+  `, "fixture.tsx");
+  assert.deepEqual(findings, []);
+});
+
 test("writes one changed object field through the narrowest observable child", () => {
   const findings = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
@@ -380,15 +453,6 @@ test("keeps computed, shallow, dynamic, and unproven useValue selectors", () => 
   ]) {
     assert.deepEqual(source(selector), [], selector);
   }
-  assert.deepEqual(
-    analyzeLegendPractices(`
-      import { observable } from "@legendapp/state";
-      import { useValue } from "@legendapp/state/react";
-      const state$ = observable({ value: 1 });
-      useValue(() => state$.value.get(), { suspense: true });
-    `, "fixture.tsx"),
-    []
-  );
 });
 
 test("narrows a broad useValue binding to its only static child", () => {

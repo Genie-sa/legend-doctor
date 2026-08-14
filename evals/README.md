@@ -89,9 +89,11 @@ Existing batches, repeated or overlapping paths, awaited values,
 unrelated statements, partial runs containing an unproven `.set()`, and test/story/demo files abstain. Adversarial
 fixtures cover Maps, shadowed bindings, nested observable container types, aliases, barrels, and namespace imports;
 full-app impact must remain zero in applications that do not import Legend State.
-Direct-reactivity labels replace only an exact `useValue(() => observablePath.get())` selector with
-`useValue(observablePath)`. The path must be statically addressed and proven as Legend State through a local declaration
-or resolved export. Computed selectors, shallow reads, dynamic element access, and unproven getters abstain.
+The direct-reactivity rule replaces an eager `useValue(observablePath.get())` input or an exact
+`useValue(() => observablePath.get())` selector with `useValue(observablePath)`. Explicit type arguments and the suspense
+option are preserved. The path must be statically addressed and proven as Legend State through a local declaration or
+resolved export. Computed selectors, optional or dynamic access, shallow reads, reserved members, shadowed hooks, and
+unproven getters abstain.
 Legacy-hook labels replace calls imported as `useSelector` or `use$` from `@legendapp/state/react` with `useValue`.
 An exact zero-argument `.get()` on a proven static observable path becomes the direct `useValue(path)` form; computed,
 dynamic, and unproven selectors preserve their callback. Named aliases and namespace imports are resolved; unrelated and

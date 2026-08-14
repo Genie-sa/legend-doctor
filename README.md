@@ -17,6 +17,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | `useEffect` | Keep, move to event, mount, unmount, or observable reaction |
 | Coupled fields | One grouped model and one atomic migration |
 | Broad subscriptions | Lowest proven observable path |
+| `useValue(leaf$.get())` | `useValue(leaf$)` with types and options preserved |
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
 | Whole-object clone writes | Direct child `.set()` on the changed path |
 | Multiple Legend writes | One `.assign()` or `batch()` transaction |
@@ -31,7 +32,7 @@ Measured on pinned real applications:
 | Source targets | 157 |
 | Hooks analyzed | 1,969 |
 | Manual labels | 629 |
-| Unit tests | 310/310 |
+| Unit tests | 314/314 |
 | Actionable precision | 100% (341/341) |
 | Actionable recall | 95.3% (341/358) |
 | Legend practice precision | 100% (68/68) |
@@ -185,6 +186,35 @@ return <Name>{name}</Name>;
 The rule follows nested children and selects the deepest static path shared by every read. Divergent fields, dynamic or
 optional access, assertion boundaries, calls, writes, and raw object transport stay unchanged.
 
+### Direct leaf → direct `useValue`
+
+Before:
+
+```tsx
+const name = useValue(profile$.name.get());
+const email = useValue(() => profile$.email.get());
+```
+
+Output:
+
+```text
+Profile.tsx:18 [pass-observable-to-use-value] Replace the eager read or
+one-get selector with `useValue(profile$.name)`.
+```
+
+After:
+
+```tsx
+const name = useValue(profile$.name);
+const email = useValue(profile$.email);
+```
+
+Keep a callback when it computes a value:
+
+```tsx
+const fullName = useValue(() => `${profile$.first.get()} ${profile$.last.get()}`);
+```
+
 ### Legacy hook → `useValue`
 
 [Legend State recommends this migration](https://legendapp.com/open-source/state/v3/react/react-api/#usevalue).
@@ -214,8 +244,7 @@ const email = useValue(profile$.email);
 const fullName = useValue(() => `${profile$.first.get()} ${profile$.last.get()}`);
 ```
 
-Use the observable directly when you need its raw value. Use a callback only for a derived value that transforms or combines observable reads.
-Never pass an already-read value: `useValue(profile$.name.get())` cannot establish the subscription.
+Use the observable directly for its raw value. Use a callback only to compute a value.
 
 ### 4. Whole-object clone → direct child write
 
