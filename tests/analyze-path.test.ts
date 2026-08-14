@@ -93,6 +93,44 @@ test("uses cross-file observable provenance for batching findings", async () => 
   }
 });
 
+test("uses typed project factory provenance for narrow leaf subscriptions", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-factory-"));
+  try {
+    await writeFile(
+      path.join(root, "create-store.ts"),
+      `
+        import { observable, type Observable } from "@legendapp/state";
+        export function createStore<T>(value: T): Observable<T> {
+          return observable(value);
+        }
+      `,
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "screen.tsx"),
+      `
+        import { useValue } from "@legendapp/state/react";
+        import { createStore } from "./create-store";
+        const state$ = createStore({ profile: { name: "Ada", email: "ada@example.com" } });
+        function Name(profile$: typeof state$.profile) {
+          const profile = useValue(profile$);
+          return <span>{profile.name}</span>;
+        }
+        export function Screen() { return <span>{Name(state$.profile)}</span>; }
+      `,
+      "utf8"
+    );
+
+    const report = await analyzePath(root);
+    assert.deepEqual(report.practices.map(finding => finding.action), [
+      "narrow-use-value-subscription",
+    ]);
+    assert.match(report.practices[0]?.message ?? "", /useValue\(profile\$\.name\)/);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("uses cross-file observable provenance for direct useValue findings", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-read-"));
   try {

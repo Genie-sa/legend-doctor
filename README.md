@@ -30,10 +30,10 @@ Measured on pinned real applications:
 | Source targets | 124 |
 | Hooks analyzed | 1,876 |
 | Manual labels | 572 |
-| Unit tests | 285/285 |
+| Unit tests | 290/290 |
 | Actionable precision | 100% (305/305) |
 | Actionable recall | 93.8% (305/325) |
-| Legend practice precision | 100% (60/60) |
+| Legend practice precision | 100% (67/67) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, and Outline.

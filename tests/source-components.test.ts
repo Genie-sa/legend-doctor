@@ -105,9 +105,26 @@ test("resolves observables created by explicitly typed project factories", async
       "screen.ts": 'import { theme$ as appTheme$ } from "./theme";',
     },
     (root, sources) => {
-      const observables = buildSourceIndex(root, sources)
+      const index = buildSourceIndex(root, sources);
+      const factories = index.observableFactoriesFor(path.join(root, "theme.ts"));
+      const observables = index
         .observablesFor(path.join(root, "screen.ts"));
+      assert.deepEqual([...factories], ["makeStore"]);
       assert.deepEqual([...observables], ["appTheme$"]);
+    }
+  );
+});
+
+test("does not expose untyped project helpers as observable factories", async () => {
+  await withProject(
+    {
+      "create-store.ts": "export function createStore<T>(value: T): T { return value; }",
+      "screen.ts": 'import { createStore as makeStore } from "./create-store";',
+    },
+    (root, sources) => {
+      const factories = buildSourceIndex(root, sources)
+        .observableFactoriesFor(path.join(root, "screen.ts"));
+      assert.deepEqual([...factories], []);
     }
   );
 });

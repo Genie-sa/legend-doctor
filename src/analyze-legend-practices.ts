@@ -8,7 +8,10 @@ import {
 import { isNonProductionHarness, visit } from "./ast.js";
 import { collectHookImports, type HookImports } from "./imports.js";
 import { findObservableCloneWritePractices } from "./rules/observable-clone-writes.js";
-import { findObservableReadPractices } from "./rules/observable-reads.js";
+import {
+  findObservableReadPractices,
+  RESERVED_OBSERVABLE_MEMBERS,
+} from "./rules/observable-reads.js";
 import type { LegendPracticeFinding } from "./types.js";
 
 interface ObservableWrite {
@@ -23,7 +26,8 @@ interface ObservableWrite {
 export function analyzeLegendPractices(
   sourceText: string,
   fileName: string,
-  importedObservables: ReadonlySet<string> = new Set()
+  importedObservables: ReadonlySet<string> = new Set(),
+  importedObservableFactories: ReadonlySet<string> = new Set()
 ): LegendPracticeFinding[] {
   if (isNonProductionHarness(fileName)) return [];
   const sourceFile = ts.createSourceFile(
@@ -40,12 +44,18 @@ export function analyzeLegendPractices(
     imports.observable.size === 0 &&
     imports.useObservable.size === 0 &&
     imports.observableTypes.size === 0 &&
-    importedObservables.size === 0
+    importedObservables.size === 0 &&
+    importedObservableFactories.size === 0
   ) {
     return [];
   }
 
-  const observableBindings = collectObservableBindings(sourceFile, imports, importedObservables);
+  const observableBindings = collectObservableBindings(
+    sourceFile,
+    imports,
+    importedObservables,
+    importedObservableFactories
+  );
   if (observableBindings.size === 0) return [];
 
   const findings: LegendPracticeFinding[] = [];
@@ -96,11 +106,25 @@ function isSetStatement(statement: ts.Statement): boolean {
 function collectObservableBindings(
   sourceFile: ts.SourceFile,
   imports: HookImports,
-  importedObservables: ReadonlySet<string>
+  importedObservables: ReadonlySet<string>,
+  importedObservableFactories: ReadonlySet<string>
 ): ReadonlySet<string> {
   const declarations = new Map<string, number>();
-  const candidates = new Set(importedObservables);
+  const directCandidates = new Set(importedObservables);
+  const factoryBindings = new Set(importedObservableFactories);
+  const aliases: Array<{ initializer: ts.Expression; name: string }> = [];
+  const factoryCalls: Array<{ initializer: ts.Expression; name: string }> = [];
+  const typeQueries: Array<{ name: string; type: ts.TypeNode }> = [];
+
   visit(sourceFile, node => {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name &&
+      node.type &&
+      typeNamesObservable(node.type, imports.observableTypes)
+    ) {
+      factoryBindings.add(node.name.text);
+    }
     if (ts.isImportClause(node) && node.name) {
       recordDeclaration(declarations, node.name.text);
       return;
@@ -111,18 +135,25 @@ function collectObservableBindings(
     }
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
       recordDeclaration(declarations, node.name.text);
-      if (
-        (node.initializer && isObservableFactoryCall(node.initializer, imports)) ||
-        (node.type && typeNamesObservable(node.type, imports.observableTypes))
-      ) {
-        candidates.add(node.name.text);
+      if (node.type && typeNamesObservable(node.type, imports.observableTypes)) {
+        directCandidates.add(node.name.text);
+      } else if (node.type) {
+        typeQueries.push({ name: node.name.text, type: node.type });
+      }
+      if (node.initializer) {
+        factoryCalls.push({ initializer: node.initializer, name: node.name.text });
+      }
+      if (!node.type && node.initializer && declarationIsConst(node)) {
+        aliases.push({ initializer: node.initializer, name: node.name.text });
       }
       return;
     }
     if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
       recordDeclaration(declarations, node.name.text);
       if (node.type && typeNamesObservable(node.type, imports.observableTypes)) {
-        candidates.add(node.name.text);
+        directCandidates.add(node.name.text);
+      } else if (node.type) {
+        typeQueries.push({ name: node.name.text, type: node.type });
       }
       return;
     }
@@ -133,18 +164,64 @@ function collectObservableBindings(
       recordDeclaration(declarations, node.name.text);
     }
   });
-  return new Set([...candidates].filter(name => declarations.get(name) === 1));
+
+  const uniqueFactories = new Set(
+    [...factoryBindings].filter(name => declarations.get(name) === 1)
+  );
+  const candidates = new Set(
+    [...directCandidates].filter(name => declarations.get(name) === 1)
+  );
+  for (const candidate of factoryCalls) {
+    if (
+      declarations.get(candidate.name) === 1 &&
+      isObservableFactoryCall(candidate.initializer, imports, uniqueFactories)
+    ) {
+      candidates.add(candidate.name);
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const alias of aliases) {
+      if (
+        declarations.get(alias.name) === 1 &&
+        !candidates.has(alias.name) &&
+        expressionIsObservablePath(alias.initializer, candidates)
+      ) {
+        candidates.add(alias.name);
+        changed = true;
+      }
+    }
+    for (const alias of typeQueries) {
+      if (
+        declarations.get(alias.name) === 1 &&
+        !candidates.has(alias.name) &&
+        typeQueriesObservable(alias.type, candidates)
+      ) {
+        candidates.add(alias.name);
+        changed = true;
+      }
+    }
+  }
+  return candidates;
 }
 
 function recordDeclaration(counts: Map<string, number>, name: string): void {
   counts.set(name, (counts.get(name) ?? 0) + 1);
 }
 
-function isObservableFactoryCall(expression: ts.Expression, imports: HookImports): boolean {
+function isObservableFactoryCall(
+  expression: ts.Expression,
+  imports: HookImports,
+  projectFactories: ReadonlySet<string>
+): boolean {
   const value = unwrapTransparentExpression(expression);
   if (!ts.isCallExpression(value)) return false;
   if (ts.isIdentifier(value.expression)) {
-    return imports.observable.has(value.expression.text) || imports.useObservable.has(value.expression.text);
+    return imports.observable.has(value.expression.text) ||
+      imports.useObservable.has(value.expression.text) ||
+      projectFactories.has(value.expression.text);
   }
   return (
     ts.isPropertyAccessExpression(value.expression) &&
@@ -152,6 +229,38 @@ function isObservableFactoryCall(expression: ts.Expression, imports: HookImports
     imports.legendNamespaces.has(value.expression.expression.text) &&
     value.expression.name.text === "observable"
   );
+}
+
+function declarationIsConst(declaration: ts.VariableDeclaration): boolean {
+  return ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0;
+}
+
+function expressionIsObservablePath(
+  expression: ts.Expression,
+  observableBindings: ReadonlySet<string>
+): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (!ts.isIdentifier(value) && !ts.isPropertyAccessExpression(value)) return false;
+  for (let current: ts.Expression = value; ts.isPropertyAccessExpression(current); current = current.expression) {
+    if (RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) return false;
+  }
+  const root = rootIdentifier(value);
+  return root !== null && observableBindings.has(root.text);
+}
+
+function typeQueriesObservable(
+  type: ts.TypeNode,
+  observableBindings: ReadonlySet<string>
+): boolean {
+  if (ts.isParenthesizedTypeNode(type)) return typeQueriesObservable(type.type, observableBindings);
+  if (!ts.isTypeQueryNode(type)) return false;
+  let current: ts.EntityName = type.exprName;
+  while (ts.isQualifiedName(current)) {
+    if (RESERVED_OBSERVABLE_MEMBERS.has(current.right.text)) return false;
+    current = current.left;
+  }
+  return observableBindings.has(current.text);
 }
 
 function typeNamesObservable(type: ts.TypeNode, names: ReadonlySet<string>): boolean {

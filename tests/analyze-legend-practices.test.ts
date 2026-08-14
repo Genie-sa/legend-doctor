@@ -408,6 +408,69 @@ test("narrows a single-property useValue destructure", () => {
   `, "fixture.tsx");
   assert.equal(finding?.action, "narrow-use-value-subscription");
   assert.match(finding?.message ?? "", /useValue\(theme\$\.colors\.dark\)/);
+  assert.match(finding?.message ?? "", /const palette =/);
+  assert.doesNotMatch(finding?.message ?? "", /palette\.dark/);
+});
+
+test("tracks observable paths created by proven project factories and aliases", () => {
+  const findings = analyzeLegendPractices(`
+    import { useValue } from "@legendapp/state/react";
+    import { makeStore } from "./create-store";
+    const store$ = makeStore({ profile: { name: "Ada", email: "ada@example.com" } });
+    const profile$ = store$.profile;
+    function Name(value$: typeof profile$) {
+      const profile = useValue(value$);
+      return <span>{profile.name}</span>;
+    }
+  `, "fixture.tsx", new Set(), new Set(["makeStore"]));
+  assert.deepEqual(findings.map(finding => finding.action), ["narrow-use-value-subscription"]);
+  assert.match(findings[0]?.message ?? "", /useValue\(value\$\.name\)/);
+});
+
+test("does not infer mutable, nullable, reserved, or unproven observable aliases", () => {
+  const source = (declarations: string, expression: string) => analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const store$ = observable({ profile: { name: "Ada" } });
+    ${declarations}
+    export function Name() {
+      const profile = useValue(${expression});
+      return <span>{profile.name}</span>;
+    }
+  `, "fixture.tsx");
+  for (const [declarations, expression] of [
+    ["let profile$ = store$.profile;", "profile$"],
+    ["const getter$ = store$.get.bind;", "getter$"],
+    ["const profile$: typeof store$.profile | null = store$.profile;", "profile$"],
+    ["const profile$ = makeStore({ name: 'Ada' });", "profile$"],
+  ] as const) {
+    assert.deepEqual(source(declarations, expression), [], declarations);
+  }
+});
+
+test("does not propagate observable provenance through shadowed roots or factories", () => {
+  const findings = analyzeLegendPractices(
+    `
+      import { useValue } from "@legendapp/state/react";
+      import { createStore, shared$ } from "./store";
+
+      const fromFactory$ = createStore();
+      const fromShared$ = shared$.profile;
+
+      export function Screen() {
+        const createStore = () => ({ profile: { name: "local" } });
+        const shared$ = { profile: { name: "local" } };
+        const factoryValue = useValue(fromFactory$);
+        const sharedValue = useValue(fromShared$);
+        return <>{factoryValue.profile.name}{sharedValue.name}{createStore}{shared$}</>;
+      }
+    `,
+    "Screen.tsx",
+    new Set(["shared$"]),
+    new Set(["createStore"])
+  );
+
+  assert.equal(findings.some(finding => finding.action === "narrow-use-value-subscription"), false);
 });
 
 test("keeps broad useValue reads when the child subscription is not proven equivalent", () => {

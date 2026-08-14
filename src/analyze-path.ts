@@ -62,15 +62,21 @@ export async function analyzePath(
     const importedObservables = mayContainLegendPractice
       ? context.sourceIndex.observablesFor(file)
       : new Set<string>();
+    const importedObservableFactories = mayContainLegendPractice
+      ? context.sourceIndex.observableFactoriesFor(file)
+      : new Set<string>();
     if (
       mayContainLegendPractice &&
-      (sourceText.includes("@legendapp/state") || importedObservables.size > 0)
+      (sourceText.includes("@legendapp/state") ||
+        importedObservables.size > 0 ||
+        importedObservableFactories.size > 0)
     ) {
       practices.push(
         ...analyzeLegendPractices(
           sourceText,
           path.relative(analysisRoot, file) || path.basename(file),
-          importedObservables
+          importedObservables,
+          importedObservableFactories
         )
       );
     }

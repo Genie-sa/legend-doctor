@@ -4607,4 +4607,34 @@ export const goldPracticeCases = [
     rationale: "The component destructures only width, so it can subscribe directly to the width child observable.",
     target: "legend-music",
   },
+  ...[145, 146, 155, 156].map(
+    (line): GoldPracticeCase => ({
+      action: "use-peek-for-snapshot",
+      file: "components/PlaybackTimelineSlider.tsx",
+      line,
+      rationale: "The hover command reads the latest disabled flag without creating a reactive dependency.",
+      target: "legend-music",
+    }),
+  ),
+  {
+    action: "batch-observable-writes",
+    file: "systems/LocalMusicState.ts",
+    line: 139,
+    rationale: "Clearing cached tracks publishes the scan timestamp, track list, and both counters as one transaction.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "systems/LocalMusicState.ts",
+    line: 972,
+    rationale: "Scan completion publishes tracks, timestamp, and progress totals together while preserving value evaluation order.",
+    target: "legend-music",
+  },
+  {
+    action: "narrow-use-value-subscription",
+    file: "theme/ThemeProvider.tsx",
+    line: 40,
+    rationale: "The provider reads only customColors.dark, so sibling color updates should not invalidate it.",
+    target: "legend-music",
+  },
 ] as const satisfies readonly GoldPracticeCase[];

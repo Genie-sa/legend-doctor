@@ -29,6 +29,7 @@ interface ModuleRecord {
 
 export interface SourceIndex {
   componentsFor(file: string): ReadonlySet<string>;
+  observableFactoriesFor(file: string): ReadonlySet<string>;
   observablesFor(file: string): ReadonlySet<string>;
 }
 
@@ -50,6 +51,7 @@ export function buildSourceIndex(
 
   const compilerContexts = new Map<string, CompilerContext>();
   const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const observableFactoriesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observablesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
 
   function resolveModule(importer: string, specifier: string): string | null {
@@ -135,7 +137,11 @@ export function buildSourceIndex(
 
   function resolvedFor(file: string, kind: SourceSymbolKind): ReadonlyMap<string, ResolvedSymbol> {
     const importer = normalizeFile(file);
-    const cache = kind === "component" ? componentsByImporter : observablesByImporter;
+    const cache = kind === "component"
+      ? componentsByImporter
+      : kind === "observable-factory"
+        ? observableFactoriesByImporter
+        : observablesByImporter;
     const cached = cache.get(importer);
     if (cached) return cached;
     const symbols = new Map<string, ResolvedSymbol>();
@@ -156,6 +162,7 @@ export function buildSourceIndex(
 
   return {
     componentsFor: file => new Set(resolvedFor(file, "component").keys()),
+    observableFactoriesFor: file => new Set(resolvedFor(file, "observable-factory").keys()),
     observablesFor: file => new Set(resolvedFor(file, "observable").keys()),
   };
 }

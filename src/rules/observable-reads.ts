@@ -238,6 +238,7 @@ function narrowUseValueFinding(
     commonPath.join("."),
     localName,
     paths.length,
+    false,
     sourceFile,
     fileName
   );
@@ -297,6 +298,7 @@ function narrowObjectBindingFinding(
     property,
     element.name.text,
     1,
+    true,
     sourceFile,
     fileName
   );
@@ -308,12 +310,16 @@ function narrowFinding(
   property: string,
   localName: string,
   reads: number,
+  destructured: boolean,
   sourceFile: ts.SourceFile,
   fileName: string
 ): LegendPracticeFinding {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(declaration.getStart(sourceFile));
   const parentPath = observable.getText(sourceFile);
   const leafPath = `${parentPath}.${property}`;
+  const instruction = destructured
+    ? `Replace the single-property destructure with \`const ${localName} = useValue(${leafPath})\``
+    : `Narrow \`${localName}\` from \`useValue(${parentPath})\` to \`useValue(${leafPath})\`; bind the leaf value directly and replace the \`${localName}.${property}\` reads`;
   return {
     action: "narrow-use-value-subscription",
     confidence: "certain",
@@ -323,7 +329,7 @@ function narrowFinding(
       `${leafPath} is a proven Legend observable path and has ${reads} raw-value read${reads === 1 ? "" : "s"}`,
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
-    message: `Narrow \`${localName}\` from \`useValue(${parentPath})\` to \`useValue(${leafPath})\`; bind the leaf value directly and replace the \`${localName}.${property}\` reads so sibling observable fields no longer invalidate this component.`,
+    message: `${instruction} so sibling observable fields no longer invalidate this component.`,
     practice: "reactivity",
   };
 }
