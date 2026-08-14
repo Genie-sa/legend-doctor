@@ -68,11 +68,11 @@ Use the result in this order:
 
 `--actionable` shows `change` and `candidate` findings. Omit it to include intentional `keep` findings.
 
-## Before and after
+## Clear before and after
 
-### Row-local selection
+### 1. Selected row: 100 rows → about 2 row renders
 
-Before: every cursor update rerenders the list owner and every row.
+**Before:** one cursor update invalidates the list owner and all 100 rows.
 
 ```jsx
 function Results({ rows }) {
@@ -88,7 +88,15 @@ function Results({ rows }) {
 }
 ```
 
-After: the owner keeps one stable observable; each row subscribes to one boolean.
+**Doctor says:**
+
+```text
+search.tsx:31:31 [use-observable] Replace scalar row-selection state `active` with a
+component-lifetime observable; extract a stable-keyed row component and subscribe with a
+per-item `useValue(() => active$.get() === rowDiscriminator)` selector.
+```
+
+**After:** the owner keeps one observable. Each row subscribes to one boolean.
 
 ```jsx
 function Results({ rows }) {
@@ -104,20 +112,67 @@ function ResultRow({ row, index, active$ }) {
 }
 ```
 
-Tool output:
+**Impact:** changing row 12 → row 13 can rerender 2 row subscribers instead of the owner plus 100 rows.
 
-```text
-search.tsx:31:31 [use-observable] Replace scalar row-selection state `active` with a
-component-lifetime observable; extract a stable-keyed row component and subscribe with a
-per-item `useValue(() => active$.get() === rowDiscriminator)` selector, while event commands
-read or update the cursor without subscribing.
+### 2. Dialog state: page render → dialog render
+
+**Before:** opening a dialog rerenders the table, filters, toolbar, and dialog.
+
+```tsx
+function AccountsPage() {
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
+
+  return (
+    <>
+      <AccountsTable onDelete={setDeleteTarget} />
+      <DeleteDialog
+        account={deleteTarget}
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+      />
+    </>
+  );
+}
 ```
 
-Result: keyboard and pointer updates target row selectors instead of invalidating the 28-element search owner.
+**Doctor says:**
 
-### Effect-synchronized draft
+```text
+accounts-page.tsx:18:35 [use-observable] Keep `deleteTarget` in a component-lifetime
+observable and subscribe at the single dialog call site. Keep table callbacks command-only.
+```
 
-Before: the synchronization effect and every field edit rerender the sheet owner.
+**After:** table commands update the observable; one stable wrapper subscribes for the dialog.
+
+```tsx
+function AccountsPage() {
+  const deleteTarget$ = useObservable<Account | null>(null);
+
+  return (
+    <>
+      <AccountsTable onDelete={account => deleteTarget$.set(account)} />
+      <DeleteDialogState deleteTarget$={deleteTarget$} />
+    </>
+  );
+}
+
+function DeleteDialogState({ deleteTarget$ }) {
+  const account = useValue(deleteTarget$);
+  return (
+    <DeleteDialog
+      account={account}
+      open={account !== null}
+      onClose={() => deleteTarget$.set(null)}
+    />
+  );
+}
+```
+
+**Impact:** open and close update 1 dialog boundary instead of rebuilding the page and table.
+
+### 3. Effect-synchronized draft: 2 setter calls → 1 atomic assignment
+
+**Before:** mounting can render the sheet, run the effect, then render it again. Every edit renders it again.
 
 ```tsx
 const [name, setName] = useState("");
@@ -129,7 +184,18 @@ useEffect(() => {
 }, [session]);
 ```
 
-After: keep the React effect and its timing, but assign one observable draft atomically.
+**Doctor says:**
+
+```text
+SessionSheet.tsx:44:27 [use-observable] Replace the effect-synchronized React draft cluster
+(`name`, `color`, `anchor`) with one component-lifetime observable model. Preserve the React
+effect and assign the draft atomically.
+
+SessionSheet.tsx:53:3 [review-effect] Preserve this React synchronization effect and its
+dependency timing. Replace only its setter calls with one atomic observable assignment.
+```
+
+**After:** keep the React effect and dependency timing. Change only its state sink.
 
 ```tsx
 const draft$ = useObservable({ name: "", color: "" });
@@ -146,25 +212,29 @@ function NameField({ draft$ }) {
 }
 ```
 
-Tool output:
+**Impact:** the synchronization write no longer forces a second owner render; edits update subscribed fields.
 
-```text
-SessionSheet.tsx:44:27 [use-observable] Replace the effect-synchronized React draft cluster
-(`name`, `color`, `anchor`) with one component-lifetime observable model; preserve the React
-synchronization effect and its dependencies, assign the draft atomically there, and subscribe
-only in rendered leaves.
+### 4. Teardown ownership: keep setup out, move cleanup
 
-SessionSheet.tsx:53:3 [review-effect] Preserve this React synchronization effect and its
-dependency timing; replace only its setter calls with one atomic observable assignment.
+**Before:** an empty-dependency effect exists only to return cleanup.
+
+```tsx
+useEffect(() => {
+  return () => tooltip.hide();
+}, []);
 ```
 
-Result: field edits can update leaf subscribers while the original React synchronization timing remains unchanged.
-
-### Teardown ownership
+**Doctor says:**
 
 ```text
 Tooltip.tsx:93:3 [use-unmount] Replace this teardown-only empty-dependency effect with
 `useUnmount` if once-only Legend lifecycle semantics are intended.
+```
+
+**After:** lifecycle intent is explicit.
+
+```tsx
+useUnmount(() => tooltip.hide());
 ```
 
 ## How findings are classified
