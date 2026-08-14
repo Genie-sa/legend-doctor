@@ -26,10 +26,12 @@ import {
   isSynchronousRenderCallback,
   jsxElementCount,
   jsxElementCountIn,
+  localFunctionBinding,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
   repeatedRenderHasStableItemKey,
   stateMayHoldCallable,
+  uniqueVariableDeclaration,
 } from "./state-proofs.js";
 
 export interface EffectDraftScope {
@@ -188,7 +190,8 @@ function draftEditProof(
   });
   const independent = direct || reachable.some(call => {
     const region = proofs.nearestMutationFunction(call, state.owner);
-    return mutationRegionOnlyCallsStateSetters(region, ownerSetters) &&
+    return (mutationRegionOnlyCallsStateSetters(region, ownerSetters) ||
+      mutationRegionForwardsDraftValue(region, call, ownerSetters, state.owner)) &&
       setterArgumentDiffersFromEffect(call, state, effect);
   });
   return { independent, reachable: direct || reachable.length > 0 };
@@ -267,6 +270,56 @@ export function mutationRegionOnlyCallsStateSetters(
     unsafeCall = true;
   });
   return sawSetter && !unsafeCall;
+}
+
+function mutationRegionForwardsDraftValue(
+  region: RuntimeFunctionLike,
+  edit: ts.CallExpression,
+  stateSetters: ReadonlySet<string>,
+  owner: RuntimeFunctionLike
+): boolean {
+  const argument = edit.arguments[0];
+  if (!region.body || !argument || !ts.isIdentifier(argument)) return false;
+  const declaration = uniqueVariableDeclaration(region, argument.text);
+  if (
+    !declaration?.initializer ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    declaration.getStart() >= edit.getStart()
+  ) {
+    return false;
+  }
+
+  let forwardedCalls = 0;
+  let safe = true;
+  visitSkippingNestedFunctions(region.body, region, node => {
+    if (!safe || !ts.isCallExpression(node)) return;
+    if (ts.isIdentifier(node.expression) && stateSetters.has(node.expression.text)) return;
+    if (nodeWithin(node, declaration.initializer!)) {
+      safe = !isLocalFunctionCall(node, owner);
+      return;
+    }
+    if (
+      node.getStart() <= edit.getStart() ||
+      !node.arguments.some(candidate =>
+        expressionDependsOnBinding(candidate, argument, region)
+      ) ||
+      isLocalFunctionCall(node, owner)
+    ) {
+      safe = false;
+      return;
+    }
+    forwardedCalls += 1;
+  });
+  return safe && forwardedCalls === 1;
+}
+
+function isLocalFunctionCall(
+  call: ts.CallExpression,
+  owner: RuntimeFunctionLike
+): boolean {
+  return ts.isIdentifier(call.expression) &&
+    localFunctionBinding(owner, call.expression.text) !== null;
 }
 
 function synchronousDraftSetters(

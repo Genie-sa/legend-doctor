@@ -30,7 +30,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 1,944 hooks across 148 source roots. The corpus currently contains
-620 manual hook labels, including 23 non-enforced opportunities, plus twelve
+620 manual hook labels, including 22 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
 labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
@@ -52,7 +52,8 @@ a complete editable state cluster into one observable model. A migration also ne
 count alone is not proof, root-level cohesive controls stay in React, and deferred commands snapshot the observable once at
 command entry. One-hop immutable aliases are audited before promotion; aliases that feed hooks, queries, lifecycle,
 list-data construction, or owner control flow remain review findings. Async work, cleanup, partial clusters, and
-unproven edit paths also remain review findings.
+unproven edit paths also remain review findings. An edit may forward the same freshly computed draft value to one
+upstream command after the local write; unrelated calls, reversed ordering, and local helper-owned state still abstain.
 Async pending labels require a literal-false flag whose pending transition in an event command reaches awaited work
 before any owner-state write or early exit and renders through one proven runtime status leaf. The same leaf may consume
 the flag through loading props and pure label or icon selection. A broad owner qualifies directly; a compact owner must

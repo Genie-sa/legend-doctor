@@ -2337,12 +2337,11 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "index.tsx",
     hook: "useState",
     line: 182,
     name: "text",
-    rationale: "The prop-seeded text is an editable leaf draft, but proving its debounced upstream command needs bounded event-root tracing beyond the strict detector.",
+    rationale: "The prop-seeded text is an editable leaf draft; its event command forwards the same computed value to one debounced upstream update.",
     target: "formbricks-element-input",
   },
   {

@@ -22,6 +22,7 @@ import {
   isHookDependencyReference,
   isSafeJsxProjectionReference,
   jsxElementCount,
+  localFunctionBinding,
   nearestRepeatedRenderCall,
 } from "./state-proofs.js";
 
@@ -451,31 +452,6 @@ function containsOwnerStateWrite(
   };
   scan(root);
   return found;
-}
-
-function localFunctionBinding(
-  owner: RuntimeFunctionLike,
-  name: string
-): ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null {
-  if (!owner.body || bindingDeclarationCount(owner, name) !== 1) return null;
-  let result: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null = null;
-  visit(owner.body, node => {
-    if (result) return;
-    if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
-      result = node;
-      return;
-    }
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === name &&
-      node.initializer &&
-      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
-    ) {
-      result = node.initializer;
-    }
-  });
-  return result;
 }
 
 function containsEarlyExit(root: ts.Node, before: number): boolean {

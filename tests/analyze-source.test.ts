@@ -754,6 +754,57 @@ test("migrates a complete effect-synchronized draft while preserving the effect"
   assert.match(findings[0]?.message ?? "", /preserve the React synchronization effect/);
 });
 
+test("keeps a synchronized local draft beside its value-forwarding upstream command", () => {
+  const findings = analyzeSource(`
+    import { useCallback, useEffect, useMemo, useState } from "react";
+    export function Profile({ initialName, onChange }: { initialName: string; onChange: (value: string) => void }) {
+      const [name, setName] = useState(initialName);
+      useEffect(() => { setName(initialName); }, [initialName]);
+      const debouncedChange = useMemo(() => debounce(onChange, 100), [onChange]);
+      const edit = useCallback((next: string) => {
+        const updated = name === next ? name : next.trimStart();
+        setName(updated);
+        debouncedChange(updated);
+      }, [name, debouncedChange]);
+      return <main>
+        <Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><Content />
+        <input value={name} onChange={event => edit(event.target.value)} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "name")?.action, "use-observable");
+  assert.equal(findings.find(finding => finding.hook === "useEffect")?.action, "review-effect");
+});
+
+test("does not call unrelated or stateful work a synchronized draft forwarding command", () => {
+  for (const edit of [
+    `const edit = (next: string) => { const updated = next.trim(); setName(updated); notify(); };`,
+    `const edit = (next: string) => { const updated = next.trim(); notify(updated); setName(updated); };`,
+    `const edit = (next: string) => { const updated = next.trim(); setName(updated); notify(initialName); };`,
+    `const markDirty = (next: string) => setDirty(next !== "");
+     const edit = (next: string) => { const updated = next.trim(); setName(updated); markDirty(updated); };`,
+  ]) {
+    const findings = analyzeSource(`
+      import { useEffect, useState } from "react";
+      export function Profile({ initialName }: { initialName: string }) {
+        const [name, setName] = useState(initialName);
+        const [dirty, setDirty] = useState(false);
+        useEffect(() => { setName(initialName); }, [initialName]);
+        ${edit}
+        return <main>
+          <Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><Content />
+          <input value={name} onChange={event => edit(event.target.value)} /><p>{dirty}</p>
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.notEqual(
+      findings.find(finding => finding.name === "name")?.action,
+      "use-observable",
+      edit
+    );
+  }
+});
+
 test("groups every state written by one synchronization effect", () => {
   const findings = analyzeSource(`
     import { useEffect, useState } from "react";

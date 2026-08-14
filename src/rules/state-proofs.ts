@@ -466,3 +466,28 @@ export function uniqueVariableDeclaration(boundary: ts.Node, name: string): ts.V
   });
   return matches.length === 1 ? matches[0]! : null;
 }
+
+export function localFunctionBinding(
+  owner: RuntimeFunctionLike,
+  name: string
+): ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null {
+  if (!owner.body || bindingDeclarationCount(owner, name) !== 1) return null;
+  let match: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null = null;
+  visit(owner.body, node => {
+    if (match) return;
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
+      match = node;
+      return;
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name &&
+      node.initializer &&
+      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+    ) {
+      match = node.initializer;
+    }
+  });
+  return match;
+}
