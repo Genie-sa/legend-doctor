@@ -2676,6 +2676,44 @@ test("does not infer a row-only cursor when a selected-item lookup drives a sepa
   assert.equal(finding?.action, "review-state");
 });
 
+test("accepts a memoized event command whose binding matches its JSX prop name", () => {
+  const finding = analyzeSource(`
+    import { useCallback, useState } from "react";
+    export function Results({ rows }: { rows: Array<{ id: string; run: () => void }> }) {
+      const [selectedIndex, setSelectedIndex] = useState(0);
+      const onKeyDown = useCallback(() => rows[selectedIndex]?.run(), [rows, selectedIndex]);
+      return <Screen onKeyDown={onKeyDown}><Header /><Toolbar /><Summary /><Filters /><Status /><Help />
+        <Sidebar /><Banner /><Search /><Preview /><Actions /><Footer />
+        {rows.map((row, index) => <Row key={row.id} selected={selectedIndex === index}
+          onPointerMove={() => setSelectedIndex(index)} />)}
+      </Screen>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "selectedIndex");
+  assert.equal(finding?.action, "use-observable");
+});
+
+test("keeps a row cursor whose callback is stale or also owns external lifecycle", () => {
+  for (const callback of [
+    `const onKeyDown = useCallback(() => rows[selectedIndex]?.run(), []);`,
+    `const onKeyDown = useCallback(() => rows[selectedIndex]?.run(), [rows, selectedIndex]);
+     useEffect(() => subscribe(onKeyDown), [onKeyDown]);`,
+  ]) {
+    const finding = analyzeSource(`
+      import { useCallback, useEffect, useState } from "react";
+      export function Results({ rows }: { rows: Array<{ id: string; run: () => void }> }) {
+        const [selectedIndex, setSelectedIndex] = useState(0);
+        ${callback}
+        return <Screen onKeyDown={onKeyDown}><Header /><Toolbar /><Summary /><Filters /><Status /><Help />
+          <Sidebar /><Banner /><Search /><Preview /><Actions /><Footer />
+          {rows.map((row, index) => <Row key={row.id} selected={selectedIndex === index}
+            onPointerMove={() => setSelectedIndex(index)} />)}
+        </Screen>;
+      }
+    `, "fixture.tsx").find(candidate => candidate.name === "selectedIndex");
+    assert.equal(finding?.action, "review-state");
+  }
+});
+
 test("moves keyed collection membership into repeated row subscriptions", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

@@ -2844,7 +2844,15 @@ function callbackIsEventRooted(
   let referenced = false;
   let safe = true;
   visit(owner.body, node => {
-    if (!safe || !ts.isIdentifier(node) || node.text !== name || isDeclarationName(node)) return;
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
     referenced = true;
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     if (

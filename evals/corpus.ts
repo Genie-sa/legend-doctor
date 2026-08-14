@@ -2117,7 +2117,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "components/cockpit/search.tsx",
     hook: "useState",
     line: 31,
