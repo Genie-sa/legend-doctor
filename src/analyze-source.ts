@@ -48,6 +48,7 @@ import {
   isSetOrMapState,
   setterCallUsesPreviousValue,
 } from "./rules/keyed-selection.js";
+import { isLiteralBooleanLeafState } from "./rules/literal-boolean-leaf.js";
 import {
   callbackIsEventRooted,
   expressionDependsOnBinding,
@@ -195,14 +196,17 @@ export function analyzeSource(
   const usageByState = new Map(states.map(state => [state, collectStateUsage(state, effectNodes, imports)]));
   const subtreeByState = new Map<StateCandidate, StateSubtree>();
   const safeCommandStates = new Set<StateCandidate>();
+  const reactiveMutationAffectedStates = new Set<StateCandidate>();
   for (const state of states) {
     const usage = usageByState.get(state);
     if (!usage) continue;
-    const projectionAllowed = !allSetterPathsHaveReactiveMutation(
+    const reactiveMutationPaths = setterReactiveMutationPaths(
       state,
       usage,
       reactiveMutationsByOwner.get(state.owner) ?? EMPTY_BINDINGS
-    ) &&
+    );
+    if (reactiveMutationPaths.any) reactiveMutationAffectedStates.add(state);
+    const projectionAllowed = !reactiveMutationPaths.all &&
       !setterCallbackEscapesThroughUnknownHook(state, usage) &&
       primitiveSetterUpdatersArePure(state, usage);
     if (projectionAllowed) safeCommandStates.add(state);
@@ -325,6 +329,7 @@ export function analyzeSource(
           observableSelectionOwners.has(state.owner),
           statesWithCompanionWrites.has(state),
           statesWithIndependentDirectEventWrites.has(state),
+          reactiveMutationAffectedStates.has(state),
           asyncLeafStatuses.has(state),
           deferredRevealStates.has(state),
           keyedSelections.collectionStates.has(state),
@@ -1479,6 +1484,7 @@ function classifyState(
   belongsToObservableSelection: boolean,
   hasCompanionWrites: boolean,
   hasIndependentDirectEventWrite: boolean,
+  hasReactiveMutationPath: boolean,
   isAsyncLeafStatus: boolean,
   isDeferredReveal: boolean,
   isKeyedLeafCollection: boolean,
@@ -1623,6 +1629,27 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace call-site-owned state \`${state.valueName}\` with a component-lifetime observable and wrap the branch-local \`${target}\` call site in a leaf subscriber; keep ownership at this owner so alternate returns and conditional mounts preserve the existing state lifetime.`,
+    };
+  }
+  if (
+    isLiteralBooleanLeafState(
+      state,
+      usage,
+      {
+        branchCallSiteExists: branchCallSite !== null,
+        hasCompanionWrites,
+        hasReactiveMutationPath,
+        isCustomHookOwner: isCustomHookOwner(state.owner),
+        localComponents,
+        sourceComponents,
+      }
+    )
+  ) {
+    const target = [...usage.valueTargets][0] ?? "the receiving child";
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace boolean leaf state \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${target}\` call site in a leaf subscriber; preserve owner lifetime and change only the literal setter commands so external callbacks no longer invalidate the broad owner.`,
     };
   }
   const controlledLeafCut =
@@ -2568,18 +2595,21 @@ function isSafeMixedProjectionTransport(
   );
 }
 
-function allSetterPathsHaveReactiveMutation(
+function setterReactiveMutationPaths(
   state: StateCandidate,
   usage: StateUsage,
   mutationBindings: ReadonlySet<string>
-): boolean {
-  return mutationBindings.size > 0 &&
-    usage.setterCallNodes.length > 0 &&
-    usage.setterCallNodes.every(call =>
-      functionAncestors(call, state.owner).some(ancestor =>
-        functionDirectlyCallsBinding(ancestor, mutationBindings)
-      )
+): { all: boolean; any: boolean } {
+  let any = false;
+  let all = mutationBindings.size > 0 && usage.setterCallNodes.length > 0;
+  for (const call of usage.setterCallNodes) {
+    const pathHasMutation = mutationBindings.size > 0 && functionAncestors(call, state.owner).some(ancestor =>
+      functionDirectlyCallsBinding(ancestor, mutationBindings)
     );
+    any ||= pathHasMutation;
+    all &&= pathHasMutation;
+  }
+  return { all, any };
 }
 
 function functionAncestors(

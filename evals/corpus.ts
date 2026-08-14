@@ -165,6 +165,30 @@ export const repositories = [
         states: 2,
       },
       {
+        effects: 2,
+        id: "expensify-workspace-categories",
+        root: "src/pages/workspace/categories/WorkspaceCategoriesPage.tsx",
+        states: 2,
+      },
+      {
+        effects: 1,
+        id: "expensify-workspace-per-diem",
+        root: "src/pages/workspace/perDiem/WorkspacePerDiemPage.tsx",
+        states: 1,
+      },
+      {
+        effects: 0,
+        id: "expensify-import-tags-options",
+        root: "src/pages/workspace/tags/ImportTagsOptionsPage.tsx",
+        states: 2,
+      },
+      {
+        effects: 3,
+        id: "expensify-workspace-tags",
+        root: "src/pages/workspace/tags/WorkspaceTagsPage.tsx",
+        states: 2,
+      },
+      {
         effects: 0,
         id: "expensify-workspace-description",
         root: "src/pages/workspace/WorkspaceOverviewDescriptionPage.tsx",
@@ -2718,6 +2742,20 @@ export const goldCases = [
     rationale: "This effect issues one committed-ref command when the external workspace signal changes and remains in React.",
     target: "expensify-workspace-overview",
   },
+  ...[
+    ["expensify-workspace-categories", "WorkspaceCategoriesPage.tsx", 72],
+    ["expensify-workspace-per-diem", "WorkspacePerDiemPage.tsx", 98],
+    ["expensify-import-tags-options", "ImportTagsOptionsPage.tsx", 62],
+    ["expensify-workspace-tags", "WorkspaceTagsPage.tsx", 94],
+  ].map(([target, file, line]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: "isDownloadFailureModalVisible",
+    rationale: "A literal event callback owns this failure flag and one stable DecisionModal is its only subscriber; observable ownership avoids rebuilding the workspace screen when an async download fails.",
+    target: target as string,
+  })),
   {
     action: "review-state",
     file: "WorkspaceOverviewDescriptionPage.tsx",
