@@ -21,6 +21,8 @@ interface ModuleRecord {
   imports: ReadonlyMap<string, ImportBinding>;
   localExports: ReadonlyMap<string, string>;
   observableDeclarations: ReadonlySet<string>;
+  observableFactoryCalls: ReadonlyMap<string, string>;
+  observableFactoryDeclarations: ReadonlySet<string>;
   reexports: ReadonlyMap<string, ReexportBinding>;
   starExports: readonly string[];
 }
@@ -35,7 +37,7 @@ interface ResolvedSymbol {
   localName: string;
 }
 
-type SourceSymbolKind = "component" | "observable";
+type SourceSymbolKind = "component" | "observable" | "observable-factory";
 
 export function buildSourceIndex(
   root: string,
@@ -72,20 +74,44 @@ export function buildSourceIndex(
     depth: number
   ): ResolvedSymbol | null {
     if (depth > 8) return null;
-    const key = `${file}\0${exportName}`;
+    const key = `${kind}\0${file}\0${exportName}`;
     if (visited.has(key)) return null;
     const record = records.get(file);
     if (!record) return null;
     const nextVisited = new Set(visited).add(key);
 
     const localName = record.localExports.get(exportName);
-    if (
-      localName &&
-      (kind === "component"
+    if (localName) {
+      const declared = kind === "component"
         ? record.componentDeclarations.has(localName)
-        : record.observableDeclarations.has(localName))
-    ) {
-      return { file, localName };
+        : kind === "observable"
+          ? record.observableDeclarations.has(localName)
+          : record.observableFactoryDeclarations.has(localName);
+      if (declared) return { file, localName };
+
+      const factoryName = kind === "observable"
+        ? record.observableFactoryCalls.get(localName)
+        : undefined;
+      if (factoryName) {
+        if (record.observableFactoryDeclarations.has(factoryName)) return { file, localName };
+        const factoryImport = record.imports.get(factoryName);
+        const target = factoryImport
+          ? resolveModule(file, factoryImport.moduleSpecifier)
+          : null;
+        if (
+          factoryImport &&
+          target &&
+          exportedSymbol(
+            target,
+            factoryImport.importedName,
+            "observable-factory",
+            nextVisited,
+            depth + 1
+          )
+        ) {
+          return { file, localName };
+        }
+      }
     }
 
     const reexport = record.reexports.get(exportName);
@@ -174,9 +200,12 @@ function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
   const imports = new Map<string, ImportBinding>();
   const localExports = new Map<string, string>();
   const observableDeclarations = new Set<string>();
+  const observableFactoryCalls = new Map<string, string>();
+  const observableFactoryDeclarations = new Set<string>();
   const reexports = new Map<string, ReexportBinding>();
   const starExports: string[] = [];
   const observableFactories = new Set<string>();
+  const observableTypes = new Set<string>();
   const legendNamespaces = new Set<string>();
 
   for (const statement of sourceFile.statements) {
@@ -192,8 +221,12 @@ function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
       legendNamespaces.add(bindings.name.text);
     } else if (bindings && ts.isNamedImports(bindings)) {
       for (const element of bindings.elements) {
-        if ((element.propertyName?.text ?? element.name.text) === "observable") {
+        const importedName = element.propertyName?.text ?? element.name.text;
+        if (importedName === "observable") {
           observableFactories.add(element.name.text);
+        }
+        if (importedName === "Observable") {
+          observableTypes.add(element.name.text);
         }
       }
     }
@@ -201,6 +234,14 @@ function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
 
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement)) {
+      if (
+        statement.name &&
+        statement.type &&
+        isObservableTypeReference(statement.type, observableTypes)
+      ) {
+        observableFactoryDeclarations.add(statement.name.text);
+        if (hasExport(statement)) localExports.set(statement.name.text, statement.name.text);
+      }
       if (statement.name && isSemanticComponentName(statement.name.text)) {
         componentDeclarations.set(statement.name.text, statement);
         if (hasExport(statement)) localExports.set(statement.name.text, statement.name.text);
@@ -222,6 +263,18 @@ function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
     }
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
+        const initializer = declaration.initializer
+          ? unwrapTransparentExpression(declaration.initializer)
+          : null;
+        if (
+          ts.isIdentifier(declaration.name) &&
+          initializer &&
+          ts.isCallExpression(initializer) &&
+          ts.isIdentifier(initializer.expression)
+        ) {
+          observableFactoryCalls.set(declaration.name.text, initializer.expression.text);
+          if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
+        }
         if (
           ts.isIdentifier(declaration.name) &&
           declaration.initializer &&
@@ -293,9 +346,20 @@ function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
     imports,
     localExports,
     observableDeclarations,
+    observableFactoryCalls,
+    observableFactoryDeclarations,
     reexports,
     starExports,
   };
+}
+
+function isObservableTypeReference(
+  type: ts.TypeNode,
+  observableTypes: ReadonlySet<string>
+): boolean {
+  return ts.isTypeReferenceNode(type) &&
+    ts.isIdentifier(type.typeName) &&
+    observableTypes.has(type.typeName.text);
 }
 
 function isObservableInitializer(

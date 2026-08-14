@@ -31,7 +31,8 @@ Acceptance targets for the first useful release:
 
 At the pinned commits, the analyzer inventories 1,747 hooks across ninety-eight source roots. The corpus currently contains
 503 manual hook labels, including twenty-six non-enforced opportunities (twenty-four currently missed), plus twelve
-grouped-instruction labels that verify exact cluster membership and thirty-one real Legend transaction labels. Run the eval for the
+grouped-instruction labels that verify exact cluster membership, thirty-one real Legend transaction labels, and eleven
+direct-reactivity labels. Run the eval for the
 current precision/recall table; do not copy a passing percentage into documentation because the score must change as
 known misses are added.
 
@@ -76,6 +77,9 @@ Existing batches, repeated or overlapping paths, awaited values,
 unrelated statements, partial runs containing an unproven `.set()`, and test/story/demo files abstain. Adversarial
 fixtures cover Maps, shadowed bindings, nested observable container types, aliases, barrels, and namespace imports;
 full-app impact must remain zero in applications that do not import Legend State.
+Direct-reactivity labels replace only an exact `useValue(() => observablePath.get())` selector with
+`useValue(observablePath)`. The path must be statically addressed and proven as Legend State through a local declaration
+or resolved export. Computed selectors, shallow reads, dynamic element access, and unproven getters abstain.
 Controlled-input labels require one direct value/callback leaf and either no other render read or one complete pure
 validation projection in a disjoint sibling leaf. A separate rendered sibling proves that the owner cut is material.
 The observable stays at the owner across state-independent conditional branches; ref-backed validity, repeated

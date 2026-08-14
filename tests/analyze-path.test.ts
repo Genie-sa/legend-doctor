@@ -93,6 +93,39 @@ test("uses cross-file observable provenance for batching findings", async () => 
   }
 });
 
+test("uses cross-file observable provenance for direct useValue findings", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-read-"));
+  try {
+    await mkdir(path.join(root, "state"), { recursive: true });
+    await writeFile(
+      path.join(root, "state", "theme.ts"),
+      `
+        import { observable } from "@legendapp/state";
+        export const theme$ = observable({ accent: "blue" });
+      `,
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "screen.tsx"),
+      `
+        import { useValue as observe } from "@legendapp/state/react";
+        import { theme$ } from "./state/theme";
+        export function Screen() {
+          return <span>{observe(() => theme$.accent.get())}</span>;
+        }
+      `,
+      "utf8"
+    );
+
+    const report = await analyzePath(root);
+    assert.equal(report.practices.length, 1);
+    assert.equal(report.practices[0]?.action, "pass-observable-to-use-value");
+    assert.equal(report.practices[0]?.location.file, "screen.tsx");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("places an observable subscription at one resolved child call site", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-contract-"));
   await writeFile(

@@ -67,10 +67,74 @@ export function analyzeLegendPractices(
     flush();
   });
 
+  visit(sourceFile, node => {
+    if (!ts.isCallExpression(node)) return;
+    const receiver = directUseValueObservable(node, imports, observableBindings);
+    if (receiver) findings.push(directUseValueFinding(node, receiver, sourceFile, fileName));
+  });
+
   return findings.sort(
     (left, right) =>
       left.location.line - right.location.line || left.location.column - right.location.column
   );
+}
+
+function directUseValueObservable(
+  call: ts.CallExpression,
+  imports: HookImports,
+  observableBindings: ReadonlySet<string>
+): ts.Expression | null {
+  if (
+    !ts.isIdentifier(call.expression) ||
+    !imports.useValue.has(call.expression.text) ||
+    call.arguments.length !== 1
+  ) {
+    return null;
+  }
+  const selector = call.arguments[0];
+  if (
+    !selector ||
+    (!ts.isArrowFunction(selector) && !ts.isFunctionExpression(selector)) ||
+    selector.parameters.length > 0 ||
+    ts.isBlock(selector.body)
+  ) {
+    return null;
+  }
+  const read = unwrapExpression(selector.body);
+  if (
+    !ts.isCallExpression(read) ||
+    read.arguments.length > 0 ||
+    !ts.isPropertyAccessExpression(read.expression) ||
+    read.expression.name.text !== "get"
+  ) {
+    return null;
+  }
+  const receiver = unwrapExpression(read.expression.expression);
+  if (containsElementAccess(receiver)) return null;
+  const root = rootIdentifier(receiver);
+  return root && observableBindings.has(root.text) ? receiver : null;
+}
+
+function directUseValueFinding(
+  call: ts.CallExpression,
+  receiver: ts.Expression,
+  sourceFile: ts.SourceFile,
+  fileName: string
+): LegendPracticeFinding {
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
+  const path = receiver.getText(sourceFile);
+  return {
+    action: "pass-observable-to-use-value",
+    confidence: "certain",
+    disposition: "change",
+    evidence: [
+      "useValue selector only returns one zero-argument get() call",
+      `${path} is a proven Legend observable path`,
+    ],
+    location: { column: character + 1, file: fileName, line: line + 1 },
+    message: `Replace \`useValue(() => ${path}.get())\` with \`useValue(${path})\`; the direct observable form keeps the same subscription with less code.`,
+    practice: "reactivity",
+  };
 }
 
 function isSetStatement(statement: ts.Statement): boolean {

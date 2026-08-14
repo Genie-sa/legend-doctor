@@ -89,6 +89,29 @@ test("resolves exported Legend observables through aliases and barrels", async (
   );
 });
 
+test("resolves observables created by explicitly typed project factories", async () => {
+  await withProject(
+    {
+      "create-store.ts": `
+        import { observable, type Observable as LegendObservable } from "@legendapp/state";
+        export function createStore<T>(value: T): LegendObservable<T> {
+          return observable(value);
+        }
+      `,
+      "theme.ts": `
+        import { createStore as makeStore } from "./create-store";
+        export const theme$ = makeStore({ accent: "blue" });
+      `,
+      "screen.ts": 'import { theme$ as appTheme$ } from "./theme";',
+    },
+    (root, sources) => {
+      const observables = buildSourceIndex(root, sources)
+        .observablesFor(path.join(root, "screen.ts"));
+      assert.deepEqual([...observables], ["appTheme$"]);
+    }
+  );
+});
+
 test("does not infer exported observables from names or unrelated factories", async () => {
   await withProject(
     {

@@ -14,6 +14,7 @@ agent implements and verifies them.
 | Coupled state | One atomic model and one grouped instruction |
 | Render scope | Smallest proven subscriber: field, row, gate, or dialog |
 | Legend writes | Exact transaction: one `.assign()` or one `batch()` |
+| Legend reads | Direct `useValue(observable)` when a selector only unwraps `.get()` |
 | Proof | File, line, confidence, evidence, and review boundary |
 
 ### Value in numbers
@@ -35,8 +36,8 @@ agent implements and verifies them.
 | Inventoried hooks | 1,747 |
 | Manual labels | 503 |
 | Grouped-model checks | 12/12 |
-| Legend practice checks | 31/31 |
-| Unit tests | 242/242 |
+| Legend practice checks | 42/42 |
+| Unit tests | 247/247 |
 | Actionable precision | 100% (275/275) |
 | Actionable recall | 92.3% (275/298) |
 | `use-observable` recall | 93.4% (225/241) |
@@ -297,6 +298,31 @@ batch(() => {
 read that observable. Otherwise the result is `batch()`. The rule requires Legend observables proven locally or through
 a resolved project export. It ignores tests, Maps, animation values, partial write runs, repeated paths, `await`, and
 separated control flow.
+
+### 6. Direct observable read: selector wrapper → observable
+
+**Before — redundant selector**
+
+```ts
+const accent = useValue(() => theme$.customColors.dark.accent.primary.get());
+```
+
+**Finding**
+
+```text
+TrackItem.tsx:62:25 [pass-observable-to-use-value] Replace
+`useValue(() => theme$.customColors.dark.accent.primary.get())` with
+`useValue(theme$.customColors.dark.accent.primary)`; the direct form keeps the same subscription with less code.
+```
+
+**After — direct subscription**
+
+```ts
+const accent = useValue(theme$.customColors.dark.accent.primary);
+```
+
+**Result:** 1 callback and 1 `.get()` are removed. Computed selectors, shallow reads, dynamic paths, and unproven getters
+are left unchanged.
 
 ## How findings are classified
 

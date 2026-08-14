@@ -94,6 +94,64 @@ test("uses batch when assign would change updater or read ordering", () => {
   }
 });
 
+test("passes a proven observable directly to useValue", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const theme$ = observable({ accent: "blue" });
+    export function Theme() {
+      const accent = useValue(() => theme$.accent.get());
+      return <span>{accent}</span>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "pass-observable-to-use-value");
+  assert.equal(finding?.confidence, "certain");
+  assert.match(finding?.message ?? "", /useValue\(theme\$\.accent\)/);
+});
+
+test("uses cross-file observable provenance for direct useValue", () => {
+  assert.deepEqual(
+    analyzeLegendPractices(`
+      import { useValue } from "@legendapp/state/react";
+      import { settings$ } from "./store";
+      export function Theme() {
+        return <span>{useValue(() => settings$.theme.get())}</span>;
+      }
+    `, "fixture.tsx", new Set(["settings$"])).map(finding => finding.action),
+    ["pass-observable-to-use-value"]
+  );
+});
+
+test("keeps computed, shallow, dynamic, and unproven useValue selectors", () => {
+  const source = (selector: string) => analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const state$ = observable({ selected: 1, rows: [{ name: "one" }] });
+    const external = { get: () => 1 };
+    export function Row({ index }: { index: number }) {
+      const value = useValue(${selector});
+      return <span>{String(value)}</span>;
+    }
+  `, "fixture.tsx");
+  for (const selector of [
+    `() => state$.selected.get() === 1`,
+    `() => state$.rows.get(true)`,
+    `() => state$.rows[index].get()`,
+    `() => external.get()`,
+  ]) {
+    assert.deepEqual(source(selector), [], selector);
+  }
+  assert.deepEqual(
+    analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const state$ = observable({ value: 1 });
+      useValue(() => state$.value.get(), { suspense: true });
+    `, "fixture.tsx"),
+    []
+  );
+});
+
 test("recognizes namespace observable and batch calls", () => {
   assert.deepEqual(
     actions(`

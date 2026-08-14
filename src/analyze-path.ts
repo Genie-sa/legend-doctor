@@ -57,12 +57,12 @@ export async function analyzePath(
         context.sourceIndex.componentsFor(file)
       )
     );
-    const mayContainObservableWrite = /\.set\s*\(/.test(sourceText);
-    const importedObservables = mayContainObservableWrite
+    const mayContainLegendPractice = /\.(?:get|set)\s*\(/.test(sourceText);
+    const importedObservables = mayContainLegendPractice
       ? context.sourceIndex.observablesFor(file)
       : new Set<string>();
     if (
-      mayContainObservableWrite &&
+      mayContainLegendPractice &&
       (sourceText.includes("@legendapp/state") || importedObservables.size > 0)
     ) {
       practices.push(

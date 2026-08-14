@@ -21,7 +21,10 @@ export type EffectAction =
 
 export type HookAction = StateAction | EffectAction;
 
-export type LegendPracticeAction = "assign-observable-fields" | "batch-observable-writes";
+export type LegendPracticeAction =
+  | "assign-observable-fields"
+  | "batch-observable-writes"
+  | "pass-observable-to-use-value";
 
 export interface SourceLocation {
   column: number;
@@ -57,7 +60,7 @@ export interface LegendPracticeFinding {
   evidence: readonly string[];
   location: SourceLocation;
   message: string;
-  practice: "assign" | "batch";
+  practice: "assign" | "batch" | "reactivity";
 }
 
 export interface AnalysisReport {
