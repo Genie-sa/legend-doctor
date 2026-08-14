@@ -12,9 +12,9 @@ Pinned repositories:
 - `Radwan-Albahrani/memoria`
 - `LegendApp/legend-music`
 - `excalidraw/excalidraw`
-- `Expensify/App`: focused address, controlled-form, async-status, Promise-chain, navigation-effect, animation-lifecycle, list-render, validation, task, workspace, payment-form, HR-sync, video-control, signer-document, Chronos, and domain targets
+- `Expensify/App`: focused address, controlled-form, async-status, Promise-chain, navigation-effect, animation-lifecycle, list-render, validation, task, workspace, payment-form, HR-sync, video-control, signer-document, Chronos, domain, report-access, and callback-resource targets
 - `formbricks/formbricks`: focused controlled-form, draft, chart-form, element-editor, webhook, billing, segment, tag, integration, async-status, and survey-URL targets
-- `outline/outline`: focused API-key, controlled-form, document-copy, export-form, and icon-picker targets
+- `outline/outline`: focused API-key, controlled-form, document-copy, export-form, icon-picker, split-history, and collection-routing targets
 
 Repository source is not copied into this project. Corpus entries pin a commit and source location, then a local eval
 runner scans checked-out repositories. A recommendation is added to the golden corpus only after manual review.
@@ -29,8 +29,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,969 hooks across 157 source roots. The corpus currently contains
-629 manual hook labels, including 21 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 1,996 hooks across 164 source roots. The corpus currently contains
+639 manual hook labels, including 20 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
 labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
@@ -77,11 +77,12 @@ synchronization effect remains unchanged; opaque helpers, multiple consumers, re
 Companion writes block per-state isolation even when another event independently opens the leaf: splitting a later
 payload/visibility transition across React and Legend would lose the original atomic workflow transaction. Those cases
 remain review until the complete state machine can be modeled and emitted as one grouped observable instruction.
-Dependency-driven external effects stay in React when one standalone command follows non-state dependencies. The command
-may contain one imported, module-scope, or known-global argument builder. A local translator is also accepted when it is
-destructured from `react-i18next`'s imported `useTranslation` and included in the dependency array. Local-state
-synchronization, observable snapshots, cleanup, timers, collection callbacks, arbitrary local builders, and
-multi-command effects do not enter this rule.
+Dependency-driven external effects stay in React when one standalone integration follows non-state dependencies. The
+effect may use one imported/module/global precondition and one command-argument builder; finite membership/string queries
+and a `Date` value are also accepted. A local translator is accepted only when it comes from `react-i18next`'s imported
+`useTranslation` and is listed in the dependency array. Local-state synchronization, observable snapshots, cleanup,
+timers, nested functions, subscriptions, arbitrary constructors or local builders, and multi-command effects remain
+under review.
 Legend transaction labels require two or more consecutive `.set()` calls on distinct observable paths proven by a local
 Legend factory/type or a resolved project export. Direct fields of one object use `.assign()` only when their values do
 not read that observable and are not updater functions; multiple roots and ordering-sensitive values use `batch()`.

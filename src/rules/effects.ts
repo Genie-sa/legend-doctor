@@ -184,7 +184,7 @@ export function classifyEffect(
       action: "keep-effect",
       confidence: "probable",
       derivedState: null,
-      message: "Keep this React effect; one external command follows React dependencies and is not an observable reaction.",
+      message: "Keep this React effect; external integration follows React dependencies and is not an observable reaction.",
     };
   }
 
@@ -294,7 +294,7 @@ function isDependencyDrivenExternalCommandEffect(
     if (
       ts.isAwaitExpression(node) ||
       ts.isYieldExpression(node) ||
-      ts.isNewExpression(node) ||
+      (ts.isNewExpression(node) && !isDependencyEffectValueConstructor(node)) ||
       ts.isDeleteExpression(node) ||
       ts.isPostfixUnaryExpression(node) ||
       (ts.isPrefixUnaryExpression(node) &&
@@ -308,19 +308,24 @@ function isDependencyDrivenExternalCommandEffect(
 
   const call = commands[0]!;
   const nestedCalls = calls.filter(candidate => candidate !== call);
+  const argumentCalls = nestedCalls.filter(candidate =>
+    call.arguments.some(argument => nodeWithin(candidate, argument))
+  );
   if (
-    nestedCalls.length > 1 ||
-    nestedCalls.some(candidate => !call.arguments.some(argument => nodeWithin(candidate, argument))) ||
-    nestedCalls.some(candidate => {
-      const root = callRootIdentifier(candidate.expression);
-      if (root === null || isCallbackDrivenCall(candidate)) return true;
-      if (bindingDeclarationCount(owner, root) !== 0) {
-        return !isImportedTranslationArgument(candidate, owner, dependencies);
-      }
-      return !moduleScopeBindings.has(root) && !KNOWN_GLOBAL_OBJECTS.has(root);
-    }) ||
-    isSubscriptionCall(call) ||
-    call.arguments.some(containsFunctionLike)
+    containsFunctionLike(callback.body) ||
+    argumentCalls.length > 1 ||
+    nestedCalls.length - argumentCalls.length > 1 ||
+    nestedCalls.some(
+      candidate =>
+        !isDependencyEffectSupportCall(
+          candidate,
+          call,
+          owner,
+          dependencies,
+          moduleScopeBindings
+        )
+    ) ||
+    isSubscriptionCall(call)
   ) {
     return false;
   }
@@ -335,6 +340,42 @@ function isDependencyDrivenExternalCommandEffect(
   if (isCallbackDrivenCall(call)) return false;
   const root = callRootIdentifier(callee);
   return root !== null && !["console", "Math", "Promise"].includes(root);
+}
+
+function isDependencyEffectSupportCall(
+  call: ts.CallExpression,
+  command: ts.CallExpression,
+  owner: RuntimeFunctionLike,
+  dependencies: ts.ArrayLiteralExpression,
+  moduleScopeBindings: ReadonlySet<string>
+): boolean {
+  if (
+    isCallbackDrivenCall(call) ||
+    isSubscriptionCall(call)
+  ) {
+    return false;
+  }
+
+  if (
+    ts.isPropertyAccessExpression(call.expression) &&
+    /^(?:endsWith|includes|indexOf|lastIndexOf|startsWith)$/.test(call.expression.name.text)
+  ) {
+    return true;
+  }
+
+  const root = callRootIdentifier(call.expression);
+  if (root === null) return false;
+  if (bindingDeclarationCount(owner, root) !== 0) {
+    return (
+      command.arguments.some(argument => nodeWithin(call, argument)) &&
+      isImportedTranslationArgument(call, owner, dependencies)
+    );
+  }
+  return moduleScopeBindings.has(root) || KNOWN_GLOBAL_OBJECTS.has(root);
+}
+
+function isDependencyEffectValueConstructor(node: ts.NewExpression): boolean {
+  return ts.isIdentifier(node.expression) && node.expression.text === "Date";
 }
 
 function isImportedTranslationArgument(

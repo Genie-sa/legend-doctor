@@ -4238,6 +4238,92 @@ test("keeps one dependency-driven external resource command in React", () => {
   assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect", "keep-effect"]);
 });
 
+test("keeps externally prepared dependency-driven navigation in React", () => {
+  const effects = analyzeSource(`
+    import { useEffect } from "react";
+    import { format, isEmptyObject } from "./values";
+    import { Navigation, ROUTES } from "./navigation";
+    export function EmptyReport({ report }: { report: object | null }) {
+      useEffect(() => {
+        if (!report || isEmptyObject(report)) return;
+        Navigation.dismissModal();
+      }, [report]);
+      return null;
+    }
+    export function Membership({ emails, login }: { emails: string[]; login: string }) {
+      useEffect(() => {
+        if (!emails.includes(login)) return;
+        Navigation.goBack(ROUTES.member(login));
+      }, [emails, login]);
+      return null;
+    }
+    export function CurrentPeriod({ period }: { period: string | null }) {
+      useEffect(() => {
+        const current = format(new Date(), "yyyyMM");
+        if (period?.length !== 6 || period > current) Navigation.dismissModal();
+      }, [period]);
+      return null;
+    }
+    export function RepeatedCommands({ values }: { values: string[] }) {
+      useEffect(() => { for (const value of values) Navigation.navigate(value); }, [values]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "keep-effect",
+    "keep-effect",
+    "keep-effect",
+    "keep-effect",
+  ]);
+});
+
+test("reviews unsafe dependency-driven command preparation", () => {
+  const effects = analyzeSource(`
+    import { useEffect, useState } from "react";
+    import { Navigation } from "./navigation";
+    import { subscribe } from "./resource";
+    import { useSharedValue, withRepeat, withTiming } from "./animation";
+    export function LocalHelper({ ready }: { ready: boolean }) {
+      const [dirty, setDirty] = useState(false);
+      const check = () => { setDirty(true); return ready; };
+      useEffect(() => { if (check()) Navigation.dismissModal(); }, [ready]);
+      return <output>{dirty}</output>;
+    }
+    export function Subscription({ ready }: { ready: boolean }) {
+      useEffect(() => { if (subscribe(ready)) Navigation.dismissModal(); }, [ready]);
+      return null;
+    }
+    export function Scheduled({ ready }: { ready: boolean }) {
+      useEffect(() => { if (setTimeout(() => ready, 0)) Navigation.dismissModal(); }, [ready]);
+      return null;
+    }
+    export function ArbitraryConstructor({ ready }: { ready: boolean }) {
+      useEffect(() => { const value = new Widget(ready); if (value) Navigation.dismissModal(); }, [ready]);
+      return null;
+    }
+    export function HookResource({ speed }: { speed: number }) {
+      const progress = useSharedValue(0);
+      useEffect(() => { progress.set(withRepeat(withTiming(speed))); }, [progress, speed]);
+      return null;
+    }
+    export function CallbackResource({ path }: { path: string }) {
+      useEffect(() => {
+        const onSuccess = () => Navigation.dismissModal();
+        loadResource(path, onSuccess);
+      }, [path]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+  ]);
+});
+
 test("keeps one translated external notification in React", () => {
   const effects = analyzeSource(`
     import { useEffect } from "react";
