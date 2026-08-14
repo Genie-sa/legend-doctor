@@ -3162,7 +3162,7 @@ export const goldCases = [
   },
   ...[
     [106, "records", "review-state", true],
-    [120, "selectedIds", "use-observable", false],
+    [120, "selectedIds", "use-observable", true],
     [122, "isDeleting", "use-observable", true],
   ].map(([line, name, action, enforced]) => ({
     action: action as "review-state" | "use-observable",

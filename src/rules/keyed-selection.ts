@@ -2,6 +2,8 @@ import ts from "typescript";
 
 import {
   bindingDeclarationCount,
+  callRootIdentifier,
+  hookCallName,
   isDeclarationName,
   isNonValueIdentifier,
   isPureExpression,
@@ -57,10 +59,21 @@ export function analyzeKeyedSelections(
   safeCommandStates: ReadonlySet<StateCandidate>,
   statesWithCompanionWrites: ReadonlySet<StateCandidate>
 ): KeyedSelectionAnalysis {
+  const settersByOwner = new Map<RuntimeFunctionLike, Set<string>>();
+  for (const state of states) {
+    if (!state.setterName) continue;
+    const setters = settersByOwner.get(state.owner) ?? new Set<string>();
+    setters.add(state.setterName);
+    settersByOwner.set(state.owner, setters);
+  }
   const collectionStates = new Set(
     states.filter(state =>
-      !statesWithCompanionWrites.has(state) &&
       safeCommandStates.has(state) &&
+      hasIndependentCollectionEventWrite(
+        state,
+        usageByState.get(state),
+        settersByOwner.get(state.owner) ?? new Set()
+      ) &&
       isKeyedLeafCollectionState(state, usageByState.get(state))
     )
   );
@@ -81,6 +94,79 @@ export function analyzeKeyedSelections(
     })
   );
   return { collectionStates, scalarStates, secondaryLeafStates };
+}
+
+function hasIndependentCollectionEventWrite(
+  state: StateCandidate,
+  usage: StateUsage | undefined,
+  ownerSetters: ReadonlySet<string>
+): boolean {
+  if (!state.setterName || !usage) return false;
+  return usage.setterCallNodes.some(call => {
+    const region = nearestNestedFunction(call, state.owner);
+    if (
+      !region ||
+      (!ts.isArrowFunction(region) &&
+        !ts.isFunctionDeclaration(region) &&
+        !ts.isFunctionExpression(region)) ||
+      !region.body ||
+      !callbackIsEventRooted(region, state.owner, "", new Set())
+    ) {
+      return false;
+    }
+    if (
+      (ts.isArrowFunction(region) || ts.isFunctionExpression(region)) &&
+      ts.isCallExpression(region.parent) &&
+      region.parent.arguments.includes(region) &&
+      hookCallName(region.parent) !== "useCallback"
+    ) {
+      return false;
+    }
+
+    let safe = true;
+    visitSkippingNestedFunctions(region.body, region, node => {
+      if (!safe || !ts.isCallExpression(node)) return;
+      if (ts.isIdentifier(node.expression) && node.expression.text === state.setterName) {
+        safe = !setterArgumentCallsOwnerCommand(node, state, ownerSetters);
+        return;
+      }
+      const root = callRootIdentifier(node.expression);
+      if (
+        root &&
+        (ownerSetters.has(root) || bindingDeclarationCount(state.owner, root) > 0)
+      ) {
+        safe = false;
+      }
+    });
+    return safe;
+  });
+}
+
+function setterArgumentCallsOwnerCommand(
+  setterCall: ts.CallExpression,
+  state: StateCandidate,
+  ownerSetters: ReadonlySet<string>
+): boolean {
+  let found = false;
+  for (const argument of setterCall.arguments) {
+    visit(argument, node => {
+      if (
+        found ||
+        !ts.isCallExpression(node) ||
+        !ts.isIdentifier(node.expression) ||
+        node.expression.text === state.setterName
+      ) {
+        return;
+      }
+      if (
+        ownerSetters.has(node.expression.text) ||
+        bindingDeclarationCount(state.owner, node.expression.text) > 0
+      ) {
+        found = true;
+      }
+    });
+  }
+  return found;
 }
 
 
@@ -582,13 +668,19 @@ function isKeyedLeafCollectionState(
       if (
         property.name.text !== "has" ||
         !ts.isCallExpression(property.parent) ||
-        property.parent.expression !== property ||
-        !isRepeatedMembershipRender(property.parent, state.owner)
+        property.parent.expression !== property
       ) {
         unsafe = true;
         return;
       }
-      if (membershipControlsRepeatedMount(property.parent, state.owner)) unsafe = true;
+      const membershipCall = property.parent;
+      const summaryCall = collectionMembershipSummaryCall(membershipCall, state.owner);
+      if (summaryCall) {
+        if (collectionSummaryControlsRepeatedRendering(summaryCall, state.owner)) unsafe = true;
+        return;
+      }
+      if (!isRepeatedMembershipRender(membershipCall, state.owner)) unsafe = true;
+      else if (membershipControlsRepeatedMount(membershipCall, state.owner)) unsafe = true;
       else repeatedMembership = true;
       return;
     }
@@ -601,8 +693,35 @@ function isKeyedLeafCollectionState(
   return repeatedMembership && !unsafe;
 }
 
+function collectionMembershipSummaryCall(
+  membership: ts.CallExpression,
+  owner: RuntimeFunctionLike
+): ts.CallExpression | null {
+  const callback = nearestNestedFunction(membership, owner);
+  if (
+    !callback ||
+    (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+    ts.isBlock(callback.body) ||
+    unwrapTransparentExpression(callback.body) !== membership ||
+    !membershipUsesCallbackKey(membership, callback)
+  ) {
+    return null;
+  }
+  const summary = callback.parent;
+  if (
+    !ts.isCallExpression(summary) ||
+    !summary.arguments.includes(callback) ||
+    !ts.isPropertyAccessExpression(summary.expression) ||
+    !["every", "some"].includes(summary.expression.name.text) ||
+    !ts.isIdentifier(unwrapTransparentExpression(summary.expression.expression))
+  ) {
+    return null;
+  }
+  return summary;
+}
+
 function collectionSummaryControlsRepeatedRendering(
-  summary: ts.PropertyAccessExpression,
+  summary: ts.Expression,
   owner: RuntimeFunctionLike
 ): boolean {
   if (!owner.body) return true;

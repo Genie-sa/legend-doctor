@@ -3381,6 +3381,72 @@ test("moves keyed collection membership into repeated row subscriptions", () => 
   assert.match(finding?.message ?? "", /per-row/);
 });
 
+test("isolates keyed selection with select-all and partial-selection summaries", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
+      const [page, setPage] = useState(1);
+      const [selected, setSelected] = useState<Set<string>>(() => new Set());
+      const allSelected = rows.length > 0 && rows.every(row => selected.has(row.id));
+      const someSelected = rows.some(row => selected.has(row.id));
+      const toggleOne = (id: string) => setSelected(previous => {
+        const next = new Set(previous);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+      const reset = () => { setPage(1); setSelected(new Set()); };
+      return <Screen><Header checked={allSelected ? true : someSelected ? "indeterminate" : false} />
+        <Toolbar /><Summary count={selected.size} /><Filters /><Actions onReset={reset} /><Status />
+        <Help /><Footer page={page} /><Sidebar /><Banner /><Search />
+        {rows.map(row => <Row key={row.id} selected={selected.has(row.id)} onPress={() => toggleOne(row.id)} />)}
+      </Screen>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "selected");
+  assert.equal(finding?.action, "use-observable");
+});
+
+test("keeps keyed selection when summary membership controls row mounting", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
+      const [selected, setSelected] = useState<Set<string>>(() => new Set());
+      const anySelected = rows.some(row => selected.has(row.id));
+      return <Screen><Header /><Toolbar /><Summary /><Filters /><Actions /><Status /><Help /><Footer />
+        <Sidebar /><Banner /><Search />
+        {anySelected && rows.map(row => <Row key={row.id} selected={selected.has(row.id)} onPress={() => setSelected(new Set([row.id]))} />)}
+      </Screen>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "selected");
+  assert.equal(finding?.action, "review-state");
+});
+
+test("requires a synchronous event-rooted collection update without hidden React work", () => {
+  for (const update of [
+    `const markDirty = () => setDirty(true);
+     const toggle = (id: string) => { setSelected(new Set([id])); markDirty(); };`,
+    `const toggle = (id: string) => { setTimeout(() => setSelected(new Set([id])), 10); };`,
+    `const markDirty = () => setDirty(true);
+     const toggle = (id: string) => setSelected(previous => {
+       markDirty();
+       return new Set(previous).add(id);
+     });`,
+  ]) {
+    const finding = analyzeSource(`
+      import { useState } from "react";
+      export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
+        const [dirty, setDirty] = useState(false);
+        const [selected, setSelected] = useState<Set<string>>(() => new Set());
+        ${update}
+        return <Screen><Header dirty={dirty} /><Toolbar /><Summary count={selected.size} /><Filters /><Actions />
+          <Status /><Help /><Footer /><Sidebar /><Banner /><Search />
+          {rows.map(row => <Row key={row.id} selected={selected.has(row.id)} onPress={() => toggle(row.id)} />)}
+        </Screen>;
+      }
+    `, "fixture.tsx").find(candidate => candidate.name === "selected");
+    assert.equal(finding?.action, "review-state");
+  }
+});
+
 test("recognizes an array selection normalized by one immutable local Set", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
@@ -3448,6 +3514,31 @@ test("recognizes keyed collection membership in a JSX renderItem callback", () =
       );
       return <Screen><Header /><Toolbar /><Summary count={selected.size} /><Filters /><Actions /><Status /><Help /><Footer /><Sidebar /><Banner /><Search />
         <List data={rows} renderItem={renderItem} extraData={selected} />
+      </Screen>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+});
+
+test("ignores callback dependency references when proving a keyed event command", () => {
+  const [finding] = analyzeSource(`
+    import { useCallback, useState } from "react";
+    export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
+      const [selected, setSelected] = useState<Set<string>>(() => new Set());
+      const toggle = useCallback((id: string) => {
+        vibrate();
+        setSelected(previous => {
+          const next = new Set(previous);
+          next.has(id) ? next.delete(id) : next.add(id);
+          return next;
+        });
+      }, []);
+      const renderItem = useCallback(({ item }: { item: { id: string } }) =>
+        <Row selected={selected.has(item.id)} onPress={() => toggle(item.id)} />,
+        [selected, toggle]
+      );
+      return <Screen><Header /><Toolbar /><Summary count={selected.size} /><Filters /><Actions /><Status />
+        <Help /><Footer /><Sidebar /><Banner /><Search /><List data={rows} renderItem={renderItem} />
       </Screen>;
     }
   `, "fixture.tsx");

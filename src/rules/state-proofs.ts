@@ -198,6 +198,7 @@ export function callbackIsEventRooted(
     ) {
       return;
     }
+    if (isHookDependencyReference(node, new Set(["useCallback"]))) return;
     referenced = true;
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     if (
