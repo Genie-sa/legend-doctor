@@ -45,6 +45,8 @@ resolution is provenance rather than proof of leaf ownership; production migrati
 cannot move into conditional, keyed, or repeated child instances; and an isolated observable conversion must actually
 eliminate an owner render across its companion update cluster. Effect rules distinguish recognizable disposer protocols
 from arbitrary returned calls and treat `useMount` as a probable lifecycle choice because it changes Strict Mode replay.
+Keyed collection advice is proven from event-rooted writes, stable row keys, per-row membership, and mount/cardinality
+safety; state variable names are not evidence.
 The Genie holdout verifies that an adjacent `legend-doctor keep-react-effect` or existing `react-effect-allow`
 directive is an explicit React-lifecycle ownership decision. The effect remains inventoried as `keep-effect`; detached
 comments and string literals do not apply. Conditional `useMount` and `useUnmount` advice remains visible without

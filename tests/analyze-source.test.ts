@@ -3806,6 +3806,46 @@ test("isolates keyed selection with select-all and partial-selection summaries",
   assert.equal(finding?.action, "use-observable");
 });
 
+test("uses keyed collection behavior rather than state names", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function Gallery({ rows }: { rows: Array<{ id: string; src: string }> }) {
+      const [failures, setFailures] = useState<Set<string>>(() => new Set());
+      const markFailed = (id: string) => setFailures(previous => new Set(previous).add(id));
+      return <Screen><Header /><Toolbar /><Summary count={failures.size} /><Filters /><Actions />
+        <Status /><Help /><Footer /><Sidebar /><Banner /><Search />
+        {rows.map(row => <ImageRow key={row.id} fallback={failures.has(row.id)} onError={() => markFailed(row.id)} />)}
+      </Screen>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "failures");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /per-row/);
+});
+
+test("rejects lifecycle and mount-control collections without name heuristics", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function LifecycleRows({ rows }: { rows: Array<{ id: string }> }) {
+      const [mounted, setMounted] = useState<Set<string>>(() => new Set());
+      useEffect(() => setMounted(new Set(rows.map(row => row.id))), [rows]);
+      return <Screen><Header /><Toolbar /><Summary /><Filters /><Actions /><Status /><Help /><Footer />
+        <Sidebar /><Banner /><Search />
+        {rows.map(row => mounted.has(row.id) && <Row key={row.id} />)}
+      </Screen>;
+    }
+    export function FailedRows({ rows }: { rows: Array<{ id: string }> }) {
+      const [failed, setFailed] = useState<Set<string>>(() => new Set());
+      return <Screen><Header /><Toolbar /><Summary /><Filters /><Actions /><Status /><Help /><Footer />
+        <Sidebar /><Banner /><Search />
+        {rows.map(row => !failed.has(row.id) && <Row key={row.id} onError={() => setFailed(new Set([row.id]))} />)}
+      </Screen>;
+    }
+  `, "fixture.tsx");
+  for (const name of ["mounted", "failed"]) {
+    assert.notEqual(findings.find(candidate => candidate.name === name)?.action, "use-observable");
+  }
+});
+
 test("keeps keyed selection when summary membership controls row mounting", () => {
   const finding = analyzeSource(`
     import { useState } from "react";

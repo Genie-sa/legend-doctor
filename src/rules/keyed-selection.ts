@@ -620,7 +620,6 @@ function isKeyedLeafCollectionState(
 ): boolean {
   if (
     !usage ||
-    !isKeyedCollectionName(state.valueName) ||
     usage.effectReads > 0
   ) {
     return false;
@@ -904,11 +903,6 @@ function isListExtraDataReference(node: ts.Identifier, owner: RuntimeFunctionLik
 
 function isInsideOwner(node: ts.Node, owner: RuntimeFunctionLike): boolean {
   return node.getStart() >= owner.getStart() && node.end <= owner.end;
-}
-
-function isKeyedCollectionName(name: string): boolean {
-  return /(?:selected|selection|added|checked|chosen|open|expanded|requested)/i.test(name) &&
-    !/(?:mounted|failed|loaded|requestedAt)/i.test(name);
 }
 
 function isCollectionCopyArgument(node: ts.Identifier): boolean {
