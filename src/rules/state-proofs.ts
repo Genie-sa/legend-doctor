@@ -363,6 +363,22 @@ export function isInsideJsxEventCallback(node: ts.Node, boundary: RuntimeFunctio
 }
 
 export function isSynchronousRenderCallback(node: ts.FunctionLikeDeclaration): boolean {
+  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+    let expression: ts.Expression = node;
+    while (
+      (ts.isParenthesizedExpression(expression.parent) ||
+        ts.isAsExpression(expression.parent) ||
+        ts.isTypeAssertionExpression(expression.parent) ||
+        ts.isSatisfiesExpression(expression.parent) ||
+        ts.isNonNullExpression(expression.parent)) &&
+      expression.parent.expression === expression
+    ) {
+      expression = expression.parent;
+    }
+    if (ts.isCallExpression(expression.parent) && expression.parent.expression === expression) {
+      return true;
+    }
+  }
   const parent = node.parent;
   if (!ts.isCallExpression(parent)) return false;
   if (ts.isIdentifier(parent.expression) && parent.expression.text === "useMemo") return true;

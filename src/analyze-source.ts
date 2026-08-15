@@ -1855,7 +1855,8 @@ function classifyState(
     usage.jsxTargets.size === 0 &&
     !usage.shadowed &&
     !usage.escaped &&
-    (usage.eventReads === 0 || hasOnlyEventCommandReads(state))
+    ((usage.eventReads === 0 && usage.effectWrites === 0) ||
+      hasOnlyEventCommandReads(state))
   ) {
     return {
       action: "use-ref",

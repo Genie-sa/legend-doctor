@@ -4184,6 +4184,60 @@ test("does not call lifecycle or render-callback state command-only", () => {
   assert.notEqual(renderCallback?.action, "use-ref");
 });
 
+test("counts immediately invoked render computations as render reads", () => {
+  const finding = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Filter({ custom }: { custom: boolean }) {
+      const [enabled, setEnabled] = useState(custom);
+      useEffect(() => setEnabled(custom), [custom]);
+      const selected = (() => enabled ? "custom" : "preset")();
+      return <Select value={selected} onChange={() => setEnabled(true)} />;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+  assert.match(finding?.evidence[1] ?? "", /reads: render 1/);
+});
+
+test("does not call custom-hook reactions or returned commands event-rooted", () => {
+  const focusReaction = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Map() {
+      const [idle, setIdle] = useState(false);
+      useEffect(() => setIdle(false), []);
+      useFocusEffect(() => { if (idle) fitBounds(); });
+      return <MapView onIdle={() => setIdle(true)} />;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(focusReaction?.action, "use-ref");
+
+  const returnedCommand = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function useSteps(source: string) {
+      const [next, setNext] = useState("");
+      useEffect(() => setNext(source), [source]);
+      const navigate = () => go(next);
+      return { navigate };
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(returnedCommand?.action, "use-ref");
+});
+
+test("does not call a value shared by an event and an effect-owned callback command-only", () => {
+  const finding = analyzeSource(`
+    import { useCallback, useEffect, useState } from "react";
+    export function Editor() {
+      const [edited, setEdited] = useState(false);
+      const confirm = useCallback(() => { if (edited) save(); }, [edited]);
+      useEffect(() => {
+        window.addEventListener("keydown", confirm);
+        return () => window.removeEventListener("keydown", confirm);
+      }, [confirm]);
+      return <Input onChange={() => { if (!edited) setEdited(true); }} />;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+});
+
 test("deletes setter-only state when no assigned value is consumed", () => {
   assert.deepEqual(
     actions(`

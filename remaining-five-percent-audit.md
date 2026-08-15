@@ -4,12 +4,12 @@ This file records evidence, decisions, measurements, and rejected approaches for
 
 ## System baseline
 
-- Production analyzer: 32 TypeScript modules and 12,770 lines.
+- Production analyzer: 32 TypeScript modules and 12,787 lines.
 - Largest orchestration module: `src/analyze-source.ts` at 3,087 lines; rule families are separated under `src/rules/`.
 - Full real-app scan: 6,147 hooks across 12 app roots: 3,647 `useState`, 2,500 `useEffect`, 77 Legend practice findings.
-- Pinned scored corpus after closeout: 2,233 hooks across 199 focused targets and 744 manual labels.
-- Final quality: 100% actionable precision (369/369), 93.9% actionable recall (369/393), 13/13 state groups, 77/77 Legend practices.
-- Validation: 420/420 tests under strict TypeScript settings.
+- Pinned scored corpus after closeout: 2,277 hooks across 208 focused targets and 754 manual labels.
+- Final quality: 100% actionable precision (371/371), 93.0% actionable recall (371/399), 13/13 state groups, 77/77 Legend practices.
+- Validation: 423/423 tests under strict TypeScript settings.
 
 ## Goal 1 findings
 
@@ -99,9 +99,9 @@ Adversarial gaps found and fixed at the shared boundary: conditional/outside con
 ## Final verification
 
 - TypeScript: pass under strict project settings.
-- Unit tests: 420/420.
-- Pinned eval: 2,233 hooks, 715/744 labels, 29 declared misses, 13/13 groups, 77/77 practices.
-- Hook quality: 100% actionable precision (369/369), 93.9% actionable recall (369/393).
+- Unit tests: 423/423.
+- Pinned eval: 2,277 hooks, 721/754 labels, 33 declared misses, 13/13 groups, 77/77 practices.
+- Hook quality: 100% actionable precision (371/371), 93.0% actionable recall (371/399).
 - `use-observable`: 100% precision (307/307), 93.9% recall (307/327).
 - Bounded state-flow correctness changed zero findings. Final React commit, callback-contract, and atomicity hardening demoted sixteen uncertain automatic actions to review.
 - Before that safety closeout, reverting the named-effect experiment restored all eleven finding sets to their accepted baseline.
@@ -153,8 +153,8 @@ No new opportunity detector shipped. The only new detector is a conservative Rea
 
 - The named-effect cohort contained eight cases. Five resolved locally, four fit one proof, and only two improved a non-actionable `keep-effect` classification. The experiment was reverted.
 - The remaining 21 labels contain 16 actionable opportunities split across at least five proof families. Closing them now would require broader flow, cross-file ownership, lifecycle, or atomicity analysis.
-- All 420 tests pass after reverting the experiments and completing the safety closeout.
-- At the end of the opportunity-only re-audit, the pinned eval remained 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices. The later safety closeout produced 701/730 with 29 explicit misses; the subsequent Hoalu expansion produced the current 715/744 result without adding a miss.
+- All 423 tests pass after reverting the experiments and completing the safety closeout.
+- At the end of the opportunity-only re-audit, the pinned eval remained 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices. The later safety closeout produced 701/730 with 29 explicit misses; Hoalu produced 715/744, and the lifecycle command audit produced the current 721/754 with 33 explicit misses.
 
 Exact app impact from the opportunity-only re-audit:
 
@@ -201,12 +201,17 @@ The final run extended the same commit boundary across proven React `useEffect`,
 `useInsertionEffect` callbacks. It resolves namespace calls, imported aliases, named functions, immutable aliases, and
 `useCallback` bindings while ignoring local lookalikes.
 
-Compared with the preceding private release, the 12 full app roots changed 16 hook actions and zero Legend practice
+The first callback expansion exposed nine new command-only candidates. A pinned-source audit kept only the two with a
+complete event-command proof and rejected focus reactions, render-time IIFEs, returned custom-hook commands, and opaque
+component callback contracts. Four manually valid but unproven ref opportunities remain explicit non-enforced labels.
+
+Compared with the preceding private release, the final 12-root output changes ten hook actions and zero Legend practice
 actions:
 
-- Nine command-only states moved from review to `use-ref`; their lifecycle hook and dependency timing remain React-owned.
-- Seven commit-sensitive states moved from `keep-state` to explicit review because their render ownership is not proven.
-- Excalidraw changed one action, Expensify eight, Formbricks one, and Outline six. The other eight roots changed zero.
+- Two lifecycle-written command values move from review to `use-ref`; their React hook and dependency timing remain unchanged.
+- Seven commit-sensitive states move from `keep-state` to explicit review.
+- One pre-existing `use-ref` finding moves to review because an IIFE consumes it during render.
+- Excalidraw changes one action, Expensify three, and Outline six. The other nine roots change zero.
 
-The scored corpus remains 2,233 hooks, 715/744 labels, 29 declared misses, 13/13 groups, and 77/77 practices. Actionable
-precision remains 100% (369/369), actionable recall 93.9% (369/393), and `use-ref` is 9/9 for both precision and recall.
+The scored corpus is now 2,277 hooks, 721/754 labels, 33 declared misses, 13/13 groups, and 77/77 practices. Actionable
+precision is 100% (371/371), actionable recall 93.0% (371/399), and `use-ref` precision is 100% (11/11).
