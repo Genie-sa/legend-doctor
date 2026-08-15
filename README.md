@@ -38,7 +38,7 @@ Measured on pinned real applications:
 | Source targets | 190 |
 | Hooks analyzed | 2,127 |
 | Manual labels | 716 |
-| Unit tests | 351/351 |
+| Unit tests | 379/379 |
 | Actionable precision | 100% (366/366) |
 | Actionable recall | 95.6% (366/383) |
 | Legend practice precision | 100% (76/76) |
@@ -58,6 +58,10 @@ Run Legend Doctor before and after every React state, effect, or Legend observab
 6. Finish when every changed hook is accounted for and no unsafe finding appears.
 
 `--actionable` returns `change` and `candidate`. Omit it to include intentional `keep` findings.
+
+For parser and analysis coverage, use `--json --coverage`. It reports every discovered supported source file and runtime
+function, parser diagnostics, and whether parsing, semantic analysis, detectors, or future lowering ran or were skipped.
+The normal report stays unchanged.
 
 When project knowledge says an effect must keep React lifecycle semantics, place a directive immediately above it:
 

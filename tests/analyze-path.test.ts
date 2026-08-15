@@ -4,7 +4,17 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { analyzePath, createAnalysisContext } from "../src/analyze-path.js";
+import {
+  analyzeLegendPractices,
+  analyzeLegendPracticesFile,
+} from "../src/analyze-legend-practices.js";
+import {
+  analyzePath,
+  analyzePathDetailed,
+  createAnalysisContext,
+} from "../src/analyze-path.js";
+import { analyzeSource, analyzeSourceFile } from "../src/analyze-source.js";
+import { AnalysisProject } from "../src/analysis-project.js";
 
 test("scans source files deterministically and ignores generated directories", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-test-"));
@@ -24,6 +34,253 @@ test("scans source files deterministically and ignores generated directories", a
   assert.equal(report.files, 1);
   assert.equal(report.hooks.states, 1);
   assert.equal(report.findings[0]?.location.file, path.join("src", "component.tsx"));
+});
+
+test("reports parser diagnostics and complete coverage without changing the default report", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-coverage-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "broken.ts"),
+    'import { useState } from "react"; const [value] = useState(;',
+    "utf8"
+  );
+  await writeFile(path.join(root, "valid.ts"), "export const value = 1;", "utf8");
+
+  const detailed = await analyzePathDetailed(root);
+  const ordinary = await analyzePath(root);
+
+  assert.deepEqual(detailed.report, ordinary);
+  assert.equal(detailed.diagnostics.parser.length, 1);
+  assert.equal(detailed.diagnostics.parser[0]?.file, "broken.ts");
+  assert.deepEqual(detailed.diagnostics.semantic, []);
+  assert.equal(detailed.coverage.entries.length, 2);
+  assert.deepEqual(
+    detailed.coverage.entries.map(entry => [
+      entry.target.file,
+      entry.stages.parser.reason.code,
+      entry.stages.detector.status,
+    ]),
+    [
+      ["broken.ts", "parser-recovered", "analyzed"],
+      ["valid.ts", "parser-complete", "analyzed"],
+    ]
+  );
+});
+
+test("inventories named and anonymous runtime functions in coverage", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-functions-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "screen.ts"),
+    `
+      export function Screen() {
+        return [1].map(value => value + 1);
+      }
+    `,
+    "utf8"
+  );
+
+  const detailed = await analyzePathDetailed(root);
+  const functions = detailed.coverage.entries.filter(entry => entry.target.kind === "function");
+
+  assert.deepEqual(
+    functions.map(entry => entry.target.kind === "function" ? entry.target.name : null),
+    ["Screen", null]
+  );
+  assert.ok(functions.every(entry => entry.stages.detector.status === "analyzed"));
+  assert.ok(functions.every(entry => entry.stages.lowering.reason.code === "lowering-not-implemented"));
+});
+
+test("excludes ambient declarations, overload signatures, and abstract methods from runtime coverage", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-runtime-only-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "contracts.ts"),
+    `
+      declare function ambient(): void;
+      function overloaded(value: string): string;
+      function overloaded(value: string) { return value; }
+      abstract class Base { abstract method(): void; }
+    `,
+    "utf8"
+  );
+
+  const detailed = await analyzePathDetailed(root);
+  const names = detailed.coverage.entries.flatMap(entry =>
+    entry.target.kind === "function" ? [entry.target.name] : []
+  );
+
+  assert.deepEqual(names, ["overloaded"]);
+});
+
+test("localizes parser recovery to the overlapping function", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-recovery-range-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "screen.ts"),
+    `
+      function broken() { const value = ; return value; }
+      function healthy() { return 1; }
+    `,
+    "utf8"
+  );
+
+  const detailed = await analyzePathDetailed(root);
+  const functions = detailed.coverage.entries.filter(entry => entry.target.kind === "function");
+
+  assert.deepEqual(
+    functions.map(entry => [
+      entry.target.kind === "function" ? entry.target.name : null,
+      entry.stages.parser.reason.code,
+      entry.stages.detector.status,
+    ]),
+    [
+      ["broken", "parser-recovered-in-function", "unknown"],
+      ["healthy", "parser-complete", "analyzed"],
+    ]
+  );
+});
+
+test("preserves the path-level Legend practice eligibility boundary", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-practice-eligibility-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "legacy.ts"),
+    `
+      import { useSelector } from "@legendapp/state/react";
+      export function read(value: string) { return useSelector(() => value); }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.deepEqual(report.practices, []);
+});
+
+test("shares one cached AST across source indexing and both detector families", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const statePath = path.join(root, "state.ts");
+  const leafPath = path.join(root, "Leaf.tsx");
+  const screenPath = path.join(root, "Screen.tsx");
+  await writeFile(
+    statePath,
+    'import { observable } from "@legendapp/state"; export const profile$ = observable({ name: "Ada" });',
+    "utf8"
+  );
+  await writeFile(
+    leafPath,
+    "export function Leaf({ busy }: { busy: boolean }) { return <span>{String(busy)}</span>; }",
+    "utf8"
+  );
+  const screenSource = `
+    import { useState } from "react";
+    import { useValue } from "@legendapp/state/react";
+    import { Leaf } from "./Leaf";
+    import { profile$ } from "./state";
+    export function Screen() {
+      const [busy, setBusy] = useState(false);
+      const profile = useValue(profile$);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+        <button onClick={() => setBusy(true)}>Run</button><Leaf busy={busy} /><span>{profile.name}</span>
+      </main>;
+    }
+  `;
+  await writeFile(screenPath, screenSource, "utf8");
+
+  const context = await createAnalysisContext(root);
+  const file = context.project.getFile(screenPath);
+  assert.ok(file);
+  assert.strictEqual(context.project.getFile(screenPath)?.sourceFile, file.sourceFile);
+  const reportName = "Screen.tsx";
+  const components = context.sourceIndex.componentsFor(screenPath);
+  const observables = context.sourceIndex.observablesFor(screenPath);
+  const factories = context.sourceIndex.observableFactoriesFor(screenPath);
+
+  assert.deepEqual(
+    analyzeSourceFile(file, reportName, components),
+    analyzeSource(screenSource, reportName, components)
+  );
+  assert.deepEqual(
+    analyzeLegendPracticesFile(file, reportName, observables, factories),
+    analyzeLegendPractices(screenSource, reportName, observables, factories)
+  );
+
+  const report = await analyzePath(root, context);
+  assert.equal(report.findings.find(finding => finding.name === "busy")?.action, "use-observable");
+  assert.equal(report.practices[0]?.action, "narrow-use-value-subscription");
+});
+
+test("keeps display-path harness semantics separate from cached absolute identity", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-display-path-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const harnessDirectory = path.join(root, "src", "__tests__");
+  await mkdir(harnessDirectory, { recursive: true });
+  const harnessPath = path.join(harnessDirectory, "Screen.tsx");
+  await writeFile(
+    harnessPath,
+    `
+      import { useState } from "react";
+      export function Screen() {
+        const [busy, setBusy] = useState(false);
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+          <button onClick={() => setBusy(true)} /><Leaf busy={busy} />
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const directoryFinding = (await analyzePath(root)).findings[0];
+  const focusedFinding = (await analyzePath(harnessPath)).findings[0];
+  assert.equal(directoryFinding?.action, "keep-state");
+  assert.equal(directoryFinding?.location.file, path.join("src", "__tests__", "Screen.tsx"));
+  assert.equal(focusedFinding?.action, "use-observable");
+  assert.equal(focusedFinding?.location.file, "Screen.tsx");
+});
+
+test("keeps JavaScript and JSX practice results stable through the cached parser", () => {
+  for (const extension of ["js", "jsx", "mjs", "cjs"] as const) {
+    const fileName = `screen.${extension}`;
+    const source = `
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const profile$ = observable({ name: "Ada" });
+      /** @returns {string} */
+      export function read() {
+        const profile = useValue(profile$);
+        return profile.name;
+      }
+    `;
+    const file = new AnalysisProject(new Map([[fileName, source]])).files[0];
+    assert.ok(file);
+    assert.deepEqual(
+      analyzeLegendPracticesFile(file, fileName),
+      analyzeLegendPractices(source, fileName),
+      extension
+    );
+  }
+});
+
+test("reports optional semantic coverage only for an explicit tsconfig shard", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-semantic-context-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const sourcePath = path.join(root, "screen.ts");
+  const configFilePath = path.join(root, "tsconfig.json");
+  await writeFile(sourcePath, "export const value: string = 'ready';", "utf8");
+  await writeFile(
+    configFilePath,
+    JSON.stringify({ compilerOptions: { strict: true }, files: ["screen.ts"] }),
+    "utf8"
+  );
+
+  const context = await createAnalysisContext(root, { configFilePath });
+  const detailed = await analyzePathDetailed(root, context);
+
+  assert.ok(context.semanticContext);
+  assert.deepEqual(detailed.diagnostics.semantic, []);
+  assert.equal(detailed.coverage.entries[0]?.stages.semantic.status, "analyzed");
 });
 
 test("does not require application component provenance for a focused call-site wrapper", async () => {
@@ -58,6 +315,23 @@ test("does not require application component provenance for a focused call-site 
   assert.equal(contextual.files, 1);
   assert.equal(contextual.findings[0]?.location.file, "Screen.tsx");
   assert.equal(contextual.findings[0]?.action, "use-observable");
+});
+
+test("rejects targets outside a shared analysis project", async t => {
+  const contextRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-root-"));
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-target-root-"));
+  t.after(() => rm(contextRoot, { force: true, recursive: true }));
+  t.after(() => rm(targetRoot, { force: true, recursive: true }));
+  await writeFile(path.join(contextRoot, "owned.ts"), "export const owned = true;", "utf8");
+  const targetPath = path.join(targetRoot, "foreign.ts");
+  await writeFile(targetPath, "export const foreign = true;", "utf8");
+
+  const context = await createAnalysisContext(contextRoot);
+
+  await assert.rejects(
+    analyzePath(targetPath, context),
+    /analysis context does not own target file/
+  );
 });
 
 test("uses cross-file observable provenance for batching findings", async () => {

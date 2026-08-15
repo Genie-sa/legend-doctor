@@ -29,6 +29,7 @@ import {
   visitSkippingNestedRuntimeFunctions,
 } from "./ast.js";
 import { collectHookImports, isImportedHookCall, isLocalHookCall, type HookImports } from "./imports.js";
+import type { AnalysisFile } from "./analysis-project.js";
 import { findAsyncLeafStatuses } from "./rules/async-leaf-status.js";
 import {
   commonRenderGateSubtree,
@@ -181,6 +182,22 @@ export function analyzeSource(
     true,
     scriptKindForFile(fileName)
   );
+  return analyzeParsedSource(sourceFile, fileName, sourceComponents);
+}
+
+export function analyzeSourceFile(
+  file: AnalysisFile,
+  reportFileName: string,
+  sourceComponents: ReadonlySet<string> = new Set()
+): HookFinding[] {
+  return analyzeParsedSource(file.sourceFile, reportFileName, sourceComponents);
+}
+
+function analyzeParsedSource(
+  sourceFile: ts.SourceFile,
+  fileName: string,
+  sourceComponents: ReadonlySet<string>
+): HookFinding[] {
   const imports = collectHookImports(sourceFile);
   const localComponents = collectLocalComponents(sourceFile);
   const states: StateCandidate[] = [];
@@ -190,6 +207,7 @@ export function analyzeSource(
   const useObservableBindingsByOwner = collectStableUseObservableBindings(sourceFile, imports);
   const moduleScopeBindings = collectModuleScopeBindings(sourceFile);
   const reactiveMutationsByOwner = collectReactiveMutationBindings(sourceFile);
+  const nonProductionHarness = isNonProductionHarness(fileName);
 
   visit(sourceFile, node => {
     if (!ts.isCallExpression(node)) return;
@@ -307,7 +325,8 @@ export function analyzeSource(
       effect.owner ? useObservableBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS : EMPTY_BINDINGS,
       imports.useRef,
       imports.reactNamespaces,
-      moduleScopeBindings
+      moduleScopeBindings,
+      nonProductionHarness
     );
     effectClassifications.set(effect, classification);
     if (classification.derivedState) derivedStates.add(classification.derivedState);
@@ -345,6 +364,7 @@ export function analyzeSource(
           localComponents,
           sourceComponents,
           sourceFile,
+          nonProductionHarness,
           subtreeByState.get(state) ?? null,
           safeCommandStates.has(state),
           observableSelectionOwners.has(state.owner),
@@ -1519,6 +1539,7 @@ function classifyState(
   localComponents: ReadonlySet<string>,
   sourceComponents: ReadonlySet<string>,
   sourceFile: ts.SourceFile,
+  nonProductionHarness: boolean,
   subtree: StateSubtree | null,
   hasSafeCommands: boolean,
   belongsToObservableSelection: boolean,
@@ -1534,7 +1555,7 @@ function classifyState(
   isKeyedScalarWithSecondary: boolean,
   siblingRenderCut: SiblingRenderCut | null
 ): ClassifiedState {
-  if (isNonProductionHarness(sourceFile.fileName)) {
+  if (nonProductionHarness) {
     return {
       action: "keep-state",
       confidence: "certain",

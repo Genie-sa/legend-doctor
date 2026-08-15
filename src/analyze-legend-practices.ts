@@ -8,6 +8,7 @@ import {
 } from "./analysis-ast.js";
 import { isNonProductionHarness, visit } from "./ast.js";
 import { collectHookImports, type HookImports } from "./imports.js";
+import type { AnalysisFile } from "./analysis-project.js";
 import { findLegacyUseValuePractices } from "./rules/legacy-use-value.js";
 import { findObservableCloneWritePractices } from "./rules/observable-clone-writes.js";
 import {
@@ -32,7 +33,6 @@ export function analyzeLegendPractices(
   importedObservables: ReadonlySet<string> = new Set(),
   importedObservableFactories: ReadonlySet<string> = new Set()
 ): LegendPracticeFinding[] {
-  if (isNonProductionHarness(fileName)) return [];
   const sourceFile = ts.createSourceFile(
     fileName,
     sourceText,
@@ -42,6 +42,37 @@ export function analyzeLegendPractices(
       ? ts.ScriptKind.TSX
       : ts.ScriptKind.TS
   );
+  return analyzeParsedLegendPractices(
+    sourceFile,
+    fileName,
+    importedObservables,
+    importedObservableFactories
+  );
+}
+
+export function analyzeLegendPracticesFile(
+  file: AnalysisFile,
+  reportFileName: string,
+  importedObservables: ReadonlySet<string> = new Set(),
+  importedObservableFactories: ReadonlySet<string> = new Set(),
+  eligible = true
+): LegendPracticeFinding[] {
+  if (!eligible) return [];
+  return analyzeParsedLegendPractices(
+    file.sourceFile,
+    reportFileName,
+    importedObservables,
+    importedObservableFactories
+  );
+}
+
+function analyzeParsedLegendPractices(
+  sourceFile: ts.SourceFile,
+  fileName: string,
+  importedObservables: ReadonlySet<string>,
+  importedObservableFactories: ReadonlySet<string>
+): LegendPracticeFinding[] {
+  if (isNonProductionHarness(fileName)) return [];
   const imports = collectHookImports(sourceFile);
   const lacksObservableSources =
     imports.observable.size === 0 &&

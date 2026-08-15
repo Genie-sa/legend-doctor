@@ -17,7 +17,6 @@ import {
 } from "../analysis-ast.js";
 import {
   findAncestorUntil,
-  isNonProductionHarness,
   isRuntimeFunctionLike,
   nearestNestedFunction,
   nodeWithin,
@@ -44,7 +43,8 @@ export function classifyEffect(
   useObservableBindings: ReadonlySet<string>,
   useRefBindings: ReadonlySet<string>,
   reactNamespaces: ReadonlySet<string>,
-  moduleScopeBindings: ReadonlySet<string>
+  moduleScopeBindings: ReadonlySet<string>,
+  nonProductionHarness: boolean
 ): ClassifiedEffect {
   if (hasReactEffectOwnershipDirective(effect)) {
     return {
@@ -82,7 +82,8 @@ export function classifyEffect(
     effect,
     stateBySetter,
     stateByValue,
-    usageBySetter
+    usageBySetter,
+    nonProductionHarness
   );
   if (eventReset) {
     return {
@@ -909,14 +910,15 @@ function findMutationSiteReset(
   effect: EffectCandidate,
   stateBySetter: ReadonlyMap<string, StateCandidate>,
   stateByValue: ReadonlyMap<string, StateCandidate>,
-  usageBySetter: ReadonlyMap<string, StateUsage>
+  usageBySetter: ReadonlyMap<string, StateUsage>,
+  nonProductionHarness: boolean
 ): MutationSiteReset | null {
   if (
     !effect.callback ||
     !effect.owner ||
     !effect.dependencies ||
     effect.dependencies.elements.length === 0 ||
-    isNonProductionHarness(effect.call.getSourceFile().fileName)
+    nonProductionHarness
   ) {
     return null;
   }

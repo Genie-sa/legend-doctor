@@ -2,7 +2,12 @@ import path from "node:path";
 
 import ts from "typescript";
 
-import { scriptKindForFile } from "./ast.js";
+import {
+  AnalysisProject,
+  isSupportedAnalysisFile,
+  type AnalysisFile,
+} from "./analysis-project.js";
+import { pathIdentityKey } from "./path-identity.js";
 
 interface ImportBinding {
   importedName: string;
@@ -44,9 +49,21 @@ export function buildSourceIndex(
   root: string,
   sources: ReadonlyMap<string, string>
 ): SourceIndex {
+  return buildSourceIndexFromFiles(
+    root,
+    new AnalysisProject(
+      new Map([...sources].filter(([fileName]) => isSupportedAnalysisFile(fileName)))
+    ).files
+  );
+}
+
+export function buildSourceIndexFromFiles(
+  root: string,
+  files: readonly AnalysisFile[]
+): SourceIndex {
   const records = new Map<string, ModuleRecord>();
-  for (const [file, source] of sources) {
-    records.set(normalizeFile(file), moduleRecord(source, file));
+  for (const file of files) {
+    records.set(normalizeFile(file.identityPath), moduleRecord(file.sourceFile));
   }
 
   const compilerContexts = new Map<string, CompilerContext>();
@@ -195,14 +212,7 @@ function compilerContextFor(
   return context;
 }
 
-function moduleRecord(sourceText: string, fileName: string): ModuleRecord {
-  const sourceFile = ts.createSourceFile(
-    fileName,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKindForFile(fileName)
-  );
+function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const componentDeclarations = new Map<string, ComponentFunction>();
   const imports = new Map<string, ImportBinding>();
   const localExports = new Map<string, string>();
@@ -449,5 +459,5 @@ function hasDefault(node: ts.Node & { modifiers?: ts.NodeArray<ts.ModifierLike> 
 }
 
 function normalizeFile(file: string): string {
-  return path.normalize(path.resolve(file));
+  return pathIdentityKey(file);
 }
