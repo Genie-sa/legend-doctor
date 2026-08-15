@@ -27,6 +27,8 @@ import {
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
 
+export { stateMayHoldCallable, stateTypeMayBeCallable } from "./callable-state.js";
+
 export function hasIndependentRenderCutWitness(
   returned: ts.Expression,
   excluded: readonly ts.Node[],
@@ -145,31 +147,6 @@ export function isDirectPrimitiveExpression(expression: ts.Expression): boolean 
   return ts.isPrefixUnaryExpression(value) &&
     (value.operator === ts.SyntaxKind.PlusToken || value.operator === ts.SyntaxKind.MinusToken) &&
     (ts.isNumericLiteral(value.operand) || ts.isBigIntLiteral(value.operand));
-}
-
-export function stateMayHoldCallable(state: StateCandidate): boolean {
-  const type = state.call.typeArguments?.[0];
-  if (!type) return false;
-  if (ts.isFunctionTypeNode(type) || ts.isConstructorTypeNode(type)) return true;
-  if (ts.isParenthesizedTypeNode(type) || ts.isTypeOperatorNode(type)) {
-    return stateTypeMayBeCallable(type.type);
-  }
-  return ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type)
-    ? type.types.some(stateTypeMayBeCallable)
-    : stateTypeMayBeCallable(type);
-}
-
-export function stateTypeMayBeCallable(type: ts.TypeNode): boolean {
-  if (ts.isFunctionTypeNode(type) || ts.isConstructorTypeNode(type)) return true;
-  if (ts.isParenthesizedTypeNode(type) || ts.isTypeOperatorNode(type)) {
-    return stateTypeMayBeCallable(type.type);
-  }
-  if (ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type)) {
-    return type.types.some(stateTypeMayBeCallable);
-  }
-  if (!ts.isTypeReferenceNode(type)) return false;
-  const name = type.typeName.getText();
-  return /(?:^|\.)(?:ComponentType|ComponentClass|FC|Function|JSXElementConstructor)$/.test(name);
 }
 
 export function hasOnlyEventCommandReads(

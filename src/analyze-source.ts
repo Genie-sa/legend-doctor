@@ -1246,6 +1246,7 @@ function normalizeObservableDialogClusterMembers(
       !usage ||
       usage.shadowed ||
       usage.escaped ||
+      stateMayHoldCallable(member) ||
       usage.effectReads > 0 ||
       usage.effectWrites > 0 ||
       usage.setterUsesPreviousValue
@@ -1738,6 +1739,7 @@ function classifyState(
   }
   const controlledLeafCut =
     !isCustomHookOwner(state.owner) &&
+    !stateMayHoldCallable(state) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
     usage.effectWrites === 0 &&
@@ -1770,6 +1772,7 @@ function classifyState(
     };
   }
   const controlledProjectionCut = !isCustomHookOwner(state.owner) &&
+    !stateMayHoldCallable(state) &&
     usage.localRenderReads > 0 &&
     usage.localRenderReads === usage.directRenderNodes.length &&
     usage.effectReads === 0 &&
@@ -1873,6 +1876,7 @@ function classifyState(
   if (
     ownerLineSpan(state.owner, sourceFile) >= 150 &&
     jsxElementCount(state.owner) >= 12 &&
+    !stateMayHoldCallable(state) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
     usage.deferredReads === 0 &&
@@ -1907,7 +1911,12 @@ function classifyState(
       message: `Keep \`${state.valueName}\` as React state for now; its owner is already a small render boundary.`,
     };
   }
-  if (usage.repeatedTransport && usage.deferredReads === 0 && usage.setterCalls === 0) {
+  if (
+    usage.repeatedTransport &&
+    usage.deferredReads === 0 &&
+    usage.setterCalls === 0 &&
+    !stateMayHoldCallable(state)
+  ) {
     return {
       action: "use-observable",
       confidence: "probable",
@@ -1926,6 +1935,7 @@ function classifyState(
   if (
     !isCustomHookOwner(state.owner) &&
     jsxElementCount(state.owner) >= 12 &&
+    !stateMayHoldCallable(state) &&
     usage.transportedOccurrences > 0 &&
     usage.jsxTargets.size === 1 &&
     usage.effectReads === 0 &&
@@ -2515,6 +2525,7 @@ function analyzeStateSubtree(
   const ownerJsx = jsxElementCount(state.owner);
   if (
     ownerJsx < 12 ||
+    stateMayHoldCallable(state) ||
     usage.directRenderNodes.length === 0 ||
     usage.localRenderReads !== usage.directRenderNodes.length ||
     usage.setterCallNodes.length === 0 ||

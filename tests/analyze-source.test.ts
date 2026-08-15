@@ -1743,6 +1743,88 @@ test("does not put callable React state into a mixed observable transport", () =
   }
 });
 
+test("keeps callable React state out of projection and sibling leaf rules", () => {
+  for (const state of [
+    {
+      declaration: "const [value, setValue] = useState<(() => void) | null>(null);",
+      write: "setValue(() => work)",
+    },
+    {
+      declaration: "type Handler = () => void; const [value, setValue] = useState<Handler | null>(null);",
+      write: "setValue(() => work)",
+    },
+    {
+      declaration: "const [value, setValue] = useState(() => work);",
+      write: "setValue(() => next)",
+    },
+    {
+      declaration: "interface DialogState { id: string; onConfirm(): void } const [value, setValue] = useState<DialogState | null>(null);",
+      write: "setValue({ id: 'x', onConfirm: work })",
+    },
+    {
+      declaration: "const [value, setValue] = useState(null);",
+      write: "setValue({ onConfirm: () => work() })",
+    },
+  ]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      function work() {}
+      function next() {}
+      export function Screen() {
+        ${state.declaration}
+        return <main>
+          <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+          <button onClick={() => ${state.write}}>Set</button>
+          <section><Leaf ready={value != null} /></section>
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.notEqual(finding?.action, "use-observable", state.declaration);
+    assert.notEqual(finding?.action, "move-state-down", state.declaration);
+  }
+});
+
+test("does not mistake ordinary local state aliases for callable state", () => {
+  for (const alias of ["Selection", "FC", "ComponentType"]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      type ${alias} = { id: string };
+      export function Screen() {
+        const [value, setValue] = useState<${alias} | null>(null);
+        return <main>
+          <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+          <button onClick={() => setValue({ id: "x" })}>Set</button>
+          <section><Leaf ready={value != null} /></section>
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.equal(finding?.action, "use-observable", alias);
+  }
+});
+
+test("resolves callable aliases in the nearest lexical scope", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function OtherScreen() {
+      type Handler = string;
+      const [value] = useState<Handler>("");
+      return <output>{value}</output>;
+    }
+    export function Screen() {
+      type Handler = () => void;
+      const [value, setValue] = useState<Handler | null>(null);
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={() => setValue(() => () => {})}>Set</button>
+        <section><Leaf ready={value != null} /></section>
+      </main>;
+    }
+  `, "fixture.tsx");
+  const finding = findings.find(candidate => candidate.name === "value" && candidate.location.line > 8);
+  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(finding?.action, "move-state-down");
+});
+
 test("isolates direct primitive state at one stable call-site leaf", () => {
   const findings = analyzeSource(`
     import { useState } from "react";
