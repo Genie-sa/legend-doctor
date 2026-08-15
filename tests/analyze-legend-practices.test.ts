@@ -454,6 +454,30 @@ test("keeps clone writes whose snapshot or replacement path is not equivalent", 
   }
 });
 
+test("keeps clone writes when the old snapshot remains observable", () => {
+  const bodies = [
+    `const current = list$.peek(); list$.set([...current, item]); consume(current);`,
+    `const current = profile$.peek(); profile$.set({ ...current, name }); return current.name;`,
+    `const current = profile$.peek(); const alias = current; profile$.set({ ...current, name }); return alias.name;`,
+    `const current = profile$.peek(); const read = () => current.name; profile$.set({ ...current, name }); return read();`,
+    `const current = profile$.peek(); while (current.name !== name) { profile$.set({ ...current, name }); if (stop()) break; }`,
+  ];
+  for (const body of bodies) {
+    const findings = analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      const list$ = observable<string[]>([]);
+      const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+      export function update(item: string, name: string) { ${body} }
+    `, "snapshot.ts");
+
+    assert.equal(
+      findings.some((finding) => finding.action === "narrow-observable-write"),
+      false,
+      body
+    );
+  }
+});
+
 test("uses cross-file observable provenance for direct useValue", () => {
   assert.deepEqual(
     analyzeLegendPractices(`

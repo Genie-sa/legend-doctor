@@ -344,13 +344,28 @@ function snapshotBindingIsReadOnly(
       !safe ||
       !ts.isIdentifier(node) ||
       node.text !== name ||
-      node === binding.declaration.name ||
-      node.getStart() >= write.end
+      node === binding.declaration.name
     ) {
       return;
     }
+    if (node.getStart() >= write.end) {
+      safe = false;
+      return;
+    }
     if (nodeWithin(node, targetSpread.expression)) return;
+    if (findAncestor(node, isRuntimeFunctionLike) !== owner) {
+      safe = false;
+      return;
+    }
+    if (referenceMayRepeatAfterWrite(node, write, owner)) {
+      safe = false;
+      return;
+    }
     const access = outermostAccess(node);
+    if (access === node && !isControlConditionReference(node, owner)) {
+      safe = false;
+      return;
+    }
     const parent = access.parent;
     if (
       (ts.isBinaryExpression(parent) &&
@@ -359,8 +374,6 @@ function snapshotBindingIsReadOnly(
       ((ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) &&
         parent.operand === access) ||
       (ts.isDeleteExpression(parent) && parent.expression === access) ||
-      (access === node && ts.isCallExpression(parent) && parent.arguments.includes(access)) ||
-      (access === node && ts.isNewExpression(parent) && parent.arguments?.includes(access) === true) ||
       (ts.isCallExpression(parent) && parent.expression === access) ||
       (ts.isTaggedTemplateExpression(parent) && parent.tag === access) ||
       (ts.isSpreadElement(parent) && parent.expression === access)
@@ -369,6 +382,40 @@ function snapshotBindingIsReadOnly(
     }
   });
   return safe;
+}
+
+function isControlConditionReference(node: ts.Node, owner: ts.Node): boolean {
+  let current = node;
+  while (current.parent && current.parent !== owner) {
+    const parent = current.parent;
+    if (
+      (ts.isIfStatement(parent) && parent.expression === current) ||
+      (ts.isConditionalExpression(parent) && parent.condition === current)
+    ) {
+      return true;
+    }
+    current = parent;
+  }
+  return false;
+}
+
+function referenceMayRepeatAfterWrite(
+  node: ts.Node,
+  write: ts.Node,
+  owner: ts.Node
+): boolean {
+  let current = node;
+  while (current.parent && current.parent !== owner) {
+    const parent = current.parent;
+    const repeatedCondition =
+      ((ts.isWhileStatement(parent) || ts.isDoStatement(parent)) &&
+        parent.expression === current) ||
+      (ts.isForStatement(parent) &&
+        (parent.condition === current || parent.incrementor === current));
+    if (repeatedCondition && nodeWithin(write, parent.statement)) return true;
+    current = parent;
+  }
+  return false;
 }
 
 function outermostAccess(root: ts.Identifier): ts.Expression {

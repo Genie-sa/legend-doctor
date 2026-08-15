@@ -4,12 +4,12 @@ This file records evidence, decisions, measurements, and rejected approaches for
 
 ## System baseline
 
-- Production analyzer: 32 TypeScript modules and 12,670 lines.
+- Production analyzer: 32 TypeScript modules and 12,717 lines.
 - Largest orchestration module: `src/analyze-source.ts` at 3,087 lines; rule families are separated under `src/rules/`.
-- Full real-app scan: 6,070 hooks across 11 app roots: 3,594 `useState`, 2,476 `useEffect`, 76 Legend practice findings.
-- Pinned scored corpus after closeout: 2,156 hooks across 198 focused targets and 730 manual labels.
-- Final quality: 100% actionable precision (360/360), 93.8% actionable recall (360/384), 13/13 state groups, 76/76 Legend practices.
-- Validation: 416/416 tests under strict TypeScript settings.
+- Full real-app scan: 6,147 hooks across 12 app roots: 3,647 `useState`, 2,500 `useEffect`, 77 Legend practice findings.
+- Pinned scored corpus after closeout: 2,233 hooks across 199 focused targets and 744 manual labels.
+- Final quality: 100% actionable precision (369/369), 93.9% actionable recall (369/393), 13/13 state groups, 77/77 Legend practices.
+- Validation: 417/417 tests under strict TypeScript settings.
 
 ## Goal 1 findings
 
@@ -38,8 +38,9 @@ The shared analysis foundation is complete enough to stop architectural patching
 | Outline | 618 | 326 | 292 | 0 |
 | Genie Courses | 29 | 0 | 29 | 5 |
 | Open WebUI RN | 0 | 0 | 0 | 3 |
+| Hoalu | 77 | 53 | 24 | 1 |
 
-Across full apps the tool emits 396 `use-observable`, 15 `move-state-down`, 57 `use-ref`, 96 `use-unmount`, 38 `use-mount`, six `use-observe-effect`, and 2,783/1,246 conservative state/effect reviews. The safety closeout also removed the only automatic `move-to-event` recommendation.
+Across full apps the tool emits 401 `use-observable`, 16 `move-state-down`, 57 `use-ref`, 97 `use-unmount`, 40 `use-mount`, six `use-observe-effect`, and 2,830/1,256 conservative state/effect reviews. The safety closeout also removed the only automatic `move-to-event` recommendation.
 
 ## Opportunity-only audit: 21 labeled opportunities
 
@@ -98,14 +99,20 @@ Adversarial gaps found and fixed at the shared boundary: conditional/outside con
 ## Final verification
 
 - TypeScript: pass under strict project settings.
-- Unit tests: 416/416.
-- Pinned eval: 2,156 hooks, 701/730 labels, 29 declared misses, 13/13 groups, 76/76 practices.
-- Hook quality: 100% actionable precision (360/360), 93.8% actionable recall (360/384).
-- `use-observable`: 100% precision (302/302), 93.8% recall (302/322).
+- Unit tests: 417/417.
+- Pinned eval: 2,233 hooks, 715/744 labels, 29 declared misses, 13/13 groups, 77/77 practices.
+- Hook quality: 100% actionable precision (369/369), 93.9% actionable recall (369/393).
+- `use-observable`: 100% precision (307/307), 93.9% recall (307/327).
 - Bounded state-flow correctness changed zero findings. Final React commit, callback-contract, and atomicity hardening demoted sixteen uncertain automatic actions to review.
 - Before that safety closeout, reverting the named-effect experiment restored all eleven finding sets to their accepted baseline.
 
-The work stops here by design. The next improvement should begin only when a new structural family has repeated cross-app evidence; the 29 current misses are not one unfinished rule.
+Hook opportunity expansion stops here by design. A new hook rule should begin only when a structural family has repeated cross-app evidence; the 29 current misses are not one unfinished rule.
+
+## Legend-native continuation
+
+Hoalu added 77 hooks and one proven transaction to the corpus without creating a new hook miss. Its queue code also exposed a general rewrite-safety bug: replacing a cloned `.set()` with direct mutation can change the identity and contents observed through a snapshot alias that is read afterward.
+
+The narrow-write rule now abstains whenever that old snapshot remains observable after the write, including later reads, aliases, and nested-function captures. Hoalu's unsafe recommendation disappeared (two practice findings became one), while hook output stayed unchanged. The other eleven app roots had zero hook or practice action changes. This is the intended continuation after hook expansion: improve Legend advice only when the transformation itself is proven equivalent.
 
 ## Two-goal product re-audit
 
@@ -146,8 +153,8 @@ No new opportunity detector shipped. The only new detector is a conservative Rea
 
 - The named-effect cohort contained eight cases. Five resolved locally, four fit one proof, and only two improved a non-actionable `keep-effect` classification. The experiment was reverted.
 - The remaining 21 labels contain 16 actionable opportunities split across at least five proof families. Closing them now would require broader flow, cross-file ownership, lifecycle, or atomicity analysis.
-- All 416 tests pass after reverting the experiments and completing the safety closeout.
-- At the end of the opportunity-only re-audit, the pinned eval remained 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices. The later safety closeout and added labels produced the current 701/730 result with 29 explicit misses.
+- All 417 tests pass after reverting the experiments and completing the safety closeout.
+- At the end of the opportunity-only re-audit, the pinned eval remained 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices. The later safety closeout produced 701/730 with 29 explicit misses; the subsequent Hoalu expansion produced the current 715/744 result without adding a miss.
 
 Exact app impact from the opportunity-only re-audit:
 
