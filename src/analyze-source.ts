@@ -705,23 +705,41 @@ function localCallableRenderSites(state: StateCandidate): readonly ts.Identifier
 
   const sites: ts.Identifier[] = [];
   visit(state.owner.body, node => {
+    if (!ts.isIdentifier(node) || !callableNames.has(node.text)) return;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
     if (
-      ts.isIdentifier(node) &&
-      callableNames.has(node.text) &&
-      ts.isCallExpression(node.parent) &&
-      node.parent.expression === node &&
-      (() => {
-        if (isInsideJsxEventCallback(node, state.owner)) return false;
-        const callback = nearestNestedFunction(node, state.owner);
-        return findAncestorUntil(node.parent, isJsxNode, state.owner) !== null ||
-          callback === null ||
-          isSynchronousRenderCallback(callback);
-      })()
+      attribute &&
+      isDirectJsxAttributeExpression(attribute, node) &&
+      jsxPropMayRenderCallable(attribute.name.getText())
+    ) {
+      sites.push(node);
+      return;
+    }
+    if (
+      !ts.isCallExpression(node.parent) ||
+      node.parent.expression !== node ||
+      isInsideJsxEventCallback(node, state.owner)
+    ) {
+      return;
+    }
+    const callback = nearestNestedFunction(node, state.owner);
+    if (
+      findAncestorUntil(node.parent, isJsxNode, state.owner) !== null ||
+      callback === null ||
+      isSynchronousRenderCallback(callback)
     ) {
       sites.push(node);
     }
   });
   return sites;
+}
+
+function jsxPropMayRenderCallable(name: string): boolean {
+  return name === "children" ||
+    name === "component" ||
+    name === "renderer" ||
+    /^render(?:[A-Z]|$)/.test(name) ||
+    /(?:Renderer|Component)$/.test(name);
 }
 
 function localCallableCallback(
@@ -1853,6 +1871,7 @@ function classifyState(
     usage.deferredReads > 0 &&
     usage.transportedOccurrences === 0 &&
     usage.jsxTargets.size === 0 &&
+    !functionalUpdaterPrecedesSnapshotRead(state, usage) &&
     !usage.shadowed &&
     !usage.escaped &&
     ((usage.eventReads === 0 && usage.effectWrites === 0) ||
@@ -1861,7 +1880,7 @@ function classifyState(
     return {
       action: "use-ref",
       confidence: "probable",
-      message: `Replace \`${state.valueName}\` with a ref or observable handle; preserve any existing React lifecycle hook and its timing, because the value is read only by deferred commands and does not render UI.`,
+      message: `Replace \`${state.valueName}\` with a ref or observable handle; preserve any existing React lifecycle hook timing and statement order${usage.setterUsesPreviousValue ? ", evaluating functional updaters against the current handle value" : ""}, because the value is read only by deferred commands and does not render UI.`,
     };
   }
   if (usage.shadowed || usage.escaped || usage.effectWrites > 0) {
@@ -2033,6 +2052,31 @@ function classifyState(
         ? legendCandidateMessage(state, usage, sourceComponents)
         : `Review React state \`${state.valueName}\`; local evidence does not prove a render-boundary improvement.`,
   };
+}
+
+function functionalUpdaterPrecedesSnapshotRead(
+  state: StateCandidate,
+  usage: StateUsage
+): boolean {
+  if (!usage.setterUsesPreviousValue) return false;
+  return usage.setterCallNodes.some(call => {
+    if (!setterCallUsesPreviousValue(call)) return false;
+    const region = nearestMutationFunction(call, state.owner);
+    if (!region.body) return true;
+    let readAfterWrite = false;
+    visitSkippingNestedRuntimeFunctions(region.body, node => {
+      if (
+        ts.isIdentifier(node) &&
+        node.text === state.valueName &&
+        node.getStart() > call.end &&
+        !isDeclarationName(node) &&
+        !isNonValueIdentifier(node)
+      ) {
+        readAfterWrite = true;
+      }
+    });
+    return readAfterWrite;
+  });
 }
 
 function setterOwnedByValueCallSite(

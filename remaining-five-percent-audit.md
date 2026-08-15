@@ -4,12 +4,12 @@ This file records evidence, decisions, measurements, and rejected approaches for
 
 ## System baseline
 
-- Production analyzer: 32 TypeScript modules and 12,787 lines.
-- Largest orchestration module: `src/analyze-source.ts` at 3,087 lines; rule families are separated under `src/rules/`.
+- Production analyzer: 32 TypeScript modules and 12,831 lines.
+- Largest orchestration module: `src/analyze-source.ts` at 3,132 lines; rule families are separated under `src/rules/`.
 - Full real-app scan: 6,147 hooks across 12 app roots: 3,647 `useState`, 2,500 `useEffect`, 77 Legend practice findings.
-- Pinned scored corpus after closeout: 2,277 hooks across 208 focused targets and 754 manual labels.
-- Final quality: 100% actionable precision (371/371), 93.0% actionable recall (371/399), 13/13 state groups, 77/77 Legend practices.
-- Validation: 423/423 tests under strict TypeScript settings.
+- Pinned scored corpus after closeout: 2,281 hooks across 210 focused targets and 756 manual labels.
+- Final quality: 100% actionable precision (371/371), 92.5% actionable recall (371/401), 13/13 state groups, 77/77 Legend practices.
+- Validation: 426/426 tests under strict TypeScript settings.
 
 ## Goal 1 findings
 
@@ -40,7 +40,7 @@ The shared analysis foundation is complete enough to stop architectural patching
 | Open WebUI RN | 0 | 0 | 0 | 3 |
 | Hoalu | 77 | 53 | 24 | 1 |
 
-Across full apps the tool emits 401 `use-observable`, 16 `move-state-down`, 57 `use-ref`, 97 `use-unmount`, 40 `use-mount`, six `use-observe-effect`, and 2,830/1,256 conservative state/effect reviews. The safety closeout also removed the only automatic `move-to-event` recommendation.
+Across full apps the tool emits 401 `use-observable`, 16 `move-state-down`, 55 `use-ref`, 97 `use-unmount`, 40 `use-mount`, six `use-observe-effect`, and 2,832/1,256 conservative state/effect reviews. The safety closeout also removed the only automatic `move-to-event` recommendation.
 
 ## Opportunity-only audit: 21 labeled opportunities
 
@@ -99,10 +99,10 @@ Adversarial gaps found and fixed at the shared boundary: conditional/outside con
 ## Final verification
 
 - TypeScript: pass under strict project settings.
-- Unit tests: 423/423.
-- Pinned eval: 2,277 hooks, 721/754 labels, 33 declared misses, 13/13 groups, 77/77 practices.
-- Hook quality: 100% actionable precision (371/371), 93.0% actionable recall (371/399).
-- `use-observable`: 100% precision (307/307), 93.9% recall (307/327).
+- Unit tests: 426/426.
+- Pinned eval: 2,281 hooks, 721/756 labels, 35 declared misses, 13/13 groups, 77/77 practices.
+- Hook quality: 100% actionable precision (371/371), 92.5% actionable recall (371/401).
+- `use-observable`: 100% precision (307/307), 93.6% recall (307/328).
 - Bounded state-flow correctness changed zero findings. Final React commit, callback-contract, and atomicity hardening demoted sixteen uncertain automatic actions to review.
 - Before that safety closeout, reverting the named-effect experiment restored all eleven finding sets to their accepted baseline.
 
@@ -153,7 +153,7 @@ No new opportunity detector shipped. The only new detector is a conservative Rea
 
 - The named-effect cohort contained eight cases. Five resolved locally, four fit one proof, and only two improved a non-actionable `keep-effect` classification. The experiment was reverted.
 - The remaining 21 labels contain 16 actionable opportunities split across at least five proof families. Closing them now would require broader flow, cross-file ownership, lifecycle, or atomicity analysis.
-- All 423 tests pass after reverting the experiments and completing the safety closeout.
+- All 426 tests pass after reverting the experiments and completing the safety closeout.
 - At the end of the opportunity-only re-audit, the pinned eval remained 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices. The later safety closeout produced 701/730 with 29 explicit misses; Hoalu produced 715/744, and the lifecycle command audit produced the current 721/754 with 33 explicit misses.
 
 Exact app impact from the opportunity-only re-audit:
@@ -213,5 +213,18 @@ actions:
 - One pre-existing `use-ref` finding moves to review because an IIFE consumes it during render.
 - Excalidraw changes one action, Expensify three, and Outline six. The other nine roots change zero.
 
-The scored corpus is now 2,277 hooks, 721/754 labels, 33 declared misses, 13/13 groups, and 77/77 practices. Actionable
-precision is 100% (371/371), actionable recall 93.0% (371/399), and `use-ref` precision is 100% (11/11).
+The scored corpus is now 2,281 hooks, 721/756 labels, 35 declared misses, 13/13 groups, and 77/77 practices. Actionable
+precision is 100% (371/371), actionable recall 92.5% (371/401), and `use-ref` precision is 100% (11/11).
+
+## Command-only ref closeout
+
+The final command-only audit examined every full-app `use-ref` output, not only the eleven scored cases. Two unsafe proof
+gaps were found:
+
+- a local function passed through a standard render prop such as `renderItem` can read state during rendering;
+- a functional updater followed by a state read in the same command can intentionally observe the old React render snapshot.
+
+Both cases now abstain. The 12-root action delta is exactly two: Expensify `itemsToHighlight` and Outline `minutes` move
+from `use-ref` to review. Both remain explicit non-enforced opportunities with the stronger migration each needs: a
+per-row observable subscriber for the rendered collection, and an old-snapshot-preserving ref rewrite for the timer.
+All other hook and Legend-practice actions are unchanged.

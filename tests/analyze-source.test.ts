@@ -4238,6 +4238,50 @@ test("does not call a value shared by an event and an effect-owned callback comm
   assert.notEqual(finding?.action, "use-ref");
 });
 
+test("counts state read by a transported render callback as rendered", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function List({ rows }: { rows: Array<{ id: string }> }) {
+      const [highlighted, setHighlighted] = useState<Set<string> | null>(null);
+      const renderItem = ({ item }: { item: { id: string } }) => {
+        const active = highlighted?.has(item.id);
+        return <Row active={active} />;
+      };
+      return <VirtualList data={rows} renderItem={renderItem} onClear={() => setHighlighted(null)} />;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+  assert.match(finding?.evidence[1] ?? "", /reads: render 1/);
+});
+
+test("does not replace functional-updater state when commands observe its render snapshot", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function useReload() {
+      const [minutes, setMinutes] = useState(0);
+      useInterval(() => {
+        setMinutes(previous => previous + 1);
+        if (minutes >= 60) reload();
+      }, 1000);
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+});
+
+test("keeps the ref recommendation when a functional updater has no later snapshot read", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function Actions() {
+      const [count, setCount] = useState(0);
+      const increment = () => setCount(previous => previous + 1);
+      const saveCount = () => save(count);
+      return <><Button onPress={increment} /><Button onPress={saveCount} /></>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.equal(finding?.action, "use-ref");
+  assert.match(finding?.message ?? "", /functional updaters against the current handle value/i);
+});
+
 test("deletes setter-only state when no assigned value is consumed", () => {
   assert.deepEqual(
     actions(`

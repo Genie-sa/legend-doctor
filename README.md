@@ -35,12 +35,12 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 12 |
-| Source targets | 208 |
-| Hooks analyzed | 2,277 |
-| Manual labels | 754 |
-| Unit tests | 423/423 |
+| Source targets | 210 |
+| Hooks analyzed | 2,281 |
+| Manual labels | 756 |
+| Unit tests | 426/426 |
 | Actionable precision | 100% (371/371) |
-| Actionable recall | 93.0% (371/399) |
+| Actionable recall | 92.5% (371/401) |
 | Legend practice precision | 100% (77/77) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -474,6 +474,47 @@ const insert = () => insertElements(chartElementsRef.current);
 
 The action is `use-ref`; the lifecycle hook, dependency list, and commit timing remain unchanged.
 
+### 10. Render callbacks and old snapshots → review
+
+Before: the state looks command-only unless the analyzer follows `renderItem`.
+
+```tsx
+const [highlighted, setHighlighted] = useState<Set<string> | null>(null);
+const renderItem = ({ item }) => (
+  <Row highlighted={highlighted?.has(item.id) ?? false} />
+);
+return <List renderItem={renderItem} />;
+```
+
+Output:
+
+```text
+BaseSelectionList.tsx:121 [review-state] Legend-first restructuring candidate:
+replace `itemsToHighlight` with observable ownership and move its subscription
+into the smallest rendered subtree.
+```
+
+A verified migration keeps observable ownership above the list and subscribes per row:
+
+```tsx
+const highlighted$ = useObservable<Set<string> | null>(null);
+
+function HighlightedRow({ id, highlighted$ }) {
+  const highlighted = useValue(() => highlighted$.get()?.has(id) ?? false);
+  return <Row highlighted={highlighted} />;
+}
+```
+
+Functional updates have a separate snapshot hazard:
+
+```tsx
+setMinutes(previous => previous + 1);
+if (minutes >= refreshAfter) reload(); // reads the old render snapshot
+```
+
+The tool now reviews this instead of emitting a generic ref rewrite. A manual ref migration must snapshot
+`minutesRef.current` before the write and keep the later comparison on that snapshot.
+
 ## Actions
 
 | Disposition | Agent response |
@@ -484,6 +525,12 @@ The action is `use-ref`; the lifecycle hook, dependency list, and commit timing 
 
 Legend Doctor is Legend-first, not conversion-first. It keeps React when resource lifetime, commit timing, cleanup, or a
 cohesive leaf makes React the better owner.
+
+## Next steps
+
+1. Publish hardening: add a license, package files, install smoke test, and CI release workflow.
+2. Legend-native value: keep expanding proven batching, `peek()`, direct observable reads, narrow subscriptions, and child writes.
+3. Hook recall: add a rule only after five equivalent positives across three apps share one structural proof.
 
 ## Next improvement loop
 
