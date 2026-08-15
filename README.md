@@ -35,12 +35,12 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 11 |
-| Source targets | 197 |
-| Hooks analyzed | 2,151 |
-| Manual labels | 726 |
-| Unit tests | 402/402 |
-| Actionable precision | 100% (369/369) |
-| Actionable recall | 95.8% (369/385) |
+| Source targets | 198 |
+| Hooks analyzed | 2,156 |
+| Manual labels | 730 |
+| Unit tests | 416/416 |
+| Actionable precision | 100% (360/360) |
+| Actionable recall | 93.8% (360/384) |
 | Legend practice precision | 100% (76/76) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,

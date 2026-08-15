@@ -9,11 +9,16 @@ export interface HookImports {
   observable: ReadonlySet<string>;
   observableTypes: ReadonlySet<string>;
   reactNamespaces: ReadonlySet<string>;
+  startTransition: ReadonlySet<string>;
+  useCallback: ReadonlySet<string>;
   useEffect: ReadonlySet<string>;
+  useInsertionEffect: ReadonlySet<string>;
+  useLayoutEffect: ReadonlySet<string>;
   useObservable: ReadonlySet<string>;
   useObserveEffect: ReadonlySet<string>;
   useRef: ReadonlySet<string>;
   useState: ReadonlySet<string>;
+  useTransition: ReadonlySet<string>;
   useValue: ReadonlySet<string>;
 }
 
@@ -29,11 +34,16 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   const hostComponents = new Set<string>();
   const observable = new Set<string>();
   const observableTypes = new Set<string>();
+  const startTransition = new Set<string>();
+  const useCallback = new Set<string>();
   const useEffect = new Set<string>();
+  const useInsertionEffect = new Set<string>();
+  const useLayoutEffect = new Set<string>();
   const useObservable = new Set<string>();
   const useObserveEffect = new Set<string>();
   const useRef = new Set<string>();
   const useState = new Set<string>();
+  const useTransition = new Set<string>();
   const useValue = new Set<string>();
 
   for (const statement of sourceFile.statements) {
@@ -80,8 +90,13 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
       }
       if (moduleName === REACT_MODULE) {
         if (importedName === "useState") useState.add(localName);
+        if (importedName === "useCallback") useCallback.add(localName);
         if (importedName === "useEffect") useEffect.add(localName);
+        if (importedName === "useInsertionEffect") useInsertionEffect.add(localName);
+        if (importedName === "useLayoutEffect") useLayoutEffect.add(localName);
         if (importedName === "useRef") useRef.add(localName);
+        if (importedName === "useTransition") useTransition.add(localName);
+        if (importedName === "startTransition") startTransition.add(localName);
       }
       if (moduleName === LEGEND_REACT_MODULE) {
         if (importedName === "useSelector" || importedName === "use$") {
@@ -110,11 +125,16 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
     observable,
     observableTypes,
     reactNamespaces,
+    startTransition,
+    useCallback,
     useEffect,
+    useInsertionEffect,
+    useLayoutEffect,
     useObservable,
     useObserveEffect,
     useRef,
     useState,
+    useTransition,
     useValue,
   };
 }

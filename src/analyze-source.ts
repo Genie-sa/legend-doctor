@@ -54,6 +54,9 @@ import {
 } from "./rules/keyed-selection.js";
 import { isLiteralBooleanLeafState } from "./rules/literal-boolean-leaf.js";
 import {
+  collectCommitSensitiveOwners,
+} from "./rules/react-commit-sensitivity.js";
+import {
   findLazyCallbackLeaf,
   type LazyCallbackLeafProofs,
 } from "./rules/lazy-callback-leaf.js";
@@ -214,6 +217,7 @@ function analyzeParsedSource(
   const moduleScopeBindings = collectModuleScopeBindings(sourceFile);
   const reactiveMutationsByOwner = collectReactiveMutationBindings(sourceFile);
   const nonProductionHarness = isNonProductionHarness(fileName);
+  const commitSensitiveOwners = collectCommitSensitiveOwners(sourceFile, imports);
 
   visit(sourceFile, node => {
     if (!ts.isCallExpression(node)) return;
@@ -345,7 +349,10 @@ function analyzeParsedSource(
     if (!usage) continue;
     const cluster = effectDrafts.clusters.get(state) ?? observableClusters.get(state) ?? subtreeClusters.get(state);
     const siblingCut = siblingRenderCuts.get(state);
-    const classification = cluster
+    const commitSensitive = commitSensitiveOwners.has(state.owner) &&
+      state.setterName !== null &&
+      !nonProductionHarness;
+    const baseClassification = cluster
       ? {
           action: cluster.action,
           confidence: "probable" as const,
@@ -390,6 +397,12 @@ function analyzeParsedSource(
           keyedSelections.secondaryLeafStates.has(state),
           siblingCut ?? null
         );
+    const commitSensitiveOverride = commitSensitive &&
+      baseClassification.action !== "review-state" &&
+      baseClassification.action !== "keep-state";
+    const classification = commitSensitiveOverride
+      ? commitSensitiveStateClassification(state)
+      : baseClassification;
     const finding = findingFor(
       state.call,
       sourceFile,
@@ -399,7 +412,7 @@ function analyzeParsedSource(
       classification,
       stateEvidence(state, usage, sourceFile)
     );
-    if (cluster) {
+    if (cluster && !commitSensitiveOverride) {
       finding.group = {
         id: cluster.id,
         kind: "state-cluster",
@@ -450,6 +463,14 @@ function analyzeParsedSource(
       left.location.column - right.location.column ||
       left.hook.localeCompare(right.hook)
   );
+}
+
+function commitSensitiveStateClassification(state: StateCandidate): ClassifiedState {
+  return {
+    action: "review-state",
+    confidence: "probable",
+    message: `Review React state \`${state.valueName}\`; updating it currently participates in a React transition, every-commit effect, or callback-ref lifecycle in this owner, so isolating the render could change priority or commit cadence.`,
+  };
 }
 
 function stateCandidate(call: ts.CallExpression): StateCandidate | null {
@@ -1912,6 +1933,9 @@ function classifyState(
     usage.valueTargets.size === 1 &&
     localComponents.has([...usage.valueTargets][0] ?? "") &&
     usage.setterReferences > 0 &&
+    hasSafeCommands &&
+    !hasCompanionWrites &&
+    !hasReactiveMutationPath &&
     !usage.setterUsesPreviousValue &&
     !usage.shadowed &&
     !usage.escaped
@@ -2764,7 +2788,6 @@ function setterCallbackEscapesThroughUnknownHook(
     return false;
   });
 }
-
 
 function commonRepeatedRender(
   nodes: readonly ts.Node[],

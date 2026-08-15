@@ -321,14 +321,15 @@ function analyzedFunctionCoverage(
   const recovered = file.parserDiagnostics.some(diagnostic =>
     diagnosticAffectsTarget(diagnostic, target)
   );
+  const fileRecovered = file.parserDiagnostics.length > 0;
   return {
     parser: recovered
       ? outcome("analyzed", "parser-recovered-in-function", "The parser recovered within this function range.")
       : outcome("analyzed", "parser-complete", "No parser recovery diagnostic overlaps this function."),
     lowering: boundedFlowCoverage(recovered ? "unknown" : stateFlow.coverageFor(node), "function"),
     semantic: semanticCoverage(file, context),
-    detector: recovered
-      ? outcome("unknown", "detector-recovery-uncertain", "Detectors ran, but results in this recovered function are not trusted as complete.")
+    detector: fileRecovered
+      ? outcome("unknown", "detector-recovery-uncertain", "Detectors ran, but file-wide facts from recovered source make function results uncertain.")
       : outcome("analyzed", "detectors-complete", "All current source detectors ran on this cached function AST."),
   };
 }

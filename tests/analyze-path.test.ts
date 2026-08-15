@@ -163,7 +163,7 @@ test("localizes parser recovery to the overlapping function", async t => {
     ]),
     [
       ["broken", "parser-recovered-in-function", "unknown"],
-      ["healthy", "parser-complete", "analyzed"],
+      ["healthy", "parser-complete", "unknown"],
     ]
   );
 });

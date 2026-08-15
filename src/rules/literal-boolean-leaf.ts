@@ -1,7 +1,7 @@
 import ts from "typescript";
 
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
-import { isRuntimeFunctionLike, type RuntimeFunctionLike } from "../ast.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 import { hasStateInitializer } from "./deferred-reveal.js";
 import { isInsideJsxEventCallback, jsxElementCount } from "./state-proofs.js";
 
@@ -53,17 +53,5 @@ function isEventRootedLiteralSetterCall(
   call: ts.CallExpression,
   owner: RuntimeFunctionLike
 ): boolean {
-  if (isInsideJsxEventCallback(call, owner)) return true;
-  for (let current: ts.Node | undefined = call.parent; current && current !== owner; current = current.parent) {
-    if (!isRuntimeFunctionLike(current)) continue;
-    const parent: ts.Node = current.parent;
-    if (
-      ts.isPropertyAssignment(parent) &&
-      parent.initializer === current &&
-      /^on[A-Z]/.test(parent.name.getText())
-    ) {
-      return true;
-    }
-  }
-  return false;
+  return isInsideJsxEventCallback(call, owner);
 }

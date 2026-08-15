@@ -781,6 +781,12 @@ export const repositories = [
       },
       {
         effects: 0,
+        id: "formbricks-dashboard-detail",
+        root: "apps/web/modules/ee/analysis/dashboards/components/dashboard-detail-client.tsx",
+        states: 5,
+      },
+      {
+        effects: 0,
         id: "formbricks-contact-control",
         root: "apps/web/modules/ee/contacts/[contactId]/components/contact-control-bar.tsx",
         states: 4,
@@ -1351,11 +1357,12 @@ export const goldCases = [
   },
   {
     action: "move-to-event",
+    enforced: false,
     file: "components/cockpit/pages/recent.tsx",
     hook: "useEffect",
     line: 124,
     name: null,
-    rationale: "All reset sources are same-owner event state, so reset pagination at those mutations and delete the post-render effect.",
+    rationale: "Manual review proves all reset sources are same-owner events, but the detector now abstains because their custom-component callback contract is not locally proven.",
     target: "tree-map",
   },
   {
@@ -1859,12 +1866,12 @@ export const goldCases = [
     target: "legend-music",
   })),
   {
-    action: "use-observable",
+    action: "review-state",
     file: "components/account-management/account-form-dialog.tsx",
     hook: "useState",
     line: 174,
     name: "previewUrl",
-    rationale: "The large owner performs file commands while a same-file ImageField is the only rendering consumer.",
+    rationale: "Role changes reset the preview in the same React transition; moving only the preview to Legend would split that atomic update even though file completion writes it independently.",
     target: "tree-map",
   },
   ...[
@@ -2398,7 +2405,6 @@ export const goldCases = [
     ["formbricks-survey-menu-bar", "survey-menu-bar.tsx", 73, "isSurveyPublishing"],
     ["formbricks-connect-integration", "index.tsx", 29, "isConnecting"],
     ["formbricks-date-picker", "index.tsx", 55, "isOpen"],
-    ["outline-input", "Input.tsx", 199, "focused"],
     ["outline-split-button", "SplitButton.tsx", 51, "alignOffset"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
@@ -2409,6 +2415,15 @@ export const goldCases = [
     rationale: "One stable JSX call site consumes the complete value while owner commands mutate it; a local subscriber can pass the same snapshot without requiring the child implementation or prop contract.",
     target: target as string,
   })),
+  {
+    action: "review-state",
+    file: "Input.tsx",
+    hook: "useState",
+    line: 199,
+    name: "focused",
+    rationale: "The same owner creates merged callback refs for its inputs; isolating focus updates would change their detach and attach cadence.",
+    target: "outline-input",
+  },
   ...[
     ["tree-map", "components/cockpit/pages/edit-land-modal.tsx", 27],
     ["memoria-src", "feature/creative/pages/MomentNewScreen.tsx", 254],
@@ -3313,17 +3328,26 @@ export const goldCases = [
   ...[
     ["expensify-workspace-categories", "WorkspaceCategoriesPage.tsx", 72],
     ["expensify-workspace-per-diem", "WorkspacePerDiemPage.tsx", 98],
-    ["expensify-import-tags-options", "ImportTagsOptionsPage.tsx", 62],
     ["expensify-workspace-tags", "WorkspaceTagsPage.tsx", 94],
   ].map(([target, file, line]) => ({
     action: "use-observable" as const,
+    enforced: false,
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: "isDownloadFailureModalVisible",
-    rationale: "A literal event callback owns this failure flag and one stable DecisionModal is its only subscriber; observable ownership avoids rebuilding the workspace screen when an async download fails.",
+    rationale: "A manually verified download command owns this failure flag and one stable DecisionModal is its only subscriber; the detector correctly abstains until callback provenance is available.",
     target: target as string,
   })),
+  {
+    action: "use-observable",
+    file: "ImportTagsOptionsPage.tsx",
+    hook: "useState",
+    line: 62,
+    name: "isDownloadFailureModalVisible",
+    rationale: "A direct UI command owns this failure flag and one stable DecisionModal is its only subscriber.",
+    target: "expensify-import-tags-options",
+  },
   {
     action: "review-state",
     file: "WorkspaceOverviewDescriptionPage.tsx",
@@ -3479,6 +3503,18 @@ export const goldCases = [
     rationale: "The value renders inside the list renderItem callback and also participates in focus callbacks; it is not command-only state.",
     target: "expensify-emoji-picker-menu",
   },
+  ...[
+    [127, "highlightEmoji"],
+    [128, "highlightFirstEmoji"],
+  ].map(([line, name]) => ({
+    action: "review-state" as const,
+    file: "index.tsx",
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "Highlight state participates in focus callbacks and repeated emoji rendering in an owner with ref-driven focus management; a command-only ref migration is not proven.",
+    target: "expensify-emoji-picker-menu",
+  })),
   {
     action: "use-observable",
     file: "WorkspaceMemberCustomFieldPage.tsx",
@@ -3796,8 +3832,6 @@ export const goldCases = [
   })),
   ...[
     ["formbricks-survey-analysis-cta", "SurveyAnalysisCTA.tsx", 66, "isResetting"],
-    ["formbricks-dashboard-control", "dashboard-control-bar.tsx", 53, "isDeleting"],
-    ["formbricks-contact-control", "contact-control-bar.tsx", 47, "isDeletingPerson"],
     ["formbricks-delete-team", "delete-team.tsx", 23, "isDeleting"],
     ["outline-authentication-settings", "Authentication.tsx", 335, "isSaving"],
   ].map(([target, file, line, name]) => ({
@@ -3807,6 +3841,21 @@ export const goldCases = [
     line: line as number,
     name: name as string,
     rationale: "One stable control or dialog owns the pending surface while independently rendered siblings prove a material owner cut; preserve the exact async start and completion boundaries.",
+    target: target as string,
+  })),
+  ...[
+    ["formbricks-dashboard-control", "dashboard-control-bar.tsx", 53, "isDeleting"],
+    ["formbricks-contact-control", "contact-control-bar.tsx", 47, "isDeletingPerson"],
+    ["formbricks-dashboard-detail", "dashboard-detail-client.tsx", 193, "isSaving"],
+    ["formbricks-dashboard-detail", "dashboard-detail-client.tsx", 194, "editingChartId"],
+  ].map(([target, file, line, name]) => ({
+    action: "use-observable" as const,
+    enforced: false,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "Manual review proves this leaf update remains outside the component's React transition, but the conservative owner boundary abstains instead of building a partial transition call graph.",
     target: target as string,
   })),
   {
@@ -4782,7 +4831,6 @@ export const goldCases = [
     ["tree-map", "components/tree-actions/enhance-image-page.tsx", 25, "promptOptions", "The prompt editor owns the controlled value while the independent tree-review component stays outside the subscription and the confirm command snapshots once."],
     ["tree-wallet", "components/challenge-history/challenge-history-content.tsx", 23, "filter", "The tabs and history-list query boundary can subscribe independently while the sheet header stays outside selection updates."],
     ["expensify-biometrics-test", "BiometricsTestToolRow.tsx", 25, "isMFARevokeLoading", "The revoke button is the only pending consumer and starts loading before the awaited credential command; the independent test button need not rerender."],
-    ["expensify-text-filter", "TextInputFilterContent.tsx", 39, "isNegated", "Negation is controlled by one filter boundary and read once by the confirm command while the independent button remains outside the subscription."],
     ["expensify-date-filter", "DateFilterContentPageWrapper.tsx", 16, "value", "The date editor owns value changes and the confirm command snapshots once, leaving its independent action button outside editing renders."],
     ["formbricks-create-dashboard", "create-dashboard-button.tsx", 28, "isCreating", "Only the dashboard dialog renders pending status; the true transition precedes the awaited create command and the trigger stays independent."],
     ["formbricks-delete-contact", "delete-contact-button.tsx", 26, "isDeletingPerson", "Only the delete dialog renders pending status; opening deletion starts independently before await while the trigger button stays outside the subscriber."],
@@ -4799,6 +4847,7 @@ export const goldCases = [
   })),
   ...[
     ["expensify-text-filter", "TextInputFilterContent.tsx", 38, "value", "review-state", "Text input drives validation and the confirm payload across the owner, so isolating its controlled prop would leave required owner computation."],
+    ["expensify-text-filter", "TextInputFilterContent.tsx", 39, "isNegated", "review-state", "An inline callback ref performs commit work in this owner, so isolating negation updates would change that ref callback's detach and attach cadence."],
     ["expensify-date-filter", "DateFilterContentPageWrapper.tsx", 17, "selectedDateModifier", "keep-state", "The modifier controls both the date editor and confirm-button mount inside an already compact owner."],
     ["formbricks-create-dashboard", "create-dashboard-button.tsx", 26, "isCreateDialogOpen", "review-state", "Dialog visibility and its trigger already form a compact workflow boundary; no smaller meaningful owner is proven."],
     ["formbricks-create-dashboard", "create-dashboard-button.tsx", 27, "dashboardName", "review-state", "The name participates in validation, the create payload, and the complete dialog workflow rather than one presentation leaf."],

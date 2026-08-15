@@ -4,12 +4,12 @@ This file records evidence, decisions, measurements, and rejected approaches for
 
 ## System baseline
 
-- Production analyzer: 31 TypeScript modules and 12,302 lines.
-- Largest orchestration module: `src/analyze-source.ts` at 3,064 lines; rule families are already separated under `src/rules/`.
+- Production analyzer: 32 TypeScript modules and 12,670 lines.
+- Largest orchestration module: `src/analyze-source.ts` at 3,087 lines; rule families are separated under `src/rules/`.
 - Full real-app scan: 6,070 hooks across 11 app roots: 3,594 `useState`, 2,476 `useEffect`, 76 Legend practice findings.
-- Pinned scored corpus after closeout: 2,151 hooks across 197 focused targets and 726 manual labels.
-- Final quality: 100% actionable precision (369/369), 95.8% actionable recall (369/385), 13/13 state groups, 76/76 Legend practices.
-- Validation: 402/402 tests under strict TypeScript settings.
+- Pinned scored corpus after closeout: 2,156 hooks across 198 focused targets and 730 manual labels.
+- Final quality: 100% actionable precision (360/360), 93.8% actionable recall (360/384), 13/13 state groups, 76/76 Legend practices.
+- Validation: 416/416 tests under strict TypeScript settings.
 
 ## Goal 1 findings
 
@@ -39,15 +39,15 @@ The shared analysis foundation is complete enough to stop architectural patching
 | Genie Courses | 29 | 0 | 29 | 5 |
 | Open WebUI RN | 0 | 0 | 0 | 3 |
 
-Across full apps the tool emits 406 `use-observable`, 15 `move-state-down`, 62 `use-ref`, 96 `use-unmount`, 38 `use-mount`, six `use-observe-effect`, and 2,768/1,245 conservative state/effect reviews.
+Across full apps the tool emits 396 `use-observable`, 15 `move-state-down`, 57 `use-ref`, 96 `use-unmount`, 38 `use-mount`, six `use-observe-effect`, and 2,783/1,246 conservative state/effect reviews. The safety closeout also removed the only automatic `move-to-event` recommendation.
 
-## Remaining 21 labeled opportunities
+## Opportunity-only audit: 21 labeled opportunities
 
 The misses do not form one last universal rule:
 
 | Family | Labels | Independent shapes | Decision |
 | --- | ---: | ---: | --- |
-| Keyed/derived selection models | 3 | 2 apps | Defer; existing keyed proof is already specialized and these need broader summary/payload contracts. |
+| Keyed/derived selection models | 3 | 1 app root | Defer; existing keyed proof is already specialized and these need broader summary/payload contracts. |
 | Legend Music multi-surface state machines | 6 | 4 runtime clusters | Defer; alternate platform branches and async finalizers require whole-cluster ownership proof. |
 | Strict subtree ownership | 2 | 2 | Defer; parent reset/unmount correlation and throttled effect ownership are different proofs. |
 | Async/controlled leaf edges | 4 | 4 | Defer; transition callback provenance, companion writes, and conditional lifetime differ. |
@@ -56,6 +56,8 @@ The misses do not form one last universal rule:
 | Cohesive leaf keep | 1 | 1 | Deliberate abstention boundary. |
 
 This is the stop signal: closing all 21 now would require at least six unrelated proof families. That would optimize the score, not the product.
+
+The later safety closeout added eight declared misses rather than weakening the eval: three manually verified Expensify modal opportunities whose callback provenance is not locally proven, one Tree Map event-reset opportunity behind a custom component contract, and four Formbricks leaf opportunities in owners that also use React transitions. The current corpus therefore has 29 non-enforced opportunities.
 
 ## Final `useEffect` cohort audit
 
@@ -67,7 +69,7 @@ Five representative effects are now pinned in the real-world corpus. Two would g
 
 The earlier architecture closeout kept one bounded synchronous co-write proof because it replaced duplicated branch reasoning in four detector consumers and had cross-app impact. It remained structural and failed closed for unsupported control flow; no symbolic predicate engine was added.
 
-Current intended full-app action deltas versus `main`:
+Earlier accepted Goal 2 action deltas versus the then-current `main`:
 
 - Expensify: one `review-state` → `use-observable` (`startPermissionsFlow`).
 - Formbricks: two `review-state` → grouped `use-observable` (`selectedSurveyId`, `generatedUrl`).
@@ -77,15 +79,15 @@ Exact per-app phase impact:
 
 | App root | Goal 1: cached analysis/coverage | Goal 2: co-write proof | Closeout hardening/final rule set |
 | --- | ---: | ---: | ---: |
-| Tree Map | 0 | 0 | 0 |
+| Tree Map | 0 | 0 | -2 automatic actions |
 | Tree Wallet | 0 | 0 | 0 |
 | Memoria src | 0 | 0 | 0 |
 | Memoria app | 0 | 0 | 0 |
 | Legend Music | 0 | 0 | 0 |
 | Excalidraw | 0 | 0 | 0 |
-| Expensify | 0 | +1 `use-observable` | 0 |
-| Formbricks | 0 | +2 grouped `use-observable` | 0 |
-| Outline | 0 | 0 | 0 |
+| Expensify | 0 | +1 `use-observable` | -9 automatic actions |
+| Formbricks | 0 | +2 grouped `use-observable` | -4 automatic actions |
+| Outline | 0 | 0 | -1 automatic action |
 | Genie Courses | 0 | 0 | 0 |
 | Open WebUI RN | 0 | 0 | 0 |
 
@@ -96,14 +98,14 @@ Adversarial gaps found and fixed at the shared boundary: conditional/outside con
 ## Final verification
 
 - TypeScript: pass under strict project settings.
-- Unit tests: 402/402.
-- Pinned eval: 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, 76/76 practices.
-- Hook quality: 100% actionable precision (369/369), 95.8% actionable recall (369/385).
-- `use-observable`: 100% precision (310/310), 96.0% recall (310/323).
-- State-flow correctness and coverage hardening changed zero findings across all eleven full apps.
-- The named-effect experiment was reverted after review; all eleven full-app finding sets remain identical to the accepted baseline.
+- Unit tests: 416/416.
+- Pinned eval: 2,156 hooks, 701/730 labels, 29 declared misses, 13/13 groups, 76/76 practices.
+- Hook quality: 100% actionable precision (360/360), 93.8% actionable recall (360/384).
+- `use-observable`: 100% precision (302/302), 93.8% recall (302/322).
+- Bounded state-flow correctness changed zero findings. Final React commit, callback-contract, and atomicity hardening demoted sixteen uncertain automatic actions to review.
+- Before that safety closeout, reverting the named-effect experiment restored all eleven finding sets to their accepted baseline.
 
-The work stops here by design. The next improvement should begin only when a new structural family has repeated cross-app evidence; the 21 current misses are not one unfinished rule.
+The work stops here by design. The next improvement should begin only when a new structural family has repeated cross-app evidence; the 29 current misses are not one unfinished rule.
 
 ## Two-goal product re-audit
 
@@ -140,14 +142,14 @@ There is a repeatable sole-child `keep-state` classification cohort, but it is d
 
 ### Goal 2: ship only a proof that clears the gate
 
-No new hook detector shipped. This is the measured result, not an incomplete implementation.
+No new opportunity detector shipped. The only new detector is a conservative React commit-sensitivity boundary that turns uncertain actions into explicit reviews. This is the measured result, not an incomplete implementation.
 
 - The named-effect cohort contained eight cases. Five resolved locally, four fit one proof, and only two improved a non-actionable `keep-effect` classification. The experiment was reverted.
 - The remaining 21 labels contain 16 actionable opportunities split across at least five proof families. Closing them now would require broader flow, cross-file ownership, lifecycle, or atomicity analysis.
-- All 402 tests pass after reverting the experiments.
-- The pinned eval remains 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices.
+- All 416 tests pass after reverting the experiments and completing the safety closeout.
+- At the end of the opportunity-only re-audit, the pinned eval remained 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices. The later safety closeout and added labels produced the current 701/730 result with 29 explicit misses.
 
-Exact final app impact from this re-audit:
+Exact app impact from the opportunity-only re-audit:
 
 | App root | Hook action delta | Practice delta |
 | --- | ---: | ---: |
@@ -164,3 +166,24 @@ Exact final app impact from this re-audit:
 | Open WebUI RN | 0 | 0 |
 
 The correct product conclusion is narrow: no examined **high-value actionable** hook family clears the five-case, three-app, structural-proof gate. Hook detection is therefore at its practical optimum under the current proof model. The next higher-value research lane is Legend-native code quality—narrow `useValue` subscriptions, correct `get()` versus `peek()`, direct child writes, and safe batching—while retaining the same cross-app evidence and precision requirements.
+
+## Safety closeout
+
+The final adversarial pass corrected sixteen automatic recommendations that lacked a complete React-semantics proof:
+
+- Tree Map: one owner-scoped image preview with a companion React-state transaction and one reset effect behind an opaque custom callback now remain review.
+- Expensify: nine states involving fresh callback refs, repeated focus management, transition/commit cadence, or opaque deferred callback ownership now remain review.
+- Formbricks: four otherwise valid leaf opportunities now remain review because their owners also use React transitions and the analyzer intentionally avoids a partial transition call graph.
+- Outline: one input focus state now remains review because its owner creates merged callback refs.
+- The other seven app roots changed zero hook actions. All eleven app roots changed zero Legend practice actions.
+
+The shared rules now fail closed when an optimization could change any of these boundaries:
+
+- atomic companion React-state writes;
+- `startTransition` / `useTransition` priority;
+- every-commit effects and fresh callback-ref lifecycles;
+- collection callbacks on an unproven or shadowed array type;
+- parser-recovered file facts;
+- opaque JSX option or registrar callbacks.
+
+This was a safety phase, not a recall phase. It added no app, component, or state-name matcher. The commit-sensitive proof is isolated in `src/rules/react-commit-sensitivity.ts` so the main analyzer remains orchestration rather than another rule bucket.

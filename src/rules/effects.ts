@@ -814,8 +814,106 @@ function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
     ts.isPropertyAccessExpression(call.expression) &&
     /^(?:every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/.test(
       call.expression.name.text
-    )
+    ) &&
+    hasSynchronousArrayReceiver(call.expression.expression)
   );
+}
+
+function hasSynchronousArrayReceiver(expression: ts.Expression): boolean {
+  const receiver = unwrapTransparentExpression(expression);
+  if (ts.isArrayLiteralExpression(receiver)) return true;
+  if (!ts.isIdentifier(receiver)) return false;
+
+  const declarations: Array<
+    ts.BindingElement | ts.ParameterDeclaration | ts.VariableDeclaration
+  > = [];
+  visit(receiver.getSourceFile(), node => {
+    if (
+      (ts.isBindingElement(node) ||
+        ts.isParameter(node) ||
+        ts.isVariableDeclaration(node)) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === receiver.text
+    ) {
+      declarations.push(node);
+    }
+  });
+  if (declarations.length !== 1) return false;
+  const declaration = declarations[0]!;
+  if (arrayBindingHasDirectOverride(receiver)) return false;
+  if (ts.isBindingElement(declaration)) {
+    return bindingElementHasArrayType(declaration);
+  }
+  return isArrayTypeNode(declaration.type) ||
+    (ts.isVariableDeclaration(declaration) &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+      declaration.initializer !== undefined &&
+      ts.isArrayLiteralExpression(unwrapTransparentExpression(declaration.initializer)));
+}
+
+function arrayBindingHasDirectOverride(receiver: ts.Identifier): boolean {
+  let overridden = false;
+  visit(receiver.getSourceFile(), node => {
+    if (overridden) return;
+    if (
+      ts.isBinaryExpression(node) &&
+      isAssignmentOperator(node.operatorToken.kind) &&
+      expressionTargetsBinding(node.left, receiver.text)
+    ) {
+      overridden = true;
+      return;
+    }
+    if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      expressionTargetsBinding(node.operand, receiver.text)
+    ) {
+      overridden = true;
+      return;
+    }
+    if (
+      ts.isDeleteExpression(node) &&
+      expressionTargetsBinding(node.expression, receiver.text)
+    ) {
+      overridden = true;
+    }
+  });
+  return overridden;
+}
+
+function expressionTargetsBinding(expression: ts.Expression, name: string): boolean {
+  let current = unwrapTransparentExpression(expression);
+  while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+    current = current.expression;
+  }
+  return ts.isIdentifier(current) && current.text === name;
+}
+
+function bindingElementHasArrayType(element: ts.BindingElement): boolean {
+  const pattern = element.parent;
+  if (!ts.isObjectBindingPattern(pattern)) return false;
+  const declaration = pattern.parent;
+  if (!ts.isParameter(declaration) || !declaration.type || !ts.isTypeLiteralNode(declaration.type)) {
+    return false;
+  }
+  const propertyName = element.propertyName?.getText() ?? element.name.getText();
+  return declaration.type.members.some(member =>
+    ts.isPropertySignature(member) &&
+    member.name?.getText() === propertyName &&
+    isArrayTypeNode(member.type)
+  );
+}
+
+function isArrayTypeNode(type: ts.TypeNode | undefined): boolean {
+  if (!type) return false;
+  if (ts.isArrayTypeNode(type)) return true;
+  if (
+    ts.isTypeOperatorNode(type) &&
+    type.operator === ts.SyntaxKind.ReadonlyKeyword
+  ) {
+    return isArrayTypeNode(type.type);
+  }
+  return false;
 }
 
 function findPureDerivedSetter(
@@ -938,7 +1036,14 @@ function findMutationSiteReset(
   if (!target || target.owner !== effect.owner || sources.includes(target)) return null;
   const initializer = target.call.arguments[0];
   const reset = setterCall.arguments[0];
-  if (!initializer || !reset || !nodesHaveSameText(initializer, reset)) return null;
+  if (
+    !initializer ||
+    !reset ||
+    !nodesHaveSameText(initializer, reset) ||
+    !isStablePrimitiveReset(initializer)
+  ) {
+    return null;
+  }
   const targetUsage = target.setterName ? usageBySetter.get(target.setterName) : undefined;
   if (!targetUsage || targetUsage.setterCalls <= targetUsage.effectWrites) return null;
 
@@ -957,6 +1062,20 @@ function findMutationSiteReset(
     }
   }
   return { sources, target };
+}
+
+function isStablePrimitiveReset(expression: ts.Expression): boolean {
+  const value = unwrapTransparentExpression(expression);
+  return value.kind === ts.SyntaxKind.NullKeyword ||
+    value.kind === ts.SyntaxKind.TrueKeyword ||
+    value.kind === ts.SyntaxKind.FalseKeyword ||
+    ts.isStringLiteralLike(value) ||
+    ts.isNumericLiteral(value) ||
+    ts.isBigIntLiteral(value) ||
+    ts.isNoSubstitutionTemplateLiteral(value) ||
+    (ts.isPrefixUnaryExpression(value) &&
+      (value.operator === ts.SyntaxKind.PlusToken || value.operator === ts.SyntaxKind.MinusToken) &&
+      (ts.isNumericLiteral(value.operand) || ts.isBigIntLiteral(value.operand)));
 }
 
 function soleDirectSetterCall(
@@ -1028,12 +1147,12 @@ function allSetterReferencesAreEventBoundaries(state: StateCandidate): boolean {
 }
 
 function jsxAttributeHasProvenEventContract(attribute: ts.JsxAttribute): boolean {
-  if (isValueTransitionProp(attribute.name.getText())) return true;
   const opening = attribute.parent.parent;
   return (
     (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
     /^[a-z]/.test(opening.tagName.getText()) &&
-    /^on[A-Z]/.test(attribute.name.getText())
+    (isValueTransitionProp(attribute.name.getText()) ||
+      /^on[A-Z]/.test(attribute.name.getText()))
   );
 }
 

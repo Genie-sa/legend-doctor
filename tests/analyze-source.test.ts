@@ -707,6 +707,314 @@ test("does not isolate controlled state read by an effect-like lifecycle hook", 
   assert.notEqual(source("useInsertionEffect as useInsert", "useInsert")?.action, "use-observable");
 });
 
+test("does not isolate state whose update is scheduled by a React transition", () => {
+  const findings = analyzeSource(`
+    import { startTransition as schedule, useState, useTransition } from "react";
+    function Leaf(_props: unknown) { return null; }
+    function Shell(_props: unknown) { return null; }
+    export function PlainUpdate() {
+      const [visible, setVisible] = useState(false);
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => setVisible(true)}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function StaticTransition() {
+      const [visible, setVisible] = useState(false);
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => schedule(() => setVisible(true))}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function HookTransition() {
+      const [visible, setVisible] = useState(false);
+      const [, begin] = useTransition();
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => begin(() => setVisible(true))}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function NamedTransition() {
+      const [visible, setVisible] = useState(false);
+      function update() { setVisible(true); }
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => schedule(update)}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function AliasedTransition() {
+      const [visible, setVisible] = useState(false);
+      const begin = schedule;
+      const update = () => setVisible(true);
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => begin(() => update())}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function ChainedStaticTransition() {
+      const [visible, setVisible] = useState(false);
+      const first = schedule;
+      const begin = first;
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => begin(() => setVisible(true))}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function AliasedHookTransition() {
+      const [visible, setVisible] = useState(false);
+      const [, transition] = useTransition();
+      const begin = transition;
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => begin(() => setVisible(true))}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function NestedHelperTransition() {
+      const [visible, setVisible] = useState(false);
+      const update = () => setVisible(true);
+      const middle = () => update();
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => schedule(() => middle())}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function AssertedTransition() {
+      const [visible, setVisible] = useState(false);
+      function update() { setVisible(true); }
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => schedule(update as () => void)}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  const visible = findings.filter(finding => finding.name === "visible");
+  assert.deepEqual(
+    visible.map(finding => finding.action),
+    [
+      "use-observable",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+    ]
+  );
+});
+
+test("preserves mutable React state when its owner has an every-commit effect", () => {
+  for (const [hookImport, hookCall] of [
+    ["useEffect", "useEffect"],
+    ["useLayoutEffect as useLayout", "useLayout"],
+    ["useInsertionEffect", "useInsertionEffect"],
+  ]) {
+    const findings = analyzeSource(`
+      import { ${hookImport}, useState } from "react";
+      function Leaf(_props: unknown) { return null; }
+      export function Screen() {
+        const [visible, setVisible] = useState(false);
+        ${hookCall}(() => synchronizeLayout());
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+          <button onClick={() => setVisible(true)}>Open</button>
+          {visible && <Leaf />}
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.equal(findings.find(finding => finding.name === "visible")?.action, "review-state");
+  }
+
+  const explicitUndefined = analyzeSource(`
+    import { useEffect, useState } from "react";
+    function Leaf() { return null; }
+    export function Screen() {
+      const [visible, setVisible] = useState(false);
+      function nested(undefined: unknown) { return undefined; }
+      useEffect(() => synchronizeLayout(), undefined);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+        <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(
+    explicitUndefined.find(finding => finding.name === "visible")?.action,
+    "review-state"
+  );
+
+  const explicitNull = analyzeSource(`
+    import { useEffect, useState } from "react";
+    function Leaf() { return null; }
+    export function Screen() {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => synchronizeLayout(), null);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+        <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(
+    explicitNull.find(finding => finding.name === "visible")?.action,
+    "review-state"
+  );
+});
+
+test("preserves mutable React state when its owner uses an inline callback ref", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function Leaf() { return null; }
+    export function Screen() {
+      const [visible, setVisible] = useState(false);
+      return <main ref={node => synchronizeLayout(node)}>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+        <button onClick={() => setVisible(true)}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "visible")?.action, "review-state");
+});
+
+test("uses an owner-level boundary for fresh refs while allowing stable memoized refs", () => {
+  const siblings = "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />";
+  const findings = analyzeSource(`
+    import { useCallback, useState } from "react";
+    function Leaf() { return null; }
+    export function NamedRef() {
+      const [visible, setVisible] = useState(false);
+      const setNode = (node: unknown) => synchronizeLayout(node);
+      return <main ref={setNode}>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function RepeatedRef({ rows }: { rows: Array<{ id: string }> }) {
+      const [visible, setVisible] = useState(false);
+      return <main>${siblings}<button onClick={() => setVisible(true)}>Open</button>
+        {rows.map(row => <div key={row.id} ref={node => synchronizeRow(row.id, node)} />)}
+        {visible && <Leaf />}
+      </main>;
+    }
+    export function MemoizedRef() {
+      const [visible, setVisible] = useState(false);
+      const setNode = useCallback((node: unknown) => synchronizeLayout(node), []);
+      return <main ref={setNode}>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function ConditionalRef({ alternate }: { alternate: boolean }) {
+      const [visible, setVisible] = useState(false);
+      return <main ref={alternate ? node => synchronizeLayout(node) : node => synchronizeFallback(node)}>
+        ${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
+      </main>;
+    }
+    export function NestedComponentRef() {
+      const [visible, setVisible] = useState(false);
+      function Nested() { return <div ref={node => synchronizeLayout(node)} />; }
+      return <main>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function OpaqueMergedRef({ externalRef }: { externalRef: unknown }) {
+      const [visible, setVisible] = useState(false);
+      const merged = mergeRefs(externalRef);
+      return <main ref={merged}>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function ArrayFromRef({ rows }: { rows: string[] }) {
+      const [visible, setVisible] = useState(false);
+      return <main>${siblings}{Array.from(rows, row => <div key={row} ref={node => synchronizeRow(row, node)} />)}
+        <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function NamedRenderRef({ rows }: { rows: string[] }) {
+      const [visible, setVisible] = useState(false);
+      function renderRow(row: string) { return <div key={row} ref={node => synchronizeRow(row, node)} />; }
+      return <main>${siblings}{rows.map(renderRow)}
+        <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function DirectRenderHelperRef() {
+      const [visible, setVisible] = useState(false);
+      const renderRef = () => <div ref={node => synchronizeLayout(node)} />;
+      return <main>${siblings}{renderRef()}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function LocalComponentRef() {
+      const [visible, setVisible] = useState(false);
+      function RefChild() { return <div ref={node => synchronizeLayout(node)} />; }
+      return <main>${siblings}<RefChild /><button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function UnmemoizedCallbackRef() {
+      const [visible, setVisible] = useState(false);
+      const setNode = useCallback((node: unknown) => synchronizeLayout(node));
+      return <main ref={setNode}>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+    export function ConditionalBindingRef({ alternate }: { alternate: boolean }) {
+      const [visible, setVisible] = useState(false);
+      const setNode = alternate
+        ? (node: unknown) => synchronizeLayout(node)
+        : (node: unknown) => synchronizeFallback(node);
+      return <main ref={setNode}>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+  `, "fixture.tsx");
+  const visible = findings.filter(finding => finding.name === "visible");
+  assert.deepEqual(
+    visible.map(finding => finding.action),
+    [
+      "review-state",
+      "review-state",
+      "use-observable",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+    ]
+  );
+});
+
+test("does not call a nonliteral dependency array an every-commit effect", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    function Leaf() { return null; }
+    export function Screen({ dependency }: { dependency: string }) {
+      const [visible, setVisible] = useState(false);
+      const dependencies = [dependency];
+      useEffect(() => synchronizeLayout(), dependencies);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+        <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "visible")?.action, "use-observable");
+});
+
+test("does not trust shadowed React effect bindings", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    function Leaf() { return null; }
+    export function Screen({ useEffect }: { useEffect: (callback: () => void) => void }) {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => synchronizeLayout());
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+        <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "visible")?.action, "use-observable");
+
+  const unrelatedNestedShadow = analyzeSource(`
+    import { useEffect, useState } from "react";
+    function Leaf() { return null; }
+    export function Screen() {
+      const [visible, setVisible] = useState(false);
+      function nested(useEffect: (callback: () => void) => void) { useEffect(() => work()); }
+      useEffect(() => synchronizeLayout());
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+        <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(
+    unrelatedNestedShadow.find(finding => finding.name === "visible")?.action,
+    "review-state"
+  );
+});
+
 test("does not isolate controlled state captured by timers or subscriptions", () => {
   for (const root of ["subscribe(listener)", "setInterval(listener, 100)", "useFocusEffect(listener)"]) {
     const [finding] = analyzeSource(`
@@ -1937,7 +2245,7 @@ test("does not mistake unresolved boundaries for proof of leaf ownership", () =>
   }
 });
 
-test("isolates a literal boolean leaf commanded by memoized event options", () => {
+test("reviews a literal boolean leaf commanded by memoized event options", () => {
   const [finding] = analyzeSource(`
     import { useMemo, useState } from "react";
     function DecisionModal(props: { isVisible: boolean; onClose: () => void }) { return null; }
@@ -1952,8 +2260,41 @@ test("isolates a literal boolean leaf commanded by memoized event options", () =
       </main>;
     }
   `, "fixture.tsx");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /boolean leaf state/);
+  assert.equal(finding?.action, "review-state");
+});
+
+test("does not treat lifecycle options passed to an unknown hook as JSX events", () => {
+  const [finding] = analyzeSource(`
+    import { useMemo, useState } from "react";
+    function DecisionModal(props: { isVisible: boolean; onClose: () => void }) { return null; }
+    export function Screen() {
+      const [visible, setVisible] = useState(false);
+      const lifecycle = useMemo(() => ({
+        onOpen: () => setVisible(true),
+        onCleanup: () => setVisible(false),
+      }), []);
+      useLibraryLifecycle(lifecycle);
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <DecisionModal isVisible={visible} onClose={() => setVisible(false)} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "review-state");
+});
+
+test("does not treat event options wrapped by a JSX-time registrar as direct events", () => {
+  const [finding] = analyzeSource(`
+    import { useMemo, useState } from "react";
+    function DecisionModal(props: { isVisible: boolean; onClose: () => void }) { return null; }
+    export function Screen() {
+      const [visible, setVisible] = useState(false);
+      const actions = useMemo(() => [{ onSelected: () => setVisible(true) }], []);
+      return <main><Header /><Toolbar actions={register(actions)} /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <DecisionModal isVisible={visible} onClose={() => setVisible(false)} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "review-state");
 });
 
 test("requires literal leaf setters to be event-rooted and independently useful", () => {
@@ -3072,6 +3413,52 @@ test("keeps a lazy callback leaf when its write command also invalidates the own
   assert.notEqual(preview?.action, "use-observable");
 });
 
+test("does not promote broad transported state when every write also invalidates the owner", () => {
+  const padding = "\n".repeat(150);
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function Field(_props: unknown) { return null; }
+    export function Screen() {
+      const [value, setValue] = useState("");
+      const [dirty, setDirty] = useState(false);
+      const change = () => { setValue("next"); setDirty(true); };
+      ${padding}
+      return <main>
+        <button onClick={change}>Change</button>
+        <Field value={value} /><Field value={value} />
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+        {dirty && <Save />}
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "value")?.action, "review-state");
+});
+
+test("does not split a broad transported preview from a companion React transition", () => {
+  const padding = "\n".repeat(150);
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function ImageField(_props: unknown) { return null; }
+    export function Screen() {
+      const [preview, setPreview] = useState<string | null>(null);
+      const [role, setRole] = useState("user");
+      const changeRole = () => { setRole("admin"); setPreview(null); };
+      const chooseFile = (reader: FileReader) => {
+        reader.onloadend = () => { setPreview(reader.result as string); };
+      };
+      ${padding}
+      return <main>
+        <button onClick={changeRole}>Role</button>
+        <button onClick={() => chooseFile(new FileReader())}>Choose</button>
+        <ImageField preview={preview} /><ImageField preview={preview} />
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />
+        <span>{role}</span>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "preview")?.action, "review-state");
+});
+
 test("does not move controlled state through a stored JSX value", () => {
   assert.deepEqual(
     actions(`
@@ -3429,7 +3816,7 @@ test("does not call a resettable state value derived", () => {
   );
 });
 
-test("moves a same-owner reset effect into complete event mutation boundaries", () => {
+test("keeps a same-owner reset effect behind an opaque controlled component", () => {
   assert.deepEqual(
     actions(`
       import { useEffect, useState } from "react";
@@ -3443,7 +3830,7 @@ test("moves a same-owner reset effect into complete event mutation boundaries", 
         </main>;
       }
     `),
-    ["review-state", "review-state", "move-to-event"]
+    ["review-state", "review-state", "review-effect"]
   );
 });
 
@@ -3451,6 +3838,7 @@ test("does not move reset effects into opaque custom-component callbacks", () =>
   for (const mutation of [
     `<Controller onRender={setCategory} />`,
     `<Controller onMount={() => setCategory("next")} />`,
+    `<Controller onChange={setCategory} />`,
   ]) {
     assert.deepEqual(
       actions(`
@@ -3487,6 +3875,28 @@ test("moves reset effects into intrinsic event callbacks", () => {
     `),
     ["review-state", "review-state", "move-to-event"]
   );
+});
+
+test("does not move reset effects whose initializer evaluation is not stable", () => {
+  for (const reset of ["nextPage()", "{}", "[]"]) {
+    const findings = analyzeSource(`
+        import { useEffect, useState } from "react";
+        export function Browser() {
+          const [category, setCategory] = useState("all");
+          const [page, setPage] = useState(${reset});
+          useEffect(() => setPage(${reset}), [category]);
+          return <main>
+            <button onClick={() => setCategory("next")}>Next category</button>
+            <button onClick={() => setPage(${reset})}>Next page</button>
+          </main>;
+        }
+      `, "fixture.tsx");
+    assert.equal(
+      findings.find(finding => finding.hook === "useEffect")?.action,
+      "review-effect",
+      reset
+    );
+  }
 });
 
 test("does not move a reset effect when a dependency mutation boundary is external", () => {
@@ -5376,6 +5786,71 @@ test("tracks useValue reads through synchronous collection callbacks", () => {
     `),
     ["use-observe-effect"]
   );
+});
+
+test("does not trust collection method names on an unknown scheduler", () => {
+  assert.deepEqual(
+    actions(`
+      import { useEffect } from "react";
+      import { useValue } from "@legendapp/state/react";
+      export function Screen({ value$, scheduler }: {
+        value$: unknown;
+        scheduler: { find: (callback: () => boolean) => unknown };
+      }) {
+        const value = useValue(value$);
+        useEffect(() => {
+          scheduler.find(() => {
+            report(value);
+            return true;
+          });
+        }, [value]);
+        return null;
+      }
+    `),
+    ["review-effect"]
+  );
+});
+
+test("does not trust a shadowed Array type as a synchronous collection", () => {
+  assert.deepEqual(
+    actions(`
+      import { useEffect } from "react";
+      import { useValue } from "@legendapp/state/react";
+      type Array<T> = { find: (callback: (value: T) => boolean) => T | undefined };
+      export function Screen({ selected$, items }: { selected$: unknown; items: Array<{ id: string }> }) {
+        const selected = useValue(selected$);
+        useEffect(() => {
+          report(items.find(item => item.id === selected));
+        }, [selected]);
+        return null;
+      }
+    `),
+    ["review-effect"]
+  );
+});
+
+test("does not trust reassigned or method-overridden array receivers", () => {
+  for (const setup of [
+    `let items: { id: string }[] = []; items = makeScheduler();`,
+    `const items: { id: string }[] = []; items.find = schedule;`,
+  ]) {
+    assert.deepEqual(
+      actions(`
+        import { useEffect } from "react";
+        import { useValue } from "@legendapp/state/react";
+        export function Screen({ selected$ }: { selected$: unknown }) {
+          const selected = useValue(selected$);
+          ${setup}
+          useEffect(() => {
+            report(items.find(item => item.id === selected));
+          }, [selected]);
+          return null;
+        }
+      `),
+      ["review-effect"],
+      setup
+    );
+  }
 });
 
 test("abstains when state is shadowed", () => {
