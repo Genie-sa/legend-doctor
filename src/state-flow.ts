@@ -3,6 +3,7 @@ import ts from "typescript";
 import { isRuntimeFunctionLike, type RuntimeFunctionLike } from "./ast.js";
 
 export type FlowProof = "disproven" | "proven" | "unknown";
+export type StateFlowCoverage = "complete" | "not-requested" | "unknown";
 
 /**
  * Bounded structural proof that two calls share one normal execution path and
@@ -12,6 +13,7 @@ export type FlowProof = "disproven" | "proven" | "unknown";
  */
 export class StateFlowIndex {
   readonly #flows = new WeakMap<RuntimeFunctionLike, FunctionWriteFlow>();
+  readonly #coverage = new WeakMap<RuntimeFunctionLike, Exclude<StateFlowCoverage, "not-requested">>();
 
   proveSynchronousCoexecution(
     fn: RuntimeFunctionLike,
@@ -23,7 +25,14 @@ export class StateFlowIndex {
       flow = new FunctionWriteFlow(fn);
       this.#flows.set(fn, flow);
     }
-    return flow.prove(left, right);
+    const result = flow.prove(left, right);
+    const previous = this.#coverage.get(fn);
+    this.#coverage.set(fn, previous === "unknown" || result === "unknown" ? "unknown" : "complete");
+    return result;
+  }
+
+  coverageFor(fn: RuntimeFunctionLike): StateFlowCoverage {
+    return this.#coverage.get(fn) ?? "not-requested";
   }
 }
 
@@ -84,7 +93,9 @@ class FunctionWriteFlow {
     if (together.length === 0) return "disproven";
     const synchronous = together.filter(path => callsShareAwaitEpoch(path, left, right));
     if (synchronous.length === 0) return "disproven";
-    if (sameControlArms(leftControls, rightControls)) return "proven";
+    if (sameControlArms(leftControls, rightControls)) {
+      return hasEarlierCorrelatedControlRisk(leftControls, this.fn) ? "unknown" : "proven";
+    }
     return unconditionalCallPrecedesControlledCall(
       synchronous,
       left,
@@ -95,6 +106,43 @@ class FunctionWriteFlow {
       ? "proven"
       : "unknown";
   }
+}
+
+/**
+ * Successive dynamic controls are enumerated independently. Until the lowerer
+ * tracks predicate identity, an earlier control surface makes a later shared
+ * arm an unsafe co-execution proof even when both calls appear in that arm.
+ */
+function hasEarlierCorrelatedControlRisk(
+  controls: readonly ControlArm[],
+  boundary: RuntimeFunctionLike
+): boolean {
+  for (const control of controls) {
+    let child: ts.Node = control.control;
+    for (let parent = child.parent; parent && child !== boundary; child = parent, parent = parent.parent) {
+      if (!ts.isBlock(parent)) continue;
+      const statement = parent.statements.find(candidate => candidate === child || nodeContains(candidate, child));
+      if (!statement) continue;
+      const index = parent.statements.indexOf(statement);
+      if (parent.statements.slice(0, index).some(isPotentiallyCorrelatedControlStatement)) return true;
+    }
+  }
+  return false;
+}
+
+function isPotentiallyCorrelatedControlStatement(statement: ts.Statement): boolean {
+  return ts.isIfStatement(statement) ||
+    ts.isSwitchStatement(statement) ||
+    ts.isTryStatement(statement) ||
+    ts.isForStatement(statement) ||
+    ts.isForInStatement(statement) ||
+    ts.isForOfStatement(statement) ||
+    ts.isWhileStatement(statement) ||
+    ts.isDoStatement(statement);
+}
+
+function nodeContains(ancestor: ts.Node, node: ts.Node): boolean {
+  return node.pos >= ancestor.pos && node.end <= ancestor.end;
 }
 
 function lowerStatements(

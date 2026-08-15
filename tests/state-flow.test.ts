@@ -161,6 +161,26 @@ test("does not turn correlated guards into a co-execution proof", () => {
   );
 });
 
+test("does not prove a shared branch that an earlier guard makes unreachable", () => {
+  const { calls, fn } = functionAndCalls(`
+    function run(mode: boolean) {
+      if (mode) return;
+      if (mode) {
+        setName("Ada");
+        setOpen(true);
+      }
+    }
+  `);
+  assert.equal(
+    new StateFlowIndex().proveSynchronousCoexecution(
+      fn,
+      calls.get("setName")!,
+      calls.get("setOpen")!
+    ),
+    "unknown"
+  );
+});
+
 test("disproves co-execution with a call in a constant-false branch", () => {
   const { calls, fn } = functionAndCalls(`
     function run() {

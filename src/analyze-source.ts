@@ -186,23 +186,24 @@ export function analyzeSource(
     true,
     scriptKindForFile(fileName)
   );
-  return analyzeParsedSource(sourceFile, fileName, sourceComponents);
+  return analyzeParsedSource(sourceFile, fileName, sourceComponents, new StateFlowIndex());
 }
 
 export function analyzeSourceFile(
   file: AnalysisFile,
   reportFileName: string,
-  sourceComponents: ReadonlySet<string> = new Set()
+  sourceComponents: ReadonlySet<string> = new Set(),
+  stateFlow: StateFlowIndex = new StateFlowIndex()
 ): HookFinding[] {
-  return analyzeParsedSource(file.sourceFile, reportFileName, sourceComponents);
+  return analyzeParsedSource(file.sourceFile, reportFileName, sourceComponents, stateFlow);
 }
 
 function analyzeParsedSource(
   sourceFile: ts.SourceFile,
   fileName: string,
-  sourceComponents: ReadonlySet<string>
+  sourceComponents: ReadonlySet<string>,
+  stateFlow: StateFlowIndex
 ): HookFinding[] {
-  const stateFlow = new StateFlowIndex();
   const imports = collectHookImports(sourceFile);
   const localComponents = collectLocalComponents(sourceFile);
   const states: StateCandidate[] = [];

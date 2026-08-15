@@ -5,6 +5,7 @@ import ts from "typescript";
 
 import { analyzeLegendPracticesFile } from "./analyze-legend-practices.js";
 import { analyzeSourceFile } from "./analyze-source.js";
+import { isRuntimeFunctionLike, type RuntimeFunctionLike } from "./ast.js";
 import {
   AnalysisCoverageLedger,
   type AnalysisCoverageOutcome,
@@ -25,6 +26,7 @@ import {
 } from "./semantic-context.js";
 import { pathIdentityKey } from "./path-identity.js";
 import { buildSourceIndexFromFiles, type SourceIndex } from "./source-components.js";
+import { StateFlowIndex, type StateFlowCoverage } from "./state-flow.js";
 import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
 
 const IGNORED_DIRECTORIES = new Set([
@@ -102,7 +104,7 @@ export async function analyzePathDetailed(
   const analysisFiles = files.map(file => {
     const reportFileName = path.relative(analysisRoot, file) || path.basename(file);
     if (!isSupportedAnalysisFile(file)) {
-      return { analysisFile: null, file, functionTargets: [], reportFileName };
+      return { analysisFile: null, file, functionEntries: [], reportFileName };
     }
     const analysisFile = context.project.getFile(file);
     if (!analysisFile) {
@@ -111,17 +113,17 @@ export async function analyzePathDetailed(
     return {
       analysisFile,
       file,
-      functionTargets: functionCoverageTargets(analysisFile, reportFileName),
+      functionEntries: functionCoverageEntries(analysisFile, reportFileName),
       reportFileName,
     };
   });
   const coverageTargets: AnalysisCoverageTarget[] = analysisFiles.flatMap(entry => [
     { kind: "file" as const, file: entry.reportFileName },
-    ...entry.functionTargets,
+    ...entry.functionEntries.map(functionEntry => functionEntry.target),
   ]);
   const coverage = new AnalysisCoverageLedger(coverageTargets);
   const diagnostics: AnalysisDiagnostic[] = [];
-  for (const { analysisFile, file, functionTargets, reportFileName } of analysisFiles) {
+  for (const { analysisFile, file, functionEntries, reportFileName } of analysisFiles) {
     if (!analysisFile) {
       coverage.record({
         target: { kind: "file", file: reportFileName },
@@ -135,11 +137,13 @@ export async function analyzePathDetailed(
         file: reportFileName,
       }))
     );
+    const stateFlow = new StateFlowIndex();
     findings.push(
       ...analyzeSourceFile(
         analysisFile,
         reportFileName,
-        context.sourceIndex.componentsFor(file)
+        context.sourceIndex.componentsFor(file),
+        stateFlow
       )
     );
     const importedObservables = context.sourceIndex.observablesFor(file);
@@ -157,15 +161,15 @@ export async function analyzePathDetailed(
         )
       )
     );
-    const stages = analyzedFileCoverage(analysisFile, context);
+    const stages = analyzedFileCoverage(analysisFile, context, functionEntries, stateFlow);
     coverage.record({
       target: { kind: "file", file: reportFileName },
       stages,
     });
-    for (const target of functionTargets) {
+    for (const { node, target } of functionEntries) {
       coverage.record({
         target,
-        stages: analyzedFunctionCoverage(analysisFile, context, target),
+        stages: analyzedFunctionCoverage(analysisFile, context, target, node, stateFlow),
       });
     }
   }
@@ -191,52 +195,37 @@ export async function analyzePathDetailed(
   };
 }
 
-function functionCoverageTargets(
+interface FunctionCoverageEntry {
+  node: RuntimeFunctionLike;
+  target: Extract<AnalysisCoverageTarget, { kind: "function" }>;
+}
+
+function functionCoverageEntries(
   file: AnalysisFile,
   reportFileName: string
-): Array<Extract<AnalysisCoverageTarget, { kind: "function" }>> {
-  const targets: Array<Extract<AnalysisCoverageTarget, { kind: "function" }>> = [];
+): FunctionCoverageEntry[] {
+  const entries: FunctionCoverageEntry[] = [];
   const sourceFile = file.sourceFile;
   const visit = (node: ts.Node): void => {
-    if (isRuntimeFunction(node)) {
-      targets.push({
-        kind: "function",
-        file: reportFileName,
-        name: runtimeFunctionName(node),
-        start: node.getStart(sourceFile),
-        end: node.end,
+    if (isRuntimeFunctionLike(node) && node.body) {
+      entries.push({
+        node,
+        target: {
+          kind: "function",
+          file: reportFileName,
+          name: runtimeFunctionName(node),
+          start: node.getStart(sourceFile),
+          end: node.end,
+        },
       });
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return targets;
+  return entries;
 }
 
-type RuntimeFunction =
-  | ts.ArrowFunction
-  | ts.ConstructorDeclaration
-  | ts.FunctionDeclaration
-  | ts.FunctionExpression
-  | ts.GetAccessorDeclaration
-  | ts.MethodDeclaration
-  | ts.SetAccessorDeclaration;
-
-function isRuntimeFunction(node: ts.Node): node is RuntimeFunction {
-  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return true;
-  if (
-    ts.isConstructorDeclaration(node) ||
-    ts.isFunctionDeclaration(node) ||
-    ts.isGetAccessorDeclaration(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node)
-  ) {
-    return node.body !== undefined;
-  }
-  return false;
-}
-
-function runtimeFunctionName(node: RuntimeFunction): string | null {
+function runtimeFunctionName(node: RuntimeFunctionLike): string | null {
   if (ts.isConstructorDeclaration(node)) return "constructor";
   if (node.name) return node.name.getText(node.getSourceFile());
   const parent = node.parent;
@@ -302,14 +291,19 @@ function outcome(
 
 function analyzedFileCoverage(
   file: AnalysisFile,
-  context: AnalysisContext
+  context: AnalysisContext,
+  functionEntries: readonly FunctionCoverageEntry[],
+  stateFlow: StateFlowIndex
 ): AnalysisCoverageStages {
   const recovered = file.parserDiagnostics.length > 0;
   return {
     parser: recovered
       ? outcome("analyzed", "parser-recovered", "The parser recovered with reported diagnostics.")
       : outcome("analyzed", "parser-complete", "The source parsed without recovery diagnostics."),
-    lowering: outcome("skipped", "lowering-not-implemented", "Function IR lowering is not implemented."),
+    lowering: boundedFlowCoverage(
+      recovered ? "unknown" : aggregateStateFlowCoverage(functionEntries, stateFlow),
+      "file"
+    ),
     semantic: semanticCoverage(file, context),
     detector: recovered
       ? outcome("unknown", "detector-recovery-uncertain", "Detectors ran, but results in recovered source regions are not trusted as complete.")
@@ -320,7 +314,9 @@ function analyzedFileCoverage(
 function analyzedFunctionCoverage(
   file: AnalysisFile,
   context: AnalysisContext,
-  target: Extract<AnalysisCoverageTarget, { kind: "function" }>
+  target: Extract<AnalysisCoverageTarget, { kind: "function" }>,
+  node: RuntimeFunctionLike,
+  stateFlow: StateFlowIndex
 ): AnalysisCoverageStages {
   const recovered = file.parserDiagnostics.some(diagnostic =>
     diagnosticAffectsTarget(diagnostic, target)
@@ -329,12 +325,46 @@ function analyzedFunctionCoverage(
     parser: recovered
       ? outcome("analyzed", "parser-recovered-in-function", "The parser recovered within this function range.")
       : outcome("analyzed", "parser-complete", "No parser recovery diagnostic overlaps this function."),
-    lowering: outcome("skipped", "lowering-not-implemented", "Function IR lowering is not implemented."),
+    lowering: boundedFlowCoverage(recovered ? "unknown" : stateFlow.coverageFor(node), "function"),
     semantic: semanticCoverage(file, context),
     detector: recovered
       ? outcome("unknown", "detector-recovery-uncertain", "Detectors ran, but results in this recovered function are not trusted as complete.")
       : outcome("analyzed", "detectors-complete", "All current source detectors ran on this cached function AST."),
   };
+}
+
+function aggregateStateFlowCoverage(
+  entries: readonly FunctionCoverageEntry[],
+  stateFlow: StateFlowIndex
+): StateFlowCoverage {
+  const outcomes = entries.map(entry => stateFlow.coverageFor(entry.node));
+  if (outcomes.includes("unknown")) return "unknown";
+  return outcomes.includes("complete") ? "complete" : "not-requested";
+}
+
+function boundedFlowCoverage(
+  coverage: StateFlowCoverage,
+  scope: "file" | "function"
+): AnalysisCoverageOutcome {
+  if (coverage === "complete") {
+    return outcome(
+      "analyzed",
+      "bounded-flow-complete",
+      `Every requested bounded state-flow proof in this ${scope} completed.`
+    );
+  }
+  if (coverage === "unknown") {
+    return outcome(
+      "unknown",
+      "bounded-flow-uncertain",
+      `At least one bounded state-flow proof in this ${scope} encountered unsupported or recovered control flow.`
+    );
+  }
+  return outcome(
+    "skipped",
+    "bounded-flow-not-requested",
+    `No detector requested a bounded state-flow proof in this ${scope}.`
+  );
 }
 
 function diagnosticAffectsTarget(

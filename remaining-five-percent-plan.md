@@ -48,7 +48,7 @@ Exit criteria:
 
 ## Status
 
-Both goals complete. One shared synchronous co-write proof survived the evidence gate; the remaining low-frequency edge families are documented and intentionally deferred.
+Both goals complete. One shared synchronous co-write proof survived the evidence gate. Flow uncertainty is now visible in coverage; the lower-value named-effect experiment was reverted, and the remaining edge families are documented and intentionally deferred.
 
 ## Errors encountered
 

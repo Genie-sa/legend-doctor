@@ -88,7 +88,34 @@ test("inventories named and anonymous runtime functions in coverage", async t =>
     ["Screen", null]
   );
   assert.ok(functions.every(entry => entry.stages.detector.status === "analyzed"));
-  assert.ok(functions.every(entry => entry.stages.lowering.reason.code === "lowering-not-implemented"));
+  assert.ok(functions.every(entry => entry.stages.lowering.reason.code === "bounded-flow-not-requested"));
+});
+
+test("reports complete, uncertain, and unrequested bounded state-flow coverage", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-flow-coverage-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const source = `
+    import { useState } from "react";
+    export function Screen({ items }: { items: string[] }) {
+      const [first, setFirst] = useState("");
+      const [second, setSecond] = useState("");
+      const complete = () => { setFirst("a"); setSecond("b"); };
+      const uncertain = () => { for (const item of items) setFirst(item); setSecond("b"); };
+      return <button onClick={complete}>{first}{second}{String(uncertain)}</button>;
+    }
+    export function Unrelated() { return null; }
+  `;
+  await writeFile(path.join(root, "screen.tsx"), source, "utf8");
+
+  const detailed = await analyzePathDetailed(root);
+  const functions = detailed.coverage.entries.filter(entry => entry.target.kind === "function");
+  const byName = new Map(functions.map(entry => [entry.target.kind === "function" ? entry.target.name : null, entry]));
+
+  assert.equal(byName.get("complete")?.stages.lowering.reason.code, "bounded-flow-complete");
+  assert.equal(byName.get("uncertain")?.stages.lowering.reason.code, "bounded-flow-uncertain");
+  assert.equal(byName.get("Unrelated")?.stages.lowering.reason.code, "bounded-flow-not-requested");
+  assert.equal(detailed.coverage.entries[0]?.stages.lowering.reason.code, "bounded-flow-uncertain");
+  assert.deepEqual(detailed.report.findings, analyzeSource(source, "screen.tsx"));
 });
 
 test("excludes ambient declarations, overload signatures, and abstract methods from runtime coverage", async t => {
@@ -156,6 +183,7 @@ test("attributes an end-of-file recovery diagnostic to the unfinished function",
   );
 
   assert.equal(functionEntry?.stages.parser.reason.code, "parser-recovered-in-function");
+  assert.equal(functionEntry?.stages.lowering.reason.code, "bounded-flow-uncertain");
   assert.equal(functionEntry?.stages.detector.status, "unknown");
 });
 

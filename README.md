@@ -35,13 +35,13 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 11 |
-| Source targets | 192 |
-| Hooks analyzed | 2,136 |
-| Manual labels | 721 |
-| Unit tests | 400/400 |
+| Source targets | 197 |
+| Hooks analyzed | 2,151 |
+| Manual labels | 726 |
+| Unit tests | 402/402 |
 | Actionable precision | 100% (369/369) |
 | Actionable recall | 95.8% (369/385) |
-| Legend practice precision | 100% (73/73) |
+| Legend practice precision | 100% (76/76) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, and Open WebUI React Native.
@@ -60,7 +60,8 @@ Run Legend Doctor before and after every React state, effect, or Legend observab
 `--actionable` returns `change` and `candidate`. Omit it to include intentional `keep` findings.
 
 For parser and analysis coverage, use `--json --coverage`. It reports every discovered supported source file and runtime
-function, parser diagnostics, and whether parsing, semantic analysis, detectors, or future lowering ran or were skipped.
+function, parser diagnostics, and whether parsing, semantic analysis, detectors, or bounded state-flow proofs ran, were
+not requested, or encountered unsupported control flow.
 The normal report stays unchanged.
 
 When project knowledge says an effect must keep React lifecycle semantics, place a directive immediately above it:
