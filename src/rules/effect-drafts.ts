@@ -160,16 +160,25 @@ export function findEffectSynchronizedDrafts(
       continue;
     }
     const names = ordered.map(state => state.valueName);
+    const initialization = ordered.some(hasLazyStateInitializer)
+      ? " Preserve every lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
+      : "";
     const cluster: EffectDraftCluster = {
       action: "use-observable",
       id: `state-cluster:effect-draft:${effect.owner.getStart()}:${effect.call.getStart()}`,
       members: ordered,
-      message: `Replace the effect-synchronized React draft cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the React synchronization effect and its dependencies, assign the draft atomically there, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.`,
+      message: `Replace the effect-synchronized React draft cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the React synchronization effect and its dependencies, assign the draft atomically there, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.${initialization}`,
       primary: ordered[0]!,
     };
     for (const state of ordered) clusters.set(state, cluster);
   }
   return { clusters, effects: synchronizedEffects, singletons };
+}
+
+export function hasLazyStateInitializer(state: StateCandidate): boolean {
+  const initializer = state.call.arguments[0];
+  return !!initializer &&
+    (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer));
 }
 
 function draftEditProof(

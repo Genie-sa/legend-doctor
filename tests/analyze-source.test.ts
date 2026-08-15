@@ -754,6 +754,24 @@ test("migrates a complete effect-synchronized draft while preserving the effect"
   assert.match(findings[0]?.message ?? "", /preserve the React synchronization effect/);
 });
 
+test("preserves lazy draft initialization as a once-only snapshot", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Permissions({ saved }: { saved: string[] }) {
+      const [draft, setDraft] = useState(() => new Set(saved));
+      useEffect(() => { setDraft(new Set(saved)); }, [saved]);
+      return <main>
+        <Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><Content />
+        <PermissionsEditor value={draft} onChange={setDraft} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  const state = findings.find(finding => finding.hook === "useState");
+  assert.equal(state?.action, "use-observable");
+  assert.match(state?.message ?? "", /once-only owner snapshot/);
+  assert.match(state?.message ?? "", /not pass it to Legend as a computed/);
+});
+
 test("keeps a synchronized local draft beside its value-forwarding upstream command", () => {
   const findings = analyzeSource(`
     import { useCallback, useEffect, useMemo, useState } from "react";

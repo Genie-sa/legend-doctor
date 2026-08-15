@@ -35,13 +35,13 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 11 |
-| Source targets | 191 |
-| Hooks analyzed | 2,128 |
-| Manual labels | 717 |
-| Unit tests | 382/382 |
-| Actionable precision | 100% (366/366) |
-| Actionable recall | 95.8% (366/382) |
-| Legend practice precision | 100% (76/76) |
+| Source targets | 192 |
+| Hooks analyzed | 2,136 |
+| Manual labels | 721 |
+| Unit tests | 400/400 |
+| Actionable precision | 100% (369/369) |
+| Actionable recall | 95.8% (369/385) |
+| Legend practice precision | 100% (73/73) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, and Open WebUI React Native.
@@ -455,6 +455,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/observable-reads.ts` | Direct and lowest-path reads |
 | `src/rules/observable-toggle.ts` | Exact observable boolean flips |
 | `src/rules/state-proofs.ts` | Shared state and JSX proofs |
+| `src/state-flow.ts` | Bounded write ordering, structural exclusion, and synchronous transaction proofs |
 | `src/analyze-legend-practices.ts` | Legend practice orchestration and write transactions |
 
 Pinned repositories, labels, and acceptance gates live in [evals/README.md](evals/README.md).

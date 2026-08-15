@@ -41,6 +41,7 @@ import {
 } from "./rules/deferred-reveal.js";
 import {
   findEffectSynchronizedDrafts,
+  hasLazyStateInitializer,
   mutationRegionOnlyCallsStateSetters,
   type EffectDraftProofs,
 } from "./rules/effect-drafts.js";
@@ -76,6 +77,7 @@ import {
   repeatedRenderHasStableItemKey,
   stateMayHoldCallable,
 } from "./rules/state-proofs.js";
+import { StateFlowIndex } from "./state-flow.js";
 import type { EffectAction, HookFinding, StateAction } from "./types.js";
 
 export interface StateCandidate {
@@ -155,20 +157,22 @@ interface ControlledProjectionCut {
   consumerLine: number;
 }
 
-const EFFECT_DRAFT_PROOFS: EffectDraftProofs = {
-  directUniqueReturnCallSite,
-  hasIndependentRenderCutWitness,
-  isCustomHookOwner,
-  nearestMutationFunction,
-  setterMutationsCanCooccur: (left, right, region) =>
-    branchesAreCompatible(mutationBranches(left, region), mutationBranches(right, region)),
-  uniqueReturnedExpression,
-};
-
 const LAZY_CALLBACK_LEAF_PROOFS: LazyCallbackLeafProofs = {
   hasUnstableSubtreeLifetime,
   uniqueReturnedExpression,
 };
+
+function effectDraftProofs(stateFlow: StateFlowIndex): EffectDraftProofs {
+  return {
+    directUniqueReturnCallSite,
+    hasIndependentRenderCutWitness,
+    isCustomHookOwner,
+    nearestMutationFunction,
+    setterMutationsCanCooccur: (left, right, region) =>
+      mutationsAreProvenCoexecuting(left, right, region, stateFlow),
+    uniqueReturnedExpression,
+  };
+}
 
 export function analyzeSource(
   sourceText: string,
@@ -198,6 +202,7 @@ function analyzeParsedSource(
   fileName: string,
   sourceComponents: ReadonlySet<string>
 ): HookFinding[] {
+  const stateFlow = new StateFlowIndex();
   const imports = collectHookImports(sourceFile);
   const localComponents = collectLocalComponents(sourceFile);
   const states: StateCandidate[] = [];
@@ -263,7 +268,7 @@ function analyzeParsedSource(
     states,
     usageByState
   );
-  const statesWithCompanionWrites = findStatesWithCompanionWrites(states);
+  const statesWithCompanionWrites = findStatesWithCompanionWrites(states, stateFlow);
   const independentStateWrites = findIndependentStateWrites(states);
   const asyncLeafStatuses = findAsyncLeafStatuses(
     states,
@@ -294,7 +299,7 @@ function analyzeParsedSource(
     siblingRenderCuts,
     localComponents,
     sourceComponents,
-    EFFECT_DRAFT_PROOFS
+    effectDraftProofs(stateFlow)
   );
   const keyedSelections = analyzeKeyedSelections(
     states,
@@ -306,7 +311,8 @@ function analyzeParsedSource(
     states,
     usageByState,
     new Set([...localComponents, ...sourceComponents]),
-    sourceFile
+    sourceFile,
+    stateFlow
   );
   const subtreeClusters = findStateSubtreeClusters(
     subtreeByState,
@@ -348,9 +354,12 @@ function analyzeParsedSource(
       ? {
           action: "use-observable" as const,
           confidence: "probable" as const,
-          message: siblingCut
+          message: (siblingCut
             ? `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, keep producer commands non-tracking, subscribe only in the sibling ${siblingCut.consumerLabel} boundary at line ${siblingCut.consumerLine}, and pass state-independent fallback inputs as ordinary snapshots.`
-            : `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.`,
+            : `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.`) +
+            (hasLazyStateInitializer(state)
+              ? " Preserve its lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
+              : ""),
         }
       : derivedStates.has(state)
       ? {
@@ -971,7 +980,8 @@ function findObservableStateClusters(
   states: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   knownComponents: ReadonlySet<string>,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
+  stateFlow: StateFlowIndex
 ): ReadonlyMap<StateCandidate, StateCluster> {
   const result = new Map<StateCandidate, StateCluster>();
   const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
@@ -998,7 +1008,6 @@ function findObservableStateClusters(
       const state = stateBySetter.get(node.expression.text);
       if (!state) return;
       calls.push({
-        branches: mutationBranches(node, owner),
         call: node,
         region: nearestMutationFunction(node, owner),
         state,
@@ -1012,7 +1021,10 @@ function findObservableStateClusters(
       for (let rightIndex = leftIndex + 1; rightIndex < calls.length; rightIndex += 1) {
         const right = calls[rightIndex];
         if (!right || left.state === right.state) continue;
-        if (left.region !== right.region || !branchesAreCompatible(left.branches, right.branches)) continue;
+        if (
+          left.region !== right.region ||
+          !mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow)
+        ) continue;
         const leftStateIndex = mutableStates.indexOf(left.state);
         const rightStateIndex = mutableStates.indexOf(right.state);
         if (leftStateIndex >= 0 && rightStateIndex >= 0) union.join(leftStateIndex, rightStateIndex);
@@ -1034,7 +1046,8 @@ function findObservableStateClusters(
         members,
         usageByState,
         knownComponents,
-        calls
+        calls,
+        stateFlow
       );
       if (!clusterMembers) continue;
       if (
@@ -1067,7 +1080,8 @@ function findObservableStateClusters(
 }
 
 function findStatesWithCompanionWrites(
-  states: readonly StateCandidate[]
+  states: readonly StateCandidate[],
+  stateFlow: StateFlowIndex
 ): ReadonlySet<StateCandidate> {
   const result = new Set<StateCandidate>();
   const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
@@ -1093,7 +1107,7 @@ function findStatesWithCompanionWrites(
       const state = stateBySetter.get(node.expression.text);
       if (!state) return;
       const region = nearestMutationFunction(node, owner);
-      mutations.push({ branches: mutationBranches(node, region), call: node, region, state });
+      mutations.push({ call: node, region, state });
     });
 
     for (let leftIndex = 0; leftIndex < mutations.length; leftIndex += 1) {
@@ -1105,7 +1119,7 @@ function findStatesWithCompanionWrites(
           !right ||
           left.state === right.state ||
           left.region !== right.region ||
-          !branchesAreCompatible(left.branches, right.branches)
+          !mutationsMayCoexecute(left.call, right.call, left.region, stateFlow)
         ) {
           continue;
         }
@@ -1234,7 +1248,6 @@ function findStateSubtreeClusters(
 }
 
 interface SetterMutation {
-  branches: ReadonlyMap<number, string>;
   call: ts.CallExpression;
   region: RuntimeFunctionLike;
   state: StateCandidate;
@@ -1244,7 +1257,8 @@ function normalizeObservableDialogClusterMembers(
   members: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   knownComponents: ReadonlySet<string>,
-  mutations: readonly SetterMutation[]
+  mutations: readonly SetterMutation[],
+  stateFlow: StateFlowIndex
 ): readonly StateCandidate[] | null {
   if (members.length < 2) return null;
   const payloads = members.filter(state => hasStateInitializer(state, ts.SyntaxKind.NullKeyword));
@@ -1299,7 +1313,12 @@ function normalizeObservableDialogClusterMembers(
       payloadOpenMutations.some(
         payloadMutation =>
           flagMutation.region === payloadMutation.region &&
-          branchesAreCompatible(flagMutation.branches, payloadMutation.branches)
+          mutationsAreProvenCoexecuting(
+            flagMutation.call,
+            payloadMutation.call,
+            flagMutation.region,
+            stateFlow
+          )
       )
     );
     if (!pairedOpen) return null;
@@ -1370,35 +1389,22 @@ function nearestMutationFunction(node: ts.Node, owner: RuntimeFunctionLike): Run
   return findAncestorUntil(node, isRuntimeFunctionLike, owner) ?? owner;
 }
 
-function mutationBranches(node: ts.Node, boundary: RuntimeFunctionLike): ReadonlyMap<number, string> {
-  const branches = new Map<number, string>();
-  for (let current: ts.Node = node; current.parent && current !== boundary; current = current.parent) {
-    const parent = current.parent;
-    if (ts.isIfStatement(parent)) {
-      if (current === parent.thenStatement) branches.set(parent.getStart(), "then");
-      if (current === parent.elseStatement) branches.set(parent.getStart(), "else");
-    } else if (ts.isConditionalExpression(parent)) {
-      if (current === parent.whenTrue) branches.set(parent.getStart(), "true");
-      if (current === parent.whenFalse) branches.set(parent.getStart(), "false");
-    } else if (ts.isCaseClause(parent) || ts.isDefaultClause(parent)) {
-      const switchStatement = parent.parent.parent;
-      if (ts.isSwitchStatement(switchStatement)) {
-        branches.set(switchStatement.getStart(), `${parent.kind}:${parent.getStart()}`);
-      }
-    }
-  }
-  return branches;
+function mutationsAreProvenCoexecuting(
+  left: ts.CallExpression,
+  right: ts.CallExpression,
+  region: RuntimeFunctionLike,
+  stateFlow: StateFlowIndex
+): boolean {
+  return stateFlow.proveSynchronousCoexecution(region, left, right) === "proven";
 }
 
-function branchesAreCompatible(
-  left: ReadonlyMap<number, string>,
-  right: ReadonlyMap<number, string>
+function mutationsMayCoexecute(
+  left: ts.CallExpression,
+  right: ts.CallExpression,
+  region: RuntimeFunctionLike,
+  stateFlow: StateFlowIndex
 ): boolean {
-  for (const [branch, leftValue] of left) {
-    const rightValue = right.get(branch);
-    if (rightValue !== undefined && rightValue !== leftValue) return false;
-  }
-  return true;
+  return stateFlow.proveSynchronousCoexecution(region, left, right) !== "disproven";
 }
 
 class DisjointSet {

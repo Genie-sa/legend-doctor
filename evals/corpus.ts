@@ -452,6 +452,12 @@ export const repositories = [
         root: "src/pages/MultifactorAuthentication/AuthorizeTransactionPage/index.tsx",
         states: 3,
       },
+      {
+        effects: 0,
+        id: "expensify-gps-permissions-flow",
+        root: "src/pages/iou/request/step/IOURequestStepDistanceGPS/GPSButtons/index.tsx",
+        states: 4,
+      },
       { effects: 10, id: "expensify-root-lifecycle", root: "src/Expensify.tsx", states: 4 },
       {
         effects: 2,
@@ -526,6 +532,12 @@ export const repositories = [
         id: "formbricks-bulk-options",
         root: "apps/web/modules/survey/editor/components/bulk-edit-options-modal.tsx",
         states: 2,
+      },
+      {
+        effects: 1,
+        id: "formbricks-personal-link-modal",
+        root: "apps/web/modules/ee/contacts/[contactId]/components/generate-personal-link-modal.tsx",
+        states: 3,
       },
       {
         effects: 1,
@@ -2666,6 +2678,36 @@ export const goldCases = [
     name: null,
     rationale: "The guarded prop synchronization must remain a React effect with the same dependencies and timing.",
     target: "formbricks-bulk-options",
+  },
+  ...[
+    [55, "selectedSurveyId"],
+    [57, "generatedUrl"],
+  ].map(([line, name]) => ({
+    action: "use-observable" as const,
+    file: "generate-personal-link-modal.tsx",
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "The close effect resets one complete survey/link draft, while the generation command snapshots the selection before suspension and publishes the URL afterward; preserve the effect and subscribe only in the select, URL, and button leaves.",
+    target: "formbricks-personal-link-modal",
+  })),
+  {
+    action: "review-effect",
+    file: "generate-personal-link-modal.tsx",
+    hook: "useEffect",
+    line: 59,
+    name: null,
+    rationale: "Preserve the modal-close synchronization effect and its dependency timing while replacing only its two-state draft reset.",
+    target: "formbricks-personal-link-modal",
+  },
+  {
+    action: "use-observable",
+    file: "index.tsx",
+    hook: "useState",
+    line: 51,
+    name: "startPermissionsFlow",
+    rationale: "The disabled-services return makes its modal transition mutually exclusive with starting the permission flow; one stable child wrapper can subscribe without rerendering the GPS controls.",
+    target: "expensify-gps-permissions-flow",
   },
   {
     action: "use-observable",
@@ -5274,6 +5316,13 @@ export const goldStateGroups = [
     members: ["textareaValue", "validationError"],
     rationale: "Text and its validation error are reset and edited as one modal draft.",
     target: "formbricks-bulk-options",
+  },
+  {
+    file: "generate-personal-link-modal.tsx",
+    line: 55,
+    members: ["selectedSurveyId", "generatedUrl"],
+    rationale: "Selection and generated URL share one modal-close reset but retain their command snapshot across the async generation boundary.",
+    target: "formbricks-personal-link-modal",
   },
   {
     file: "components/account-management/accounts-section.tsx",
