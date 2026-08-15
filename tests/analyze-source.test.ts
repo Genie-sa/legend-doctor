@@ -3347,6 +3347,48 @@ test("moves a same-owner reset effect into complete event mutation boundaries", 
   );
 });
 
+test("does not move reset effects into opaque custom-component callbacks", () => {
+  for (const mutation of [
+    `<Controller onRender={setCategory} />`,
+    `<Controller onMount={() => setCategory("next")} />`,
+  ]) {
+    assert.deepEqual(
+      actions(`
+        import { useEffect, useState } from "react";
+        export function Browser() {
+          const [category, setCategory] = useState("all");
+          const [detailIndex, setDetailIndex] = useState(0);
+          useEffect(() => setDetailIndex(0), [category]);
+          return <main>
+            ${mutation}
+            <button onClick={() => setDetailIndex(value => value + 1)}>{detailIndex}</button>
+          </main>;
+        }
+      `),
+      ["review-state", "review-state", "review-effect"],
+      mutation
+    );
+  }
+});
+
+test("moves reset effects into intrinsic event callbacks", () => {
+  assert.deepEqual(
+    actions(`
+      import { useEffect, useState } from "react";
+      export function Browser() {
+        const [category, setCategory] = useState("all");
+        const [detailIndex, setDetailIndex] = useState(0);
+        useEffect(() => setDetailIndex(0), [category]);
+        return <main>
+          <button onClick={() => setCategory("next")}>Next category</button>
+          <button onClick={() => setDetailIndex(value => value + 1)}>{detailIndex}</button>
+        </main>;
+      }
+    `),
+    ["review-state", "review-state", "move-to-event"]
+  );
+});
+
 test("does not move a reset effect when a dependency mutation boundary is external", () => {
   assert.deepEqual(
     actions(`

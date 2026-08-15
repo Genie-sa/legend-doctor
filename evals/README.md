@@ -46,6 +46,8 @@ cannot move into conditional, keyed, or repeated child instances; and an isolate
 eliminate an owner render across its companion update cluster. Effect rules distinguish recognizable disposer protocols
 from arbitrary returned calls and treat `useMount` as a probable lifecycle choice because it changes Strict Mode replay.
 Derived-state deletion requires transparent inputs that match effect dependency paths and cannot create a fresh identity.
+Mutation-site reset advice requires controlled value-transition callbacks or intrinsic element events; opaque component
+callbacks remain review.
 Keyed collection advice is proven from event-rooted writes, stable row keys, per-row membership, and mount/cardinality
 safety; state variable names are not evidence.
 The Genie holdout verifies that an adjacent `legend-doctor keep-react-effect` or existing `react-effect-allow`

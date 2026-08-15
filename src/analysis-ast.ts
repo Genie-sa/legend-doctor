@@ -154,6 +154,16 @@ export function isInsideJsxAttribute(node: ts.Node, attribute: ts.JsxAttribute):
   return attribute.getStart() <= node.getStart() && node.end <= attribute.end;
 }
 
+export function isControlledInteractionProp(name: string): boolean {
+  return /^(?:onChange|onChangeText|onCheckedChange|onSelect|onToggle|onValueChange)$/.test(name);
+}
+
+export function isValueTransitionProp(name: string): boolean {
+  return isControlledInteractionProp(name) ||
+    /^on(?:Change|Select|Toggle|Update)[A-Z][A-Za-z0-9]*$/.test(name) ||
+    /^on[A-Z][A-Za-z0-9]*(?:Change|Select|Toggle|Update)$/.test(name);
+}
+
 export function isNonValueIdentifier(node: ts.Identifier): boolean {
   const parent = node.parent;
   return (

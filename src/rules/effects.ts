@@ -11,6 +11,7 @@ import {
   isInsideJsxAttribute,
   isNonValueIdentifier,
   isPureExpression,
+  isValueTransitionProp,
   localBindingNames,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
@@ -948,7 +949,7 @@ function allSetterReferencesAreEventBoundaries(state: StateCandidate): boolean {
     if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
       const callback = nearestNestedFunction(node, state.owner);
       if (
-        !/^on[A-Z]/.test(attribute.name.getText()) ||
+        !jsxAttributeHasProvenEventContract(attribute) ||
         !callback ||
         !isInsideJsxAttribute(callback, attribute)
       ) {
@@ -957,19 +958,29 @@ function allSetterReferencesAreEventBoundaries(state: StateCandidate): boolean {
       return;
     }
     if (isDirectJsxAttributeExpression(attribute, node)) {
-      if (!/^on[A-Z]/.test(attribute.name.getText())) valid = false;
+      if (!jsxAttributeHasProvenEventContract(attribute)) valid = false;
       return;
     }
     const property = findAncestorUntil(node, ts.isPropertyAssignment, attribute);
     if (
       !property ||
       property.initializer !== node ||
-      !/^on[A-Z]/.test(property.name.getText())
+      !isValueTransitionProp(property.name.getText())
     ) {
       valid = false;
     }
   });
   return valid && references > 0;
+}
+
+function jsxAttributeHasProvenEventContract(attribute: ts.JsxAttribute): boolean {
+  if (isValueTransitionProp(attribute.name.getText())) return true;
+  const opening = attribute.parent.parent;
+  return (
+    (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
+    /^[a-z]/.test(opening.tagName.getText()) &&
+    /^on[A-Z]/.test(attribute.name.getText())
+  );
 }
 
 

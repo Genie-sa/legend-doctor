@@ -6,11 +6,13 @@ import {
   bindingDeclarationCount,
   collectBindingNames,
   containsCallExpression,
+  isControlledInteractionProp,
   isDeclarationName,
   isDirectJsxAttributeExpression,
   isInsideJsxAttribute,
   isNonValueIdentifier,
   isPureExpression,
+  isValueTransitionProp,
   unwrapTransparentExpression,
 } from "./analysis-ast.js";
 import {
@@ -2312,16 +2314,6 @@ function hasInteractionSetterAdapter(
     callback.body.statements.length === 1 &&
     ts.isExpressionStatement(callback.body.statements[0]!) &&
     callback.body.statements[0]!.expression === call;
-}
-
-function isControlledInteractionProp(name: string): boolean {
-  return /^(?:onChange|onChangeText|onCheckedChange|onSelect|onToggle|onValueChange)$/.test(name);
-}
-
-function isValueTransitionProp(name: string): boolean {
-  return isControlledInteractionProp(name) ||
-    /^on(?:Change|Select|Toggle|Update)[A-Z][A-Za-z0-9]*$/.test(name) ||
-    /^on[A-Z][A-Za-z0-9]*(?:Change|Select|Toggle|Update)$/.test(name);
 }
 
 function isValueTransitionAttribute(
