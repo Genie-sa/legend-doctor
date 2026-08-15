@@ -18,6 +18,7 @@ import {
 import {
   findAncestorUntil,
   isNonProductionHarness,
+  isRuntimeFunctionLike,
   nearestNestedFunction,
   nodeWithin,
   type RuntimeFunctionLike,
@@ -164,11 +165,13 @@ export function classifyEffect(
     );
     const directUseValueDependencies = dependencyNames.filter(name => useValueBindings.has(name));
     if (
+      !effect.callback.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) &&
+      !effect.callback.asteriskToken &&
       dependencyNames.length === effect.dependencies.elements.length &&
       dependencyNames.length > 0 &&
       directUseValueDependencies.length > 0 &&
       dependencyNames.every(name => useValueBindings.has(name) || useObservableBindings.has(name)) &&
-      directUseValueDependencies.every(name => callbackReadsUnshadowedIdentifier(effect.callback!, name))
+      directUseValueDependencies.every(name => callbackReadsSynchronously(effect.callback!, name))
     ) {
       return {
         action: "use-observe-effect",
@@ -746,12 +749,12 @@ function expressionContainsCall(expression: ts.Expression): boolean {
   return contains;
 }
 
-
-function callbackReadsUnshadowedIdentifier(
+function callbackReadsSynchronously(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   name: string
 ): boolean {
   let reads = false;
+  let deferredRead = false;
   let shadowed = callback.parameters.some(
     parameter => ts.isIdentifier(parameter.name) && parameter.name.text === name
   );
@@ -760,9 +763,58 @@ function callbackReadsUnshadowedIdentifier(
       shadowed = true;
       return;
     }
-    if (ts.isIdentifier(node) && node.text === name && !isNonValueIdentifier(node)) reads = true;
+    if (
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    reads = true;
+    let current: ts.Node | undefined = node.parent;
+    while (current && current !== callback) {
+      if (
+        isRuntimeFunctionLike(current) &&
+        current !== callback &&
+        !isSynchronousEffectCallback(current)
+      ) {
+        deferredRead = true;
+        return;
+      }
+      current = current.parent;
+    }
   });
-  return reads && !shadowed;
+  return reads && !deferredRead && !shadowed;
+}
+
+function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
+  if (
+    callback.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    callback.asteriskToken
+  ) {
+    return false;
+  }
+  let expression: ts.Node = callback;
+  while (
+    ts.isParenthesizedExpression(expression.parent) ||
+    ts.isAsExpression(expression.parent) ||
+    ts.isTypeAssertionExpression(expression.parent) ||
+    ts.isSatisfiesExpression(expression.parent) ||
+    ts.isNonNullExpression(expression.parent)
+  ) {
+    expression = expression.parent;
+  }
+  const call = expression.parent;
+  if (!ts.isCallExpression(call)) return false;
+  if (call.expression === expression) return true;
+  return (
+    call.arguments.includes(expression as ts.Expression) &&
+    ts.isPropertyAccessExpression(call.expression) &&
+    /^(?:every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/.test(
+      call.expression.name.text
+    )
+  );
 }
 
 function findPureDerivedSetter(
@@ -982,7 +1034,6 @@ function jsxAttributeHasProvenEventContract(attribute: ts.JsxAttribute): boolean
     /^on[A-Z]/.test(attribute.name.getText())
   );
 }
-
 
 export function callbackHasCleanup(
   callback: ts.ArrowFunction | ts.FunctionExpression,

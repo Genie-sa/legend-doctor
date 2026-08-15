@@ -5179,6 +5179,68 @@ test("does not infer an observable reaction when the effect never reads the useV
   );
 });
 
+test("does not move deferred useValue reads into an untracked observable reaction", () => {
+  for (const body of [
+    `setTimeout(() => report(value), 10);`,
+    `Promise.resolve().then(() => report(value));`,
+    `source.subscribe(() => report(value));`,
+    `const later = () => report(value); register(later);`,
+    `report(value); setTimeout(() => report(value), 10);`,
+  ]) {
+    assert.deepEqual(
+      actions(`
+        import { useEffect } from "react";
+        import { useValue } from "@legendapp/state/react";
+        export function Screen({ value$, source }: { value$: unknown; source: { subscribe: (callback: () => void) => void } }) {
+          const value = useValue(value$);
+          useEffect(() => { ${body} }, [value]);
+          return null;
+        }
+      `),
+      ["review-effect"],
+      body
+    );
+  }
+});
+
+test("does not replace async effects or callbacks with observable reactions", () => {
+  for (const effect of [
+    `useEffect(async () => { await load(); report(value); }, [value]);`,
+    `useEffect(() => { void (async () => { await load(); report(value); })(); }, [value]);`,
+  ]) {
+    assert.deepEqual(
+      actions(`
+        import { useEffect } from "react";
+        import { useValue } from "@legendapp/state/react";
+        export function Screen({ value$ }: { value$: unknown }) {
+          const value = useValue(value$);
+          ${effect}
+          return null;
+        }
+      `),
+      ["review-effect"],
+      effect
+    );
+  }
+});
+
+test("tracks useValue reads through synchronous collection callbacks", () => {
+  assert.deepEqual(
+    actions(`
+      import { useEffect } from "react";
+      import { useValue } from "@legendapp/state/react";
+      export function Screen({ selected$, items }: { selected$: unknown; items: { id: string }[] }) {
+        const selected = useValue(selected$);
+        useEffect(() => {
+          report(items.find(item => item.id === selected));
+        }, [selected]);
+        return null;
+      }
+    `),
+    ["use-observe-effect"]
+  );
+});
+
 test("abstains when state is shadowed", () => {
   assert.deepEqual(
     actions(`
