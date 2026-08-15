@@ -4,8 +4,8 @@ This file records evidence, decisions, measurements, and rejected approaches for
 
 ## System baseline
 
-- Production analyzer: 31 TypeScript modules, 12,094 lines before this closeout's untracked flow module is counted by Git.
-- Largest orchestration module: `src/analyze-source.ts` at 3,063 lines; rule families are already separated under `src/rules/`.
+- Production analyzer: 31 TypeScript modules and 12,302 lines.
+- Largest orchestration module: `src/analyze-source.ts` at 3,064 lines; rule families are already separated under `src/rules/`.
 - Full real-app scan: 6,070 hooks across 11 app roots: 3,594 `useState`, 2,476 `useEffect`, 76 Legend practice findings.
 - Pinned scored corpus after closeout: 2,151 hooks across 197 focused targets and 726 manual labels.
 - Final quality: 100% actionable precision (369/369), 95.8% actionable recall (369/385), 13/13 state groups, 76/76 Legend practices.
@@ -63,9 +63,9 @@ The last broad review cohort contained eight effects whose callback is passed by
 
 Five representative effects are now pinned in the real-world corpus. Two would gain a more precise `keep-effect`, but that is non-actionable classification value and only four cases fit the proposed immutable-local-binding proof. The detector was therefore reverted under the five-example/high-value gate. Async work, imports, aliases, mutable bindings, function declarations, and lookalike hooks remain review without adding marginal machinery.
 
-## Goal 2 selected proof
+## Earlier architecture Goal 2 selected proof
 
-Keep one bounded synchronous co-write proof because it replaces duplicated branch reasoning in four detector consumers and has cross-app impact. It must remain structural and fail closed for unsupported control flow; no symbolic predicate engine.
+The earlier architecture closeout kept one bounded synchronous co-write proof because it replaced duplicated branch reasoning in four detector consumers and had cross-app impact. It remained structural and failed closed for unsupported control flow; no symbolic predicate engine was added.
 
 Current intended full-app action deltas versus `main`:
 
@@ -104,3 +104,63 @@ Adversarial gaps found and fixed at the shared boundary: conditional/outside con
 - The named-effect experiment was reverted after review; all eleven full-app finding sets remain identical to the accepted baseline.
 
 The work stops here by design. The next improvement should begin only when a new structural family has repeated cross-app evidence; the 21 current misses are not one unfinished rule.
+
+## Two-goal product re-audit
+
+The final product pass started from all 2,768 full-app `review-state` findings. Of those, 2,760 exposed parseable evidence suitable for automated stratification.
+
+### Goal 1: find one repeated, valuable family
+
+The most common exact signature was zero local render reads, zero effect reads, zero deferred reads, one value transport, one or two setter calls, and zero effect writes. It produced 136 cases across seven app roots:
+
+| App root | Cases |
+| --- | ---: |
+| Expensify | 82 |
+| Formbricks | 20 |
+| Tree Map | 13 |
+| Outline | 9 |
+| Memoria src | 7 |
+| Excalidraw | 4 |
+| Tree Wallet | 1 |
+
+Evidence counts were only a candidate generator. A manual audit covered 25 representative cases across five apps and found 10 positive state rows, representing nine migration units. They separated into three different proofs:
+
+- Async pending state rendered by one leaf: four positives across two apps.
+- Modal or payload state that must migrate as an atomic model: three units across three apps.
+- Hot producer state rendered by one leaf: two units across two apps.
+
+None reaches the acceptance gate of five equivalent positives across three apps. The negative cases depend on owner-level derivation, companion writes, mount identity, form adapters, route invalidation, mutation lifecycle, or already-cohesive leaf ownership.
+
+Two controlled relaxations tested whether the gap was merely conservative thresholds:
+
+1. Lowering the literal-boolean leaf threshold changed only three Expensify findings. Two owners were already tiny boundaries, so the change did not prove meaningful work removal. It was reverted.
+2. A sole-child pass-through proof first changed 34 findings, then eight after strict lifetime and ownership gates. A real Expensify counterexample still performed substantial hooks and memoized work above its only child. `keep-state` would hide a possible render cut, while `move-state-down` would overreach the child contract. It was reverted.
+
+There is a repeatable sole-child `keep-state` classification cohort, but it is deliberately not automated: it offers no optimization, and the number of returned JSX elements does not prove that the owner has no expensive work.
+
+### Goal 2: ship only a proof that clears the gate
+
+No new hook detector shipped. This is the measured result, not an incomplete implementation.
+
+- The named-effect cohort contained eight cases. Five resolved locally, four fit one proof, and only two improved a non-actionable `keep-effect` classification. The experiment was reverted.
+- The remaining 21 labels contain 16 actionable opportunities split across at least five proof families. Closing them now would require broader flow, cross-file ownership, lifecycle, or atomicity analysis.
+- All 402 tests pass after reverting the experiments.
+- The pinned eval remains 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices.
+
+Exact final app impact from this re-audit:
+
+| App root | Hook action delta | Practice delta |
+| --- | ---: | ---: |
+| Tree Map | 0 | 0 |
+| Tree Wallet | 0 | 0 |
+| Memoria src | 0 | 0 |
+| Memoria app | 0 | 0 |
+| Legend Music | 0 | 0 |
+| Excalidraw | 0 | 0 |
+| Expensify | 0 | 0 |
+| Formbricks | 0 | 0 |
+| Outline | 0 | 0 |
+| Genie Courses | 0 | 0 |
+| Open WebUI RN | 0 | 0 |
+
+The correct product conclusion is narrow: no examined **high-value actionable** hook family clears the five-case, three-app, structural-proof gate. Hook detection is therefore at its practical optimum under the current proof model. The next higher-value research lane is Legend-native code quality—narrow `useValue` subscriptions, correct `get()` versus `peek()`, direct child writes, and safe batching—while retaining the same cross-app evidence and precision requirements.
