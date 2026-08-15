@@ -35,12 +35,13 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 12 |
-| Source targets | 210 |
-| Hooks analyzed | 2,281 |
-| Manual labels | 756 |
-| Unit tests | 426/426 |
-| Actionable precision | 100% (371/371) |
-| Actionable recall | 92.5% (371/401) |
+| Source targets | 218 |
+| Hooks analyzed | 2,325 |
+| Manual labels | 772 |
+| Known misses | 43 |
+| Unit tests | 431/431 |
+| Actionable precision | 100% (370/370) |
+| Actionable recall | 90.7% (370/408) |
 | Legend practice precision | 100% (77/77) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -515,6 +516,39 @@ if (minutes >= refreshAfter) reload(); // reads the old render snapshot
 The tool now reviews this instead of emitting a generic ref rewrite. A manual ref migration must snapshot
 `minutesRef.current` before the write and keep the later comparison on that snapshot.
 
+### 11. Published getter → keep the notification boundary
+
+Before: React state republishes a getter to render consumers.
+
+```tsx
+function AttachmentStateProvider({ children }) {
+  const [loaded, setLoaded] = useState<Record<string, boolean>>({});
+  const isLoaded = useCallback(id => loaded[id] === true, [loaded]);
+  const value = useMemo(() => ({ isLoaded, setLoaded }), [isLoaded]);
+  return <AttachmentState.Provider value={value}>{children}</AttachmentState.Provider>;
+}
+```
+
+Output:
+
+```text
+AttachmentStateProvider.tsx:18 [review-state] The Context value publishes a
+state-reading getter; React state currently refreshes its consumers.
+```
+
+A local `useRef` replacement is unsafe because ref writes do not publish a new Context value. A complete migration must
+change the contract so each consumer subscribes to the observable leaf:
+
+```tsx
+function AttachmentRow({ id, loaded$ }) {
+  const loaded = useValue(loaded$[id]);
+  return <Status loaded={loaded === true} />;
+}
+```
+
+The same boundary applies to returned custom-hook getters, effect/focus callbacks, and raw state snapshots exposed through
+`useImperativeHandle`.
+
 ## Actions
 
 | Disposition | Agent response |
@@ -528,9 +562,11 @@ cohesive leaf makes React the better owner.
 
 ## Next steps
 
-1. Publish hardening: add a license, package files, install smoke test, and CI release workflow.
-2. Legend-native value: keep expanding proven batching, `peek()`, direct observable reads, narrow subscriptions, and child writes.
-3. Hook recall: add a rule only after five equivalent positives across three apps share one structural proof.
+1. Legend-native value: expand proven batching, `peek()` versus `get()`, direct observable reads, narrow subscriptions, and child writes.
+2. Hook recall: resume only when five equivalent positives across three apps share one structural proof.
+3. Publish hardening: add a license, package files, install smoke test, and CI release workflow.
+
+The current phase, exact deltas, deferred opportunities, and restart criteria are in [NEXT_PHASE.md](NEXT_PHASE.md).
 
 ## Next improvement loop
 
@@ -558,6 +594,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/effects.ts` | Effect and lifecycle rules |
 | `src/rules/effect-drafts.ts` | Effect-synchronized drafts |
 | `src/rules/async-leaf-status.ts` | Event-owned async status leaves |
+| `src/rules/command-only-state.ts` | Command-only state, callback publication, and ref safety |
 | `src/rules/deferred-reveal.ts` | Deferred reveal and render gates |
 | `src/rules/keyed-selection.ts` | Row and collection selection |
 | `src/rules/lazy-callback-leaf.ts` | Lazy owner state rendered in one nested callback leaf |

@@ -32,6 +32,12 @@ import { collectHookImports, isImportedHookCall, isLocalHookCall, type HookImpor
 import type { AnalysisFile } from "./analysis-project.js";
 import { findAsyncLeafStatuses } from "./rules/async-leaf-status.js";
 import {
+  collectCommandOnlyCallableReads,
+  functionalUpdaterPrecedesSnapshotRead,
+  statePublishesReadOnlyGetter,
+  stateReadCallbackEscapesThroughUnknownHook,
+} from "./rules/command-only-state.js";
+import {
   commonRenderGateSubtree,
   findDeferredRevealStates,
   hasStateInitializer,
@@ -50,7 +56,6 @@ import {
   analyzeKeyedSelections,
   isSelectionStateName,
   isSetOrMapState,
-  setterCallUsesPreviousValue,
 } from "./rules/keyed-selection.js";
 import { isLiteralBooleanLeafState } from "./rules/literal-boolean-leaf.js";
 import {
@@ -78,6 +83,7 @@ import {
   nearestRepeatedRenderCall,
   oneHopRenderProjectionReferences,
   repeatedRenderHasStableItemKey,
+  setterCallUsesPreviousValue,
   stateMayHoldCallable,
 } from "./rules/state-proofs.js";
 import { StateFlowIndex } from "./state-flow.js";
@@ -673,107 +679,17 @@ function collectStateUsage(
     }
   });
 
-  const renderCallableSites = localCallableRenderSites(state);
+  const callableReads = collectCommandOnlyCallableReads(state, effectNodes);
+  const renderCallableSites = callableReads.renderSites;
   if (renderCallableSites.length > 0) {
     usage.localRenderReads += renderCallableSites.length;
     usage.directRenderNodes.push(...renderCallableSites);
   }
+  if (usage.effectReads === 0) {
+    usage.effectReads += callableReads.effectSites.length;
+  }
 
   return usage;
-}
-
-function localCallableRenderSites(state: StateCandidate): readonly ts.Identifier[] {
-  const callableNames = new Set<string>();
-  visit(state.owner.body, node => {
-    if (
-      ts.isFunctionDeclaration(node) &&
-      node.name &&
-      node.body &&
-      functionReadsState(node, state) &&
-      bindingDeclarationCount(state.owner, node.name.text) === 1
-    ) {
-      callableNames.add(node.name.text);
-      return;
-    }
-    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) return;
-    const callback = localCallableCallback(node.initializer);
-    if (!callback || !functionReadsState(callback, state)) return;
-    if (bindingDeclarationCount(state.owner, node.name.text) !== 1) return;
-    callableNames.add(node.name.text);
-  });
-  if (callableNames.size === 0) return [];
-
-  const sites: ts.Identifier[] = [];
-  visit(state.owner.body, node => {
-    if (!ts.isIdentifier(node) || !callableNames.has(node.text)) return;
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
-    if (
-      attribute &&
-      isDirectJsxAttributeExpression(attribute, node) &&
-      jsxPropMayRenderCallable(attribute.name.getText())
-    ) {
-      sites.push(node);
-      return;
-    }
-    if (
-      !ts.isCallExpression(node.parent) ||
-      node.parent.expression !== node ||
-      isInsideJsxEventCallback(node, state.owner)
-    ) {
-      return;
-    }
-    const callback = nearestNestedFunction(node, state.owner);
-    if (
-      findAncestorUntil(node.parent, isJsxNode, state.owner) !== null ||
-      callback === null ||
-      isSynchronousRenderCallback(callback)
-    ) {
-      sites.push(node);
-    }
-  });
-  return sites;
-}
-
-function jsxPropMayRenderCallable(name: string): boolean {
-  return name === "children" ||
-    name === "component" ||
-    name === "renderer" ||
-    /^render(?:[A-Z]|$)/.test(name) ||
-    /(?:Renderer|Component)$/.test(name);
-}
-
-function localCallableCallback(
-  initializer: ts.Expression
-): ts.ArrowFunction | ts.FunctionExpression | null {
-  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) return initializer;
-  if (
-    ts.isCallExpression(initializer) &&
-    ts.isIdentifier(initializer.expression) &&
-    initializer.expression.text === "useCallback"
-  ) {
-    const callback = initializer.arguments[0];
-    return callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) ? callback : null;
-  }
-  return null;
-}
-
-function functionReadsState(
-  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  state: StateCandidate
-): boolean {
-  let reads = false;
-  if (!callback.body) return false;
-  visitSkippingNestedFunctions(callback.body, callback, node => {
-    if (
-      ts.isIdentifier(node) &&
-      node.text === state.valueName &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node)
-    ) {
-      reads = true;
-    }
-  });
-  return reads;
 }
 
 function addMapSet<Key, Value>(map: Map<Key, Set<Value>>, key: Key, value: Value): void {
@@ -1871,7 +1787,9 @@ function classifyState(
     usage.deferredReads > 0 &&
     usage.transportedOccurrences === 0 &&
     usage.jsxTargets.size === 0 &&
-    !functionalUpdaterPrecedesSnapshotRead(state, usage) &&
+    !functionalUpdaterPrecedesSnapshotRead(state, usage, nearestMutationFunction) &&
+    !stateReadCallbackEscapesThroughUnknownHook(state) &&
+    !statePublishesReadOnlyGetter(state) &&
     !usage.shadowed &&
     !usage.escaped &&
     ((usage.eventReads === 0 && usage.effectWrites === 0) ||
@@ -2052,31 +1970,6 @@ function classifyState(
         ? legendCandidateMessage(state, usage, sourceComponents)
         : `Review React state \`${state.valueName}\`; local evidence does not prove a render-boundary improvement.`,
   };
-}
-
-function functionalUpdaterPrecedesSnapshotRead(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
-  if (!usage.setterUsesPreviousValue) return false;
-  return usage.setterCallNodes.some(call => {
-    if (!setterCallUsesPreviousValue(call)) return false;
-    const region = nearestMutationFunction(call, state.owner);
-    if (!region.body) return true;
-    let readAfterWrite = false;
-    visitSkippingNestedRuntimeFunctions(region.body, node => {
-      if (
-        ts.isIdentifier(node) &&
-        node.text === state.valueName &&
-        node.getStart() > call.end &&
-        !isDeclarationName(node) &&
-        !isNonValueIdentifier(node)
-      ) {
-        readAfterWrite = true;
-      }
-    });
-    return readAfterWrite;
-  });
 }
 
 function setterOwnedByValueCallSite(

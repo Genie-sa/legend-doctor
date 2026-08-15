@@ -4222,6 +4222,84 @@ test("does not call custom-hook reactions or returned commands event-rooted", ()
   assert.notEqual(returnedCommand?.action, "use-ref");
 });
 
+test("does not replace state exposed through a returned getter callback", () => {
+  const finding = analyzeSource(`
+    import { useCallback, useState } from "react";
+    export function useAttachmentErrors() {
+      const [errors, setErrors] = useState<Record<string, boolean>>({});
+      const setError = useCallback((key: string) => {
+        setErrors(previous => ({ ...previous, [key]: true }));
+      }, []);
+      const hasError = useCallback((key: string) => errors[key] === true, [errors]);
+      return { setError, hasError };
+    }
+  `, "fixture.ts").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+});
+
+test("does not replace state that refreshes a context getter", () => {
+  const finding = analyzeSource(`
+    import { createContext, useCallback, useMemo, useState } from "react";
+    const StateContext = createContext(null);
+    export function StateProvider({ children }) {
+      const [loaded, setLoaded] = useState<Record<string, boolean>>({});
+      const markLoaded = useCallback((key: string) => {
+        setLoaded(previous => ({ ...previous, [key]: true }));
+      }, []);
+      const isLoaded = useCallback((key: string) => loaded[key] === true, [loaded]);
+      const value = useMemo(() => ({ markLoaded, isLoaded }), [markLoaded, isLoaded]);
+      return <StateContext.Provider value={value}>{children}</StateContext.Provider>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+});
+
+test("does not replace state snapshots exposed through a React imperative handle", () => {
+  const finding = analyzeSource(`
+    import { forwardRef, useImperativeHandle, useState } from "react";
+    export const Menu = forwardRef(function Menu(_props, ref) {
+      const [opening, setOpening] = useState(false);
+      useImperativeHandle(ref, () => ({
+        open() { setOpening(true); },
+        isOpening() { return opening; },
+      }), [opening]);
+      return <Button onPress={() => setOpening(false)} />;
+    });
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+});
+
+test("does not replace state that invalidates a React effect through a callback", () => {
+  const finding = analyzeSource(`
+    import { useCallback, useEffect, useState } from "react";
+    export function Map() {
+      const [interacted, setInteracted] = useState(false);
+      const shouldPan = useCallback(() => !interacted, [interacted]);
+      useEffect(() => {
+        if (shouldPan()) panToCurrentLocation();
+      }, [shouldPan]);
+      return <MapView onTouchStart={() => setInteracted(true)} />;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+  assert.match(finding?.evidence[1] ?? "", /effects [1-9]/);
+});
+
+test("does not replace state captured by an unresolved lifecycle hook", () => {
+  const finding = analyzeSource(`
+    import { useCallback, useState } from "react";
+    import { useFocusEffect } from "@react-navigation/native";
+    export function ImportFlow() {
+      const [pending, setPending] = useState(false);
+      useFocusEffect(useCallback(() => {
+        if (pending) startImport();
+      }, [pending]));
+      return <Button onPress={() => setPending(true)} />;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "use-ref");
+});
+
 test("does not call a value shared by an event and an effect-owned callback command-only", () => {
   const finding = analyzeSource(`
     import { useCallback, useEffect, useState } from "react";

@@ -4,12 +4,12 @@ This file records evidence, decisions, measurements, and rejected approaches for
 
 ## System baseline
 
-- Production analyzer: 32 TypeScript modules and 12,831 lines.
-- Largest orchestration module: `src/analyze-source.ts` at 3,132 lines; rule families are separated under `src/rules/`.
+- Production analyzer: 33 TypeScript modules and 13,065 lines.
+- Largest orchestration module: `src/analyze-source.ts` at 3,025 lines; rule families are separated under `src/rules/`.
 - Full real-app scan: 6,147 hooks across 12 app roots: 3,647 `useState`, 2,500 `useEffect`, 77 Legend practice findings.
-- Pinned scored corpus after closeout: 2,281 hooks across 210 focused targets and 756 manual labels.
-- Final quality: 100% actionable precision (371/371), 92.5% actionable recall (371/401), 13/13 state groups, 77/77 Legend practices.
-- Validation: 426/426 tests under strict TypeScript settings.
+- Pinned scored corpus after closeout: 2,325 hooks across 218 focused targets and 772 manual labels.
+- Final quality: 100% actionable precision (370/370), 90.7% actionable recall (370/408), 13/13 state groups, 77/77 Legend practices.
+- Validation: 431/431 tests under strict TypeScript settings.
 
 ## Goal 1 findings
 
@@ -40,7 +40,7 @@ The shared analysis foundation is complete enough to stop architectural patching
 | Open WebUI RN | 0 | 0 | 0 | 3 |
 | Hoalu | 77 | 53 | 24 | 1 |
 
-Across full apps the tool emits 401 `use-observable`, 16 `move-state-down`, 55 `use-ref`, 97 `use-unmount`, 40 `use-mount`, six `use-observe-effect`, and 2,832/1,256 conservative state/effect reviews. The safety closeout also removed the only automatic `move-to-event` recommendation.
+Across full apps the tool emits 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`, 40 `use-mount`, six `use-observe-effect`, and 2,855/1,256 conservative state/effect reviews. The safety closeout also removed the only automatic `move-to-event` recommendation.
 
 ## Opportunity-only audit: 21 labeled opportunities
 
@@ -58,7 +58,7 @@ The misses do not form one last universal rule:
 
 This is the stop signal: closing all 21 now would require at least six unrelated proof families. That would optimize the score, not the product.
 
-The later safety closeout added eight declared misses rather than weakening the eval: three manually verified Expensify modal opportunities whose callback provenance is not locally proven, one Tree Map event-reset opportunity behind a custom component contract, and four Formbricks leaf opportunities in owners that also use React transitions. The current corpus therefore has 29 non-enforced opportunities.
+The later safety closeout added eight declared misses rather than weakening the eval: three manually verified Expensify modal opportunities whose callback provenance is not locally proven, one Tree Map event-reset opportunity behind a custom component contract, and four Formbricks leaf opportunities in owners that also use React transitions. That checkpoint therefore had 29 non-enforced opportunities.
 
 ## Final `useEffect` cohort audit
 
@@ -99,9 +99,9 @@ Adversarial gaps found and fixed at the shared boundary: conditional/outside con
 ## Final verification
 
 - TypeScript: pass under strict project settings.
-- Unit tests: 426/426.
-- Pinned eval: 2,281 hooks, 721/756 labels, 35 declared misses, 13/13 groups, 77/77 practices.
-- Hook quality: 100% actionable precision (371/371), 92.5% actionable recall (371/401).
+- Unit tests: 431/431.
+- Pinned eval: 2,325 hooks, 729/772 labels, 43 declared misses, 13/13 groups, 77/77 practices.
+- Hook quality: 100% actionable precision (370/370), 90.7% actionable recall (370/408).
 - `use-observable`: 100% precision (307/307), 93.6% recall (307/328).
 - Bounded state-flow correctness changed zero findings. Final React commit, callback-contract, and atomicity hardening demoted sixteen uncertain automatic actions to review.
 - Before that safety closeout, reverting the named-effect experiment restored all eleven finding sets to their accepted baseline.
@@ -213,7 +213,7 @@ actions:
 - One pre-existing `use-ref` finding moves to review because an IIFE consumes it during render.
 - Excalidraw changes one action, Expensify three, and Outline six. The other nine roots change zero.
 
-The scored corpus is now 2,281 hooks, 721/756 labels, 35 declared misses, 13/13 groups, and 77/77 practices. Actionable
+At that checkpoint the scored corpus was 2,281 hooks, 721/756 labels, 35 declared misses, 13/13 groups, and 77/77 practices. Actionable
 precision is 100% (371/371), actionable recall 92.5% (371/401), and `use-ref` precision is 100% (11/11).
 
 ## Command-only ref closeout
@@ -228,3 +228,25 @@ Both cases now abstain. The 12-root action delta is exactly two: Expensify `item
 from `use-ref` to review. Both remain explicit non-enforced opportunities with the stronger migration each needs: a
 per-row observable subscriber for the rendered collection, and an old-snapshot-preserving ref rewrite for the timer.
 All other hook and Legend-practice actions are unchanged.
+
+## Command-only publication closeout
+
+The follow-up audited every remaining full-app `use-ref` output and found that command-only storage is not enough proof
+when React state is also the notification mechanism. The new rule remains structural and rejects a ref rewrite when:
+
+- a returned custom-hook getter reads the state;
+- a Context value publishes that getter;
+- a React or unresolved lifecycle hook captures a state-reading callback;
+- `useImperativeHandle` exposes a raw state snapshot;
+- a functional updater is followed by a read of the old React render snapshot.
+
+The proof lives in `src/rules/command-only-state.ts`; `src/analyze-source.ts` only collects and applies its result.
+
+Compared with the preceding private release, the 12 full-app reports change exactly seventeen hook actions and zero Legend
+practice actions. Legend Music changes one `use-ref` to review. Expensify changes sixteen, covering getter publication,
+Context publication, effect/focus callbacks, imperative snapshots, and stable-listener cases. The other ten app roots have
+zero action changes. Eight manually plausible ref migrations remain explicit non-enforced labels because their listener or
+custom-hook contracts require a wider rewrite than local evidence proves.
+
+Final gate: 2,325 hooks across 218 targets, 729/772 labels, 43 declared misses, 13/13 groups, 77/77 practices,
+100% actionable precision (370/370), 90.7% actionable recall (370/408), and 431/431 tests.

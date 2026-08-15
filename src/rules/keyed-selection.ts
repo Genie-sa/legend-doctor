@@ -992,16 +992,3 @@ function expressionIsNullish(expression: ts.Expression): boolean {
 export function isSelectionStateName(name: string): boolean {
   return /(?:selected|selection|added|checked)/i.test(name);
 }
-
-export function setterCallUsesPreviousValue(call: ts.CallExpression): boolean {
-  const argument = call.arguments[0];
-  if (!argument || (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument))) return false;
-  const parameter = argument.parameters[0];
-  if (!parameter || !ts.isIdentifier(parameter.name)) return false;
-  const parameterName = parameter.name.text;
-  let referenced = false;
-  visit(argument.body, node => {
-    if (ts.isIdentifier(node) && node.text === parameterName && node !== parameter.name) referenced = true;
-  });
-  return referenced;
-}
