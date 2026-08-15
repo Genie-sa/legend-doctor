@@ -16,6 +16,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | `useState` | Keep, delete, move down, ref, `useValue`, or observable |
 | `useEffect` | Keep, move to event, mount, unmount, or observable reaction |
 | Explicit React-owned effect | `keep-effect`; no lifecycle rewrite |
+| Latest-value `useRef` mirror | `keep-effect`; preserve post-commit timing |
 | Coupled fields | One grouped model and one atomic migration |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | Broad subscriptions | Lowest proven observable path |
@@ -33,13 +34,13 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 11 |
-| Source targets | 167 |
-| Hooks analyzed | 2,028 |
-| Manual labels | 672 |
-| Unit tests | 333/333 |
+| Source targets | 170 |
+| Hooks analyzed | 2,053 |
+| Manual labels | 687 |
+| Unit tests | 335/335 |
 | Actionable precision | 100% (345/345) |
 | Actionable recall | 95.3% (345/362) |
-| Legend practice precision | 100% (76/76) |
+| Legend practice precision | 100% (73/73) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, and Open WebUI React Native.
@@ -66,6 +67,18 @@ useEffect(() => syncSdk(identity), [identity]);
 
 The effect remains inventoried and is reported as `keep-effect`. Detached comments do not apply. Existing
 `react-effect-allow ...` comments are also recognized.
+
+Exact latest-value ref mirrors also stay in React because the write intentionally happens after commit:
+
+```tsx
+const latestValue = useRef(value);
+useEffect(() => {
+  latestValue.current = value;
+}, [value]);
+```
+
+The rule requires one imported React `useRef`, one exact assignment, and one matching dependency. Extra work, cleanup,
+calls, mutations, shadowed hooks, empty dependencies, or a different source remain under review.
 
 ```json
 {

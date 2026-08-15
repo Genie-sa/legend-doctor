@@ -4759,6 +4759,74 @@ test("keeps effects that operate on committed refs", () => {
   );
 });
 
+test("keeps exact latest-value ref mirrors in React post-commit timing", () => {
+  const findings = analyzeSource(`
+    import React, { useEffect, useRef as useLatestRef } from "react";
+    export function Named({ value }: { value: string }) {
+      const latest = useLatestRef(value);
+      useEffect(() => { latest.current = value; }, [value]);
+      return null;
+    }
+    export function Namespace({ items }: { items: string[] }) {
+      const count = React.useRef(items.length);
+      React.useEffect(() => { count.current = items.length; }, [items.length]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(findings.map(finding => finding.action), ["keep-effect", "keep-effect"]);
+  for (const finding of findings) assert.match(finding.message, /committed ref/i);
+});
+
+test("reviews unproven or behaviorally different ref mirror effects", () => {
+  const effects = analyzeSource(`
+    import { useEffect, useRef } from "react";
+    export function WrongDependency({ value, other }: { value: string; other: string }) {
+      const latest = useRef(value);
+      useEffect(() => { latest.current = value; }, [other]);
+      return null;
+    }
+    export function EmptyDependency({ value }: { value: string }) {
+      const firstCommit = useRef(value);
+      useEffect(() => { firstCommit.current = value; }, []);
+      return null;
+    }
+    export function ExtraWork({ value }: { value: string }) {
+      const latest = useRef(value);
+      useEffect(() => { latest.current = value; report(value); }, [value]);
+      return null;
+    }
+    export function Compound({ value }: { value: number }) {
+      const total = useRef(value);
+      useEffect(() => { total.current += value; }, [value]);
+      return null;
+    }
+    export function Shadowed({ value, useRef }: { value: string; useRef: (value: string) => { current: string } }) {
+      const latest = useRef(value);
+      useEffect(() => { latest.current = value; }, [value]);
+      return null;
+    }
+    export function SelfRead() {
+      const latest = useRef(0);
+      useEffect(() => { latest.current = latest.current; }, [latest.current]);
+      return null;
+    }
+    export function RepeatedCall() {
+      const latest = useRef(0);
+      useEffect(() => { latest.current = read(); }, [read()]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+  ]);
+});
+
 test("keeps a forwarded ref snapshot in React post-commit timing", () => {
   assert.deepEqual(
     actions(`
@@ -4791,7 +4859,7 @@ test("reviews empty ref effects that intentionally capture a render snapshot", (
   );
 });
 
-test("does not call a latest-value ref mirror post-commit integration", () => {
+test("keeps a direct latest-value ref mirror in post-commit timing", () => {
   assert.deepEqual(
     actions(`
       import { useEffect, useRef } from "react";
@@ -4801,7 +4869,7 @@ test("does not call a latest-value ref mirror post-commit integration", () => {
         return null;
       }
     `),
-    ["review-effect"]
+    ["keep-effect"]
   );
 });
 

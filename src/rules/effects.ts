@@ -5,7 +5,6 @@ import {
   callRootIdentifier,
   collectBindingNames,
   containsCallExpression,
-  hookCallName,
   isAssignmentOperator,
   isDeclarationName,
   isDirectJsxAttributeExpression,
@@ -25,6 +24,7 @@ import {
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
+import { isImportedHookCall } from "../imports.js";
 import type {
   ClassifiedEffect,
   EffectCandidate,
@@ -40,6 +40,8 @@ export function classifyEffect(
   usageBySetter: ReadonlyMap<string, StateUsage>,
   useValueBindings: ReadonlySet<string>,
   useObservableBindings: ReadonlySet<string>,
+  useRefBindings: ReadonlySet<string>,
+  reactNamespaces: ReadonlySet<string>,
   moduleScopeBindings: ReadonlySet<string>
 ): ClassifiedEffect {
   if (hasReactEffectOwnershipDirective(effect)) {
@@ -102,7 +104,13 @@ export function classifyEffect(
     if (
       !hasCleanup &&
       effect.owner &&
-      callbackIsCommittedRefIntegration(effect.callback, effect.owner, true)
+      callbackIsCommittedRefIntegration(
+        effect.callback,
+        effect.owner,
+        useRefBindings,
+        reactNamespaces,
+        true
+      )
     ) {
       return committedRefEffect();
     }
@@ -137,7 +145,13 @@ export function classifyEffect(
   if (
     !hasCleanup &&
     effect.owner &&
-    (callbackIsCommittedRefIntegration(effect.callback, effect.owner) ||
+    (isExactLatestValueRefMirror(effect, useRefBindings, reactNamespaces) ||
+      callbackIsCommittedRefIntegration(
+        effect.callback,
+        effect.owner,
+        useRefBindings,
+        reactNamespaces
+      ) ||
       isCommittedPropRefSnapshot(effect, stateBySetter))
   ) {
     return committedRefEffect();
@@ -506,24 +520,65 @@ function committedRefEffect(): ClassifiedEffect {
   };
 }
 
+function isExactLatestValueRefMirror(
+  effect: EffectCandidate,
+  useRefBindings: ReadonlySet<string>,
+  reactNamespaces: ReadonlySet<string>
+): boolean {
+  const { callback, dependencies, owner } = effect;
+  const dependency = dependencies?.elements[0];
+  if (
+    !callback ||
+    !owner ||
+    dependencies?.elements.length !== 1 ||
+    !dependency
+  ) {
+    return false;
+  }
+
+  const statementExpression = ts.isBlock(callback.body)
+    ? callback.body.statements.length === 1 && ts.isExpressionStatement(callback.body.statements[0]!)
+      ? callback.body.statements[0]!.expression
+      : null
+    : callback.body;
+  const assignment = statementExpression && unwrapTransparentExpression(statementExpression);
+  if (
+    !assignment ||
+    !ts.isBinaryExpression(assignment) ||
+    assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken
+  ) {
+    return false;
+  }
+  const target = unwrapTransparentExpression(assignment.left);
+  if (
+    !ts.isPropertyAccessExpression(target) ||
+    target.name.text !== "current" ||
+    !ts.isIdentifier(target.expression)
+  ) {
+    return false;
+  }
+  const refName = target.expression.text;
+  if (
+    localBindingNames(callback, null).has(refName) ||
+    !localCommittedRefBindings(owner, useRefBindings, reactNamespaces).has(refName)
+  ) {
+    return false;
+  }
+  const sourceFile = effect.call.getSourceFile();
+  const source = unwrapTransparentExpression(assignment.right);
+  return isPureExpression(source) &&
+    source.getText(sourceFile) === unwrapTransparentExpression(dependency).getText(sourceFile);
+}
+
 function callbackIsCommittedRefIntegration(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   owner: RuntimeFunctionLike,
+  useRefBindings: ReadonlySet<string>,
+  reactNamespaces: ReadonlySet<string>,
   rejectSnapshotCaptures = false
 ): boolean {
   if (!owner.body) return false;
-  const refs = new Set<string>();
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.initializer &&
-      ts.isCallExpression(node.initializer) &&
-      hookCallName(node.initializer) === "useRef"
-    ) {
-      refs.add(node.name.text);
-    }
-  });
+  const refs = localCommittedRefBindings(owner, useRefBindings, reactNamespaces);
   if (refs.size === 0) return false;
 
   if (rejectSnapshotCaptures) {
@@ -588,6 +643,42 @@ function callbackIsCommittedRefIntegration(
     return callback.body.statements.length > 0 && callback.body.statements.every(statementIsRefIntegration);
   }
   return expressionIsRefIntegration(callback.body);
+}
+
+function localCommittedRefBindings(
+  owner: RuntimeFunctionLike,
+  useRefBindings: ReadonlySet<string>,
+  reactNamespaces: ReadonlySet<string>
+): ReadonlySet<string> {
+  const refs = new Set<string>();
+  if (!owner.body) return refs;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      ts.isCallExpression(node.initializer) &&
+      isImportedHookCall(node.initializer, useRefBindings, reactNamespaces, "useRef") &&
+      importedHookIsUnshadowed(node.initializer, owner) &&
+      bindingDeclarationCount(owner, node.name.text) === 1
+    ) {
+      refs.add(node.name.text);
+    }
+  });
+  return refs;
+}
+
+function importedHookIsUnshadowed(
+  call: ts.CallExpression,
+  owner: RuntimeFunctionLike
+): boolean {
+  const callee = call.expression;
+  const root = ts.isIdentifier(callee)
+    ? callee
+    : ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)
+      ? callee.expression
+      : null;
+  return root !== null && bindingDeclarationCount(owner, root.text) === 0;
 }
 
 function isSetupOnlyMountCandidate(

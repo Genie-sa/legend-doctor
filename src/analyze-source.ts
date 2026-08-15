@@ -302,6 +302,8 @@ export function analyzeSource(
       scope?.usageBySetter ?? EMPTY_STATE_USAGES,
       effect.owner ? useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS : EMPTY_BINDINGS,
       effect.owner ? useObservableBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS : EMPTY_BINDINGS,
+      imports.useRef,
+      imports.reactNamespaces,
       moduleScopeBindings
     );
     effectClassifications.set(effect, classification);

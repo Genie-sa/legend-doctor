@@ -12,6 +12,7 @@ export interface HookImports {
   useEffect: ReadonlySet<string>;
   useObservable: ReadonlySet<string>;
   useObserveEffect: ReadonlySet<string>;
+  useRef: ReadonlySet<string>;
   useState: ReadonlySet<string>;
   useValue: ReadonlySet<string>;
 }
@@ -31,6 +32,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   const useEffect = new Set<string>();
   const useObservable = new Set<string>();
   const useObserveEffect = new Set<string>();
+  const useRef = new Set<string>();
   const useState = new Set<string>();
   const useValue = new Set<string>();
 
@@ -79,6 +81,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
       if (moduleName === REACT_MODULE) {
         if (importedName === "useState") useState.add(localName);
         if (importedName === "useEffect") useEffect.add(localName);
+        if (importedName === "useRef") useRef.add(localName);
       }
       if (moduleName === LEGEND_REACT_MODULE) {
         if (importedName === "useSelector" || importedName === "use$") {
@@ -110,6 +113,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
     useEffect,
     useObservable,
     useObserveEffect,
+    useRef,
     useState,
     useValue,
   };
@@ -119,7 +123,7 @@ export function isImportedHookCall(
   call: ts.CallExpression,
   localNames: ReadonlySet<string>,
   namespaceNames: ReadonlySet<string>,
-  canonicalName: "useEffect" | "useState" | "useValue"
+  canonicalName: "useEffect" | "useRef" | "useState" | "useValue"
 ): boolean {
   const expression = call.expression;
   if (ts.isIdentifier(expression)) {
