@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,106 hooks across 184 source roots. The corpus currently contains
-710 manual hook labels, including 20 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 2,127 hooks across 190 source roots. The corpus currently contains
+716 manual hook labels, including 20 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-five real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -55,7 +55,9 @@ safety; state variable names are not evidence.
 The Genie holdout verifies that an adjacent `legend-doctor keep-react-effect` or existing `react-effect-allow`
 directive is an explicit React-lifecycle ownership decision. The effect remains inventoried as `keep-effect`; detached
 comments and string literals do not apply. Conditional `useMount` and `useUnmount` advice remains visible without
-claiming that once-only semantics are proven.
+claiming that once-only semantics are proven. Teardown-only `useUnmount` advice requires the empty-dependency effect to
+return a function value. A returned call may perform setup or mount work before producing a disposer, so it stays under
+React effect ownership.
 An exact React `useRef` mirror also remains `keep-effect`: it synchronizes a committed ref after render. The proof
 requires one imported, unshadowed React `useRef`, one exact `ref.current = value` assignment, and no cleanup or extra
 work. The effect may run after every commit or list one dependency identical to the assigned value. `[]`, mismatched

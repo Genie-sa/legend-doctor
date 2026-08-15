@@ -452,6 +452,37 @@ export const repositories = [
         root: "src/pages/MultifactorAuthentication/AuthorizeTransactionPage/index.tsx",
         states: 3,
       },
+      { effects: 10, id: "expensify-root-lifecycle", root: "src/Expensify.tsx", states: 4 },
+      {
+        effects: 2,
+        id: "expensify-signer-info-lifecycle",
+        root: "src/pages/ReimbursementAccount/EnterSignerInfo/index.tsx",
+        states: 0,
+      },
+      {
+        effects: 2,
+        id: "expensify-global-reimbursements-lifecycle",
+        root: "src/pages/settings/Wallet/EnableGlobalReimbursements/EnableGlobalReimbursementsBusinessPage/index.tsx",
+        states: 0,
+      },
+      {
+        effects: 1,
+        id: "expensify-emoji-picker-button-lifecycle",
+        root: "src/components/EmojiPicker/EmojiPickerButton.tsx",
+        states: 0,
+      },
+      {
+        effects: 1,
+        id: "expensify-emoji-picker-dropdown-lifecycle",
+        root: "src/components/EmojiPicker/EmojiPickerButtonDropdown.tsx",
+        states: 0,
+      },
+      {
+        effects: 1,
+        id: "expensify-add-reaction-lifecycle",
+        root: "src/components/Reactions/AddReactionBubble.tsx",
+        states: 0,
+      },
     ],
     url: "https://github.com/Expensify/App.git",
   },
@@ -5137,6 +5168,40 @@ export const goldCases = [
     rationale: "The effect only mirrors a transparent comparison of its exact dependency into React state.",
     target: "formbricks-survey-menu-bar",
   },
+  ...[
+    ["expensify-emoji-picker-button-lifecycle", "EmojiPickerButton.tsx", 79],
+    ["expensify-emoji-picker-dropdown-lifecycle", "EmojiPickerButtonDropdown.tsx", 47],
+    ["expensify-add-reaction-lifecycle", "AddReactionBubble.tsx", 68],
+  ].map(([target, file, line]) => ({
+    action: "use-unmount" as const,
+    file: file as string,
+    hook: "useEffect" as const,
+    line: line as number,
+    name: null,
+    rationale: "The empty-dependency effect returns an existing cleanup function without running setup work.",
+    target: target as string,
+  })),
+  {
+    action: "keep-effect",
+    file: "Expensify.tsx",
+    hook: "useEffect",
+    line: 223,
+    name: null,
+    rationale: "The returned call starts an interval and produces its disposer, so React must retain the paired setup and cleanup.",
+    target: "expensify-root-lifecycle",
+  },
+  ...[
+    ["expensify-signer-info-lifecycle", 95],
+    ["expensify-global-reimbursements-lifecycle", 61],
+  ].map(([target, line]) => ({
+    action: "keep-effect" as const,
+    file: "index.tsx",
+    hook: "useEffect" as const,
+    line: line as number,
+    name: null,
+    rationale: "The returned call performs mount-time form cleanup and returns no disposer; it is not an unmount callback value.",
+    target: target as string,
+  })),
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [

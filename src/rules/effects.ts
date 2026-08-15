@@ -1070,10 +1070,14 @@ function isSubscriptionCall(call: ts.CallExpression): boolean {
 }
 
 function isCleanupOnly(callback: ts.ArrowFunction | ts.FunctionExpression): boolean {
-  if (!ts.isBlock(callback.body)) return ts.isArrowFunction(callback.body) || ts.isFunctionExpression(callback.body);
-  if (callback.body.statements.length !== 1) return false;
-  const statement = callback.body.statements[0];
-  return statement !== undefined && ts.isReturnStatement(statement) && statement.expression !== undefined;
+  const expression = ts.isBlock(callback.body)
+    ? callback.body.statements.length === 1 && ts.isReturnStatement(callback.body.statements[0]!)
+      ? callback.body.statements[0]!.expression
+      : undefined
+    : callback.body;
+  if (!expression) return false;
+  const cleanup = unwrapTransparentExpression(expression);
+  return ts.isArrowFunction(cleanup) || ts.isFunctionExpression(cleanup) || ts.isIdentifier(cleanup);
 }
 
 function callbackCallsKnownSetter(

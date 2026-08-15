@@ -5133,6 +5133,43 @@ test("keeps conditional useUnmount advice as a candidate", () => {
   assert.equal(finding?.disposition, "candidate");
 });
 
+test("does not call returned setup work a teardown-only effect", () => {
+  for (const cleanup of [
+    `subscribe()`,
+    `source.listen()`,
+    `cleanupRef.current`,
+    `ready ? cleanupA : cleanupB`,
+  ]) {
+    assert.deepEqual(
+      actions(`
+        import { useEffect } from "react";
+        export function Screen() {
+          useEffect(() => { return ${cleanup}; }, []);
+          return null;
+        }
+      `),
+      ["keep-effect"],
+      cleanup
+    );
+  }
+});
+
+test("recognizes direct returned cleanup function values", () => {
+  for (const cleanup of [`() => release()`, `function cleanup() { release(); }`, `cleanup`]) {
+    assert.deepEqual(
+      actions(`
+        import { useEffect } from "react";
+        export function Screen() {
+          useEffect(() => { return ${cleanup}; }, []);
+          return null;
+        }
+      `),
+      ["use-unmount"],
+      cleanup
+    );
+  }
+});
+
 test("suggests useObserveEffect only for dependencies sourced from useValue", () => {
   assert.deepEqual(
     actions(`
