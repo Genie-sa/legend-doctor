@@ -15,6 +15,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | --- | --- |
 | `useState` | Keep, delete, move down, ref, `useValue`, or observable |
 | `useEffect` | Keep, move to event, mount, unmount, or observable reaction |
+| Explicit React-owned effect | `keep-effect`; no lifecycle rewrite |
 | Coupled fields | One grouped model and one atomic migration |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | Broad subscriptions | Lowest proven observable path |
@@ -35,8 +36,8 @@ Measured on pinned real applications:
 | Source targets | 167 |
 | Hooks analyzed | 2,028 |
 | Manual labels | 672 |
-| Unit tests | 329/329 |
-| Actionable precision | 98.9% (345/349) |
+| Unit tests | 331/331 |
+| Actionable precision | 100% (345/345) |
 | Actionable recall | 95.3% (345/362) |
 | Legend practice precision | 100% (76/76) |
 
@@ -55,6 +56,16 @@ Run Legend Doctor before and after every React state, effect, or Legend observab
 6. Finish when every changed hook is accounted for and no unsafe finding appears.
 
 `--actionable` returns `change` and `candidate`. Omit it to include intentional `keep` findings.
+
+When project knowledge says an effect must keep React lifecycle semantics, place a directive immediately above it:
+
+```tsx
+// legend-doctor keep-react-effect: the SDK requires post-commit timing.
+useEffect(() => syncSdk(identity), [identity]);
+```
+
+The effect remains inventoried and is reported as `keep-effect`. Detached comments do not apply. Existing
+`react-effect-allow ...` comments are also recognized.
 
 ```json
 {

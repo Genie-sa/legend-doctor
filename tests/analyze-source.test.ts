@@ -4637,6 +4637,70 @@ test("reviews local-state, helper, scheduled, multi-command, collection, and sub
   ]);
 });
 
+test("honors an adjacent directive that keeps lifecycle ownership in React", () => {
+  for (const directive of [
+    "react-effect-allow timer: preserve React replay",
+    "legend-doctor keep-react-effect",
+  ]) {
+    const [finding] = analyzeSource(`
+      import { useEffect, useRef } from "react";
+      export function Screen() {
+        const timer = useRef<number | null>(null);
+        // ${directive}
+        useEffect(() => () => {
+          if (timer.current !== null) clearTimeout(timer.current);
+        }, []);
+        return null;
+      }
+    `, "fixture.tsx");
+    assert.equal(finding?.action, "keep-effect");
+    assert.equal(finding?.confidence, "certain");
+    assert.match(finding?.message ?? "", /ownership directive/);
+  }
+});
+
+test("does not apply a detached or unrelated React effect comment", () => {
+  for (const source of [
+    `
+      import { useEffect } from "react";
+      // react-effect-allow timer
+      const label = "detached";
+      export function Screen() {
+        useEffect(() => () => release(), []);
+        return label;
+      }
+    `,
+    `
+      import { useEffect } from "react";
+      export function Screen() {
+        const policy = "react-effect-allow";
+        useEffect(() => () => release(), []);
+        return policy;
+      }
+    `,
+    `
+      import { useEffect } from "react";
+      export function Screen() {
+        // Documentation mentions legend-doctor keep-react-effect, but this is not a directive.
+        useEffect(() => () => release(), []);
+        return null;
+      }
+    `,
+    `
+      import { useEffect } from "react";
+      export function Screen() {
+        // legend-doctor keep-react-effect
+
+        useEffect(() => () => release(), []);
+        return null;
+      }
+    `,
+  ]) {
+    const [finding] = analyzeSource(source, "fixture.tsx");
+    assert.equal(finding?.action, "use-unmount");
+  }
+});
+
 test("keeps effects that operate on committed refs", () => {
   assert.deepEqual(
     actions(`

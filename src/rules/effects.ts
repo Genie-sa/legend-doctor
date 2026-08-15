@@ -42,6 +42,14 @@ export function classifyEffect(
   useObservableBindings: ReadonlySet<string>,
   moduleScopeBindings: ReadonlySet<string>
 ): ClassifiedEffect {
+  if (hasReactEffectOwnershipDirective(effect)) {
+    return {
+      action: "keep-effect",
+      confidence: "certain",
+      derivedState: null,
+      message: "Keep this React effect; its adjacent ownership directive explicitly preserves React lifecycle semantics.",
+    };
+  }
   if (!effect.callback) {
     return {
       action: "review-effect",
@@ -202,6 +210,26 @@ export function classifyEffect(
     derivedState: null,
     message: "Review this effect's causal owner before choosing React lifecycle, an event handler, or an observable reaction.",
   };
+}
+
+function hasReactEffectOwnershipDirective(effect: EffectCandidate): boolean {
+  const statement = findAncestorUntil(
+    effect.call,
+    ts.isExpressionStatement,
+    effect.owner ?? effect.call.getSourceFile()
+  );
+  if (!statement) return false;
+  const sourceFile = effect.call.getSourceFile();
+  const leadingComments = ts.getLeadingCommentRanges(sourceFile.text, statement.getFullStart()) ?? [];
+  const comment = leadingComments.at(-1);
+  if (!comment) return false;
+  const gap = sourceFile.text.slice(comment.end, statement.getStart(sourceFile));
+  if (/\r?\n[\t ]*\r?\n/.test(gap)) return false;
+  const body = sourceFile.text
+    .slice(comment.pos, comment.end)
+    .replace(/^\s*\/[/\*]+\s*/, "")
+    .replace(/\*\/\s*$/, "");
+  return /^(?:react-effect-allow\b|legend-doctor\s+keep-react-effect\b)/.test(body);
 }
 
 function isCommittedPropRefSnapshot(
