@@ -5083,6 +5083,27 @@ export const goldPracticeCases = [
     target: "genie-courses",
   },
   {
+    action: "toggle-observable",
+    file: "apps/web/src/features/player/comments-section.tsx",
+    line: 205,
+    rationale: "The updater is exactly the negation of the current component-local observable boolean.",
+    target: "genie-courses",
+  },
+  {
+    action: "toggle-observable",
+    file: "apps/web/src/routes/_admin/admin/feedback.tsx",
+    line: 356,
+    rationale: "The command flips one proven observable boolean using an untracked read of the same static path.",
+    target: "genie-courses",
+  },
+  {
+    action: "toggle-observable",
+    file: "apps/web/src/routes/_admin/admin/feedback.tsx",
+    line: 604,
+    rationale: "The command flips one proven observable boolean using an untracked read of the same static path.",
+    target: "genie-courses",
+  },
+  {
     action: "replace-legacy-use-value",
     file: "legend-kit/react-native/windowDimensions.tsx",
     line: 40,

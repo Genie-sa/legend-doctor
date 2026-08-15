@@ -35,7 +35,8 @@ At the pinned commits, the analyzer inventories 2,028 hooks across 167 source ro
 672 manual hook labels, including 26 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-five real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
-labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
+labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
+`useSelector`/`use$` to `useValue` migration. Run the eval for
 the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
 
@@ -99,6 +100,9 @@ full-app impact must remain zero in applications that do not import Legend State
 Exact observable-array appends use `.push()` only when the target is locally proven to start as an array and the write is
 exactly the previous entries followed by one evaluation-safe value. Prepend, sort, filter, multiple values, spread values,
 calls, getters, tracking `.get()`, escaped snapshots, and imported or otherwise unproven array roots abstain.
+Exact observable boolean flips use `.toggle()` only when the target is a proven static observable path and the write is either
+the negation of that same path's untracked `peek()` or an exact one-expression previous-value updater. Tracked `get()` reads,
+dynamic paths, mismatched paths, block or async updaters, shadowed roots, and unproven observables abstain.
 The direct-reactivity rule replaces an eager `useValue(observablePath.get())` input or an exact
 `useValue(() => observablePath.get())` selector with `useValue(observablePath)`. Explicit type arguments and the suspense
 option are preserved. The path must be statically addressed and proven as Legend State through a local declaration or

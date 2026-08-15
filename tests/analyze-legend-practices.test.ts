@@ -53,6 +53,76 @@ test("recognizes useObservable bindings", () => {
   );
 });
 
+test("replaces exact observable boolean flips with toggle", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useObservable } from "@legendapp/state/react";
+    const shell$ = observable({ palette: { open: false } });
+    export function useControls() {
+      const local$ = useObservable({ expanded: false });
+      const togglePalette = () => shell$.palette.open.set(!shell$.palette.open.peek());
+      const toggleExpanded = () => local$.expanded.set(value => !value);
+      return { toggleExpanded, togglePalette };
+    }
+  `, "fixture.ts");
+
+  const toggles = findings.filter(finding => finding.action === "toggle-observable");
+  assert.equal(toggles.length, 2);
+  assert.ok(toggles.every(finding => finding.confidence === "certain"));
+  assert.match(toggles[0]?.message ?? "", /shell\$\.palette\.open\.toggle\(\)/);
+  assert.match(toggles[1]?.message ?? "", /local\$\.expanded\.toggle\(\)/);
+});
+
+test("replaces exact boolean updater on a typed observable", () => {
+  const findings = analyzeLegendPractices(`
+    import type { Observable } from "@legendapp/state";
+    export function toggle(state$: Observable<{ enabled: boolean }>) {
+      state$.enabled.set(current => !current);
+    }
+  `, "fixture.ts");
+
+  assert.deepEqual(findings.map(finding => finding.action), ["toggle-observable"]);
+});
+
+test("keeps observable writes when an exact untracked boolean flip is not proven", () => {
+  const source = (statement: string) => analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    const state$ = observable({ enabled: false, other: false, rows: {} as Record<string, boolean> });
+    declare const external$: { enabled: { peek(): boolean } };
+    export function toggle(key: string) {
+      ${statement}
+    }
+  `, "fixture.ts").filter(finding => finding.action === "toggle-observable");
+
+  for (const statement of [
+    `state$.enabled.set(!state$.enabled.get());`,
+    `state$.enabled.set(!state$.other.peek());`,
+    `state$.enabled.set(!external$.enabled.peek());`,
+    `state$.rows[key].set(!state$.rows[key].peek());`,
+    `state$.enabled.set(current => !state$.other.peek());`,
+    `state$.enabled.set(current => { return !current; });`,
+    `state$.enabled.set(async current => !current);`,
+    `state$.enabled.set(current => !!current);`,
+    `state$.enabled.toggle();`,
+  ]) {
+    assert.deepEqual(source(statement), [], statement);
+  }
+});
+
+test("does not infer toggle support through a shadowed observable root", () => {
+  assert.deepEqual(
+    analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      const state$ = observable({ enabled: false });
+      export function toggle() {
+        const state$ = externalState();
+        state$.enabled.set(value => !value);
+      }
+    `, "fixture.ts").filter(finding => finding.action === "toggle-observable"),
+    []
+  );
+});
+
 test("replaces legacy Legend React selectors with useValue", () => {
   const findings = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";

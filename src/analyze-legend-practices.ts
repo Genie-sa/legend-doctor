@@ -14,6 +14,7 @@ import {
   findObservableReadPractices,
   RESERVED_OBSERVABLE_MEMBERS,
 } from "./rules/observable-reads.js";
+import { findObservableTogglePractices } from "./rules/observable-toggle.js";
 import type { LegendPracticeFinding } from "./types.js";
 
 interface ObservableWrite {
@@ -84,6 +85,7 @@ export function analyzeLegendPractices(
 
   findings.push(...findObservableReadPractices(sourceFile, fileName, imports, observableBindings));
   findings.push(...findObservableCloneWritePractices(sourceFile, fileName, observableBindings));
+  findings.push(...findObservableTogglePractices(sourceFile, fileName, observableBindings));
 
   return findings.sort(
     (left, right) =>

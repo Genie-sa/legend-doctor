@@ -21,6 +21,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
 | Whole-object clone writes | Direct child `.set()` on the changed path |
 | Cloned array append | Direct `.push()` when exactly one safe value is appended |
+| Boolean flip | Direct `.toggle()` on the proven observable |
 | Multiple Legend writes | One `.assign()` or `batch()` transaction |
 | Legacy `useSelector` / `use$` | `useValue`, narrowed when the selector is one direct `.get()` |
 | Every finding | File, line, action, confidence, evidence, and boundary |
@@ -33,10 +34,10 @@ Measured on pinned real applications:
 | Source targets | 167 |
 | Hooks analyzed | 2,028 |
 | Manual labels | 672 |
-| Unit tests | 321/321 |
+| Unit tests | 325/325 |
 | Actionable precision | 98.8% (343/347) |
 | Actionable recall | 94.8% (343/362) |
-| Legend practice precision | 100% (73/73) |
+| Legend practice precision | 100% (76/76) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, and Open WebUI React Native.
@@ -312,7 +313,33 @@ player$.assign({ error: message, isLoading: false, isPlaying: false });
 
 The tool uses `batch()` when writes span observables or `.assign()` would change evaluation semantics.
 
-### 6. Command read → non-tracking snapshot
+### 6. Boolean flip → direct toggle
+
+[Legend State provides `toggle()` for observable booleans](https://legendapp.com/open-source/state/v3/usage/observable/).
+
+Before:
+
+```ts
+settings$.enabled.set(!settings$.enabled.peek());
+```
+
+Output:
+
+```text
+settings.ts:24 [toggle-observable] Replace the exact boolean flip with
+`settings$.enabled.toggle()`.
+```
+
+After:
+
+```ts
+settings$.enabled.toggle();
+```
+
+The rule also recognizes `settings$.enabled.set(value => !value)`. It does not rewrite `.get()` because that read may
+intentionally participate in Legend tracking. Dynamic paths, different source paths, and unproven observables stay unchanged.
+
+### 7. Command read → non-tracking snapshot
 
 Before:
 
@@ -336,7 +363,7 @@ const onSave = () => save(profile$.name.peek());
 The rule is limited to proven React snapshots and event commands. Render reads, Legend reactions, unknown callbacks,
 dynamic paths, and shallow `get(true)` stay unchanged.
 
-### 7. Teardown effect → explicit lifecycle
+### 8. Teardown effect → explicit lifecycle
 
 Before:
 
@@ -390,6 +417,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/keyed-selection.ts` | Row and collection selection |
 | `src/rules/observable-clone-writes.ts` | Narrow child and exact array-append writes |
 | `src/rules/observable-reads.ts` | Direct and lowest-path reads |
+| `src/rules/observable-toggle.ts` | Exact observable boolean flips |
 | `src/rules/state-proofs.ts` | Shared state and JSX proofs |
 | `src/analyze-legend-practices.ts` | Legend practice orchestration and write transactions |
 
