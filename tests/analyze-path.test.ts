@@ -187,7 +187,15 @@ test("preserves the path-level Legend practice eligibility boundary", async t =>
     "utf8"
   );
 
-  const report = await analyzePath(root);
+  const context = await createAnalysisContext(root);
+  const file = context.project.getFile(path.join(root, "legacy.ts"));
+  assert.ok(file);
+  assert.equal(
+    analyzeLegendPracticesFile(file, "legacy.ts")[0]?.action,
+    "replace-legacy-use-value"
+  );
+
+  const report = await analyzePath(root, context);
 
   assert.deepEqual(report.practices, []);
 });

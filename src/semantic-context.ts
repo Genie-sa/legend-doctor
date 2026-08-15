@@ -160,9 +160,20 @@ export function createSemanticContext(
     };
   }
 
-  const configuredFiles = new Set(parsedConfig.fileNames.map(pathIdentityKey));
+  const host = createIdentityPreservingHost(parsedConfig.options, project.files);
+  const rootNames = uniqueCanonicalPaths(parsedConfig.fileNames);
+  const program = ts.createProgram({
+    configFileParsingDiagnostics: parsedConfig.errors,
+    host,
+    options: parsedConfig.options,
+    rootNames,
+    ...(parsedConfig.projectReferences
+      ? { projectReferences: parsedConfig.projectReferences }
+      : {}),
+  });
+
   const unconfiguredFiles = project.files.filter(
-    file => !configuredFiles.has(pathIdentityKey(file.identityPath))
+    file => !program.getSourceFile(file.identityPath)
   );
   if (unconfiguredFiles.length > 0) {
     return {
@@ -175,18 +186,6 @@ export function createSemanticContext(
       })),
     };
   }
-
-  const host = createIdentityPreservingHost(parsedConfig.options, project.files);
-  const rootNames = uniqueCanonicalPaths(parsedConfig.fileNames);
-  const program = ts.createProgram({
-    configFileParsingDiagnostics: parsedConfig.errors,
-    host,
-    options: parsedConfig.options,
-    rootNames,
-    ...(parsedConfig.projectReferences
-      ? { projectReferences: parsedConfig.projectReferences }
-      : {}),
-  });
 
   const mismatches = project.files.filter(
     file => program.getSourceFile(file.identityPath) !== file.sourceFile

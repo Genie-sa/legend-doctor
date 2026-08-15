@@ -55,15 +55,15 @@ export function analyzeLegendPracticesFile(
   reportFileName: string,
   importedObservables: ReadonlySet<string> = new Set(),
   importedObservableFactories: ReadonlySet<string> = new Set(),
-  eligible = true
+  includeFindings = true
 ): LegendPracticeFinding[] {
-  if (!eligible) return [];
-  return analyzeParsedLegendPractices(
+  const findings = analyzeParsedLegendPractices(
     file.sourceFile,
     reportFileName,
     importedObservables,
     importedObservableFactories
   );
+  return includeFindings ? findings : [];
 }
 
 function analyzeParsedLegendPractices(

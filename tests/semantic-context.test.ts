@@ -60,6 +60,39 @@ test("rejects analysis files that are not owned by the selected tsconfig shard",
   assert.equal(result.diagnostics[0]?.fileName, foreignPath);
 });
 
+test("treats transitive imports as members of the selected tsconfig shard", t => {
+  const directory = temporaryDirectory(t);
+  const entryPath = path.join(directory, "entry.ts");
+  const dependencyPath = path.join(directory, "dependency.ts");
+  const entrySource = 'import { value } from "./dependency.js"; export const copy = value;';
+  const dependencySource = "export const value = 1;";
+  writeFileSync(entryPath, entrySource, "utf8");
+  writeFileSync(dependencyPath, dependencySource, "utf8");
+  const configFilePath = path.join(directory, "tsconfig.json");
+  writeFileSync(
+    configFilePath,
+    JSON.stringify({
+      compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext" },
+      files: ["entry.ts"],
+    }),
+    "utf8"
+  );
+  const project = new AnalysisProject(
+    new Map([
+      [entryPath, entrySource],
+      [dependencyPath, dependencySource],
+    ])
+  );
+
+  const result = createSemanticContext(project, { configFilePath });
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.ok(result.context);
+  const dependency = project.getFile(dependencyPath);
+  assert.ok(dependency);
+  assert.strictEqual(result.context.getSourceFile(dependency), dependency.sourceFile);
+});
+
 test("owns one Program, reuses cached ASTs, and exposes symbol, declaration, import, and type facts", t => {
   const directory = temporaryDirectory(t);
   const sourceDirectory = path.join(directory, "src");
