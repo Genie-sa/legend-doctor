@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,100 hooks across 183 source roots. The corpus currently contains
-706 manual hook labels, including 20 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 2,106 hooks across 184 source roots. The corpus currently contains
+710 manual hook labels, including 20 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-five real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -45,6 +45,7 @@ resolution is provenance rather than proof of leaf ownership; production migrati
 cannot move into conditional, keyed, or repeated child instances; and an isolated observable conversion must actually
 eliminate an owner render across its companion update cluster. Effect rules distinguish recognizable disposer protocols
 from arbitrary returned calls and treat `useMount` as a probable lifecycle choice because it changes Strict Mode replay.
+Derived-state deletion requires transparent inputs that match effect dependency paths and cannot create a fresh identity.
 Keyed collection advice is proven from event-rooted writes, stable row keys, per-row membership, and mount/cardinality
 safety; state variable names are not evidence.
 The Genie holdout verifies that an adjacent `legend-doctor keep-react-effect` or existing `react-effect-allow`

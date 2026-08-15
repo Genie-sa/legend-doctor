@@ -794,8 +794,57 @@ function findPureDerivedSetter(
     return null;
   }
   const value = call.arguments[0];
-  if (!value || !isPureExpression(value)) return null;
+  if (!value || !isTransparentDerivedValue(value, dependencies)) return null;
   return state;
+}
+
+function isTransparentDerivedValue(
+  value: ts.Expression,
+  dependencies: ts.ArrayLiteralExpression
+): boolean {
+  if (!isPureExpression(value)) return false;
+
+  const sourceFile = value.getSourceFile();
+  const dependencyTexts = new Set(
+    dependencies.elements.map(dependency =>
+      unwrapTransparentExpression(dependency).getText(sourceFile)
+    )
+  );
+  let hasInput = false;
+  let inputsMatch = true;
+  const inspect = (node: ts.Node): void => {
+    if (!inputsMatch) return;
+    if (
+      ts.isArrayLiteralExpression(node) ||
+      ts.isObjectLiteralExpression(node) ||
+      ts.isArrowFunction(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isClassExpression(node) ||
+      ts.isRegularExpressionLiteral(node) ||
+      ts.isTaggedTemplateExpression(node) ||
+      ts.isJsxElement(node) ||
+      ts.isJsxSelfClosingElement(node) ||
+      ts.isJsxFragment(node)
+    ) {
+      inputsMatch = false;
+      return;
+    }
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      hasInput = true;
+      if (!dependencyTexts.has(unwrapTransparentExpression(node).getText(sourceFile))) {
+        inputsMatch = false;
+      }
+      return;
+    }
+    if (ts.isIdentifier(node) && !isNonValueIdentifier(node)) {
+      hasInput = true;
+      if (!dependencyTexts.has(node.text)) inputsMatch = false;
+      return;
+    }
+    node.forEachChild(inspect);
+  };
+  inspect(value);
+  return hasInput && inputsMatch;
 }
 
 interface MutationSiteReset {

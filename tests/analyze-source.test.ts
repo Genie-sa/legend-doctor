@@ -3227,6 +3227,46 @@ test("deletes a pure derivation state and effect pair", () => {
   );
 });
 
+test("deletes derived state only when transparent inputs match effect dependencies", () => {
+  assert.deepEqual(
+    actions(`
+      import { useEffect, useState } from "react";
+      export function Status({ login }: { login: { validated?: boolean; error?: string } }) {
+        const [visible, setVisible] = useState(true);
+        useEffect(() => { setVisible(!login.validated); }, [login.validated, login.error]);
+        return <span>{String(visible)}</span>;
+      }
+    `),
+    ["delete-derived-state", "delete-effect"]
+  );
+});
+
+test("keeps effects whose assigned value is not a transparent dependency derivation", () => {
+  for (const [body, dependencies] of [
+    [`setValue(first)`, `[other]`],
+    [`setValue(model.value)`, `[model]`],
+    [`setValue({ text: first })`, `[first]`],
+    [`setValue(true)`, `[other]`],
+  ]) {
+    assert.deepEqual(
+      actions(`
+        import { useEffect, useState } from "react";
+        export function Screen({ first, other, model }: {
+          first: string;
+          other: string;
+          model: { value: string };
+        }) {
+          const [value, setValue] = useState<unknown>(null);
+          useEffect(() => { ${body}; }, ${dependencies});
+          return <output>{String(value)}</output>;
+        }
+      `),
+      ["review-state", "review-effect"],
+      body
+    );
+  }
+});
+
 test("does not leak a derived-state deletion across sibling component bindings", () => {
   const findings = analyzeSource(`
     import { useEffect, useState } from "react";

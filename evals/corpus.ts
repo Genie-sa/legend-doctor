@@ -93,6 +93,12 @@ export const repositories = [
     targets: [
       { effects: 1, id: "expensify-address", root: "src/pages/AddressPage.tsx", states: 4 },
       {
+        effects: 4,
+        id: "expensify-contact-method-details",
+        root: "src/pages/settings/Profile/Contacts/DynamicContactMethodDetailsPage.tsx",
+        states: 2,
+      },
+      {
         effects: 0,
         id: "expensify-video-controls",
         root: "src/components/VideoPlayer/VideoPlayerControls/index.tsx",
@@ -5094,6 +5100,42 @@ export const goldCases = [
     name: null,
     rationale: "The calendar library's focused modifier can only be applied to a committed button ref.",
     target: "genie-courses",
+  },
+  {
+    action: "delete-derived-state",
+    file: "DynamicContactMethodDetailsPage.tsx",
+    hook: "useState",
+    line: 68,
+    name: "isValidateCodeFormVisible",
+    rationale: "The state is assigned only from an exact dependency path; the additional dependency can only repeat the same assignment.",
+    target: "expensify-contact-method-details",
+  },
+  {
+    action: "delete-effect",
+    file: "DynamicContactMethodDetailsPage.tsx",
+    hook: "useEffect",
+    line: 183,
+    name: null,
+    rationale: "The effect only mirrors an exact dependency path into otherwise-derived React state.",
+    target: "expensify-contact-method-details",
+  },
+  {
+    action: "delete-derived-state",
+    file: "survey-menu-bar.tsx",
+    hook: "useState",
+    line: 71,
+    name: "isLinkSurvey",
+    rationale: "The state is assigned only from a transparent comparison of its exact effect dependency.",
+    target: "formbricks-survey-menu-bar",
+  },
+  {
+    action: "delete-effect",
+    file: "survey-menu-bar.tsx",
+    hook: "useEffect",
+    line: 91,
+    name: null,
+    rationale: "The effect only mirrors a transparent comparison of its exact dependency into React state.",
+    target: "formbricks-survey-menu-bar",
   },
 ] as const satisfies readonly GoldHookCase[];
 
