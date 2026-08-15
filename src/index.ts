@@ -13,10 +13,13 @@ export type {
   DetailedAnalysisResult,
 } from "./analyze-path.js";
 export type {
+  AnalysisCoverageOutcome,
   AnalysisCoverageEntry,
   AnalysisCoverageReport,
   AnalysisCoverageStage,
+  AnalysisCoverageStages,
   AnalysisCoverageStatus,
+  AnalysisCoverageTarget,
 } from "./analysis-coverage.js";
 export type {
   AnalysisDiagnostic,
@@ -24,7 +27,9 @@ export type {
   AnalysisFile,
 } from "./analysis-project.js";
 export type {
+  CreateSemanticContextOptions,
   ImportProvenance,
+  SemanticContext,
   SemanticContextDiagnostic,
   SemanticContextResult,
 } from "./semantic-context.js";

@@ -304,13 +304,16 @@ function analyzedFileCoverage(
   file: AnalysisFile,
   context: AnalysisContext
 ): AnalysisCoverageStages {
+  const recovered = file.parserDiagnostics.length > 0;
   return {
-    parser: file.parserDiagnostics.length === 0
-      ? outcome("analyzed", "parser-complete", "The source parsed without recovery diagnostics.")
-      : outcome("analyzed", "parser-recovered", "The parser recovered with reported diagnostics."),
+    parser: recovered
+      ? outcome("analyzed", "parser-recovered", "The parser recovered with reported diagnostics.")
+      : outcome("analyzed", "parser-complete", "The source parsed without recovery diagnostics."),
     lowering: outcome("skipped", "lowering-not-implemented", "Function IR lowering is not implemented."),
     semantic: semanticCoverage(file, context),
-    detector: outcome("analyzed", "detectors-complete", "All current source detectors ran on the cached AST."),
+    detector: recovered
+      ? outcome("unknown", "detector-recovery-uncertain", "Detectors ran, but results in recovered source regions are not trusted as complete.")
+      : outcome("analyzed", "detectors-complete", "All current source detectors ran on the cached AST."),
   };
 }
 
@@ -339,7 +342,10 @@ function diagnosticAffectsTarget(
   target: Extract<AnalysisCoverageTarget, { kind: "function" }>
 ): boolean {
   if (diagnostic.start === null) return true;
-  const end = diagnostic.start + Math.max(diagnostic.length ?? 0, 1);
+  if (!diagnostic.length) {
+    return diagnostic.start >= target.start && diagnostic.start <= target.end;
+  }
+  const end = diagnostic.start + diagnostic.length;
   return diagnostic.start < target.end && end > target.start;
 }
 

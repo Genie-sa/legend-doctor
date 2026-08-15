@@ -61,7 +61,7 @@ test("reports parser diagnostics and complete coverage without changing the defa
       entry.stages.detector.status,
     ]),
     [
-      ["broken.ts", "parser-recovered", "analyzed"],
+      ["broken.ts", "parser-recovered", "unknown"],
       ["valid.ts", "parser-complete", "analyzed"],
     ]
   );
@@ -139,6 +139,40 @@ test("localizes parser recovery to the overlapping function", async t => {
       ["healthy", "parser-complete", "analyzed"],
     ]
   );
+});
+
+test("attributes an end-of-file recovery diagnostic to the unfinished function", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-recovery-eof-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "screen.ts"),
+    "function broken() { const value = 1;",
+    "utf8"
+  );
+
+  const detailed = await analyzePathDetailed(root);
+  const functionEntry = detailed.coverage.entries.find(
+    entry => entry.target.kind === "function"
+  );
+
+  assert.equal(functionEntry?.stages.parser.reason.code, "parser-recovered-in-function");
+  assert.equal(functionEntry?.stages.detector.status, "unknown");
+});
+
+test("scopes directory coverage to supported sources and reports direct unsupported targets", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-coverage-universe-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(path.join(root, "valid.ts"), "export const value = 1;", "utf8");
+  const unsupportedPath = path.join(root, "component.vue");
+  await writeFile(unsupportedPath, "<template />", "utf8");
+
+  const directory = await analyzePathDetailed(root);
+  const direct = await analyzePathDetailed(unsupportedPath);
+
+  assert.deepEqual(directory.coverage.entries.map(entry => entry.target.file), ["valid.ts"]);
+  assert.equal(direct.coverage.entries.length, 1);
+  assert.equal(direct.coverage.entries[0]?.stages.parser.reason.code, "unsupported-extension");
+  assert.equal(direct.coverage.entries[0]?.stages.detector.status, "unsupported");
 });
 
 test("preserves the path-level Legend practice eligibility boundary", async t => {
