@@ -100,6 +100,12 @@ export const repositories = [
       },
       {
         effects: 1,
+        id: "expensify-company-card-work-email",
+        root: "src/pages/workspace/companyCards/WorkspaceCompanyCardAddWorkEmailPage.tsx",
+        states: 2,
+      },
+      {
+        effects: 1,
         id: "expensify-upload-documents",
         root: "src/pages/ReimbursementAccount/EnterSignerInfo/subSteps/UploadDocuments.tsx",
         states: 6,
@@ -2707,6 +2713,15 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    file: "webhook-settings-tab.tsx",
+    hook: "useState",
+    line: 56,
+    name: "hittingEndpoint",
+    rationale: "Endpoint testing starts one pending transition before suspension; the button leaf can subscribe while completion updates remain in the existing command.",
+    target: "formbricks-webhook-settings",
+  },
+  {
+    action: "use-observable",
     file: "pricing-table.tsx",
     hook: "useState",
     line: 343,
@@ -3729,10 +3744,20 @@ export const goldCases = [
     target: "formbricks-segment-settings",
   },
   ...[
-    [56, "hittingEndpoint", "Endpoint testing is nested inside webhook creation and co-updates accessibility state, so isolating this flag alone does not prove an owner render cut."],
-    [61, "creatingWebhook", "Creation validates several owner fields and invokes endpoint testing, which changes other React state before its first await; this is a coupled workflow status, not an isolated pending leaf."],
-  ].map(([line, name, rationale]) => ({
-    action: "review-state" as const,
+    [
+      56,
+      "hittingEndpoint",
+      "use-observable",
+      "The endpoint command is reachable from both a direct test event and a proven React Hook Form submit adapter; its pending transition reaches suspension before other React state writes.",
+    ],
+    [
+      61,
+      "creatingWebhook",
+      "review-state",
+      "Creation validates several owner fields and invokes endpoint testing, which changes other React state before its first await; this is a coupled workflow status, not an isolated pending leaf.",
+    ],
+  ].map(([line, name, action, rationale]) => ({
+    action: action as "review-state" | "use-observable",
     file: "add-webhook-modal.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -3740,6 +3765,15 @@ export const goldCases = [
     rationale: rationale as string,
     target: "formbricks-add-webhook",
   })),
+  {
+    action: "review-state",
+    file: "WorkspaceCompanyCardAddWorkEmailPage.tsx",
+    hook: "useState",
+    line: 57,
+    name: "loading",
+    rationale: "A synchronous email-state write follows the Promise-chain start, so the owner rerenders before completion and the loading transition is not an isolated leaf update.",
+    target: "expensify-company-card-work-email",
+  },
   {
     action: "review-state",
     file: "create-attribute-modal.tsx",

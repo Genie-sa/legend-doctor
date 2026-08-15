@@ -215,8 +215,13 @@ export function callbackIsEventRooted(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   owner: RuntimeFunctionLike,
   dependencyName: string,
-  seen: ReadonlySet<string>
+  seen: ReadonlySet<string>,
+  additionalRoot: (
+    callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+    owner: RuntimeFunctionLike
+  ) => boolean = () => false
 ): boolean {
+  if (additionalRoot(callback, owner)) return true;
   if (callback.body && isInsideJsxEventCallback(callback.body, owner)) return true;
   const name = ts.isFunctionDeclaration(callback)
     ? callback.name?.text
@@ -271,7 +276,7 @@ export function callbackIsEventRooted(
       if (
         caller &&
         (ts.isArrowFunction(caller) || ts.isFunctionDeclaration(caller) || ts.isFunctionExpression(caller)) &&
-        callbackIsEventRooted(caller, owner, dependencyName, nextSeen)
+        callbackIsEventRooted(caller, owner, dependencyName, nextSeen, additionalRoot)
       ) {
         return;
       }

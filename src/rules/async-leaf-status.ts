@@ -143,8 +143,13 @@ function asyncCallbackIsEventRooted(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   owner: RuntimeFunctionLike
 ): boolean {
-  return callbackIsEventRooted(callback, owner, "", new Set()) ||
-    callbackIsDirectEventAdapter(callback, owner);
+  return callbackIsEventRooted(
+    callback,
+    owner,
+    "",
+    new Set(),
+    callbackIsDirectEventAdapter
+  );
 }
 
 function callbackIsDirectEventAdapter(
@@ -323,7 +328,9 @@ function startsAsyncCommandSegment(
   const index = block.statements.indexOf(statement);
   if (index < 0) return false;
 
-  for (const candidate of block.statements.slice(index + 1)) {
+  const following = block.statements.slice(index + 1);
+  for (let offset = 0; offset < following.length; offset += 1) {
+    const candidate = following[offset]!;
     const awaitPosition = firstAwaitPosition(candidate);
     const promiseBoundary = containsPromiseCompletionReset(candidate, setterCalls);
     const boundary = awaitPosition ?? (promiseBoundary ? candidate.end : null);
@@ -335,7 +342,15 @@ function startsAsyncCommandSegment(
         owner,
         new Set(),
         awaitPosition === null
-      ) && !containsEarlyExit(candidate, boundary);
+      ) &&
+        !containsEarlyExit(candidate, boundary) &&
+        (!promiseBoundary ||
+          !hasFollowingSynchronousOwnerWrite(
+            nearestMutationFunction(call, owner).body,
+            candidate.end,
+            ownerSetters,
+            owner
+          ));
     }
     if (
       containsOwnerStateWrite(
@@ -351,6 +366,47 @@ function startsAsyncCommandSegment(
     }
   }
   return false;
+}
+
+function hasFollowingSynchronousOwnerWrite(
+  root: ts.ConciseBody | undefined,
+  after: number,
+  ownerSetters: ReadonlySet<string>,
+  owner: RuntimeFunctionLike
+): boolean {
+  if (!root) return true;
+  let found = false;
+  const scan = (node: ts.Node): void => {
+    if (found || node.end <= after) return;
+    if (isRuntimeFunctionLike(node) && node !== root) return;
+    if (
+      ts.isCallExpression(node) &&
+      node.getStart() > after &&
+      ts.isIdentifier(node.expression)
+    ) {
+      if (ownerSetters.has(node.expression.text)) {
+        found = true;
+        return;
+      }
+      const helper = localFunctionBinding(owner, node.expression.text);
+      if (
+        helper?.body &&
+        containsOwnerStateWrite(
+          helper.body,
+          helper.body.end,
+          ownerSetters,
+          owner,
+          new Set()
+        )
+      ) {
+        found = true;
+        return;
+      }
+    }
+    node.forEachChild(scan);
+  };
+  scan(root);
+  return found;
 }
 
 function firstAwaitPosition(statement: ts.Statement): number | null {

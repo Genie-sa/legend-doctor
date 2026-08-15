@@ -1967,6 +1967,34 @@ test("traces async pending state through a direct JSX event adapter", () => {
   );
 });
 
+test("traces an async pending helper through a proven React Hook Form event adapter", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    import { useForm } from "react-hook-form";
+    function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
+    export function Form() {
+      const [testing, setTesting] = useState(false);
+      const { handleSubmit } = useForm();
+      const testEndpoint = async () => {
+        setTesting(true);
+        try { await ping(); } finally { setTesting(false); }
+      };
+      const submit = async () => {
+        await testEndpoint();
+        await save();
+      };
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <form onSubmit={handleSubmit(submit)}>
+          <button type="button" onClick={testEndpoint}>Test</button>
+          <LoadingButton loading={testing} />
+        </form>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /async completion boundary/);
+});
+
 test("does not treat deferred or non-event callback adapters as event roots", () => {
   const findings = analyzeSource(`
     import { useState } from "react";
@@ -2197,6 +2225,29 @@ test("does not hide a synchronous companion write inside a Promise-chain argumen
       </main>;
     }
   `, "fixture.tsx");
+  assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+});
+
+test("does not isolate a Promise-chain status before later synchronous owner work", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
+    export function Form({ enabled }: { enabled: boolean }) {
+      const [email, setEmail] = useState("");
+      const [saving, setSaving] = useState(false);
+      function save(nextEmail: string) {
+        if (enabled) {
+          setSaving(true);
+          persist().finally(() => setSaving(false));
+        }
+        setEmail(nextEmail);
+      }
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <button onClick={() => save("next@example.com")}>Save</button>
+        <LoadingButton loading={saving} /><output>{email}</output>
+      </main>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "saving");
   assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
 });
 
