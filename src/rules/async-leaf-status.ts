@@ -35,6 +35,7 @@ export function findAsyncLeafStatuses(
   states: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   safeCommandStates: ReadonlySet<StateCandidate>,
+  reactiveMutationAffectedStates: ReadonlySet<StateCandidate>,
   localComponents: ReadonlySet<string>,
   sourceComponents: ReadonlySet<string>
 ): AsyncLeafStatusAnalysis {
@@ -46,6 +47,7 @@ export function findAsyncLeafStatuses(
       !state.setterName ||
       !hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
       !safeCommandStates.has(state) ||
+      reactiveMutationAffectedStates.has(state) ||
       !usage ||
       usage.localRenderReads !== usage.directRenderNodes.length ||
       usage.effectReads !== 0 ||

@@ -2430,7 +2430,7 @@ test("does not isolate async status when another owner update starts the command
 });
 
 test("does not isolate async status owned by a reactive mutation", () => {
-  const [finding] = analyzeSource(`
+  const findings = analyzeSource(`
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form() {
@@ -2444,8 +2444,42 @@ test("does not isolate async status owned by a reactive mutation", () => {
         <form onSubmit={save}><LoadingButton loading={saving} /></form>
       </main>;
     }
+    export function ResettableForm() {
+      const mutation = useSaveMutation();
+      const [saving, setSaving] = useState(false);
+      async function save() {
+        setSaving(true);
+        try { await mutation.mutateAsync(); } finally { setSaving(false); }
+      }
+      const reset = () => setSaving(false);
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <button onClick={reset}>Reset</button>
+        <form onSubmit={save}><LoadingButton loading={saving} /></form>
+      </main>;
+    }
   `, "fixture.tsx");
-  assert.notEqual(finding?.action, "use-observable");
+  for (const finding of findings.filter(candidate => candidate.name === "saving")) {
+    assert.notEqual(finding.action, "use-observable");
+  }
+});
+
+test("keeps a proven independent UI transition beside a reactive mutation path", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function Form() {
+      const mutation = useSaveMutation();
+      const [open, setOpen] = useState(false);
+      async function confirm() {
+        await mutation.mutateAsync();
+        setOpen(false);
+      }
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <button onClick={() => setOpen(true)}>Open</button>
+        <Dialog open={open} onOpenChange={setOpen} onConfirm={confirm} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
 });
 
 test("does not isolate async status from a scheduled callback or nonliteral write", () => {

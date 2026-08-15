@@ -249,6 +249,7 @@ export function analyzeSource(
     states,
     usageByState,
     safeCommandStates,
+    reactiveMutationAffectedStates,
     localComponents,
     sourceComponents
   );
@@ -1660,6 +1661,9 @@ function classifyState(
     branchCallSite !== null &&
     !usage.repeatedValueTransport &&
     (!hasCompanionWrites ||
+      hasIndependentDirectEventWrite ||
+      hasIndependentVisibilitySetterTransport) &&
+    (!hasReactiveMutationPath ||
       hasIndependentDirectEventWrite ||
       hasIndependentVisibilitySetterTransport) &&
     hasSafeCommands &&
