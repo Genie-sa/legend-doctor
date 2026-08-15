@@ -19,6 +19,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Latest-value `useRef` mirror | `keep-effect`; preserve post-commit timing |
 | Coupled fields | One grouped model and one atomic migration |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
+| One unresolved JSX consumer | One local subscriber wrapper; no child contract required |
 | Broad subscriptions | Lowest proven observable path |
 | `useValue(leaf$.get())` | `useValue(leaf$)` with types and options preserved |
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
@@ -34,13 +35,13 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 11 |
-| Source targets | 175 |
-| Hooks analyzed | 2,073 |
-| Manual labels | 693 |
-| Unit tests | 335/335 |
-| Actionable precision | 100% (345/345) |
-| Actionable recall | 95.3% (345/362) |
-| Legend practice precision | 100% (73/73) |
+| Source targets | 183 |
+| Hooks analyzed | 2,100 |
+| Manual labels | 706 |
+| Unit tests | 337/337 |
+| Actionable precision | 100% (359/359) |
+| Actionable recall | 95.5% (359/376) |
+| Legend practice precision | 100% (76/76) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, and Open WebUI React Native.

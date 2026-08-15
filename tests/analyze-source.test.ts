@@ -1770,6 +1770,73 @@ test("isolates direct primitive state at one stable call-site leaf", () => {
   );
 });
 
+test("isolates one unresolved JSX leaf without requiring its prop contract", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    import { RemoteDialog, RemoteStatus } from "third-party-ui";
+    export function StatusScreen() {
+      const [busy, setBusy] = useState(false);
+      const save = async () => { setBusy(true); await persist(); setBusy(false); };
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Preview /><Actions />
+        <button onClick={save}>Save</button><RemoteStatus loading={busy} /></main>;
+    }
+    export function DialogScreen() {
+      const [target, setTarget] = useState<string | null>(null);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Preview /><Actions />
+        <button onClick={() => setTarget("item")}>Open</button>
+        <RemoteDialog target={target} onClose={() => setTarget(null)} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.deepEqual(
+    findings.filter(finding => ["busy", "target"].includes(finding.name ?? "")).map(finding => finding.action),
+    ["use-observable", "use-observable"]
+  );
+});
+
+test("does not mistake unresolved boundaries for proof of leaf ownership", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    import { RemoteLeaf, RemoteMenu } from "third-party-ui";
+    export function CohesiveMenu() {
+      const [open, setOpen] = useState(false);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Preview /><Actions />
+        <RemoteMenu open={open} onOpenChange={setOpen}>
+          <button onClick={() => setOpen(false)}>Close</button><One /><Two /><Three /><Four />
+        </RemoteMenu>
+      </main>;
+    }
+    export function TwoConsumers() {
+      const [visible, setVisible] = useState(false);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Preview /><Actions />
+        <button onClick={() => setVisible(true)}>Open</button>
+        <RemoteLeaf visible={visible} /><RemoteLeaf visible={visible} />
+      </main>;
+    }
+    export function EffectConsumer() {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => report(visible), [visible]);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Preview /><Actions />
+        <button onClick={() => setVisible(true)}>Open</button><RemoteLeaf visible={visible} />
+      </main>;
+    }
+    export function AtomicCompanion() {
+      const [dirty, setDirty] = useState(false);
+      const [visible, setVisible] = useState(false);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Preview /><Actions />
+        <button onClick={() => { setVisible(true); setDirty(true); }}>Open</button>
+        <RemoteLeaf visible={visible} onClose={() => { setVisible(false); setDirty(false); }} />
+        <output>{String(dirty)}</output>
+      </main>;
+    }
+  `, "fixture.tsx");
+  for (const name of ["open", "visible"]) {
+    const matching = findings.filter(finding => finding.name === name);
+    assert.ok(matching.length > 0);
+    assert.ok(matching.every(finding => finding.action !== "use-observable"));
+  }
+});
+
 test("isolates a literal boolean leaf commanded by memoized event options", () => {
   const [finding] = analyzeSource(`
     import { useMemo, useState } from "react";
@@ -2734,7 +2801,7 @@ test("does not move an inline controlled callback that co-writes owner state", (
   );
 });
 
-test("does not move state whose setter command lives outside the receiving leaf", () => {
+test("keeps observable ownership above a receiving leaf with an outside setter command", () => {
   assert.deepEqual(
     actions(`
       import { useState } from "react";
@@ -2746,7 +2813,7 @@ test("does not move state whose setter command lives outside the receiving leaf"
         </main>;
       }
     `),
-    ["review-state"]
+    ["use-observable"]
   );
 });
 

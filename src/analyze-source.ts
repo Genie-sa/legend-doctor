@@ -1657,8 +1657,6 @@ function classifyState(
     usage.transportedOccurrences > 0 &&
     usage.valueTransportSites.size === 1 &&
     usage.valueTargets.size === 1 &&
-    (localComponents.has([...usage.valueTargets][0] ?? "") ||
-      sourceComponents.has([...usage.valueTargets][0] ?? "")) &&
     branchCallSite !== null &&
     !usage.repeatedValueTransport &&
     (!hasCompanionWrites ||
@@ -1982,6 +1980,31 @@ function setterOwnedByValueCallSite(
     [...usage.setterTransportSites][0] === valueSite
   ) {
     return true;
+  }
+  const transportsSetterAtValueSite =
+    usage.setterTargets.size === 1 &&
+    usage.setterTransportSites.size === 1 &&
+    [...usage.setterTransportSites][0] === valueSite;
+  if (
+    !usage.escaped &&
+    (usage.setterReferences === usage.setterCalls || transportsSetterAtValueSite) &&
+    usage.setterCallNodes.length > 0 &&
+    owner.body
+  ) {
+    let valueSubtree: ts.Node | null = null;
+    visitSkippingNestedRuntimeFunctions(owner.body, node => {
+      if (
+        valueSubtree === null &&
+        (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        node.getStart() === valueSite
+      ) {
+        valueSubtree = ts.isJsxOpeningElement(node) ? node.parent : node;
+      }
+    });
+    const subtree = valueSubtree;
+    if (subtree && usage.setterCallNodes.every(call => nodeWithin(call, subtree))) {
+      return true;
+    }
   }
   return usage.setterReferences === usage.setterCalls &&
     usage.setterCallNodes.length > 0 &&

@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,073 hooks across 175 source roots. The corpus currently contains
-693 manual hook labels, including 20 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 2,100 hooks across 183 source roots. The corpus currently contains
+706 manual hook labels, including 20 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-five real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -60,6 +60,9 @@ one-shot boolean sink moves to a leaf observable. Projection labels require one 
 independent write path; reactive mutation lifecycles and custom-hook setter escapes are enforced hard negatives.
 Controlled-leaf and async-status labels may use an independent JSX component sibling as the render-cut witness even
 when its source is unresolved; fragments, ancestors, dead JSX, and repeated or unstable consumers do not qualify.
+One stable JSX call site may also receive an owner-scoped observable through a local subscriber wrapper without proving
+the child prop contract. The wrapper passes the same plain value, while owner commands keep the stable observable handle.
+When the value and every setter already belong to that call-site subtree, the state stays with the cohesive control.
 Effect-synchronized draft labels preserve the original React effect, guard, dependencies, and timing while moving only
 a complete editable state cluster into one observable model. A migration also needs a structural render cut: raw JSX
 count alone is not proof, root-level cohesive controls stay in React, and deferred commands snapshot the observable once at

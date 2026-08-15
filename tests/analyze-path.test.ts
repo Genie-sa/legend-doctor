@@ -26,7 +26,7 @@ test("scans source files deterministically and ignores generated directories", a
   assert.equal(report.findings[0]?.location.file, path.join("src", "component.tsx"));
 });
 
-test("shares application import provenance with a focused file analysis", async () => {
+test("does not require application component provenance for a focused call-site wrapper", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-"));
   const components = path.join(root, "components");
   const screens = path.join(root, "screens");
@@ -51,7 +51,7 @@ test("shares application import provenance with a focused file analysis", async 
   );
 
   const focused = await analyzePath(screen);
-  assert.equal(focused.findings[0]?.action, "review-state");
+  assert.equal(focused.findings[0]?.action, "use-observable");
 
   const context = await createAnalysisContext(root);
   const contextual = await analyzePath(screen, context);
