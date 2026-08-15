@@ -38,7 +38,7 @@ Measured on pinned real applications:
 | Source targets | 199 |
 | Hooks analyzed | 2,233 |
 | Manual labels | 744 |
-| Unit tests | 417/417 |
+| Unit tests | 420/420 |
 | Actionable precision | 100% (369/369) |
 | Actionable recall | 93.9% (369/393) |
 | Legend practice precision | 100% (77/77) |
@@ -324,6 +324,18 @@ pages$.push(nextPage);
 
 Prepend, sort, filter, multiple appended values, calls, getters, and unproven array roots stay unchanged.
 
+The clone also stays when later code can still observe the old snapshot:
+
+```ts
+const current = profile$.peek();
+const previous = current;
+profile$.set({ ...current, name });
+audit(previous.name);
+```
+
+Changing this to `profile$.name.set(name)` would mutate the object behind `previous`. The rule therefore checks later
+reads, aliases, nested callbacks, and repeating loop conditions before recommending direct mutation.
+
 ### 5. Multiple writes → one publication
 
 Before:
@@ -423,6 +435,45 @@ After:
 useUnmount(() => tooltip.hide());
 ```
 
+### 9. Commit-sensitive state → review before moving
+
+Before:
+
+```tsx
+const [bounds, setBounds] = useState<DOMRect | null>(null);
+const measure = useCallback(() => setBounds(node.getBoundingClientRect()), [node]);
+useLayoutEffect(measure, [measure]);
+```
+
+Output:
+
+```text
+Panel.tsx:18 [review-state] Review React state `bounds`; its value or setter
+crosses a boundary this local analysis cannot prove safe.
+```
+
+The same safety model covers `useEffect`, `useLayoutEffect`, and `useInsertionEffect`, including imported aliases,
+`React.*` calls, named functions, immutable callback aliases, and `useCallback` bindings. Local lookalikes are ignored.
+
+When lifecycle-written state never renders and is read only by commands, the tool removes the wasted render while keeping
+the hook:
+
+```tsx
+// Before
+const [chartElements, setChartElements] = useState<Element[]>([]);
+useLayoutEffect(() => setChartElements(buildChart(data)), [data]);
+const insert = () => insertElements(chartElements);
+
+// After
+const chartElementsRef = useRef<Element[]>([]);
+useLayoutEffect(() => {
+  chartElementsRef.current = buildChart(data);
+}, [data]);
+const insert = () => insertElements(chartElementsRef.current);
+```
+
+The action is `use-ref`; the lifecycle hook, dependency list, and commit timing remain unchanged.
+
 ## Actions
 
 | Disposition | Agent response |
@@ -433,6 +484,17 @@ useUnmount(() => tooltip.hide());
 
 Legend Doctor is Legend-first, not conversion-first. It keeps React when resource lifetime, commit timing, cleanup, or a
 cohesive leaf makes React the better owner.
+
+## Next improvement loop
+
+| Step | Done when |
+| --- | --- |
+| Pin evidence | A new app commit reproduces exact hook counts and includes both actionable cases and hard negatives. |
+| Prove one family | At least five equivalent positives across three app roots share one structural proof, and evil fixtures cover lifecycle, alias, repeated-render, async, and atomicity failures. |
+| Release the rule | Typecheck, every unit test, grouped migrations, and the complete pinned eval pass; the app-by-app action delta is recorded. |
+
+Start from corpus evidence. Extend one existing proof family when possible. Keep unmatched lifecycle, cross-file ownership,
+and state-machine cases as review findings until their boundary is explicit.
 
 ## Development
 

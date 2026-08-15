@@ -15,11 +15,19 @@ import {
   uniqueVariableDeclaration,
 } from "./state-proofs.js";
 
-export function collectCommitSensitiveOwners(
+export interface ReactCommitContext {
+  effectCalls: readonly ts.CallExpression[];
+  lifecycleRegions: ReadonlySet<ts.Node>;
+  sensitiveOwners: ReadonlySet<RuntimeFunctionLike>;
+}
+
+export function collectReactCommitContext(
   sourceFile: ts.SourceFile,
   imports: HookImports
-): ReadonlySet<RuntimeFunctionLike> {
-  const owners = new Set<RuntimeFunctionLike>();
+): ReactCommitContext {
+  const effectCalls: ts.CallExpression[] = [];
+  const lifecycleRegions = new Set<ts.Node>();
+  const sensitiveOwners = new Set<RuntimeFunctionLike>();
   visit(sourceFile, node => {
     if (ts.isJsxAttribute(node) && node.name.getText() === "ref") {
       const expression = node.initializer && ts.isJsxExpression(node.initializer)
@@ -27,23 +35,68 @@ export function collectCommitSensitiveOwners(
         : null;
       const owner = expression ? findAncestor(node, isRuntimeFunctionLike) : null;
       if (expression && owner && refIdentityMayChange(expression, owner, imports)) {
-        markRuntimeAncestors(node, owners);
+        markRuntimeAncestors(node, sensitiveOwners);
       }
       return;
     }
-    if (
-      ts.isCallExpression(node) &&
-      hasNoDependencyArray(node) &&
-      isReactEffectCall(node, imports)
-    ) {
-      markRuntimeAncestors(node, owners);
+    if (ts.isCallExpression(node) && isReactEffectCall(node, imports)) {
+      lifecycleRegions.add(node);
+      const owner = findAncestor(node, isRuntimeFunctionLike);
+      const callback = owner && node.arguments[0]
+        ? resolveLifecycleCallback(node.arguments[0], owner, imports, new Set())
+        : null;
+      if (callback) lifecycleRegions.add(callback);
+      if (isImportedReactCall(node, imports.useEffect, imports.reactNamespaces, "useEffect")) {
+        effectCalls.push(node);
+      }
+      if (hasNoDependencyArray(node)) markRuntimeAncestors(node, sensitiveOwners);
       return;
     }
     if (isTransitionReference(node, imports)) {
-      markRuntimeAncestors(node, owners);
+      markRuntimeAncestors(node, sensitiveOwners);
     }
   });
-  return owners;
+  return { effectCalls, lifecycleRegions, sensitiveOwners };
+}
+
+function resolveLifecycleCallback(
+  expression: ts.Expression,
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+  seen: ReadonlySet<string>
+): ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) return value;
+  if (!ts.isIdentifier(value) || seen.has(value.text)) return null;
+
+  const direct = localFunctionBinding(owner, value.text);
+  if (direct) return direct;
+  const declaration = uniqueVariableDeclaration(owner, value.text);
+  if (
+    !declaration?.initializer ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0
+  ) {
+    return null;
+  }
+  const initializer = unwrapTransparentExpression(declaration.initializer);
+  const nextSeen = new Set(seen).add(value.text);
+  if (ts.isIdentifier(initializer)) {
+    return resolveLifecycleCallback(initializer, owner, imports, nextSeen);
+  }
+  if (
+    ts.isCallExpression(initializer) &&
+    isImportedReactCall(
+      initializer,
+      imports.useCallback,
+      imports.reactNamespaces,
+      "useCallback"
+    ) &&
+    initializer.arguments[0]
+  ) {
+    return resolveLifecycleCallback(initializer.arguments[0], owner, imports, nextSeen);
+  }
+  return null;
 }
 
 function markRuntimeAncestors(

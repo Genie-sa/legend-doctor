@@ -54,7 +54,7 @@ import {
 } from "./rules/keyed-selection.js";
 import { isLiteralBooleanLeafState } from "./rules/literal-boolean-leaf.js";
 import {
-  collectCommitSensitiveOwners,
+  collectReactCommitContext,
 } from "./rules/react-commit-sensitivity.js";
 import {
   findLazyCallbackLeaf,
@@ -208,16 +208,17 @@ function analyzeParsedSource(
   stateFlow: StateFlowIndex
 ): HookFinding[] {
   const imports = collectHookImports(sourceFile);
+  const reactCommit = collectReactCommitContext(sourceFile, imports);
   const localComponents = collectLocalComponents(sourceFile);
   const states: StateCandidate[] = [];
   const unmatchedStateCalls: ts.CallExpression[] = [];
-  const effects: EffectCandidate[] = [];
+  const effects = reactCommit.effectCalls.map(effectCandidate);
   const useValueBindingsByOwner = collectUseValueBindings(sourceFile, imports);
   const useObservableBindingsByOwner = collectStableUseObservableBindings(sourceFile, imports);
   const moduleScopeBindings = collectModuleScopeBindings(sourceFile);
   const reactiveMutationsByOwner = collectReactiveMutationBindings(sourceFile);
   const nonProductionHarness = isNonProductionHarness(fileName);
-  const commitSensitiveOwners = collectCommitSensitiveOwners(sourceFile, imports);
+  const commitSensitiveOwners = reactCommit.sensitiveOwners;
 
   visit(sourceFile, node => {
     if (!ts.isCallExpression(node)) return;
@@ -227,13 +228,10 @@ function analyzeParsedSource(
       else unmatchedStateCalls.push(node);
       return;
     }
-    if (isImportedHookCall(node, imports.useEffect, imports.reactNamespaces, "useEffect")) {
-      effects.push(effectCandidate(node));
-    }
   });
 
-  const effectNodes = new Set(effects.map(effect => effect.call));
-  const usageByState = new Map(states.map(state => [state, collectStateUsage(state, effectNodes, imports)]));
+  const lifecycleRegions = reactCommit.lifecycleRegions;
+  const usageByState = new Map(states.map(state => [state, collectStateUsage(state, lifecycleRegions, imports)]));
   const subtreeByState = new Map<StateCandidate, StateSubtree>();
   const safeCommandStates = new Set<StateCandidate>();
   const reactiveMutationAffectedStates = new Set<StateCandidate>();
@@ -293,7 +291,7 @@ function analyzeParsedSource(
     ) {
       continue;
     }
-    const cut = siblingProducerConsumerCut(state, usage, effectNodes);
+    const cut = siblingProducerConsumerCut(state, usage, lifecycleRegions);
     if (cut) siblingRenderCuts.set(state, cut);
   }
   const effectDrafts = findEffectSynchronizedDrafts(
@@ -1849,6 +1847,22 @@ function classifyState(
       message: `Replace controlled state \`${state.valueName}\` with an owner-scoped observable; wrap \`${target}\` and the sibling ${controlledProjectionCut.consumerLabel} projection at line ${controlledProjectionCut.consumerLine} in stable leaf subscribers, derive validation from the subscribed value, keep the input callback API unchanged, and use non-tracking reads in event commands.`,
     };
   }
+  if (
+    usage.localRenderReads === 0 &&
+    usage.effectReads === 0 &&
+    usage.deferredReads > 0 &&
+    usage.transportedOccurrences === 0 &&
+    usage.jsxTargets.size === 0 &&
+    !usage.shadowed &&
+    !usage.escaped &&
+    (usage.eventReads === 0 || hasOnlyEventCommandReads(state))
+  ) {
+    return {
+      action: "use-ref",
+      confidence: "probable",
+      message: `Replace \`${state.valueName}\` with a ref or observable handle; preserve any existing React lifecycle hook and its timing, because the value is read only by deferred commands and does not render UI.`,
+    };
+  }
   if (usage.shadowed || usage.escaped || usage.effectWrites > 0) {
     return {
       action: "review-state",
@@ -2007,20 +2021,6 @@ function classifyState(
       action: "move-state-down",
       confidence: "probable",
       message: `Extract one stable local wrapper around \`${target ?? "the receiving child"}\` and move \`${state.valueName}\` into it; this broad owner only transports the value and setter to that leaf.`,
-    };
-  }
-  if (
-    usage.localRenderReads === 0 &&
-    usage.effectReads === 0 &&
-    usage.deferredReads > 0 &&
-    usage.transportedOccurrences === 0 &&
-    usage.jsxTargets.size === 0 &&
-    (usage.eventReads === 0 || hasOnlyEventCommandReads(state))
-  ) {
-    return {
-      action: "use-ref",
-      confidence: "probable",
-      message: `Replace \`${state.valueName}\` with a ref or observable handle; it is read only by deferred commands and does not render UI.`,
     };
   }
   return {

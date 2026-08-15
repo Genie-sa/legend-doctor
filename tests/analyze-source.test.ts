@@ -707,6 +707,65 @@ test("does not isolate controlled state read by an effect-like lifecycle hook", 
   assert.notEqual(source("useInsertionEffect as useInsert", "useInsert")?.action, "use-observable");
 });
 
+test("tracks state reads and writes through React lifecycle callback bindings", () => {
+  const siblings = "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />";
+  const findings = analyzeSource(`
+    import React, {
+      useCallback,
+      useEffect,
+      useInsertionEffect as useInsert,
+      useLayoutEffect,
+      useState,
+    } from "react";
+    function Leaf() { return null; }
+
+    export function InlineLayout({ source }: { source: boolean }) {
+      const [visible, setVisible] = useState(false);
+      useLayoutEffect(() => { setVisible(source); report(visible); }, [source]);
+      return <main>${siblings}{visible && <Leaf />}</main>;
+    }
+
+    export function MemoizedLayout({ source }: { source: boolean }) {
+      const [visible, setVisible] = useState(false);
+      const synchronize = useCallback(() => setVisible(source), [source]);
+      React.useLayoutEffect(synchronize, [synchronize]);
+      return <main>${siblings}{visible && <Leaf />}</main>;
+    }
+
+    export function AliasedInsertion() {
+      const [visible, setVisible] = useState(false);
+      function read() { report(visible); }
+      const synchronize = read;
+      useInsert(synchronize, [synchronize]);
+      return <main>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
+    }
+
+    export function NamedEffect({ source }: { source: boolean }) {
+      const [visible, setVisible] = useState(false);
+      const synchronize = () => setVisible(source);
+      useEffect(synchronize, [synchronize]);
+      return <main>${siblings}{visible && <Leaf />}</main>;
+    }
+  `, "fixture.tsx");
+  const stateFor = (owner: string) => findings.find(finding =>
+    finding.hook === "useState" && finding.evidence[0]?.startsWith(`owner: ${owner},`)
+  );
+
+  assert.equal(stateFor("InlineLayout")?.action, "review-state");
+  assert.match(stateFor("InlineLayout")?.evidence[1] ?? "", /effects 1/);
+  assert.match(stateFor("InlineLayout")?.evidence[2] ?? "", /effect writes 1/);
+  assert.equal(stateFor("MemoizedLayout")?.action, "review-state");
+  assert.match(stateFor("MemoizedLayout")?.evidence[2] ?? "", /effect writes 1/);
+  assert.equal(stateFor("AliasedInsertion")?.action, "review-state");
+  assert.match(stateFor("AliasedInsertion")?.evidence[1] ?? "", /effects 1/);
+  assert.equal(stateFor("NamedEffect")?.action, "review-state");
+  assert.match(stateFor("NamedEffect")?.evidence[2] ?? "", /effect writes 1/);
+  assert.equal(
+    findings.filter(finding => finding.hook === "useEffect").length,
+    1
+  );
+});
+
 test("does not isolate state whose update is scheduled by a React transition", () => {
   const findings = analyzeSource(`
     import { startTransition as schedule, useState, useTransition } from "react";
@@ -996,6 +1055,7 @@ test("does not trust shadowed React effect bindings", () => {
     }
   `, "fixture.tsx");
   assert.equal(findings.find(finding => finding.name === "visible")?.action, "use-observable");
+  assert.equal(findings.filter(finding => finding.hook === "useEffect").length, 0);
 
   const unrelatedNestedShadow = analyzeSource(`
     import { useEffect, useState } from "react";
@@ -4053,6 +4113,49 @@ test("suggests a ref for command-only state that never reaches rendering", () =>
     `),
     ["use-ref"]
   );
+});
+
+test("preserves React lifecycle timing when command-only state becomes a ref", () => {
+  const findings = analyzeSource(`
+    import { useLayoutEffect, useState } from "react";
+    export function ChartPreview({ source }: { source: number[] }) {
+      const [elements, setElements] = useState<number[]>([]);
+      useLayoutEffect(() => {
+        if (source.length === 0) setElements([]);
+        else setElements(source.map(value => value * 2));
+      }, [source]);
+      const insert = () => save(elements);
+      return <Button onPress={insert} />;
+    }
+  `, "fixture.tsx");
+  const state = findings.find(finding => finding.hook === "useState");
+  assert.equal(state?.action, "use-ref");
+  assert.match(state?.message ?? "", /preserve any existing React lifecycle hook/i);
+  assert.match(state?.evidence[2] ?? "", /effect writes 2/);
+});
+
+test("does not move lifecycle-written rendered or self-read state into a ref", () => {
+  const rendered = analyzeSource(`
+    import { useLayoutEffect, useState } from "react";
+    export function Preview({ source }: { source: boolean }) {
+      const [visible, setVisible] = useState(false);
+      useLayoutEffect(() => setVisible(source), [source]);
+      const report = () => save(visible);
+      return <main><Button onPress={report} />{visible && <Panel />}</main>;
+    }
+  `, "fixture.tsx").find(finding => finding.hook === "useState");
+  assert.notEqual(rendered?.action, "use-ref");
+
+  const selfRead = analyzeSource(`
+    import { useLayoutEffect, useState } from "react";
+    export function Preview({ source }: { source: boolean }) {
+      const [visible, setVisible] = useState(false);
+      useLayoutEffect(() => { if (!visible) setVisible(source); }, [source, visible]);
+      const report = () => save(visible);
+      return <Button onPress={report} />;
+    }
+  `, "fixture.tsx").find(finding => finding.hook === "useState");
+  assert.notEqual(selfRead?.action, "use-ref");
 });
 
 test("does not call lifecycle or render-callback state command-only", () => {

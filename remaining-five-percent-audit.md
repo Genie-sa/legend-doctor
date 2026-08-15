@@ -4,12 +4,12 @@ This file records evidence, decisions, measurements, and rejected approaches for
 
 ## System baseline
 
-- Production analyzer: 32 TypeScript modules and 12,717 lines.
+- Production analyzer: 32 TypeScript modules and 12,770 lines.
 - Largest orchestration module: `src/analyze-source.ts` at 3,087 lines; rule families are separated under `src/rules/`.
 - Full real-app scan: 6,147 hooks across 12 app roots: 3,647 `useState`, 2,500 `useEffect`, 77 Legend practice findings.
 - Pinned scored corpus after closeout: 2,233 hooks across 199 focused targets and 744 manual labels.
 - Final quality: 100% actionable precision (369/369), 93.9% actionable recall (369/393), 13/13 state groups, 77/77 Legend practices.
-- Validation: 417/417 tests under strict TypeScript settings.
+- Validation: 420/420 tests under strict TypeScript settings.
 
 ## Goal 1 findings
 
@@ -99,7 +99,7 @@ Adversarial gaps found and fixed at the shared boundary: conditional/outside con
 ## Final verification
 
 - TypeScript: pass under strict project settings.
-- Unit tests: 417/417.
+- Unit tests: 420/420.
 - Pinned eval: 2,233 hooks, 715/744 labels, 29 declared misses, 13/13 groups, 77/77 practices.
 - Hook quality: 100% actionable precision (369/369), 93.9% actionable recall (369/393).
 - `use-observable`: 100% precision (307/307), 93.9% recall (307/327).
@@ -153,7 +153,7 @@ No new opportunity detector shipped. The only new detector is a conservative Rea
 
 - The named-effect cohort contained eight cases. Five resolved locally, four fit one proof, and only two improved a non-actionable `keep-effect` classification. The experiment was reverted.
 - The remaining 21 labels contain 16 actionable opportunities split across at least five proof families. Closing them now would require broader flow, cross-file ownership, lifecycle, or atomicity analysis.
-- All 417 tests pass after reverting the experiments and completing the safety closeout.
+- All 420 tests pass after reverting the experiments and completing the safety closeout.
 - At the end of the opportunity-only re-audit, the pinned eval remained 2,151 hooks, 705/726 labels, 21 declared misses, 13/13 groups, and 76/76 Legend practices. The later safety closeout produced 701/730 with 29 explicit misses; the subsequent Hoalu expansion produced the current 715/744 result without adding a miss.
 
 Exact app impact from the opportunity-only re-audit:
@@ -194,3 +194,19 @@ The shared rules now fail closed when an optimization could change any of these 
 - opaque JSX option or registrar callbacks.
 
 This was a safety phase, not a recall phase. It added no app, component, or state-name matcher. The commit-sensitive proof is isolated in `src/rules/react-commit-sensitivity.ts` so the main analyzer remains orchestration rather than another rule bucket.
+
+## Lifecycle callback closeout
+
+The final run extended the same commit boundary across proven React `useEffect`, `useLayoutEffect`, and
+`useInsertionEffect` callbacks. It resolves namespace calls, imported aliases, named functions, immutable aliases, and
+`useCallback` bindings while ignoring local lookalikes.
+
+Compared with the preceding private release, the 12 full app roots changed 16 hook actions and zero Legend practice
+actions:
+
+- Nine command-only states moved from review to `use-ref`; their lifecycle hook and dependency timing remain React-owned.
+- Seven commit-sensitive states moved from `keep-state` to explicit review because their render ownership is not proven.
+- Excalidraw changed one action, Expensify eight, Formbricks one, and Outline six. The other eight roots changed zero.
+
+The scored corpus remains 2,233 hooks, 715/744 labels, 29 declared misses, 13/13 groups, and 77/77 practices. Actionable
+precision remains 100% (369/369), actionable recall 93.9% (369/393), and `use-ref` is 9/9 for both precision and recall.
