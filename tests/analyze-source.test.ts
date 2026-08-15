@@ -4772,8 +4772,13 @@ test("keeps exact latest-value ref mirrors in React post-commit timing", () => {
       React.useEffect(() => { count.current = items.length; }, [items.length]);
       return null;
     }
+    export function EveryCommit({ value }: { value: string }) {
+      const previous = React.useRef(value);
+      React.useEffect(() => { previous.current = value; });
+      return null;
+    }
   `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(findings.map(finding => finding.action), ["keep-effect", "keep-effect"]);
+  assert.deepEqual(findings.map(finding => finding.action), ["keep-effect", "keep-effect", "keep-effect"]);
   for (const finding of findings) assert.match(finding.message, /committed ref/i);
 });
 
@@ -4815,8 +4820,28 @@ test("reviews unproven or behaviorally different ref mirror effects", () => {
       useEffect(() => { latest.current = read(); }, [read()]);
       return null;
     }
+    export function EveryCommitCall() {
+      const latest = useRef(0);
+      useEffect(() => { latest.current = read(); });
+      return null;
+    }
+    export function EveryCommitSelfRead() {
+      const latest = useRef(0);
+      useEffect(() => { latest.current = latest.current; });
+      return null;
+    }
+    export function EveryCommitGuard({ enabled, value }: { enabled: boolean; value: string }) {
+      const latest = useRef(value);
+      useEffect(() => {
+        if (enabled) latest.current = value;
+      });
+      return null;
+    }
   `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
   assert.deepEqual(effects.map(finding => finding.action), [
+    "review-effect",
+    "review-effect",
+    "review-effect",
     "review-effect",
     "review-effect",
     "review-effect",

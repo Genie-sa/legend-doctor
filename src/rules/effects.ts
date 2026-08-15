@@ -526,12 +526,11 @@ function isExactLatestValueRefMirror(
   reactNamespaces: ReadonlySet<string>
 ): boolean {
   const { callback, dependencies, owner } = effect;
-  const dependency = dependencies?.elements[0];
+  const dependency = dependencies?.elements[0] ?? null;
   if (
     !callback ||
     !owner ||
-    dependencies?.elements.length !== 1 ||
-    !dependency
+    (dependencies !== null && dependencies.elements.length !== 1)
   ) {
     return false;
   }
@@ -566,8 +565,10 @@ function isExactLatestValueRefMirror(
   }
   const sourceFile = effect.call.getSourceFile();
   const source = unwrapTransparentExpression(assignment.right);
-  return isPureExpression(source) &&
-    source.getText(sourceFile) === unwrapTransparentExpression(dependency).getText(sourceFile);
+  return isPureExpression(source) && (
+    dependency === null ||
+    source.getText(sourceFile) === unwrapTransparentExpression(dependency).getText(sourceFile)
+  );
 }
 
 function callbackIsCommittedRefIntegration(

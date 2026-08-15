@@ -34,9 +34,9 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 11 |
-| Source targets | 170 |
-| Hooks analyzed | 2,053 |
-| Manual labels | 687 |
+| Source targets | 175 |
+| Hooks analyzed | 2,073 |
+| Manual labels | 693 |
 | Unit tests | 335/335 |
 | Actionable precision | 100% (345/345) |
 | Actionable recall | 95.3% (345/362) |
@@ -77,8 +77,9 @@ useEffect(() => {
 }, [value]);
 ```
 
-The rule requires one imported React `useRef`, one exact assignment, and one matching dependency. Extra work, cleanup,
-calls, mutations, shadowed hooks, empty dependencies, or a different source remain under review.
+The rule requires one imported React `useRef` and one exact assignment. It accepts either no dependency array, meaning
+the mirror runs after every commit, or one dependency that exactly matches the assigned value. Extra work, cleanup,
+calls, mutations, shadowed hooks, `[]`, mismatched dependencies, or a different source remain under review.
 
 ```json
 {

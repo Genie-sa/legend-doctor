@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,053 hooks across 170 source roots. The corpus currently contains
-687 manual hook labels, including 20 non-enforced opportunities, plus twelve
+At the pinned commits, the analyzer inventories 2,073 hooks across 175 source roots. The corpus currently contains
+693 manual hook labels, including 20 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-five real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -51,10 +51,10 @@ The Genie holdout verifies that an adjacent `legend-doctor keep-react-effect` or
 directive is an explicit React-lifecycle ownership decision. The effect remains inventoried as `keep-effect`; detached
 comments and string literals do not apply. Conditional `useMount` and `useUnmount` advice remains visible without
 claiming that once-only semantics are proven.
-An exact one-dependency React `useRef` mirror also remains `keep-effect`: it synchronizes a committed ref after render.
-The proof requires one imported, unshadowed React `useRef`, one exact `ref.current = dependency` assignment, and no
-cleanup or extra work. Empty or mismatched dependencies, calls, mutations, shadowed/local lookalikes, and self-referential
-ref reads remain review findings.
+An exact React `useRef` mirror also remains `keep-effect`: it synchronizes a committed ref after render. The proof
+requires one imported, unshadowed React `useRef`, one exact `ref.current = value` assignment, and no cleanup or extra
+work. The effect may run after every commit or list one dependency identical to the assigned value. `[]`, mismatched
+dependencies, calls, mutations, shadowed/local lookalikes, and self-referential ref reads remain review findings.
 Deferred render-gate labels separately verify that scheduler effects and cleanup stay in React while only their
 one-shot boolean sink moves to a leaf observable. Projection labels require one bounded call-site render surface and an
 independent write path; reactive mutation lifecycles and custom-hook setter escapes are enforced hard negatives.
