@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,028 hooks across 167 source roots. The corpus currently contains
-672 manual hook labels, including 26 non-enforced opportunities, plus twelve
+672 manual hook labels, including 24 non-enforced opportunities, plus twelve
 grouped-instruction labels that verify exact cluster membership, thirty-five real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -138,6 +138,10 @@ review findings.
 Dependency-driven browser-storage effects stay in React when their bodies contain only guards, storage mutations, and
 bounded `JSON`/`Object`/`Array` serialization helpers. Hydration reads, React setters, timers, async work, cleanup,
 shadowed globals, and arbitrary helpers do not enter this rule.
+Lazy-initialized state may isolate one resolved leaf inside a non-repeated JSX child callback when a separate returned
+sibling proves the owner render cut. The observable retains the React owner's lifetime and is created exactly once from
+the existing initializer; it is not converted into a Legend computed. Render props, repeated or conditional callback
+owners, callable values, effect or deferred reads, and commands that also invalidate sibling React state abstain.
 Keyed-selection labels require stable item-derived row keys, membership that changes row presentation rather than row
 existence, and independently placed summary subscribers. Array-backed selection may use one immutable local `Set`
 normalization; filtered intersections, cross-file normalization, mutable/escaped aliases, aggregate broadcasts, and

@@ -2765,6 +2765,97 @@ test("does not move controlled state through an opaque JSX callback", () => {
   );
 });
 
+test("isolates a lazy-initialized value inside one stable JSX child callback", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    function ImageField(_props: unknown) { return null; }
+    function FormField(_props: unknown) { return null; }
+    function Details() { return null; }
+    export function Screen() {
+      const [preview, setPreview] = useState<string | null>(() => initialPreview());
+      const chooseFile = () => {
+        const reader = new FileReader();
+        reader.onloadend = () => setPreview(reader.result as string);
+      };
+      return <main>
+        <FormField>{field => <ImageField field={field} preview={preview} />}</FormField>
+        <Details />
+        <button onClick={chooseFile}>Choose</button>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /created exactly once/);
+  assert.match(finding?.message ?? "", /do not turn the initializer into a computed/);
+  assert.match(finding?.message ?? "", /ImageField/);
+});
+
+test("keeps lazy callback transport without one stable independent leaf cut", () => {
+  for (const body of [
+    `<FormField>{field => <ImageField field={field} preview={preview} />}</FormField>`,
+    `<main><VirtualList renderItem={() => <ImageField preview={preview} />} /><Details /></main>`,
+    `<main>{rows.map(row => <FormField key={row.id}>{() => <ImageField preview={preview} />}</FormField>)}<Details /></main>`,
+    `<main>{show && <FormField>{() => <ImageField preview={preview} />}</FormField>}<Details /></main>`,
+  ]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      function ImageField(_props: unknown) { return null; }
+      function FormField(_props: unknown) { return null; }
+      function Details() { return null; }
+      function VirtualList(_props: unknown) { return null; }
+      export function Screen({ rows, show }: { rows: Array<{ id: string }>; show: boolean }) {
+        const [preview, setPreview] = useState<string | null>(() => initialPreview());
+        const chooseFile = () => setPreview("next");
+        return ${body};
+      }
+    `, "fixture.tsx");
+    assert.notEqual(finding?.action, "use-observable", body);
+  }
+});
+
+test("does not put a lazy callable value into a nested observable leaf", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    function Field(_props: unknown) { return null; }
+    function Slot(_props: unknown) { return null; }
+    function Details() { return null; }
+    export function Screen() {
+      const [callback, setCallback] = useState<(() => void) | null>(() => null);
+      return <main>
+        <Slot>{() => <Field callback={callback} />}</Slot>
+        <Details />
+        <button onClick={() => setCallback(() => work)}>Set</button>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.notEqual(finding?.action, "use-observable");
+});
+
+test("keeps a lazy callback leaf when its write command also invalidates the owner", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function ImageField(_props: unknown) { return null; }
+    function FormField(_props: unknown) { return null; }
+    function Details(_props: unknown) { return null; }
+    export function Screen() {
+      const [preview, setPreview] = useState<string | null>(() => initialPreview());
+      const [dirty, setDirty] = useState(false);
+      const markDirty = () => setDirty(true);
+      const chooseFile = () => {
+        setPreview("next");
+        markDirty();
+      };
+      return <main>
+        <FormField>{() => <ImageField preview={preview} />}</FormField>
+        <Details dirty={dirty} />
+        <button onClick={chooseFile}>Choose</button>
+      </main>;
+    }
+  `, "fixture.tsx");
+  const preview = findings.find(finding => finding.name === "preview");
+  assert.notEqual(preview?.action, "use-observable");
+});
+
 test("does not move controlled state through a stored JSX value", () => {
   assert.deepEqual(
     actions(`

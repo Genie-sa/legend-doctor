@@ -50,6 +50,10 @@ import {
 } from "./rules/keyed-selection.js";
 import { isLiteralBooleanLeafState } from "./rules/literal-boolean-leaf.js";
 import {
+  findLazyCallbackLeaf,
+  type LazyCallbackLeafProofs,
+} from "./rules/lazy-callback-leaf.js";
+import {
   callbackIsEventRooted,
   expressionDependsOnBinding,
   hasDirectPrimitiveInitializer,
@@ -155,6 +159,11 @@ const EFFECT_DRAFT_PROOFS: EffectDraftProofs = {
   nearestMutationFunction,
   setterMutationsCanCooccur: (left, right, region) =>
     branchesAreCompatible(mutationBranches(left, region), mutationBranches(right, region)),
+  uniqueReturnedExpression,
+};
+
+const LAZY_CALLBACK_LEAF_PROOFS: LazyCallbackLeafProofs = {
+  hasUnstableSubtreeLifetime,
   uniqueReturnedExpression,
 };
 
@@ -1588,6 +1597,39 @@ function classifyState(
   }
   const directCallSite = directUniqueReturnCallSite(usage, state.owner);
   const branchCallSite = directBranchReturnCallSite(usage, state.owner);
+  const callbackLeaf = findLazyCallbackLeaf(
+    state,
+    usage,
+    localComponents,
+    sourceComponents,
+    LAZY_CALLBACK_LEAF_PROOFS
+  );
+  if (
+    callbackLeaf &&
+    usage.effectReads === 0 &&
+    usage.effectWrites === 0 &&
+    usage.deferredReads === 0 &&
+    !hasCompanionWrites &&
+    !hasReactiveMutationPath &&
+    hasSafeCommands &&
+    state.setterName !== null &&
+    usage.setterCallNodes.some(call =>
+      mutationRegionOnlyCallsStateSetters(
+        nearestMutationFunction(call, state.owner),
+        new Set([state.setterName!])
+      )
+    ) &&
+    usage.setterReferences > 0 &&
+    !usage.setterUsesPreviousValue &&
+    !usage.shadowed &&
+    !usage.escaped
+  ) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace lazy-initialized state \`${state.valueName}\` with one owner-lifetime observable created exactly once from the existing initializer (do not turn the initializer into a computed); keep the current render-callback placement and setter timing, and subscribe only in the nested \`${callbackLeaf.target}\` leaf at line ${callbackLeaf.line}.`,
+    };
+  }
   if (isAsyncLeafStatus) {
     const target = [...usage.valueTargets][0] ?? "the pending control";
     return {

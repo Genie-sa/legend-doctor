@@ -16,6 +16,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | `useState` | Keep, delete, move down, ref, `useValue`, or observable |
 | `useEffect` | Keep, move to event, mount, unmount, or observable reaction |
 | Coupled fields | One grouped model and one atomic migration |
+| Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | Broad subscriptions | Lowest proven observable path |
 | `useValue(leaf$.get())` | `useValue(leaf$)` with types and options preserved |
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
@@ -34,9 +35,9 @@ Measured on pinned real applications:
 | Source targets | 167 |
 | Hooks analyzed | 2,028 |
 | Manual labels | 672 |
-| Unit tests | 325/325 |
-| Actionable precision | 98.8% (343/347) |
-| Actionable recall | 94.8% (343/362) |
+| Unit tests | 329/329 |
+| Actionable precision | 98.9% (345/349) |
+| Actionable recall | 95.3% (345/362) |
 | Legend practice precision | 100% (76/76) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -123,6 +124,10 @@ function DeleteDialogState({ deleteTarget$ }) {
   );
 }
 ```
+
+Lazy initializers stay one-shot. The tool does not turn `useState(() => initialValue)` into
+`useObservable(() => initialValue)`, because Legend treats that function as a computed value. It keeps the observable at
+the proven owner lifetime, creates it once from the existing initializer, and subscribes only in the nested leaf.
 
 ### 2. Effect draft → one atomic model
 
@@ -415,6 +420,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/async-leaf-status.ts` | Event-owned async status leaves |
 | `src/rules/deferred-reveal.ts` | Deferred reveal and render gates |
 | `src/rules/keyed-selection.ts` | Row and collection selection |
+| `src/rules/lazy-callback-leaf.ts` | Lazy owner state rendered in one nested callback leaf |
 | `src/rules/observable-clone-writes.ts` | Narrow child and exact array-append writes |
 | `src/rules/observable-reads.ts` | Direct and lowest-path reads |
 | `src/rules/observable-toggle.ts` | Exact observable boolean flips |

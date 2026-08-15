@@ -1820,12 +1820,11 @@ export const goldCases = [
     ["components/operations/landowner-modal.tsx", 47, "previewUrl"],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
-    enforced: false as const,
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A form-render callback appears to contain one preview leaf, but runtime multiplicity is not yet proven.",
+    rationale: "One non-repeated JSX child callback contains the only value leaf, while independent siblings prove an owner render cut and observable ownership preserves the lazy initializer lifetime.",
     target: "tree-map",
   })),
   ...[
