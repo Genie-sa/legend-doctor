@@ -4583,6 +4583,19 @@ test("suggests useMount only for module-global setup without owner-local capture
   );
 });
 
+test("keeps conditional useUnmount advice as a candidate", () => {
+  const [finding] = analyzeSource(`
+    import { useEffect } from "react";
+    import { release } from "./resource";
+    export function App() {
+      useEffect(() => () => release(), []);
+      return null;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-unmount");
+  assert.equal(finding?.disposition, "candidate");
+});
+
 test("suggests useObserveEffect only for dependencies sourced from useValue", () => {
   assert.deepEqual(
     actions(`

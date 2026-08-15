@@ -15,6 +15,7 @@ Pinned repositories:
 - `Expensify/App`: focused address, controlled-form, async-status, Promise-chain, navigation-effect, animation-lifecycle, list-render, validation, task, workspace, payment-form, HR-sync, video-control, signer-document, Chronos, domain, report-access, and callback-resource targets
 - `formbricks/formbricks`: focused controlled-form, draft, chart-form, element-editor, webhook, billing, segment, tag, integration, async-status, and survey-URL targets
 - `outline/outline`: focused API-key, controlled-form, document-copy, export-form, icon-picker, split-history, and collection-routing targets
+- `Genie-sa/genie-courses`: private full-repository effect-policy and Legend-transaction holdout
 
 Repository source is not copied into this project. Corpus entries pin a commit and source location, then a local eval
 runner scans checked-out repositories. A recommendation is added to the golden corpus only after manual review.
@@ -29,9 +30,9 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 1,996 hooks across 164 source roots. The corpus currently contains
-641 manual hook labels, including 22 non-enforced opportunities, plus twelve
-grouped-instruction labels that verify exact cluster membership, thirty-three real Legend transaction labels, eleven direct
+At the pinned commits, the analyzer inventories 2,025 hooks across 165 source roots. The corpus currently contains
+670 manual hook labels, including 26 non-enforced opportunities, plus twelve
+grouped-instruction labels that verify exact cluster membership, thirty-four real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
 labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
 the current precision/recall table. If the root README publishes those metrics, update them only
@@ -42,6 +43,8 @@ resolution is provenance rather than proof of leaf ownership; production migrati
 cannot move into conditional, keyed, or repeated child instances; and an isolated observable conversion must actually
 eliminate an owner render across its companion update cluster. Effect rules distinguish recognizable disposer protocols
 from arbitrary returned calls and treat `useMount` as a probable lifecycle choice because it changes Strict Mode replay.
+The Genie holdout adds four non-enforced review expectations where checked project policy requires React replay;
+conditional `useMount` and `useUnmount` advice remains visible without claiming that once-only semantics are proven.
 Deferred render-gate labels separately verify that scheduler effects and cleanup stay in React while only their
 one-shot boolean sink moves to a leaf observable. Projection labels require one bounded call-site render surface and an
 independent write path; reactive mutation lifecycles and custom-hook setter escapes are enforced hard negatives.

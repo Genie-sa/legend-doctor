@@ -28,17 +28,17 @@ Measured on pinned real applications:
 
 | Metric | Result |
 | --- | ---: |
-| App roots | 9 |
-| Source targets | 164 |
-| Hooks analyzed | 1,996 |
-| Manual labels | 641 |
-| Unit tests | 316/316 |
-| Actionable precision | 100% (341/341) |
+| App roots | 10 |
+| Source targets | 165 |
+| Hooks analyzed | 2,025 |
+| Manual labels | 670 |
+| Unit tests | 317/317 |
+| Actionable precision | 98.8% (341/345) |
 | Actionable recall | 94.7% (341/360) |
-| Legend practice precision | 100% (68/68) |
+| Legend practice precision | 100% (69/69) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
-Excalidraw, Expensify, Formbricks, and Outline.
+Excalidraw, Expensify, Formbricks, Outline, and Genie Courses.
 
 ## Agent contract
 
@@ -337,6 +337,9 @@ Output:
 Tooltip.tsx:93 [use-unmount] Replace this teardown-only empty-dependency effect with
 `useUnmount` if once-only Legend lifecycle semantics are intended.
 ```
+
+This is a `candidate`, never an automatic `change`: `useUnmount` suppresses React Strict Mode replay, so the agent must
+verify project policy and lifetime intent first.
 
 After:
 

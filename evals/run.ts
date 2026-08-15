@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   if (repositoryRoots.size === 0) {
     throw new Error(
       "Provide checked-out repositories as --repo platform=/path --repo memoria=/path --repo legend-music=/path --repo excalidraw=/path"
-        + " --repo expensify=/path --repo formbricks=/path --repo outline=/path"
+        + " --repo expensify=/path --repo formbricks=/path --repo outline=/path --repo genie-courses=/path"
     );
   }
 

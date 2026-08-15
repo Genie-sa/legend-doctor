@@ -2739,7 +2739,14 @@ function findingFor(
 
 function dispositionFor(action: HookFinding["action"]): HookFinding["disposition"] {
   if (action === "keep-effect" || action === "keep-state") return "keep";
-  if (action === "review-effect" || action === "review-state" || action === "use-mount") return "candidate";
+  if (
+    action === "review-effect" ||
+    action === "review-state" ||
+    action === "use-mount" ||
+    action === "use-unmount"
+  ) {
+    return "candidate";
+  }
   return "change";
 }
 
