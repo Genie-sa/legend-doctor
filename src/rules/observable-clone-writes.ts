@@ -3,6 +3,7 @@ import ts from "typescript";
 import {
   bindingDeclarationCount,
   isAssignmentOperator,
+  isEvaluationInert,
   rootIdentifier,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
@@ -16,8 +17,8 @@ interface SnapshotBinding {
 }
 
 interface NarrowWrite {
-  replacement: string;
-  target: string;
+  evidence: readonly [string, string];
+  message: string;
 }
 
 export function findObservableCloneWritePractices(
@@ -28,26 +29,24 @@ export function findObservableCloneWritePractices(
   const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, node => {
     if (!ts.isCallExpression(node)) return;
-    const write = narrowObservableWrite(node, sourceFile, observableBindings);
+    const write = narrowObservableObjectWrite(node, sourceFile, observableBindings) ??
+      narrowObservableArrayAppend(node, sourceFile, observableBindings);
     if (!write) return;
     const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
     findings.push({
       action: "narrow-observable-write",
       confidence: "probable",
       disposition: "change",
-      evidence: [
-        `the object clone starts from a non-tracking snapshot of ${write.target}`,
-        "the clone changes exactly one proven child and the snapshot binding is not mutated or escaped",
-      ],
+      evidence: write.evidence,
       location: { column: character + 1, file: fileName, line: line + 1 },
-      message: `Replace this whole-object clone write with \`${write.replacement}\`; update the observable child directly so Legend does not clone or replace unaffected sibling fields.`,
+      message: write.message,
       practice: "reactivity",
     });
   });
   return findings;
 }
 
-function narrowObservableWrite(
+function narrowObservableObjectWrite(
   call: ts.CallExpression,
   sourceFile: ts.SourceFile,
   observableBindings: ReadonlySet<string>
@@ -80,10 +79,10 @@ function narrowObservableWrite(
   const targetText = target.getText(sourceFile);
   if (ts.isShorthandPropertyAssignment(override)) {
     if (RESERVED_OBSERVABLE_MEMBERS.has(override.name.text)) return null;
-    return {
-      replacement: `${targetText}.${override.name.text}.set(${override.name.text})`,
-      target: targetText,
-    };
+    return objectWrite(
+      `${targetText}.${override.name.text}.set(${override.name.text})`,
+      targetText
+    );
   }
   if (!ts.isPropertyAssignment(override)) return null;
   const argument = override.initializer.getText(sourceFile);
@@ -93,25 +92,181 @@ function narrowObservableWrite(
     const child = ts.isIdentifier(override.name)
       ? `.${property}`
       : `[${override.name.getText(sourceFile)}]`;
-    return {
-      replacement: `${targetText}${child}.set(${argument})`,
-      target: targetText,
-    };
+    return objectWrite(`${targetText}${child}.set(${argument})`, targetText);
   }
   if (ts.isNumericLiteral(override.name)) {
-    return {
-      replacement: `${targetText}[${override.name.getText(sourceFile)}].set(${argument})`,
-      target: targetText,
-    };
+    return objectWrite(
+      `${targetText}[${override.name.getText(sourceFile)}].set(${argument})`,
+      targetText
+    );
   }
   if (!ts.isComputedPropertyName(override.name) || !safeDynamicKey(override.name.expression)) {
     return null;
   }
   const key = override.name.expression.getText(sourceFile);
+  return objectWrite(`${targetText}[${key}].set(${argument})`, targetText);
+}
+
+function objectWrite(replacement: string, target: string): NarrowWrite {
   return {
-    replacement: `${targetText}[${key}].set(${argument})`,
-    target: targetText,
+    evidence: [
+      `the object clone starts from a non-tracking snapshot of ${target}`,
+      "the clone changes exactly one proven child and the snapshot binding is not mutated or escaped",
+    ],
+    message: `Replace this whole-object clone write with \`${replacement}\`; update the observable child directly so Legend does not clone or replace unaffected sibling fields.`,
   };
+}
+
+function narrowObservableArrayAppend(
+  call: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+  observableBindings: ReadonlySet<string>
+): NarrowWrite | null {
+  if (
+    call.arguments.length !== 1 ||
+    !ts.isPropertyAccessExpression(call.expression) ||
+    call.expression.name.text !== "set"
+  ) {
+    return null;
+  }
+  const target = unwrapTransparentExpression(call.expression.expression);
+  const root = rootIdentifier(target);
+  if (
+    !root ||
+    !observableBindings.has(root.text) ||
+    !observableTargetStartsAsArray(target, call, sourceFile)
+  ) {
+    return null;
+  }
+
+  const argument = unwrapTransparentExpression(call.arguments[0]!);
+  const appended = ts.isArrowFunction(argument)
+    ? updaterAppendValue(argument)
+    : snapshotAppendValue(argument, target, call, sourceFile);
+  if (!appended || !isEvaluationInert(appended)) return null;
+
+  const targetText = target.getText(sourceFile);
+  const appendedText = appended.getText(sourceFile);
+  return {
+    evidence: [
+      `the clone appends exactly one inert value to the same proven observable array ${targetText}`,
+      "the observable path is locally initialized as an array and no sort, filter, slice, prepend, or spread transform is present",
+    ],
+    message: `Replace this cloned-array write with \`${targetText}.push(${appendedText})\`; append directly so Legend preserves the array and avoids cloning or replacing unaffected entries.`,
+  };
+}
+
+function updaterAppendValue(updater: ts.ArrowFunction): ts.Expression | null {
+  if (
+    updater.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    updater.parameters.length !== 1 ||
+    !ts.isIdentifier(updater.parameters[0]!.name) ||
+    ts.isBlock(updater.body)
+  ) {
+    return null;
+  }
+  const array = unwrapTransparentExpression(updater.body);
+  if (!ts.isArrayLiteralExpression(array) || array.elements.length !== 2) return null;
+  const [snapshot, appended] = array.elements;
+  const parameter = updater.parameters[0]!.name;
+  if (
+    !snapshot ||
+    !ts.isSpreadElement(snapshot) ||
+    !ts.isIdentifier(snapshot.expression) ||
+    snapshot.expression.text !== parameter.text ||
+    !appended ||
+    ts.isSpreadElement(appended) ||
+    expressionReferencesName(appended, parameter.text)
+  ) {
+    return null;
+  }
+  return appended;
+}
+
+function snapshotAppendValue(
+  expression: ts.Expression,
+  target: ts.Expression,
+  write: ts.CallExpression,
+  sourceFile: ts.SourceFile
+): ts.Expression | null {
+  if (!ts.isArrayLiteralExpression(expression) || expression.elements.length !== 2) return null;
+  const [spread, appended] = expression.elements;
+  if (!spread || !ts.isSpreadElement(spread) || !appended || ts.isSpreadElement(appended)) {
+    return null;
+  }
+  const snapshot = snapshotTarget(spread.expression, write, sourceFile);
+  if (!snapshot || snapshot.target.getText(sourceFile) !== target.getText(sourceFile)) return null;
+  if (
+    snapshot.binding &&
+    (!snapshotBindingIsReadOnly(snapshot.binding, spread, write) ||
+      (ts.isIdentifier(snapshot.binding.declaration.name) &&
+        expressionReferencesName(appended, snapshot.binding.declaration.name.text)))
+  ) {
+    return null;
+  }
+  return appended;
+}
+
+function observableTargetStartsAsArray(
+  target: ts.Expression,
+  write: ts.CallExpression,
+  sourceFile: ts.SourceFile
+): boolean {
+  const root = rootIdentifier(target);
+  if (!root) return false;
+  const declaration = lexicalVariableDeclaration(write, root.text) ??
+    uniqueVariableDeclaration(sourceFile, root.text);
+  if (!declaration?.initializer) return false;
+  const factory = unwrapTransparentExpression(declaration.initializer);
+  if (!ts.isCallExpression(factory) || factory.arguments.length === 0) return false;
+  let initializer: ts.Expression = factory.arguments[0]!;
+  const properties = staticPropertyPath(target);
+  if (!properties) return false;
+  for (const propertyName of properties) {
+    const object = unwrapTransparentExpression(initializer);
+    if (!ts.isObjectLiteralExpression(object)) return false;
+    const property = object.properties.find(candidate =>
+      ts.isPropertyAssignment(candidate) && staticPropertyName(candidate.name) === propertyName
+    );
+    if (!property || !ts.isPropertyAssignment(property)) return false;
+    initializer = property.initializer;
+  }
+  return ts.isArrayLiteralExpression(unwrapTransparentExpression(initializer));
+}
+
+function lexicalVariableDeclaration(node: ts.Node, name: string): ts.VariableDeclaration | null {
+  let current: ts.Node | undefined = node.parent;
+  while (current) {
+    if (isRuntimeFunctionLike(current) && current.body) {
+      const declaration = uniqueVariableDeclaration(current.body, name);
+      if (declaration) return declaration;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+function staticPropertyPath(expression: ts.Expression): string[] | null {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(value)) return [];
+  if (!ts.isPropertyAccessExpression(value)) return null;
+  const parent = staticPropertyPath(value.expression);
+  return parent ? [...parent, value.name.text] : null;
+}
+
+function staticPropertyName(name: ts.PropertyName): string | null {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+  return null;
+}
+
+function expressionReferencesName(expression: ts.Expression, name: string): boolean {
+  let found = false;
+  visit(expression, node => {
+    if (ts.isIdentifier(node) && node.text === name) found = true;
+  });
+  return found;
 }
 
 function snapshotTarget(
@@ -166,7 +321,7 @@ function peekTarget(expression: ts.Expression): ts.Expression | null {
 
 function snapshotBindingIsReadOnly(
   binding: SnapshotBinding,
-  targetSpread: ts.SpreadAssignment,
+  targetSpread: ts.SpreadAssignment | ts.SpreadElement,
   write: ts.CallExpression
 ): boolean {
   const owner = findAncestor(write, isRuntimeFunctionLike);

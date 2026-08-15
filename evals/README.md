@@ -16,6 +16,7 @@ Pinned repositories:
 - `formbricks/formbricks`: focused controlled-form, draft, chart-form, element-editor, webhook, billing, segment, tag, integration, async-status, and survey-URL targets
 - `outline/outline`: focused API-key, controlled-form, document-copy, export-form, icon-picker, split-history, and collection-routing targets
 - `Genie-sa/genie-courses`: private full-repository effect-policy and Legend-transaction holdout
+- `RonasIT/open-webui-react-native`: focused observable-array append and attachment-reset holdout
 
 Repository source is not copied into this project. Corpus entries pin a commit and source location, then a local eval
 runner scans checked-out repositories. A recommendation is added to the golden corpus only after manual review.
@@ -30,10 +31,10 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,025 hooks across 165 source roots. The corpus currently contains
+At the pinned commits, the analyzer inventories 2,025 hooks across 166 source roots. The corpus currently contains
 670 manual hook labels, including 26 non-enforced opportunities, plus twelve
-grouped-instruction labels that verify exact cluster membership, thirty-four real Legend transaction labels, eleven direct
-`useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and five narrow child-write
+grouped-instruction labels that verify exact cluster membership, thirty-five real Legend transaction labels, eleven direct
+`useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. One additional real label verifies the documented `useSelector`/`use$` to `useValue` migration. Run the eval for
 the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
@@ -93,6 +94,9 @@ Existing batches, repeated or overlapping paths, awaited values,
 unrelated statements, partial runs containing an unproven `.set()`, and test/story/demo files abstain. Adversarial
 fixtures cover Maps, shadowed bindings, nested observable container types, aliases, barrels, and namespace imports;
 full-app impact must remain zero in applications that do not import Legend State.
+Exact observable-array appends use `.push()` only when the target is locally proven to start as an array and the write is
+exactly the previous entries followed by one evaluation-safe value. Prepend, sort, filter, multiple values, spread values,
+calls, getters, tracking `.get()`, escaped snapshots, and imported or otherwise unproven array roots abstain.
 The direct-reactivity rule replaces an eager `useValue(observablePath.get())` input or an exact
 `useValue(() => observablePath.get())` selector with `useValue(observablePath)`. Explicit type arguments and the suspense
 option are preserved. The path must be statically addressed and proven as Legend State through a local declaration or

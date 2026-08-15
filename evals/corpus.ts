@@ -1053,6 +1053,19 @@ export const repositories = [
     targets: [{ effects: 29, id: "genie-courses", root: ".", states: 0 }],
     url: "https://github.com/Genie-sa/genie-courses.git",
   },
+  {
+    commit: "7a277e6eac790db034204688bb9130d457545caa",
+    name: "open-webui-react-native",
+    targets: [
+      {
+        effects: 0,
+        id: "open-webui-attached-files",
+        root: "libs/mobile/shared/features/use-attached-files/src/use-attached-files.ts",
+        states: 0,
+      },
+    ],
+    url: "https://github.com/RonasIT/open-webui-react-native.git",
+  },
 ] as const satisfies readonly CorpusRepository[];
 
 export const goldCases = [
@@ -5001,10 +5014,38 @@ export const goldStateGroups = [
 
 export const goldPracticeCases = [
   {
+    action: "narrow-observable-write",
+    file: "use-attached-files.ts",
+    line: 12,
+    rationale: "A file upload appends one already-evaluated item to a locally proven observable array, so cloning existing entries is unnecessary.",
+    target: "open-webui-attached-files",
+  },
+  {
+    action: "narrow-observable-write",
+    file: "use-attached-files.ts",
+    line: 31,
+    rationale: "Image processing finishes before this command appends one local value to a proven observable array.",
+    target: "open-webui-attached-files",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "use-attached-files.ts",
+    line: 39,
+    rationale: "Resetting files and images is one attachment transaction across two observable roots.",
+    target: "open-webui-attached-files",
+  },
+  {
     action: "batch-observable-writes",
     file: "apps/web/src/features/shell/command-palette/command-palette.tsx",
     line: 112,
     rationale: "Query text and active-row reset are one command-palette transition and must publish atomically.",
+    target: "genie-courses",
+  },
+  {
+    action: "narrow-observable-write",
+    file: "apps/web/src/features/admin/course-comments-tab.tsx",
+    line: 194,
+    rationale: "Pagination appends one resolved cursor to a component-local observable array without changing existing pages.",
     target: "genie-courses",
   },
   {

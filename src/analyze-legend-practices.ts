@@ -2,6 +2,7 @@ import ts from "typescript";
 
 import {
   containsElementAccess,
+  isEvaluationInert,
   rootIdentifier,
   unwrapTransparentExpression,
 } from "./analysis-ast.js";
@@ -385,74 +386,13 @@ function commonAssignTarget(writes: readonly ObservableWrite[]): string | null {
       write.property === null ||
       ts.isArrowFunction(write.argument) ||
       ts.isFunctionExpression(write.argument) ||
-      !isAssignEvaluationInert(write.argument) ||
+      !isEvaluationInert(write.argument) ||
       expressionReferencesIdentifier(write.argument, write.root)
     )
   ) {
     return null;
   }
   return target;
-}
-
-function isAssignEvaluationInert(expression: ts.Expression): boolean {
-  const value = unwrapTransparentExpression(expression);
-  if (
-    ts.isIdentifier(value) ||
-    ts.isNumericLiteral(value) ||
-    ts.isBigIntLiteral(value) ||
-    ts.isStringLiteral(value) ||
-    ts.isNoSubstitutionTemplateLiteral(value) ||
-    value.kind === ts.SyntaxKind.TrueKeyword ||
-    value.kind === ts.SyntaxKind.FalseKeyword ||
-    value.kind === ts.SyntaxKind.NullKeyword
-  ) {
-    return true;
-  }
-  if (ts.isPrefixUnaryExpression(value)) {
-    const numericLiteral = ts.isNumericLiteral(value.operand);
-    const bigintLiteral = ts.isBigIntLiteral(value.operand);
-    return (
-      ((numericLiteral && value.operator === ts.SyntaxKind.PlusToken) ||
-        ((numericLiteral || bigintLiteral) &&
-          (value.operator === ts.SyntaxKind.MinusToken || value.operator === ts.SyntaxKind.TildeToken)))
-    ) || (
-      value.operator === ts.SyntaxKind.ExclamationToken &&
-      isAssignEvaluationInert(value.operand)
-    );
-  }
-  if (ts.isTypeOfExpression(value)) return isAssignEvaluationInert(value.expression);
-  if (ts.isConditionalExpression(value)) {
-    return isAssignEvaluationInert(value.condition) &&
-      isAssignEvaluationInert(value.whenTrue) &&
-      isAssignEvaluationInert(value.whenFalse);
-  }
-  if (ts.isBinaryExpression(value)) {
-    const operator = value.operatorToken.kind;
-    if (
-      operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
-      operator !== ts.SyntaxKind.BarBarToken &&
-      operator !== ts.SyntaxKind.QuestionQuestionToken &&
-      operator !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
-      operator !== ts.SyntaxKind.ExclamationEqualsEqualsToken
-    ) {
-      return false;
-    }
-    return isAssignEvaluationInert(value.left) && isAssignEvaluationInert(value.right);
-  }
-  if (ts.isArrayLiteralExpression(value)) {
-    return value.elements.every(element =>
-      !ts.isSpreadElement(element) && isAssignEvaluationInert(element)
-    );
-  }
-  if (ts.isObjectLiteralExpression(value)) {
-    return value.properties.every(property => {
-      if (ts.isShorthandPropertyAssignment(property)) return true;
-      return ts.isPropertyAssignment(property) &&
-        !ts.isComputedPropertyName(property.name) &&
-        isAssignEvaluationInert(property.initializer);
-    });
-  }
-  return false;
 }
 
 function expressionReferencesIdentifier(expression: ts.Expression, name: string): boolean {

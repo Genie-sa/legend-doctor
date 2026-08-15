@@ -285,6 +285,78 @@ test("writes one dynamic record entry without cloning its parent object", () => 
   assert.match(findings[0]?.message ?? "", /rows\$\[id\]\.set\(row\)/);
 });
 
+test("appends one inert value directly to a proven observable array", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useObservable } from "@legendapp/state/react";
+    const pages$ = observable<string[]>([]);
+    const store$ = observable({ rows: [] as string[] });
+    export function append(page: string, row: string) {
+      pages$.set(previous => [...previous, page]);
+      store$.rows.set([...store$.rows.peek(), row]);
+    }
+    export function useFiles(file: string) {
+      const files$ = useObservable<string[]>([]);
+      const appendFile = (next: string) => {
+        files$.set(previous => [...previous, next]);
+      };
+      appendFile(file);
+      return files$;
+    }
+  `, "fixture.ts");
+  const appendFindings = findings.filter(finding => finding.action === "narrow-observable-write");
+  assert.equal(appendFindings.length, 3);
+  assert.match(appendFindings[0]?.message ?? "", /pages\$\.push\(page\)/);
+  assert.match(appendFindings[1]?.message ?? "", /store\$\.rows\.push\(row\)/);
+  assert.match(appendFindings[2]?.message ?? "", /files\$\.push\(next\)/);
+});
+
+test("keeps array writes whose append or array identity is not exact", () => {
+  const bodies = [
+    `list$.set(previous => [item, ...previous]);`,
+    `list$.set(previous => [...previous, first, second]);`,
+    `list$.set(previous => [...previous, ...items]);`,
+    `list$.set(previous => [...previous, item].sort());`,
+    `list$.set(previous => [...previous, createItem()]);`,
+    `list$.set(previous => [...previous, source.value]);`,
+    `list$.set(previous => [...previous, previous]);`,
+    `list$.set([...list$.get(), item]);`,
+    `const current = list$.peek(); consume(current); list$.set([...current, item]);`,
+  ];
+  for (const body of bodies) {
+    const findings = analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      const list$ = observable<string[]>([]);
+      export function append(item: string, first: string, second: string, items: string[]) {
+        ${body}
+      }
+    `, "fixture.ts");
+    assert.deepEqual(
+      findings.filter(finding => finding.action === "narrow-observable-write"),
+      [],
+      body
+    );
+  }
+
+  assert.deepEqual(
+    analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      const value$ = observable("ab");
+      value$.set(previous => [...previous, "c"]);
+    `, "fixture.ts").filter(finding => finding.action === "narrow-observable-write"),
+    []
+  );
+  assert.deepEqual(
+    analyzeLegendPractices(`
+      import { list$ } from "./store";
+      list$.set(previous => [...previous, "item"]);
+    `, "fixture.ts", new Set(["list$"])).filter(
+      finding => finding.action === "narrow-observable-write"
+    ),
+    []
+  );
+});
+
 test("keeps clone writes whose snapshot or replacement path is not equivalent", () => {
   const sources = [
     `const current = profile$.get(); profile$.set({ ...current, name });`,

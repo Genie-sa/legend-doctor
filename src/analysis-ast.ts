@@ -91,6 +91,65 @@ export function isDirectJsxAttributeExpression(
     unwrapTransparentExpression(initializer.expression) === node;
 }
 
+export function isEvaluationInert(expression: ts.Expression): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (
+    ts.isIdentifier(value) ||
+    ts.isNumericLiteral(value) ||
+    ts.isBigIntLiteral(value) ||
+    ts.isStringLiteral(value) ||
+    ts.isNoSubstitutionTemplateLiteral(value) ||
+    value.kind === ts.SyntaxKind.TrueKeyword ||
+    value.kind === ts.SyntaxKind.FalseKeyword ||
+    value.kind === ts.SyntaxKind.NullKeyword
+  ) {
+    return true;
+  }
+  if (ts.isPrefixUnaryExpression(value)) {
+    const numericLiteral = ts.isNumericLiteral(value.operand);
+    const bigintLiteral = ts.isBigIntLiteral(value.operand);
+    return (
+      (numericLiteral && value.operator === ts.SyntaxKind.PlusToken) ||
+      ((numericLiteral || bigintLiteral) &&
+        (value.operator === ts.SyntaxKind.MinusToken || value.operator === ts.SyntaxKind.TildeToken)) ||
+      (value.operator === ts.SyntaxKind.ExclamationToken && isEvaluationInert(value.operand))
+    );
+  }
+  if (ts.isTypeOfExpression(value)) return isEvaluationInert(value.expression);
+  if (ts.isConditionalExpression(value)) {
+    return isEvaluationInert(value.condition) &&
+      isEvaluationInert(value.whenTrue) &&
+      isEvaluationInert(value.whenFalse);
+  }
+  if (ts.isBinaryExpression(value)) {
+    const operator = value.operatorToken.kind;
+    if (
+      operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
+      operator !== ts.SyntaxKind.BarBarToken &&
+      operator !== ts.SyntaxKind.QuestionQuestionToken &&
+      operator !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
+      operator !== ts.SyntaxKind.ExclamationEqualsEqualsToken
+    ) {
+      return false;
+    }
+    return isEvaluationInert(value.left) && isEvaluationInert(value.right);
+  }
+  if (ts.isArrayLiteralExpression(value)) {
+    return value.elements.every(element =>
+      !ts.isSpreadElement(element) && isEvaluationInert(element)
+    );
+  }
+  if (ts.isObjectLiteralExpression(value)) {
+    return value.properties.every(property => {
+      if (ts.isShorthandPropertyAssignment(property)) return true;
+      return ts.isPropertyAssignment(property) &&
+        !ts.isComputedPropertyName(property.name) &&
+        isEvaluationInert(property.initializer);
+    });
+  }
+  return false;
+}
+
 export function isInsideJsxAttribute(node: ts.Node, attribute: ts.JsxAttribute): boolean {
   return attribute.getStart() <= node.getStart() && node.end <= attribute.end;
 }

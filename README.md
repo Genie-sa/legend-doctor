@@ -20,6 +20,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | `useValue(leaf$.get())` | `useValue(leaf$)` with types and options preserved |
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
 | Whole-object clone writes | Direct child `.set()` on the changed path |
+| Cloned array append | Direct `.push()` when exactly one safe value is appended |
 | Multiple Legend writes | One `.assign()` or `batch()` transaction |
 | Legacy `useSelector` / `use$` | `useValue`, narrowed when the selector is one direct `.get()` |
 | Every finding | File, line, action, confidence, evidence, and boundary |
@@ -28,17 +29,17 @@ Measured on pinned real applications:
 
 | Metric | Result |
 | --- | ---: |
-| App roots | 10 |
-| Source targets | 165 |
+| App roots | 11 |
+| Source targets | 166 |
 | Hooks analyzed | 2,025 |
 | Manual labels | 670 |
-| Unit tests | 317/317 |
+| Unit tests | 319/319 |
 | Actionable precision | 98.8% (341/345) |
 | Actionable recall | 94.7% (341/360) |
-| Legend practice precision | 100% (69/69) |
+| Legend practice precision | 100% (73/73) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
-Excalidraw, Expensify, Formbricks, Outline, and Genie Courses.
+Excalidraw, Expensify, Formbricks, Outline, Genie Courses, and Open WebUI React Native.
 
 ## Agent contract
 
@@ -274,6 +275,18 @@ For keyed records, the same rule targets the changed entry:
 records$[recordId].set(record);
 ```
 
+For an exact one-item array append:
+
+```ts
+// Before
+pages$.set(previous => [...previous, nextPage]);
+
+// After
+pages$.push(nextPage);
+```
+
+Prepend, sort, filter, multiple appended values, calls, getters, and unproven array roots stay unchanged.
+
 ### 5. Multiple writes → one publication
 
 Before:
@@ -375,7 +388,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/async-leaf-status.ts` | Event-owned async status leaves |
 | `src/rules/deferred-reveal.ts` | Deferred reveal and render gates |
 | `src/rules/keyed-selection.ts` | Row and collection selection |
-| `src/rules/observable-clone-writes.ts` | Narrow child writes without parent cloning |
+| `src/rules/observable-clone-writes.ts` | Narrow child and exact array-append writes |
 | `src/rules/observable-reads.ts` | Direct and lowest-path reads |
 | `src/rules/state-proofs.ts` | Shared state and JSX proofs |
 | `src/analyze-legend-practices.ts` | Legend practice orchestration and write transactions |
