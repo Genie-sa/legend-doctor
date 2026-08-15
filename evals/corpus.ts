@@ -732,6 +732,12 @@ export const repositories = [
         states: 4,
       },
       {
+        effects: 0,
+        id: "formbricks-dashboard-widget",
+        root: "apps/web/modules/ee/analysis/dashboards/components/dashboard-widget.tsx",
+        states: 1,
+      },
+      {
         effects: 1,
         id: "formbricks-survey-analysis-cta",
         root: "apps/web/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/summary/components/SurveyAnalysisCTA.tsx",
@@ -3796,6 +3802,16 @@ export const goldCases = [
     rationale: rationale as string,
     target: target as string,
   })),
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "dashboard-widget.tsx",
+    hook: "useState",
+    line: 34,
+    name: "menuOpen",
+    rationale: "The owner renders arbitrary widget content outside a conditionally mounted menu; keep the observable at widget lifetime and subscribe around the complete menu subtree so descendant close commands do not invalidate the widget body.",
+    target: "formbricks-dashboard-widget",
+  },
   {
     action: "use-observable",
     file: "index.tsx",
