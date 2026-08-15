@@ -2593,6 +2593,21 @@ test("does not promote a projection when its setter callback escapes through a c
   assert.equal(finding?.action, "review-state");
 });
 
+test("does not treat a namespace hook callback as an event command", () => {
+  const [finding] = analyzeSource(`
+    import React, { useState } from "react";
+    function Dialog(props: { open: boolean; onClose: () => void }) { return null; }
+    export function Screen() {
+      const [open, setOpen] = useState(false);
+      React.useMemo(() => { (() => setOpen(true))(); return []; }, []);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+        <Dialog open={open} onClose={() => setOpen(false)} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "review-state");
+});
+
 test("keeps React state when the component is already a tiny render leaf", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

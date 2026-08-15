@@ -2709,11 +2709,18 @@ function setterCallbackEscapesThroughUnknownHook(
 ): boolean {
   return usage.setterCallNodes.some(call => {
     for (let current: ts.Node | undefined = call.parent; current && current !== state.owner; current = current.parent) {
+      const hookName = ts.isCallExpression(current)
+        ? ts.isIdentifier(current.expression)
+          ? current.expression.text
+          : ts.isPropertyAccessExpression(current.expression)
+            ? current.expression.name.text
+            : null
+        : null;
       if (
+        hookName &&
+        /^use[A-Z0-9]/.test(hookName) &&
+        !["useCallback", "useEffect"].includes(hookName) &&
         ts.isCallExpression(current) &&
-        ts.isIdentifier(current.expression) &&
-        /^use[A-Z0-9]/.test(current.expression.text) &&
-        !["useCallback", "useEffect"].includes(current.expression.text) &&
         current.arguments.some(argument => nodeWithin(call, argument))
       ) {
         return true;
