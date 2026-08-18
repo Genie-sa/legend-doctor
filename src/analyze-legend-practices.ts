@@ -9,6 +9,7 @@ import {
 import { isNonProductionHarness, visit } from "./ast.js";
 import { collectHookImports, type HookImports } from "./imports.js";
 import type { AnalysisFile } from "./analysis-project.js";
+import type { InstalledLegendState } from "./legend-state-package.js";
 import { findLegacyUseValuePractices } from "./rules/legacy-use-value.js";
 import { findObservableCloneWritePractices } from "./rules/observable-clone-writes.js";
 import {
@@ -31,7 +32,8 @@ export function analyzeLegendPractices(
   sourceText: string,
   fileName: string,
   importedObservables: ReadonlySet<string> = new Set(),
-  importedObservableFactories: ReadonlySet<string> = new Set()
+  importedObservableFactories: ReadonlySet<string> = new Set(),
+  installedLegendState: InstalledLegendState | null = null
 ): LegendPracticeFinding[] {
   const sourceFile = ts.createSourceFile(
     fileName,
@@ -46,7 +48,8 @@ export function analyzeLegendPractices(
     sourceFile,
     fileName,
     importedObservables,
-    importedObservableFactories
+    importedObservableFactories,
+    installedLegendState
   );
 }
 
@@ -55,13 +58,15 @@ export function analyzeLegendPracticesFile(
   reportFileName: string,
   importedObservables: ReadonlySet<string> = new Set(),
   importedObservableFactories: ReadonlySet<string> = new Set(),
-  includeFindings = true
+  includeFindings = true,
+  installedLegendState: InstalledLegendState | null = null
 ): LegendPracticeFinding[] {
   const findings = analyzeParsedLegendPractices(
     file.sourceFile,
     reportFileName,
     importedObservables,
-    importedObservableFactories
+    importedObservableFactories,
+    installedLegendState
   );
   return includeFindings ? findings : [];
 }
@@ -70,7 +75,8 @@ function analyzeParsedLegendPractices(
   sourceFile: ts.SourceFile,
   fileName: string,
   importedObservables: ReadonlySet<string>,
-  importedObservableFactories: ReadonlySet<string>
+  importedObservableFactories: ReadonlySet<string>,
+  installedLegendState: InstalledLegendState | null
 ): LegendPracticeFinding[] {
   if (isNonProductionHarness(fileName)) return [];
   const imports = collectHookImports(sourceFile);
@@ -84,7 +90,13 @@ function analyzeParsedLegendPractices(
     ? new Set<string>()
     : collectObservableBindings(sourceFile, imports, importedObservables, importedObservableFactories);
   const findings = [
-    ...findLegacyUseValuePractices(sourceFile, fileName, imports, observableBindings),
+    ...findLegacyUseValuePractices(
+      sourceFile,
+      fileName,
+      imports,
+      observableBindings,
+      installedLegendState
+    ),
   ];
   if (lacksObservableSources) return findings;
   if (observableBindings.size === 0) return findings;
@@ -92,12 +104,15 @@ function analyzeParsedLegendPractices(
   visit(sourceFile, node => {
     if (!ts.isBlock(node) && !ts.isSourceFile(node)) return;
     let run: ObservableWrite[] = [];
+    let conditionalWrites: ObservableWrite[] = [];
     let runIsComplete = true;
     const flush = (): void => {
-      if (runIsComplete && run.length >= 2 && hasDistinctNonOverlappingPaths(run)) {
-        findings.push(transactionFinding(run, sourceFile, fileName));
+      if (runIsComplete && run.length >= 2) {
+        const finding = transactionFinding(run, conditionalWrites, sourceFile, fileName);
+        if (finding) findings.push(finding);
       }
       run = [];
+      conditionalWrites = [];
       runIsComplete = true;
     };
 
@@ -105,7 +120,18 @@ function analyzeParsedLegendPractices(
       const write = observableWrite(statement, observableBindings, sourceFile);
       if (write && !isInsideBatch(write.call, imports)) {
         run.push(write);
-      } else if (isSetStatement(statement)) {
+        continue;
+      }
+      const branchWrites = conditionalObservableWrites(statement, observableBindings, sourceFile, imports);
+      if (
+        branchWrites &&
+        run.length > 0 &&
+        branchWrites.every(branchWrite => run.some(member => member.root === branchWrite.root))
+      ) {
+        conditionalWrites.push(...branchWrites);
+        continue;
+      }
+      if (isSetStatement(statement)) {
         runIsComplete = false;
       } else {
         flush();
@@ -373,11 +399,41 @@ function hasDistinctNonOverlappingPaths(writes: readonly ObservableWrite[]): boo
   );
 }
 
+function conditionalObservableWrites(
+  statement: ts.Statement,
+  observableBindings: ReadonlySet<string>,
+  sourceFile: ts.SourceFile,
+  imports: HookImports
+): ObservableWrite[] | null {
+  if (!ts.isIfStatement(statement) || !isEvaluationInert(statement.expression)) return null;
+  const branches = [
+    statement.thenStatement,
+    ...(statement.elseStatement ? [statement.elseStatement] : []),
+  ];
+  const writes: ObservableWrite[] = [];
+  for (const branch of branches) {
+    const statements = ts.isBlock(branch) ? branch.statements : [branch];
+    for (const branchStatement of statements) {
+      const write = observableWrite(branchStatement, observableBindings, sourceFile);
+      if (!write || isInsideBatch(write.call, imports)) return null;
+      writes.push(write);
+    }
+  }
+  return writes.length > 0 ? writes : null;
+}
+
 function transactionFinding(
   writes: readonly ObservableWrite[],
+  conditionalWrites: readonly ObservableWrite[],
   sourceFile: ts.SourceFile,
   fileName: string
-): LegendPracticeFinding {
+): LegendPracticeFinding | null {
+  if (conditionalWrites.length > 0) {
+    return hasDistinctNonOverlappingPaths([...writes, ...conditionalWrites])
+      ? conditionalBatchFinding(writes, conditionalWrites, sourceFile, fileName)
+      : null;
+  }
+  if (!hasDistinctNonOverlappingPaths(writes)) return null;
   const first = writes[0]!;
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.call.getStart(sourceFile));
   const assignTarget = commonAssignTarget(writes);
@@ -406,6 +462,33 @@ function transactionFinding(
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
     message: `Wrap these ${writes.length} consecutive Legend observable writes in \`batch(() => { ... })\` so observers publish the transaction once.`,
+    practice: "batch",
+  };
+}
+
+function conditionalBatchFinding(
+  writes: readonly ObservableWrite[],
+  conditionalWrites: readonly ObservableWrite[],
+  sourceFile: ts.SourceFile,
+  fileName: string
+): LegendPracticeFinding {
+  const first = writes[0]!;
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(first.call.getStart(sourceFile));
+  const assignTarget = commonAssignTarget(writes);
+  const conditionalPaths = conditionalWrites.map(write => `\`${write.path}\``).join(", ");
+  const assignHint = assignTarget
+    ? ` inside the batch, one \`${assignTarget}.assign(...)\` can replace the unconditional field writes;`
+    : "";
+  return {
+    action: "batch-observable-writes",
+    confidence: "probable",
+    disposition: "change",
+    evidence: [
+      `${writes.length} consecutive writes and a conditional write to ${conditionalPaths} target the same proven Legend observable`,
+      "replacing only the unconditional writes would still let the conditional write publish a separate, torn transaction",
+    ],
+    location: { column: character + 1, file: fileName, line: line + 1 },
+    message: `Wrap these ${writes.length} \`.set()\` calls and the conditional write to ${conditionalPaths} in one \`batch(() => { ... })\`;${assignHint} observers publish the transaction once.`,
     practice: "batch",
   };
 }

@@ -1697,6 +1697,38 @@ test("flags direct render state in a non-trivial owner as Legend-first", () => {
   assert.match(finding?.message ?? "", /Legend-first restructuring candidate/);
 });
 
+test("keeps direct render state when the owner already holds an observable subscription", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    import { useValue } from "@legendapp/state/react";
+    import { player$ } from "./state";
+    export function Screen() {
+      const [active, setActive] = useState(false);
+      const positionSec = useValue(player$.positionSec);
+      return <main><Header /><Toolbar time={positionSec} /><Content /><Button onClick={() => setActive(v => !v)} />{active && <Panel />}</main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "keep-state");
+  assert.equal(finding?.disposition, "keep");
+  assert.match(finding?.message ?? "", /already re-renders through an existing observable subscription/);
+});
+
+test("keeps direct render state when the owner subscribes through a legacy hook", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    import { use$ } from "@legendapp/state/react";
+    import { player$ } from "./state";
+    export function Screen() {
+      const [note, setNote] = useState("");
+      const positionSec = use$(player$.positionSec);
+      const duration = use$(player$.durationSec);
+      return <main><Header /><Toolbar time={positionSec} max={duration} /><Content /><Button onClick={() => setNote("x")} />{note}</main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "keep-state");
+  assert.match(finding?.message ?? "", /2 existing observable subscriptions/);
+});
+
 test("moves direct state into its strict stable JSX subtree", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

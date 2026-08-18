@@ -61,7 +61,7 @@ export interface HookFinding {
 export interface LegendPracticeFinding {
   action: LegendPracticeAction;
   confidence: Confidence;
-  disposition: "change";
+  disposition: "change" | "style";
   evidence: readonly string[];
   location: SourceLocation;
   message: string;

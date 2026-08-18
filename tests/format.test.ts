@@ -37,7 +37,28 @@ test("text output includes Legend practice findings", () => {
       message: "Batch these writes.",
       practice: "batch",
     }],
-  }, true);
+  });
   assert.match(output, /store\.ts:8:3 \[batch-observable-writes\]/);
   assert.match(output, /1 shown/);
+  assert.match(output, /Re-run legend-doctor after applying change findings/);
+});
+
+test("text output surfaces the keep-react-effect directive for review-effect findings", () => {
+  const output = formatTextReport({
+    files: 1,
+    findings: [{
+      action: "review-effect",
+      confidence: "probable",
+      disposition: "candidate",
+      evidence: [],
+      hook: "useEffect",
+      location: { column: 1, file: "fixture.tsx", line: 3 },
+      message: "Review this effect.",
+      name: null,
+    }],
+    hooks: { effects: 1, states: 0, total: 1 },
+    practices: [],
+  });
+  assert.match(output, /legend-doctor keep-react-effect/);
+  assert.doesNotMatch(output, /Re-run legend-doctor/);
 });

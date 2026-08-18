@@ -989,3 +989,119 @@ test("does not treat a collection containing observables as one observable", () 
     []
   );
 });
+
+test("recommends batch when a conditional same-root write follows an assign run", () => {
+  const [finding, ...rest] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    const player$ = observable({ index: -1, isPlaying: false, positionSec: 0, durationSec: 0 });
+    export function play(index: number, track: { duration: number } | null) {
+      player$.index.set(index);
+      player$.isPlaying.set(true);
+      player$.positionSec.set(0);
+      if (track) player$.durationSec.set(track.duration);
+    }
+  `, "fixture.ts");
+  assert.deepEqual(rest, []);
+  assert.equal(finding?.action, "batch-observable-writes");
+  assert.equal(finding?.location.line, 5);
+  assert.match(finding?.message ?? "", /batch\(\(\) => \{ \.\.\. \}\)/);
+  assert.match(finding?.message ?? "", /player\$\.assign/);
+  assert.match(finding?.message ?? "", /`player\$\.durationSec`/);
+});
+
+test("recommends batch when a conditional same-root write interrupts an assign run", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    const player$ = observable({ index: -1, isPlaying: false, durationSec: 0 });
+    export function play(index: number, track: { duration: number } | null) {
+      player$.index.set(index);
+      if (track) { player$.durationSec.set(track.duration); }
+      player$.isPlaying.set(true);
+    }
+  `, "fixture.ts");
+  assert.deepEqual(findings.map(finding => finding.action), ["batch-observable-writes"]);
+  assert.match(findings[0]?.message ?? "", /conditional write to `player\$\.durationSec`/);
+});
+
+test("keeps the assign recommendation when the conditional writes another root", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    const player$ = observable({ index: -1, isPlaying: false });
+    const ui$ = observable({ toast: "" });
+    export function play(index: number, track: { title: string } | null) {
+      player$.index.set(index);
+      player$.isPlaying.set(true);
+      if (track) ui$.toast.set(track.title);
+    }
+  `, "fixture.ts");
+  assert.deepEqual(findings.map(finding => finding.action), ["assign-observable-fields"]);
+});
+
+test("keeps the assign recommendation when the conditional branch mixes non-write statements", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    const player$ = observable({ index: -1, isPlaying: false, durationSec: 0 });
+    export function play(index: number, track: { duration: number } | null) {
+      player$.index.set(index);
+      player$.isPlaying.set(true);
+      if (track) {
+        console.log(track.duration);
+        player$.durationSec.set(track.duration);
+      }
+    }
+  `, "fixture.ts");
+  assert.deepEqual(findings.map(finding => finding.action), ["assign-observable-fields"]);
+});
+
+test("keeps replace-legacy-use-value as a change when no installed package is resolved", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { useSelector } from "@legendapp/state/react";
+    export function read(value: string) { return useSelector(() => value); }
+  `, "fixture.ts");
+  assert.equal(finding?.action, "replace-legacy-use-value");
+  assert.equal(finding?.disposition, "change");
+});
+
+test("marks replace-legacy-use-value as style when the installed useValue is an alias", () => {
+  const [finding] = analyzeLegendPractices(
+    `
+      import { use$ } from "@legendapp/state/react";
+      export function read(value: string) { return use$(() => value); }
+    `,
+    "fixture.ts",
+    new Set(),
+    new Set(),
+    { useValueExport: "alias", version: "3.0.0-beta.48" }
+  );
+  assert.equal(finding?.disposition, "style");
+  assert.match(finding?.evidence.join("\n") ?? "", /no runtime effect/);
+});
+
+test("suppresses replace-legacy-use-value when the installed package lacks useValue", () => {
+  const findings = analyzeLegendPractices(
+    `
+      import { useSelector } from "@legendapp/state/react";
+      export function read(value: string) { return useSelector(() => value); }
+    `,
+    "fixture.ts",
+    new Set(),
+    new Set(),
+    { useValueExport: "missing", version: "2.1.0" }
+  );
+  assert.deepEqual(findings, []);
+});
+
+test("emits nothing when a conditional write overlaps an unconditional path", () => {
+  assert.deepEqual(
+    actions(`
+      import { observable } from "@legendapp/state";
+      const player$ = observable({ index: -1, isPlaying: false });
+      export function play(index: number, resume: boolean) {
+        player$.index.set(index);
+        player$.isPlaying.set(false);
+        if (resume) player$.isPlaying.set(true);
+      }
+    `),
+    []
+  );
+});

@@ -1,13 +1,22 @@
 import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
 
-export function formatTextReport(report: AnalysisReport, actionableOnly: boolean): string {
-  const findings = actionableOnly
-    ? agentFindings(report.findings)
-    : report.findings;
+export function formatTextReport(report: AnalysisReport): string {
+  const findings = report.findings;
   const lines = [...findings.map(formatFinding), ...report.practices.map(formatPracticeFinding)];
   lines.push(
     `Scanned ${report.files} files: ${report.hooks.states} useState, ${report.hooks.effects} useEffect, ${findings.length + report.practices.length} shown.`
   );
+  if (findings.some(finding => finding.action === "review-effect")) {
+    lines.push(
+      "Keep a deliberate React effect by preceding it with `// legend-doctor keep-react-effect`; that suppresses its review-effect finding."
+    );
+  }
+  if (
+    findings.some(finding => finding.disposition === "change") ||
+    report.practices.some(practice => practice.disposition === "change")
+  ) {
+    lines.push("Re-run legend-doctor after applying change findings; applied changes can reveal new ones.");
+  }
   return lines.join("\n");
 }
 

@@ -60,6 +60,11 @@ Run Legend Doctor before and after every React state, effect, or Legend observab
 
 `--actionable` returns `change` and `candidate`. Omit it to include intentional `keep` findings.
 
+`--disposition <value>` keeps only findings and practices with that disposition (`change`, `candidate`, `keep`, or
+`style`), so "apply the safe ones" is `--json --disposition change`. A `style` disposition marks a consistency change
+with no runtime effect, such as renaming `use$` to `useValue` when the installed `@legendapp/state` exports them as
+aliases of the same function; the finding's evidence names the resolved version.
+
 For parser and analysis coverage, use `--json --coverage`. It reports every discovered supported source file and runtime
 function, parser diagnostics, and whether parsing, semantic analysis, detectors, or bounded state-flow proofs ran, were
 not requested, or encountered unsupported control flow.

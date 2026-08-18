@@ -220,6 +220,7 @@ function analyzeParsedSource(
   const unmatchedStateCalls: ts.CallExpression[] = [];
   const effects = reactCommit.effectCalls.map(effectCandidate);
   const useValueBindingsByOwner = collectUseValueBindings(sourceFile, imports);
+  const observableSubscriptionsByOwner = collectObservableSubscriptionCounts(sourceFile, imports);
   const useObservableBindingsByOwner = collectStableUseObservableBindings(sourceFile, imports);
   const moduleScopeBindings = collectModuleScopeBindings(sourceFile);
   const reactiveMutationsByOwner = collectReactiveMutationBindings(sourceFile);
@@ -399,6 +400,7 @@ function analyzeParsedSource(
           keyedSelections.collectionStates.has(state),
           keyedSelections.scalarStates.has(state),
           keyedSelections.secondaryLeafStates.has(state),
+          observableSubscriptionsByOwner.get(state.owner) ?? 0,
           siblingCut ?? null
         );
     const commitSensitiveOverride = commitSensitive &&
@@ -547,6 +549,38 @@ function collectUseValueBindings(
     bindings.set(owner, ownerBindings);
   });
   return bindings;
+}
+
+const OBSERVABLE_SUBSCRIPTION_HOOKS = new Set(["useValue", "useSelector", "use$"]);
+
+function collectObservableSubscriptionCounts(
+  sourceFile: ts.SourceFile,
+  imports: HookImports
+): ReadonlyMap<RuntimeFunctionLike, number> {
+  const counts = new Map<RuntimeFunctionLike, number>();
+  visit(sourceFile, node => {
+    if (!ts.isCallExpression(node) || !isObservableSubscriptionHookCall(node, imports)) return;
+    const owner = findAncestor(node, isRuntimeFunctionLike);
+    if (!owner) return;
+    counts.set(owner, (counts.get(owner) ?? 0) + 1);
+  });
+  return counts;
+}
+
+function isObservableSubscriptionHookCall(
+  call: ts.CallExpression,
+  imports: HookImports
+): boolean {
+  const expression = call.expression;
+  if (ts.isIdentifier(expression)) {
+    return imports.useValue.has(expression.text) || imports.legacyUseValue.has(expression.text);
+  }
+  return (
+    ts.isPropertyAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    imports.legendReactNamespaces.has(expression.expression.text) &&
+    OBSERVABLE_SUBSCRIPTION_HOOKS.has(expression.name.text)
+  );
 }
 
 function collectStableUseObservableBindings(
@@ -1513,6 +1547,7 @@ function classifyState(
   isKeyedLeafCollection: boolean,
   isKeyedLeafScalar: boolean,
   isKeyedScalarWithSecondary: boolean,
+  ownerObservableSubscriptions: number,
   siblingRenderCut: SiblingRenderCut | null
 ): ClassifiedState {
   if (nonProductionHarness) {
@@ -1900,6 +1935,16 @@ function classifyState(
   }
   if (usage.localRenderReads > 0) {
     if (isCustomHookOwner(state.owner) || jsxElementCount(state.owner) >= 5) {
+      if (ownerObservableSubscriptions > 0) {
+        const label = ownerObservableSubscriptions === 1
+          ? "an existing observable subscription"
+          : `${ownerObservableSubscriptions} existing observable subscriptions`;
+        return {
+          action: "keep-state",
+          confidence: "probable",
+          message: `Keep \`${state.valueName}\` as React state for now; its owner already re-renders through ${label}, so observable ownership cannot shrink this render boundary. Re-review only if \`${state.valueName}\` updates more often than those subscriptions.`,
+        };
+      }
       const boundary = isCustomHookOwner(state.owner)
         ? "its unknown hook consumers"
         : `this owner with ${jsxElementCount(state.owner)} JSX elements`;

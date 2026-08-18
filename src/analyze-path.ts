@@ -24,6 +24,10 @@ import {
   type SemanticContext,
   type SemanticContextDiagnostic,
 } from "./semantic-context.js";
+import {
+  resolveInstalledLegendState,
+  type InstalledLegendState,
+} from "./legend-state-package.js";
 import { pathIdentityKey } from "./path-identity.js";
 import { buildSourceIndexFromFiles, type SourceIndex } from "./source-components.js";
 import { StateFlowIndex, type StateFlowCoverage } from "./state-flow.js";
@@ -41,6 +45,7 @@ const IGNORED_DIRECTORIES = new Set([
 ]);
 
 export interface AnalysisContext {
+  installedLegendState: InstalledLegendState | null;
   project: AnalysisProject;
   semanticContext: SemanticContext | null;
   semanticDiagnostics: readonly SemanticContextDiagnostic[];
@@ -75,6 +80,7 @@ export async function createAnalysisContext(
     ? createSemanticContext(project, { configFilePath: options.configFilePath })
     : { context: null, diagnostics: [] };
   return {
+    installedLegendState: await resolveInstalledLegendState(root),
     project,
     semanticContext: semantic.context,
     semanticDiagnostics: semantic.diagnostics,
@@ -158,7 +164,8 @@ export async function analyzePathDetailed(
           analysisFile,
           importedObservables,
           importedObservableFactories
-        )
+        ),
+        context.installedLegendState
       )
     );
     const stages = analyzedFileCoverage(analysisFile, context, functionEntries, stateFlow);
@@ -270,7 +277,8 @@ function isLegendPracticeEligible(
 ): boolean {
   const sourceText = file.sourceFile.text;
   const mayContainPractice =
-    /\.(?:get|set)\s*\(/.test(sourceText) || /\buseValue\s*\(/.test(sourceText);
+    /\.(?:get|set)\s*\(/.test(sourceText) ||
+    /\b(?:useValue|useSelector|use\$)\s*\(/.test(sourceText);
   return mayContainPractice &&
     (sourceText.includes("@legendapp/state") ||
       importedObservables.size > 0 ||

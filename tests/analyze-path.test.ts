@@ -203,7 +203,7 @@ test("scopes directory coverage to supported sources and reports direct unsuppor
   assert.equal(direct.coverage.entries[0]?.stages.detector.status, "unsupported");
 });
 
-test("preserves the path-level Legend practice eligibility boundary", async t => {
+test("surfaces legacy hook practices in read-only files through the path prefilter", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-practice-eligibility-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
@@ -214,18 +214,64 @@ test("preserves the path-level Legend practice eligibility boundary", async t =>
     `,
     "utf8"
   );
-
-  const context = await createAnalysisContext(root);
-  const file = context.project.getFile(path.join(root, "legacy.ts"));
-  assert.ok(file);
-  assert.equal(
-    analyzeLegendPracticesFile(file, "legacy.ts")[0]?.action,
-    "replace-legacy-use-value"
+  await writeFile(
+    path.join(root, "use-t.ts"),
+    `
+      import { use$ } from "@legendapp/state/react";
+      import { i18n$ } from "./legacy.js";
+      export function useT() { return use$(i18n$.strings); }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "plain.ts"),
+    "export function useT(value: string) { return value.trim(); }",
+    "utf8"
   );
 
-  const report = await analyzePath(root, context);
+  const report = await analyzePath(root);
 
-  assert.deepEqual(report.practices, []);
+  assert.deepEqual(
+    report.practices.map(practice => [practice.location.file, practice.action]),
+    [
+      ["legacy.ts", "replace-legacy-use-value"],
+      ["use-t.ts", "replace-legacy-use-value"],
+    ]
+  );
+});
+
+test("downgrades replace-legacy-use-value to style when the installed useValue is an alias", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-installed-alias-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  const packageDirectory = path.join(root, "node_modules", "@legendapp", "state");
+  await mkdir(packageDirectory, { recursive: true });
+  await writeFile(
+    path.join(packageDirectory, "package.json"),
+    JSON.stringify({ name: "@legendapp/state", version: "3.0.0-beta.48" }),
+    "utf8"
+  );
+  await writeFile(
+    path.join(packageDirectory, "react.d.ts"),
+    "export { useSelector as use$, useSelector, useSelector as useValue };",
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "legacy.ts"),
+    `
+      import { use$ } from "@legendapp/state/react";
+      export function read(value: string) { return use$(() => value); }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.equal(report.practices[0]?.action, "replace-legacy-use-value");
+  assert.equal(report.practices[0]?.disposition, "style");
+  assert.match(
+    report.practices[0]?.evidence.join("\n") ?? "",
+    /alias of useSelector in the installed @legendapp\/state@3\.0\.0-beta\.48/
+  );
 });
 
 test("shares one cached AST across source indexing and both detector families", async t => {

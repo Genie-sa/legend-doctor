@@ -3,6 +3,7 @@ import ts from "typescript";
 import { collectBindingNames } from "../analysis-ast.js";
 import { visit } from "../ast.js";
 import type { HookImports } from "../imports.js";
+import type { InstalledLegendState } from "../legend-state-package.js";
 import type { LegendPracticeFinding } from "../types.js";
 import { directObservableSelectorPath } from "./observable-reads.js";
 
@@ -12,11 +13,13 @@ export function findLegacyUseValuePractices(
   sourceFile: ts.SourceFile,
   fileName: string,
   imports: HookImports,
-  observableBindings: ReadonlySet<string>
+  observableBindings: ReadonlySet<string>,
+  installedLegendState: InstalledLegendState | null = null
 ): readonly LegendPracticeFinding[] {
   if (imports.legacyUseValue.size === 0 && imports.legendReactNamespaces.size === 0) {
     return [];
   }
+  if (installedLegendState?.useValueExport === "missing") return [];
   const shadowed = localBindingNames(sourceFile);
   const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, node => {
@@ -33,10 +36,11 @@ export function findLegacyUseValuePractices(
     findings.push({
       action: "replace-legacy-use-value",
       confidence: "certain",
-      disposition: "change",
+      disposition: installedLegendState?.useValueExport === "alias" ? "style" : "change",
       evidence: [
         `\`${current}\` resolves to a legacy hook imported from @legendapp/state/react`,
         "Legend State documents useValue as the replacement for useSelector and use$",
+        ...installedUseValueEvidence(installedLegendState),
       ],
       location: { column: character + 1, file: fileName, line: line + 1 },
       message: directObservable
@@ -48,6 +52,26 @@ export function findLegacyUseValuePractices(
     });
   });
   return findings;
+}
+
+function installedUseValueEvidence(installed: InstalledLegendState | null): string[] {
+  if (!installed) return [];
+  if (installed.useValueExport === "alias") {
+    return [
+      `useValue is an alias of useSelector in the installed @legendapp/state@${installed.version}; ` +
+        "this rename is a consistency change with no runtime effect",
+    ];
+  }
+  if (installed.useValueExport === "distinct") {
+    return [
+      `useValue and useSelector are distinct exports in the installed @legendapp/state@${installed.version}; ` +
+        "verify the documented behavior difference before and after replacing",
+    ];
+  }
+  return [
+    `the installed @legendapp/state@${installed.version} react type declarations could not be resolved; ` +
+      "confirm useValue exists there before replacing",
+  ];
 }
 
 function isLegacyHookCall(

@@ -7,6 +7,8 @@ export { analyzeSource } from "./analyze-source.js";
 export { AnalysisProject, createAnalysisFile } from "./analysis-project.js";
 export { createSemanticContext } from "./semantic-context.js";
 export { formatTextReport } from "./format.js";
+export { resolveInstalledLegendState } from "./legend-state-package.js";
+export type { InstalledLegendState, UseValueExport } from "./legend-state-package.js";
 export type {
   AnalysisContext,
   AnalysisContextOptions,
