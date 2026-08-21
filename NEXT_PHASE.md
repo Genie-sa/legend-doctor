@@ -131,6 +131,20 @@ value-transition transports only, resolved leaves through the child-contract lan
 owned by the effect-drafts family. The prototype result bounds the family at roughly twenty audited pairs if all
 survive consumer proofs.
 
+A second prototype added per-member consumer proofs (resolved children with
+verified render-only contracts, value-transition-only setter transports) and
+still fired on thirty-six members across seven roots - and asymmetrically:
+`alerts-modal.isEditing` promoted while its partner `editingAlert` abstained
+because `AlertForm`'s contract could not be proven. Two experiments now show
+adjacency plus consumer proofs cannot separate transaction latches (alerts,
+playlist create-or-rename) from form-sync clusters (address fields, measured
+heights, draft trios): both cohorts pair adjacently, reset together, and
+reach host-input or resolvable consumers. The missing ingredient is
+workflow-intent discrimination - one multi-region transaction versus
+independent field synchronization - which needs cross-region data-flow
+facts, not more local shape gates. The emission stays withdrawn; the analyzer
+is restored to the accepted baseline.
+
 ## Next work, in order
 
 ### 1. Expand Legend-native value
