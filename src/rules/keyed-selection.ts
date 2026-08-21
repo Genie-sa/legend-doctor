@@ -21,6 +21,7 @@ import {
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import { isImportedHookCall, type HookImports } from "../imports.js";
 import {
+  commonRenderGateSubtree,
   expressionContainsJsx,
   isRenderGateReference,
   isSafeProjectionExpression,
@@ -984,6 +985,7 @@ function isKeyedLeafCollectionState(
         if (collectionSummaryControlsRepeatedRendering(summaryCall, state.owner)) unsafe = true;
         return;
       }
+      if (isBoundedFilteredSelectionSummary(membershipCall, state)) return;
       if (!isRepeatedMembershipRender(membershipCall, state.owner)) unsafe = true;
       else if (membershipControlsRepeatedMount(membershipCall, state.owner)) unsafe = true;
       else repeatedMembership = true;
@@ -996,6 +998,87 @@ function isKeyedLeafCollectionState(
     unsafe = true;
   });
   return repeatedMembership && !unsafe;
+}
+
+function isBoundedFilteredSelectionSummary(
+  membership: ts.CallExpression,
+  state: StateCandidate
+): boolean {
+  const callback = nearestNestedFunction(membership, state.owner);
+  if (
+    !callback ||
+    (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+    ts.isBlock(callback.body) ||
+    unwrapTransparentExpression(callback.body) !== membership ||
+    !membershipUsesCallbackKey(membership, callback)
+  ) {
+    return false;
+  }
+  const filter = callback.parent;
+  if (
+    !ts.isCallExpression(filter) ||
+    !filter.arguments.includes(callback) ||
+    !ts.isPropertyAccessExpression(filter.expression) ||
+    filter.expression.name.text !== "filter" ||
+    !ts.isIdentifier(unwrapTransparentExpression(filter.expression.expression))
+  ) {
+    return false;
+  }
+  const declaration = filter.parent;
+  if (
+    !ts.isVariableDeclaration(declaration) ||
+    declaration.initializer !== filter ||
+    !ts.isIdentifier(declaration.name) ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    bindingDeclarationCount(state.owner, declaration.name.text) !== 1
+  ) {
+    return false;
+  }
+
+  const aliasName = declaration.name.text;
+  const references: ts.Identifier[] = [];
+  visit(state.owner.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === aliasName &&
+      node !== declaration.name &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      references.push(node);
+    }
+  });
+  const gates = new Set(
+    references.flatMap(reference => {
+      const gate = commonRenderGateSubtree([reference], state.owner);
+      return gate ? [gate] : [];
+    })
+  );
+  const gate = gates.size === 1 ? [...gates][0]! : null;
+  if (!gate || jsxElementCountIn(gate) / jsxElementCount(state.owner) > 0.4) return false;
+
+  return references.length > 0 && references.every(reference => {
+    const property = ts.isPropertyAccessExpression(reference.parent) &&
+      reference.parent.expression === reference
+      ? reference.parent
+      : null;
+    if (property?.name.text === "length") {
+      return commonRenderGateSubtree([reference], state.owner) === gate;
+    }
+    if (
+      property?.name.text !== "map" ||
+      !ts.isCallExpression(property.parent) ||
+      property.parent.expression !== property ||
+      !nodeWithin(reference, gate)
+    ) {
+      return false;
+    }
+    const row = property.parent.arguments[0];
+    return !!row &&
+      (ts.isArrowFunction(row) || ts.isFunctionExpression(row)) &&
+      repeatedRenderHasStableItemKey(row);
+  });
 }
 
 function collectionMembershipSummaryCall(

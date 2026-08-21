@@ -5215,6 +5215,52 @@ test("keeps filtered array selection as review without a general cross-value pro
   assert.notEqual(finding?.action, "use-observable");
 });
 
+test("isolates keyed array membership with one filtered selection summary leaf", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function Labels({ rows }: { rows: Array<{ id: string; name: string }> }) {
+      const [selectedIds, setSelectedIds] = useState<string[]>([]);
+      const selectedIdSet = new Set(selectedIds);
+      const selectedRows = rows.filter(row => selectedIdSet.has(row.id));
+      const toggle = (id: string) => setSelectedIds(previous =>
+        previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]
+      );
+      return <Screen><Header /><Toolbar /><Summary count={selectedIds.length} /><Filters /><Actions /><Status /><Help /><Footer /><Sidebar /><Banner /><Search />
+        {selectedRows.length > 0 && <aside>{selectedRows.map(row => <Badge key={row.id} onClick={() => toggle(row.id)}>{row.name}</Badge>)}</aside>}
+        {rows.map(row => <Row key={row.id} selected={selectedIdSet.has(row.id)} onPress={() => toggle(row.id)} />)}
+      </Screen>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+});
+
+test("keeps filtered selection summaries with split, unstable, or command consumers conservative", () => {
+  for (const summary of [
+    `{selectedRows.length > 0 && <aside>{selectedRows.map(row => <Badge key={row.id}>{row.name}</Badge>)}</aside>}
+     {selectedRows.length > 1 && <Footer />}`,
+    `{selectedRows.length > 0 && <aside>{selectedRows.map((row, index) => <Badge key={index}>{row.name}</Badge>)}</aside>}`,
+    `{selectedRows.length > 0 && <aside>{selectedRows.map(row => <Badge key={row.id}>{row.name}</Badge>)}</aside>}
+     <button onClick={() => save(selectedRows)}>Save</button>`,
+  ]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      export function Labels({ rows }: { rows: Array<{ id: string; name: string }> }) {
+        const [selectedIds, setSelectedIds] = useState<string[]>([]);
+        const selectedIdSet = new Set(selectedIds);
+        const selectedRows = rows.filter(row => selectedIdSet.has(row.id));
+        const toggle = (id: string) => setSelectedIds(previous =>
+          previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]
+        );
+        return <Screen><Header /><Toolbar /><Summary count={selectedIds.length} /><Filters /><Actions /><Status /><Help /><Footer /><Sidebar /><Banner /><Search />
+          ${summary}
+          {rows.map(row => <Row key={row.id} selected={selectedIdSet.has(row.id)} onPress={() => toggle(row.id)} />)}
+        </Screen>;
+      }
+    `, "fixture.tsx");
+    assert.notEqual(finding?.action, "use-observable", summary);
+  }
+});
+
 test("does not call array filtering that changes row membership a keyed leaf selection", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

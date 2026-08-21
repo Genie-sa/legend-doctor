@@ -3866,7 +3866,6 @@ export const goldCases = [
     ["components/tree-actions/change-labels-page.tsx", 38, "selectedLabelIds"],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
-    ...(file === "components/tree-actions/change-labels-page.tsx" ? { enforced: false as const } : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
