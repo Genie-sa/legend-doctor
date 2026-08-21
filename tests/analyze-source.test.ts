@@ -1697,7 +1697,7 @@ test("flags direct render state in a non-trivial owner as Legend-first", () => {
   assert.match(finding?.message ?? "", /Legend-first restructuring candidate/);
 });
 
-test("keeps direct render state when the owner already holds an observable subscription", () => {
+test("reports competing observable subscriptions as evidence for direct render state", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
     import { useValue } from "@legendapp/state/react";
@@ -1708,12 +1708,15 @@ test("keeps direct render state when the owner already holds an observable subsc
       return <main><Header /><Toolbar time={positionSec} /><Content /><Button onClick={() => setActive(v => !v)} />{active && <Panel />}</main>;
     }
   `, "fixture.tsx");
-  assert.equal(finding?.action, "keep-state");
-  assert.equal(finding?.disposition, "keep");
-  assert.match(finding?.message ?? "", /already re-renders through an existing observable subscription/);
+  assert.equal(finding?.action, "review-state");
+  assert.match(finding?.message ?? "", /Legend-first restructuring candidate/);
+  assert.match(
+    finding?.message ?? "",
+    /also re-renders through an existing observable subscription; isolate this state only if it updates less often/
+  );
 });
 
-test("keeps direct render state when the owner subscribes through a legacy hook", () => {
+test("reports multiple legacy-hook subscriptions as competing evidence", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
     import { use$ } from "@legendapp/state/react";
@@ -1725,7 +1728,7 @@ test("keeps direct render state when the owner subscribes through a legacy hook"
       return <main><Header /><Toolbar time={positionSec} max={duration} /><Content /><Button onClick={() => setNote("x")} />{note}</main>;
     }
   `, "fixture.tsx");
-  assert.equal(finding?.action, "keep-state");
+  assert.equal(finding?.action, "review-state");
   assert.match(finding?.message ?? "", /2 existing observable subscriptions/);
 });
 

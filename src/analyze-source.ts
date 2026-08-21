@@ -1935,23 +1935,18 @@ function classifyState(
   }
   if (usage.localRenderReads > 0) {
     if (isCustomHookOwner(state.owner) || jsxElementCount(state.owner) >= 5) {
-      if (ownerObservableSubscriptions > 0) {
-        const label = ownerObservableSubscriptions === 1
-          ? "an existing observable subscription"
-          : `${ownerObservableSubscriptions} existing observable subscriptions`;
-        return {
-          action: "keep-state",
-          confidence: "probable",
-          message: `Keep \`${state.valueName}\` as React state for now; its owner already re-renders through ${label}, so observable ownership cannot shrink this render boundary. Re-review only if \`${state.valueName}\` updates more often than those subscriptions.`,
-        };
-      }
       const boundary = isCustomHookOwner(state.owner)
         ? "its unknown hook consumers"
         : `this owner with ${jsxElementCount(state.owner)} JSX elements`;
+      const competing = ownerObservableSubscriptions === 0
+        ? ""
+        : ownerObservableSubscriptions === 1
+          ? " The owner also re-renders through an existing observable subscription; isolate this state only if it updates less often than that subscription."
+          : ` The owner also re-renders through ${ownerObservableSubscriptions} existing observable subscriptions; isolate this state only if it updates less often than they do.`;
       return {
         action: "review-state",
         confidence: "probable",
-        message: `Legend-first restructuring candidate: replace \`${state.valueName}\` with observable ownership and move its subscription into the smallest rendered subtree; updates currently invalidate ${boundary}.`,
+        message: `Legend-first restructuring candidate: replace \`${state.valueName}\` with observable ownership and move its subscription into the smallest rendered subtree; updates currently invalidate ${boundary}.${competing}`,
       };
     }
     return {
