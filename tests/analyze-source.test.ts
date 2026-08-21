@@ -4365,6 +4365,52 @@ test("does not call custom-hook reactions or returned commands event-rooted", ()
   assert.notEqual(returnedCommand?.action, "use-ref");
 });
 
+test("uses a ref for an effect-written cursor read only by one returned switch command", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    import { Navigation, resolveNext } from "./navigation";
+    export function useSteps(source: "first" | "second") {
+      const [next, setNext] = useState<"first" | "second">();
+      useEffect(() => setNext(resolveNext(source)), [source]);
+      const navigate = () => {
+        switch (next) {
+          case "first":
+            Navigation.navigate("first");
+            break;
+          case "second":
+            Navigation.navigate("second");
+            break;
+          default:
+            Navigation.navigate("done");
+            break;
+        }
+      };
+      return { navigate };
+    }
+  `, "fixture.ts");
+  assert.equal(findings.find(finding => finding.name === "next")?.action, "use-ref");
+});
+
+test("keeps returned switch cursors with extra reads or non-command branches conservative", () => {
+  for (const command of [
+    `switch (next) { case "first": Navigation.navigate(next); break; default: Navigation.navigate("done"); }`,
+    `switch (next) { case "first": return next; default: Navigation.navigate("done"); }`,
+    `switch (next) { case "first": render(next); break; default: Navigation.navigate("done"); }`,
+  ]) {
+    const finding = analyzeSource(`
+      import { useEffect, useState } from "react";
+      import { Navigation, resolveNext } from "./navigation";
+      export function useSteps(source: "first" | "second") {
+        const [next, setNext] = useState<"first" | "second">();
+        useEffect(() => setNext(resolveNext(source)), [source]);
+        const navigate = () => { ${command} };
+        return { navigate };
+      }
+    `, "fixture.ts").find(candidate => candidate.name === "next");
+    assert.notEqual(finding?.action, "use-ref", command);
+  }
+});
+
 test("does not replace state exposed through a returned getter callback", () => {
   const finding = analyzeSource(`
     import { useCallback, useState } from "react";

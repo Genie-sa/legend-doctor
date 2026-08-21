@@ -2,10 +2,12 @@ import ts from "typescript";
 
 import {
   bindingDeclarationCount,
+  callRootIdentifier,
   isEvaluationInert,
   isDeclarationName,
   isDirectJsxAttributeExpression,
   isNonValueIdentifier,
+  unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import type { StateCandidate } from "../analyze-source.js";
 import {
@@ -181,6 +183,115 @@ export function statePublishesReadOnlyGetter(state: StateCandidate): boolean {
       (callback.body.statements.length === 1 && ts.isReturnStatement(callback.body.statements[0]!));
   });
   return getterNames.some(name => localBindingReachesReturnedJsxValue(state.owner, name));
+}
+
+export function stateFeedsReturnedSwitchCommand(state: StateCandidate): boolean {
+  if (bindingDeclarationCount(state.owner, state.valueName) !== 1) return false;
+  const reads: ts.Identifier[] = [];
+  visit(state.owner.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === state.valueName &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      reads.push(node);
+    }
+  });
+  const read = reads.length === 1 ? reads[0]! : null;
+  const callback = read ? nearestNestedFunction(read, state.owner) : null;
+  if (
+    !read ||
+    !callback ||
+    !ts.isArrowFunction(callback) ||
+    !ts.isBlock(callback.body) ||
+    callback.body.statements.length !== 1 ||
+    callback.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+  ) {
+    return false;
+  }
+  const statement = callback.body.statements[0]!;
+  if (
+    !ts.isSwitchStatement(statement) ||
+    unwrapTransparentExpression(statement.expression) !== read ||
+    statement.caseBlock.clauses.length < 2 ||
+    !statement.caseBlock.clauses.some(ts.isDefaultClause) ||
+    !statement.caseBlock.clauses.every(clause => switchClauseIsCommandOnly(clause, state))
+  ) {
+    return false;
+  }
+  const name = localCallableName(callback);
+  if (!name || bindingDeclarationCount(state.owner, name) !== 1) return false;
+  const references: ts.Identifier[] = [];
+  visit(state.owner.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === name &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      references.push(node);
+    }
+  });
+  return references.length === 1 && isDirectReturnedObjectMember(references[0]!, state.owner);
+}
+
+function switchClauseIsCommandOnly(
+  clause: ts.CaseOrDefaultClause,
+  state: StateCandidate
+): boolean {
+  let commands = 0;
+  for (const statement of clause.statements) {
+    if (ts.isBreakStatement(statement)) continue;
+    if (!ts.isExpressionStatement(statement)) return false;
+    const expression = unwrapTransparentExpression(statement.expression);
+    if (!ts.isCallExpression(expression) || !callRootIsImported(expression, state)) return false;
+    commands += 1;
+  }
+  return commands === 1;
+}
+
+function callRootIsImported(call: ts.CallExpression, state: StateCandidate): boolean {
+  const root = callRootIdentifier(call.expression);
+  if (!root || bindingDeclarationCount(state.owner, root) !== 0) return false;
+  return state.call.getSourceFile().statements.some(statement => {
+    if (!ts.isImportDeclaration(statement)) return false;
+    const clause = statement.importClause;
+    if (clause?.name?.text === root) return true;
+    const bindings = clause?.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings)) return bindings.name.text === root;
+    return bindings !== undefined &&
+      ts.isNamedImports(bindings) &&
+      bindings.elements.some(element => element.name.text === root);
+  });
+}
+
+function localCallableName(callback: ts.ArrowFunction): string | null {
+  const declaration = callback.parent;
+  return ts.isVariableDeclaration(declaration) &&
+    declaration.initializer === callback &&
+    ts.isIdentifier(declaration.name)
+    ? declaration.name.text
+    : null;
+}
+
+function isDirectReturnedObjectMember(
+  reference: ts.Identifier,
+  owner: RuntimeFunctionLike
+): boolean {
+  const property = reference.parent;
+  if (
+    !ts.isShorthandPropertyAssignment(property) &&
+    !(ts.isPropertyAssignment(property) && property.initializer === reference)
+  ) {
+    return false;
+  }
+  const object = property.parent;
+  const returned = ts.isObjectLiteralExpression(object) ? object.parent : null;
+  return returned !== null &&
+    ts.isReturnStatement(returned) &&
+    returned.expression === object &&
+    nearestNestedFunction(reference, owner) === null;
 }
 
 function localStateReadCallableNames(state: StateCandidate): ReadonlySet<string> {

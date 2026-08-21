@@ -5687,7 +5687,7 @@ export const goldCases = [
   },
   ...([13, 14] as const).map(line => ({
     action: "use-ref" as const,
-    enforced: false,
+    ...(line === 14 ? { enforced: false as const } : {}),
     file: "useReviewDuplicatesNavigation.tsx",
     hook: "useState" as const,
     line,

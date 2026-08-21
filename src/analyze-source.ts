@@ -40,6 +40,7 @@ import {
   collectCommandOnlyCallableReads,
   functionalCounterUpdaterPreservesSnapshot,
   functionalUpdaterPrecedesSnapshotRead,
+  stateFeedsReturnedSwitchCommand,
   statePublishesReadOnlyGetter,
   stateReadCallbackEscapesThroughUnknownHook,
 } from "./rules/command-only-state.js";
@@ -2292,6 +2293,26 @@ function classifyState(
   );
   const preservesFunctionalSnapshot = hasFunctionalSnapshotHazard &&
     functionalCounterUpdaterPreservesSnapshot(state, usage, nearestMutationFunction);
+  if (
+    isCustomHookOwner(state.owner) &&
+    usage.localRenderReads === 0 &&
+    usage.effectReads === 0 &&
+    usage.deferredReads === 1 &&
+    usage.transportedOccurrences === 0 &&
+    usage.jsxTargets.size === 0 &&
+    usage.effectWrites > 0 &&
+    usage.setterCalls === usage.effectWrites &&
+    usage.setterReferences === usage.effectWrites &&
+    !usage.shadowed &&
+    !usage.escaped &&
+    stateFeedsReturnedSwitchCommand(state)
+  ) {
+    return {
+      action: "use-ref",
+      confidence: "probable",
+      message: `Replace effect-written command cursor \`${state.valueName}\` with a ref; preserve the effect and update its current value at the same statement positions, then read it only as the returned navigation switch discriminant.`,
+    };
+  }
   if (
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
