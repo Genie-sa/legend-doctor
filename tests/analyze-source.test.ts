@@ -3124,6 +3124,51 @@ test("keeps exact async status in React when the owner is already the status lea
   assert.match(finding?.message ?? "", /cohesive owner boundary/);
 });
 
+test("keeps delayed async status in its cohesive button owner", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function FilledButton({ onClick }: { onClick: () => Promise<void> }) {
+      const [loading, setLoading] = useState(false);
+      const click = async () => {
+        const pending = onClick();
+        const timer = window.setTimeout(() => setLoading(true), 50);
+        try {
+          await pending;
+        } finally {
+          clearTimeout(timer);
+          setLoading(false);
+        }
+      };
+      const status = loading ? "loading" : "idle";
+      return <button onClick={click}><span /><span /><span /><span>{status}</span></button>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "keep-state");
+  assert.match(finding?.message ?? "", /delays the pending transition/);
+});
+
+test("keeps unsafe delayed pending shapes under review", () => {
+  for (const [scheduled, cleanup] of [
+    [`() => { audit(); setLoading(true); }`, `clearTimeout(timer); setLoading(false);`],
+    [`() => setLoading(true)`, `setLoading(false);`],
+  ]) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      export function FilledButton({ onClick }: { onClick: () => Promise<void> }) {
+        const [loading, setLoading] = useState(false);
+        const click = async () => {
+          const pending = onClick();
+          const timer = window.setTimeout(${scheduled}, 50);
+          try { await pending; } finally { ${cleanup} }
+        };
+        const status = loading ? "loading" : "idle";
+        return <button onClick={click}><span /><span /><span /><span>{status}</span></button>;
+      }
+    `, "fixture.tsx");
+    assert.equal(finding?.action, "review-state");
+  }
+});
+
 test("isolates async status in a compact owner with an independent render cut", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,336 hooks across 220 source roots. The corpus currently contains
-774 manual hook labels, including 26 non-enforced opportunities, plus thirteen
+774 manual hook labels, including 25 non-enforced opportunities, plus thirteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -89,6 +89,8 @@ state-independent conditional branches, while a local subscriber wraps the exact
 boundary, error handling, and
 later close/reset writes stay unchanged; mutation-owned status, fanout, scheduled callbacks, and nonliteral writes
 remain review findings. Exact async status in a cohesive control emits `keep-state` because no smaller subscription exists.
+An exact delayed pending transition also emits `keep-state` in a cohesive control when its timer callback contains only
+the `true` write and the same async command clears that timer immediately before the `false` write in `finally`.
 React Hook Form's imported `handleSubmit` is a proven event adapter for this rule, including a uniquely resolved local
 helper beneath that submit command. Arbitrary functions called while building an `onSubmit` prop remain unknown because
 they may execute the callback during render. A Promise-chain command also abstains when later synchronous React state

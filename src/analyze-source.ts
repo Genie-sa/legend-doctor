@@ -2432,6 +2432,13 @@ function classifyState(
       message: `Replace \`${state.valueName}\` with \`useObservable\` at this owner and subscribe with \`useValue\` only in the transported leaf consumers.`,
     };
   }
+  if (isCohesiveDelayedPendingState(state, usage)) {
+    return {
+      action: "keep-state",
+      confidence: "certain",
+      message: `Keep \`${state.valueName}\` as React state; its cohesive button owner intentionally delays the pending transition and clears that timer before the final reset.`,
+    };
+  }
   if (usage.localRenderReads > 0) {
     if (isCustomHookOwner(state.owner) || jsxElementCount(state.owner) >= 5) {
       const boundary = isCustomHookOwner(state.owner)
@@ -2546,6 +2553,116 @@ function classifyState(
         ? legendCandidateMessage(state, usage, sourceComponents)
         : `Review React state \`${state.valueName}\`; local evidence does not prove a render-boundary improvement.`,
   };
+}
+
+function isCohesiveDelayedPendingState(
+  state: StateCandidate,
+  usage: StateUsage
+): boolean {
+  if (
+    state.call.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword ||
+    jsxElementCount(state.owner) > 5 ||
+    usage.localRenderReads === 0 ||
+    usage.localRenderReads !== usage.directRenderNodes.length ||
+    usage.effectReads !== 0 ||
+    usage.effectWrites !== 0 ||
+    usage.deferredReads !== 0 ||
+    usage.transportedOccurrences !== 0 ||
+    usage.setterCallNodes.length !== 2 ||
+    usage.setterReferences !== usage.setterCalls ||
+    usage.shadowed ||
+    usage.escaped
+  ) {
+    return false;
+  }
+  const pending = usage.setterCallNodes.find(call =>
+    call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword
+  );
+  const reset = usage.setterCallNodes.find(call =>
+    call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword
+  );
+  if (!pending || !reset) return false;
+
+  const scheduled = nearestNestedFunction(pending, state.owner);
+  if (!scheduled || !ts.isArrowFunction(scheduled) || !scheduledSetterIsExact(scheduled, pending)) {
+    return false;
+  }
+  const timerCall = scheduled.parent;
+  if (
+    !ts.isCallExpression(timerCall) ||
+    timerCall.arguments[0] !== scheduled ||
+    !isNamedCall(timerCall, "setTimeout")
+  ) {
+    return false;
+  }
+  const timerDeclaration = timerCall.parent;
+  if (
+    !ts.isVariableDeclaration(timerDeclaration) ||
+    timerDeclaration.initializer !== timerCall ||
+    !ts.isIdentifier(timerDeclaration.name) ||
+    !ts.isVariableDeclarationList(timerDeclaration.parent) ||
+    (timerDeclaration.parent.flags & ts.NodeFlags.Const) === 0
+  ) {
+    return false;
+  }
+  const command = nearestMutationFunction(timerCall, state.owner);
+  if (
+    command === state.owner ||
+    (!ts.isArrowFunction(command) &&
+      !ts.isFunctionDeclaration(command) &&
+      !ts.isFunctionExpression(command)) ||
+    !command.body ||
+    !ts.isBlock(command.body) ||
+    !command.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    !callbackIsEventRooted(command, state.owner, "", new Set())
+  ) {
+    return false;
+  }
+  const tryStatement = findAncestorUntil(reset, ts.isTryStatement, command);
+  const finalizer = tryStatement?.finallyBlock;
+  if (
+    !finalizer ||
+    finalizer.statements.length !== 2 ||
+    !ts.isExpressionStatement(finalizer.statements[0]!) ||
+    !ts.isExpressionStatement(finalizer.statements[1]!) ||
+    unwrapTransparentExpression(finalizer.statements[1]!.expression) !== reset
+  ) {
+    return false;
+  }
+  const clear = unwrapTransparentExpression(finalizer.statements[0]!.expression);
+  if (
+    !ts.isCallExpression(clear) ||
+    !isNamedCall(clear, "clearTimeout") ||
+    clear.arguments.length !== 1 ||
+    !ts.isIdentifier(clear.arguments[0]!) ||
+    clear.arguments[0]!.text !== timerDeclaration.name.text
+  ) {
+    return false;
+  }
+  let awaitsPending = false;
+  visitSkippingNestedRuntimeFunctions(tryStatement.tryBlock, node => {
+    if (ts.isAwaitExpression(node)) awaitsPending = true;
+  });
+  return awaitsPending;
+}
+
+function scheduledSetterIsExact(
+  callback: ts.ArrowFunction,
+  setter: ts.CallExpression
+): boolean {
+  if (!ts.isBlock(callback.body)) return unwrapTransparentExpression(callback.body) === setter;
+  const statement = callback.body.statements[0];
+  return callback.body.statements.length === 1 &&
+    !!statement &&
+    ts.isExpressionStatement(statement) &&
+    unwrapTransparentExpression(statement.expression) === setter;
+}
+
+function isNamedCall(call: ts.CallExpression, name: string): boolean {
+  const callee = call.expression;
+  return ts.isIdentifier(callee)
+    ? callee.text === name
+    : ts.isPropertyAccessExpression(callee) && callee.name.text === name;
 }
 
 function setterOwnedByValueCallSite(

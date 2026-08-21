@@ -2414,7 +2414,6 @@ export const goldCases = [
   },
   {
     action: "keep-state",
-    enforced: false,
     file: "components/FilledButton.tsx",
     hook: "useState",
     line: 56,
