@@ -109,6 +109,19 @@ alone is not proven equivalent.
 - `src/state-flow.ts`: bounded synchronous co-execution proof.
 - `evals/corpus.ts`: pinned targets, manual actions, known misses, and group contracts.
 
+### 0. Coupled co-write pairs (scouted, ready to implement)
+
+Corpus mining found twenty-four adjacent co-write pairs across six app roots (Tree Map 6, Formbricks 13, Outline 3,
+Tree Wallet 1, Legend Music 1): two useState members whose statement writes are always adjacent within the same
+mutation region, with equal call counts, plus solo bare setter transports only as direct value-transition props
+(`onChangeText={setName}`). Legend Music's audited Sidebar quartet (`tempPlaylistId`/`tempPlaylistName`,
+`editingPlaylistId`/`editingPlaylistName`) is the reference shape: migrate each pair as one owner-lifetime
+observable model written through batch or one model `.set`, subscribing at leaves. Candidate Tree Map
+`alerts-modal` `[isEditing, editingAlert]` and Outline `DropToImport` `[isImporting, uploadProgress]` provide the
+cross-app audit set. Implementation gates: adjacency proof both directions, equal counts, no functional updaters,
+no effect reads, primitives only; adversarial negatives for solo command writes, crossed updaters, and hook-owned
+pairs. Requires five audited positives across three roots before enforcement.
+
 ## Next work, in order
 
 ### 1. Expand Legend-native value
