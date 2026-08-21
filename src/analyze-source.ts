@@ -1815,6 +1815,21 @@ function classifyState(
   }
   const directCallSite = directUniqueReturnCallSite(usage, state.owner);
   const branchCallSite = directBranchReturnCallSite(usage, state.owner);
+  const branchSubtree = branchCallSite
+    ? ts.isJsxOpeningElement(branchCallSite.opening)
+      ? branchCallSite.opening.parent
+      : branchCallSite.opening
+    : null;
+  const descendantControlledCut = branchCallSite !== null &&
+    branchSubtree !== null &&
+    hasIndependentVisibilitySetterTransport &&
+    setterOwnedByValueCallSite(usage, state.owner) &&
+    hasIndependentRenderCutWitness(
+      branchCallSite.returned,
+      [branchSubtree],
+      localComponents,
+      sourceComponents
+    );
   const callbackLeaf = findLazyCallbackLeaf(
     state,
     usage,
@@ -1908,7 +1923,8 @@ function classifyState(
     usage.valueTransportSites.size === 1 &&
     usage.valueTargets.size === 1 &&
     (localComponents.has([...usage.valueTargets][0] ?? "") ||
-      sourceComponents.has([...usage.valueTargets][0] ?? "")) &&
+      sourceComponents.has([...usage.valueTargets][0] ?? "") ||
+      descendantControlledCut) &&
     branchCallSite !== null &&
     (directCallSite === null || usage.unstableTransport) &&
     !usage.repeatedValueTransport &&
@@ -1916,7 +1932,7 @@ function classifyState(
     hasSafeCommands &&
     hasDirectPrimitiveInitializer(state) &&
     !stateMayHoldCallable(state) &&
-    setterOwnedByValueTransitionCallSite(state, usage) &&
+    (setterOwnedByValueTransitionCallSite(state, usage) || descendantControlledCut) &&
     !usage.setterUsesPreviousValue &&
     !usage.shadowed &&
     !usage.escaped

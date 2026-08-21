@@ -4075,7 +4075,6 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
-    enforced: false,
     file: "dashboard-widget.tsx",
     hook: "useState",
     line: 34,

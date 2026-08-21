@@ -113,6 +113,25 @@ test("keeps call-site-owned state above a conditionally mounted controlled leaf"
   }
 });
 
+test("keeps controlled menu ownership above descendant close commands", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    import { Menu } from "third-party-ui";
+    export function Widget({ enabled, onEdit }: { enabled: boolean; onEdit: () => void }) {
+      const [open, setOpen] = useState(false);
+      return <main>
+        <Header /><Summary /><Search /><Filters /><Actions /><Help />
+        {enabled && <Menu open={open} onOpenChange={setOpen}>
+          <button onClick={() => { setOpen(false); onEdit(); }}>Edit</button>
+        </Menu>}
+        <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /keep ownership at this owner/i);
+});
+
 test("does not isolate call-site-owned state when it controls the child mount", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
