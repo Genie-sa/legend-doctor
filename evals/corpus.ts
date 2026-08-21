@@ -961,6 +961,12 @@ export const repositories = [
       },
       {
         effects: 1,
+        id: "formbricks-slack-wrapper",
+        root: "apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/slack/components/SlackWrapper.tsx",
+        states: 5,
+      },
+      {
+        effects: 1,
         id: "formbricks-notion-integration",
         root: "apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/notion/components/AddIntegrationModal.tsx",
         states: 5,
@@ -1827,6 +1833,15 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    file: "SlackWrapper.tsx",
+    hook: "useState",
+    line: 35,
+    name: "showReconnectButton",
+    rationale: "The Slack twin of the Google Sheets wrapper: one server-action write and a single resolved ManageIntegration leaf with a verified render-only contract.",
+    target: "formbricks-slack-wrapper",
+  },
+  {
+    action: "use-observable",
     file: "components/cockpit/activity-log.tsx",
     hook: "useState",
     line: 56,
@@ -2429,12 +2444,11 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "components/PublishLibrary.tsx",
     hook: "useState",
     line: 232,
     name: "isSubmitting",
-    rationale: "A broad form only renders submit status in one action-button leaf while command paths own every write.",
+    rationale: "A broad form only renders submit status in one action-button leaf while command paths own every write; the resolved DialogActionButton contract is verified as render-only.",
     target: "excalidraw",
   },
   {

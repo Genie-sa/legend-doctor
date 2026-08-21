@@ -2015,7 +2015,6 @@ function classifyState(
     usage.localRenderReads === 0 &&
     stableOwnerLevelCallSite(usage, state.owner) !== null &&
     hasSafeCommands &&
-    !hasCompanionWrites &&
     !hasReactiveMutationPath &&
     usage.effectReads === 0 &&
     usage.effectWrites === 0 &&

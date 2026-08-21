@@ -9,14 +9,14 @@ another rule.
 | --- | ---: |
 | Full app roots | 12 |
 | Full app hooks | 6,147 |
-| Scored targets | 219 |
-| Scored hooks | 2,330 |
-| Manual hook labels | 773 |
+| Scored targets | 220 |
+| Scored hooks | 2,336 |
+| Manual hook labels | 774 |
 | Known misses | 43 |
 | State groups | 13/13 |
 | Legend practices | 82/82 |
-| Actionable precision | 100% (371/371) |
-| Actionable recall | 90.7% (371/409) |
+| Actionable precision | 100% (373/373) |
+| Actionable recall | 91.0% (373/410) |
 | Tests | 461/461 |
 
 The full-app output currently contains 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`,
@@ -57,9 +57,13 @@ promotion then emits `use-observable` with a call-site subscriber wrapper that l
 mirror the audited call-site rules: stable owner-level call site, non-keyed, no repeated transport, event-safe literal
 setter commands, no companion writes or reactive mutation paths.
 
-The twelve-root delta is exactly one promotion: Formbricks `GoogleSheetWrapper.showReconnectButton`, now pinned as an
-enforced label (`formbricks-google-sheet-wrapper`). Expensify-style submit flags with companion writes remain
-candidates by doctrine; their future family needs a proven companion-write independence proof.
+Because the verified contract proves exclusive leaf readership (single target, zero local/effect/deferred reads),
+companion React writes cannot tear any observer: no subscriber reads the isolated value together with its siblings.
+The promotion therefore does not block on companion writes and still blocks reactive-mutation-owned pending flags.
+The twelve-root delta is exactly three promotions, each pinned as an enforced label: Formbricks
+`GoogleSheetWrapper.showReconnectButton`, Formbricks `SlackWrapper.showReconnectButton`, and Excalidraw
+`PublishLibrary.isSubmitting`. Expensify's layout-measurement pair stays review through the commit-sensitivity
+override, which correctly outranks the transport promotion.
 
 `src/rules/observable-reads.ts` now emits `split-use-value-leaves`: when every read of a broad
 `useValue(parent$)` binding resolves through static leaf paths but no single path is shared, the rule replaces one
