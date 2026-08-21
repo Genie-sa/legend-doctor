@@ -19,6 +19,7 @@ import {
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
+import { isImportedHookCall, type HookImports } from "../imports.js";
 import {
   expressionContainsJsx,
   isRenderGateReference,
@@ -57,7 +58,8 @@ export function analyzeKeyedSelections(
   states: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   safeCommandStates: ReadonlySet<StateCandidate>,
-  statesWithCompanionWrites: ReadonlySet<StateCandidate>
+  statesWithCompanionWrites: ReadonlySet<StateCandidate>,
+  imports: HookImports
 ): KeyedSelectionAnalysis {
   const settersByOwner = new Map<RuntimeFunctionLike, Set<string>>();
   for (const state of states) {
@@ -69,12 +71,14 @@ export function analyzeKeyedSelections(
   const collectionStates = new Set(
     states.filter(state =>
       safeCommandStates.has(state) &&
-      hasIndependentCollectionEventWrite(
-        state,
-        usageByState.get(state),
-        settersByOwner.get(state.owner) ?? new Set()
-      ) &&
-      isKeyedLeafCollectionState(state, usageByState.get(state))
+      ((hasIndependentCollectionEventWrite(
+          state,
+          usageByState.get(state),
+          settersByOwner.get(state.owner) ?? new Set()
+        ) &&
+        isKeyedLeafCollectionState(state, usageByState.get(state))) ||
+        (!statesWithCompanionWrites.has(state) &&
+          isImperativeRenderedCollectionState(state, usageByState.get(state), imports)))
     )
   );
   const scalarStates = new Set(
@@ -226,6 +230,308 @@ function isArrayState(call: ts.CallExpression): boolean {
   }
   const initial = call.arguments[0];
   return initial !== undefined && ts.isArrayLiteralExpression(unwrapTransparentExpression(initial));
+}
+
+function isImperativeRenderedCollectionState(
+  state: StateCandidate,
+  usage: StateUsage | undefined,
+  imports: HookImports
+): boolean {
+  if (
+    !usage ||
+    !state.setterName ||
+    !state.owner.body ||
+    (!isSetOrMapState(state.call) && !isNullableSetState(state.call)) ||
+    usage.localRenderReads === 0 ||
+    usage.localRenderReads !== usage.directRenderNodes.length ||
+    usage.effectReads > 0 ||
+    usage.effectWrites > 0 ||
+    usage.transportedOccurrences > 0 ||
+    usage.setterCalls === 0 ||
+    usage.setterReferences !== usage.setterCalls ||
+    usage.setterUsesPreviousValue ||
+    usage.shadowed ||
+    usage.escaped
+  ) {
+    return false;
+  }
+
+  const commandCallbacks = new Set<ts.ArrowFunction | ts.FunctionExpression>();
+  let renderedMembership = false;
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== state.valueName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node) ||
+      node.parent === state.call.parent
+    ) {
+      return;
+    }
+    const dependencyCallback = useCallbackDependencyOwner(node, state.owner, imports);
+    if (dependencyCallback) {
+      commandCallbacks.add(dependencyCallback);
+      return;
+    }
+    const property = ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node
+      ? node.parent
+      : null;
+    const membership = property?.name.text === "has" &&
+      ts.isCallExpression(property.parent) &&
+      property.parent.expression === property
+        ? property.parent
+        : null;
+    if (membership) {
+      if (!isStableRenderedMembership(membership, state.owner)) {
+        safe = false;
+        return;
+      }
+      renderedMembership = true;
+      return;
+    }
+    const callback = imperativeCommandCallback(node, state.owner, imports);
+    if (!callback) {
+      safe = false;
+      return;
+    }
+    commandCallbacks.add(callback);
+  });
+  for (const call of usage.setterCallNodes) {
+    const callback = imperativeCommandCallback(call, state.owner, imports);
+    if (!callback) return false;
+    commandCallbacks.add(callback);
+  }
+  if (!safe || !renderedMembership || commandCallbacks.size !== 1) return false;
+  const callback = [...commandCallbacks][0]!;
+  return callbackReadsStateWithDependency(callback, state) &&
+    callbackIsExposedOnlyByImperativeHandle(callback, state.owner, imports);
+}
+
+function useCallbackDependencyOwner(
+  node: ts.Identifier,
+  owner: RuntimeFunctionLike,
+  imports: HookImports
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  const call = findAncestorUntil(node, ts.isCallExpression, owner);
+  const callback = call?.arguments[0];
+  return call &&
+    call.arguments[1] &&
+    nodeWithin(node, call.arguments[1]) &&
+    isUnshadowedReactHookCall(call, owner, imports, "useCallback") &&
+    callback &&
+    (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))
+      ? callback
+      : null;
+}
+
+function isNullableSetState(call: ts.CallExpression): boolean {
+  const initial = call.arguments[0];
+  const type = call.typeArguments?.[0];
+  if (!initial || initial.kind !== ts.SyntaxKind.NullKeyword || !type || !ts.isUnionTypeNode(type)) {
+    return false;
+  }
+  const values = type.types.filter(member => member.kind !== ts.SyntaxKind.NullKeyword);
+  return values.length === 1 &&
+    ts.isTypeReferenceNode(values[0]!) &&
+    values[0]!.typeName.getText() === "Set";
+}
+
+function imperativeCommandCallback(
+  node: ts.Node,
+  owner: RuntimeFunctionLike,
+  imports: HookImports
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  for (let current: ts.Node | undefined = node.parent; current && current !== owner; current = current.parent) {
+    if (!ts.isArrowFunction(current) && !ts.isFunctionExpression(current)) continue;
+    const call: ts.Node = current.parent;
+    if (
+      ts.isCallExpression(call) &&
+      call.arguments[0] === current &&
+      isUnshadowedReactHookCall(call, owner, imports, "useCallback") &&
+      ts.isVariableDeclaration(call.parent) &&
+      ts.isIdentifier(call.parent.name)
+    ) {
+      return current;
+    }
+  }
+  return null;
+}
+
+function callbackReadsStateWithDependency(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  state: StateCandidate
+): boolean {
+  const call = callback.parent;
+  const dependencies = ts.isCallExpression(call) ? call.arguments[1] : undefined;
+  if (!dependencies || !ts.isArrayLiteralExpression(dependencies)) return false;
+  let readsState = false;
+  visit(callback.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === state.valueName &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      readsState = true;
+    }
+  });
+  return !readsState || dependencies.elements.some(
+    element => ts.isIdentifier(element) && element.text === state.valueName
+  );
+}
+
+function callbackIsExposedOnlyByImperativeHandle(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  owner: RuntimeFunctionLike,
+  imports: HookImports
+): boolean {
+  const hookCall = callback.parent;
+  const declaration = ts.isCallExpression(hookCall) && ts.isVariableDeclaration(hookCall.parent)
+    ? hookCall.parent
+    : null;
+  if (!declaration || !ts.isIdentifier(declaration.name)) return false;
+  const name = declaration.name.text;
+  if (bindingDeclarationCount(owner, name) !== 1) return false;
+
+  let exposed = false;
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      node === declaration.name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const imperativeCall = findAncestorUntil(node, ts.isCallExpression, owner);
+    if (
+      !imperativeCall ||
+      !isUnshadowedReactHookCall(imperativeCall, owner, imports, "useImperativeHandle")
+    ) {
+      safe = false;
+      return;
+    }
+    if (imperativeCall.arguments[1] && nodeWithin(node, imperativeCall.arguments[1])) {
+      exposed = imperativeFactoryReturnsBinding(imperativeCall.arguments[1]!, node);
+      if (!exposed) safe = false;
+      return;
+    }
+    if (imperativeCall.arguments[2] && nodeWithin(node, imperativeCall.arguments[2])) return;
+    safe = false;
+  });
+  return safe && exposed;
+}
+
+function isUnshadowedReactHookCall(
+  call: ts.CallExpression,
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+  hook: "useCallback" | "useImperativeHandle"
+): boolean {
+  const names = hook === "useCallback" ? imports.useCallback : imports.useImperativeHandle;
+  if (!isImportedHookCall(call, names, imports.reactNamespaces, hook)) return false;
+  const root = ts.isIdentifier(call.expression)
+    ? call.expression
+    : ts.isPropertyAccessExpression(call.expression) && ts.isIdentifier(call.expression.expression)
+      ? call.expression.expression
+      : null;
+  return !!root && bindingDeclarationCount(owner, root.text) === 0;
+}
+
+function imperativeFactoryReturnsBinding(factory: ts.Expression, reference: ts.Identifier): boolean {
+  const value = unwrapTransparentExpression(factory);
+  const object = (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) && !ts.isBlock(value.body)
+    ? unwrapTransparentExpression(value.body)
+    : null;
+  return !!object &&
+    ts.isObjectLiteralExpression(object) &&
+    object.properties.some(property =>
+      (ts.isShorthandPropertyAssignment(property) && property.name === reference) ||
+      (ts.isPropertyAssignment(property) && unwrapTransparentExpression(property.initializer) === reference)
+    );
+}
+
+function isStableRenderedMembership(
+  membership: ts.CallExpression,
+  owner: RuntimeFunctionLike
+): boolean {
+  const callback = renderedListCallback(membership, owner);
+  if (
+    !callback ||
+    !membershipUsesCallbackKey(membership, callback) ||
+    membershipControlsRepeatedMount(membership, owner)
+  ) {
+    return false;
+  }
+  const declaration = callback.parent;
+  const callbackName = ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)
+    ? declaration.name.text
+    : ts.isCallExpression(declaration) &&
+        ts.isVariableDeclaration(declaration.parent) &&
+        ts.isIdentifier(declaration.parent.name)
+      ? declaration.parent.name.text
+      : null;
+  if (!callbackName) return false;
+
+  const openings = new Set<ts.JsxOpeningLikeElement>();
+  let callbackConfined = true;
+  visit(owner.body, node => {
+    if (
+      !callbackConfined ||
+      !ts.isIdentifier(node) ||
+      node.text !== callbackName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const expression = node.parent;
+    const attribute = ts.isJsxExpression(expression) ? expression.parent : null;
+    if (
+      attribute &&
+      ts.isJsxAttribute(attribute) &&
+      attribute.name.getText() === "renderItem" &&
+      ts.isJsxExpression(expression) &&
+      expression.expression === node &&
+      ts.isJsxAttributes(attribute.parent)
+    ) {
+      openings.add(attribute.parent.parent);
+      return;
+    }
+    callbackConfined = false;
+  });
+  if (!callbackConfined || openings.size !== 1) return false;
+  const opening = [...openings][0]!;
+  const keyExtractor = opening.attributes.properties.find(
+    property => ts.isJsxAttribute(property) && property.name.getText() === "keyExtractor"
+  );
+  if (!keyExtractor || !ts.isJsxAttribute(keyExtractor)) return false;
+  const initializer = keyExtractor.initializer;
+  const expression = initializer && ts.isJsxExpression(initializer) ? initializer.expression : null;
+  if (!expression) return false;
+  const extractor = unwrapTransparentExpression(expression);
+  if (
+    (!ts.isArrowFunction(extractor) && !ts.isFunctionExpression(extractor)) ||
+    extractor.parameters.length === 0 ||
+    !ts.isIdentifier(extractor.parameters[0]!.name)
+  ) {
+    return false;
+  }
+  if (ts.isBlock(extractor.body)) return false;
+  let root = unwrapTransparentExpression(extractor.body);
+  let propertyDepth = 0;
+  while (ts.isPropertyAccessExpression(root)) {
+    propertyDepth += 1;
+    root = unwrapTransparentExpression(root.expression);
+  }
+  return propertyDepth > 0 &&
+    ts.isIdentifier(root) &&
+    root.text === extractor.parameters[0]!.name.text;
 }
 
 function localSetAliasForArrayState(state: StateCandidate): ts.VariableDeclaration | null {

@@ -13,6 +13,7 @@ export interface HookImports {
   useCallback: ReadonlySet<string>;
   useEffect: ReadonlySet<string>;
   useInsertionEffect: ReadonlySet<string>;
+  useImperativeHandle: ReadonlySet<string>;
   useLayoutEffect: ReadonlySet<string>;
   useObservable: ReadonlySet<string>;
   useObserveEffect: ReadonlySet<string>;
@@ -38,6 +39,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   const useCallback = new Set<string>();
   const useEffect = new Set<string>();
   const useInsertionEffect = new Set<string>();
+  const useImperativeHandle = new Set<string>();
   const useLayoutEffect = new Set<string>();
   const useObservable = new Set<string>();
   const useObserveEffect = new Set<string>();
@@ -93,6 +95,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
         if (importedName === "useCallback") useCallback.add(localName);
         if (importedName === "useEffect") useEffect.add(localName);
         if (importedName === "useInsertionEffect") useInsertionEffect.add(localName);
+        if (importedName === "useImperativeHandle") useImperativeHandle.add(localName);
         if (importedName === "useLayoutEffect") useLayoutEffect.add(localName);
         if (importedName === "useRef") useRef.add(localName);
         if (importedName === "useTransition") useTransition.add(localName);
@@ -129,6 +132,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
     useCallback,
     useEffect,
     useInsertionEffect,
+    useImperativeHandle,
     useLayoutEffect,
     useObservable,
     useObserveEffect,
@@ -143,7 +147,7 @@ export function isImportedHookCall(
   call: ts.CallExpression,
   localNames: ReadonlySet<string>,
   namespaceNames: ReadonlySet<string>,
-  canonicalName: "useCallback" | "useEffect" | "useRef" | "useState" | "useValue"
+  canonicalName: "useCallback" | "useEffect" | "useImperativeHandle" | "useRef" | "useState" | "useValue"
 ): boolean {
   const expression = call.expression;
   if (ts.isIdentifier(expression)) {

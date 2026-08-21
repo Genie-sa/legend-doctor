@@ -345,7 +345,8 @@ function analyzeParsedSource(
     states,
     usageByState,
     safeCommandStates,
-    statesWithCompanionWrites
+    statesWithCompanionWrites,
+    imports
   );
   const observableClusters = findObservableStateClusters(
     states,
@@ -1771,7 +1772,7 @@ function classifyState(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace keyed collection state \`${state.valueName}\` with a component-lifetime observable collection; extract the repeated row and subscribe there with a per-row \`useValue\` membership selector, while summary controls subscribe separately and commands read without subscribing.`,
+      message: `Replace keyed collection state \`${state.valueName}\` with a component-lifetime observable collection; extract the repeated row and subscribe there with a per-row \`useValue\` membership selector, keep any aggregate consumers in separate leaves, and read commands without subscribing.`,
     };
   }
   if (isKeyedLeafScalar) {

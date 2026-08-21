@@ -5747,7 +5747,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "BaseSelectionList.tsx",
     hook: "useState",
     line: 121,
