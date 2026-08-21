@@ -122,6 +122,15 @@ cross-app audit set. Implementation gates: adjacency proof both directions, equa
 no effect reads, primitives only; adversarial negatives for solo command writes, crossed updaters, and hook-owned
 pairs. Requires five audited positives across three roots before enforcement.
 
+A prototype of this rule (adjacency plus equal counts, latch initializers, non-hook owners) fired on forty members
+across seven roots in full-app scans, including hook-owned selector pairs (`useMultiSelect`, `usePersonalDetailSearchSelector`),
+Context-provider states, layout-measurement height chains, and an address-form reset chain. None contradicted a
+pinned label - precision stayed 100% - but none was audited either, so the emission was withdrawn and the analyzer
+restored to the accepted baseline. Enforcement requires proving each member's consumers: local render reads plus
+value-transition transports only, resolved leaves through the child-contract lane, and exclusion of shapes already
+owned by the effect-drafts family. The prototype result bounds the family at roughly twenty audited pairs if all
+survive consumer proofs.
+
 ## Next work, in order
 
 ### 1. Expand Legend-native value

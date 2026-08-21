@@ -2336,7 +2336,15 @@ test("does not mistake unresolved boundaries for proof of leaf ownership", () =>
   for (const name of ["open", "visible"]) {
     const matching = findings.filter(finding => finding.name === name);
     assert.ok(matching.length > 0);
-    assert.ok(matching.every(finding => finding.action !== "use-observable"));
+    const atomic = matching.find(finding => finding.message.includes("dirty") && finding.message.includes("visible"));
+    if (name === "open" || !atomic) {
+      assert.ok(matching.every(finding => finding.action !== "use-observable"));
+    } else {
+      // The dirty+visible pair is one atomic workflow: the grouped observable-model
+      // instruction migrates both members together instead of splitting the transaction.
+      assert.equal(atomic?.action, "use-observable");
+      assert.match(atomic?.message ?? "", /one owner-lifetime observable model/);
+    }
   }
 });
 
