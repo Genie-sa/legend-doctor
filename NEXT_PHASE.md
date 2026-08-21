@@ -25,6 +25,28 @@ had additionally demoted twenty owners to `keep-state`; the demotion now emits t
 `review-state` findings instead, so the twelve-root delta against `69c38f4` is exactly twenty `keep-state` →
 `review-state` restorations (hoalu five, Legend Music nine, Memoria src six) with zero Legend practice action changes.
 
+## Release-integrity audit (this phase)
+
+The analyzer was audited against its own reliability contract across every pinned repository:
+
+| Measure | Result |
+| --- | ---: |
+| Files inventoried | 45,216 |
+| Parser diagnostics | 0 |
+| Crashes or unaccounted files | 0 |
+| Unsupported stage outcomes | 0 |
+| Uncertain bounded-flow outcomes | 179 of 45,216 (0.4%), all `lowering:bounded-flow-uncertain`, reported not guessed |
+| Determinism | byte-identical repeated full-app runs |
+| Non-Legend applications | zero practice findings in Tree Map, Tree Wallet, Excalidraw, Expensify, Formbricks, and Outline |
+
+The 43 known misses were re-inventoried against emitted output. Each one needs a proof family the local analysis
+deliberately does not fake: child prop contracts and lifetime resets (dialog, delete, and submit flags), cross-file
+hook summaries (`useWriterName`), keyed selection models with bounded summaries, stable-listener ref contracts
+(Expensify ImageView family), custom-hook command contracts, timer-deferred async status cohesion
+(`FilledButton.isLoading` requires tracing through a reassigned projection), and four distinct effect-keep shapes.
+No family currently has five equivalent positives across three app roots, so none may reopen under the gate. Forcing
+these labels would trade the 100% actionable precision for score; they remain explicit non-enforced opportunities.
+
 ## What this phase changed
 
 `src/rules/observable-reads.ts` now emits `split-use-value-leaves`: when every read of a broad
