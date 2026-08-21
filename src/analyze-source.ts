@@ -467,7 +467,8 @@ function analyzeParsedSource(
           siblingCut ?? null,
           branchUnmountMoves.get(state) ?? null,
           childContracts,
-          deferredCallbackHooks
+          deferredCallbackHooks,
+          reactCommit.eventTransitionCallbacks.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS
         );
     const commitSensitiveOverride = commitSensitive &&
       baseClassification.action !== "review-state" &&
@@ -616,6 +617,8 @@ function resolveEffectCallback(
 }
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
+const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
+const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
 const EMPTY_STATE_CANDIDATES: ReadonlyMap<string, StateCandidate> = new Map();
 const EMPTY_STATE_USAGES: ReadonlyMap<string, StateUsage> = new Map();
 
@@ -2002,7 +2005,8 @@ function classifyState(
   siblingRenderCut: SiblingRenderCut | null,
   branchUnmountMove: BranchUnmountMove | null,
   childContracts: ChildContractResolver | null,
-  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
+  eventTransitionCallbacks: ReadonlySet<RuntimeFunctionLike>
 ): ClassifiedState {
   if (nonProductionHarness) {
     return {
@@ -2247,7 +2251,11 @@ function classifyState(
     !usage.escaped &&
     (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
     hasSafeCommands &&
-    hasOnlyEventCommandReads(state) &&
+    hasOnlyEventCommandReads(
+      state,
+      EMPTY_NODES,
+      eventTransitionCallbacks
+    ) &&
     controlledLeafRenderCut(state, usage, localComponents, sourceComponents);
   if (controlledLeafCut) {
     const target = [...usage.valueTargets][0] ?? "the controlled child";
@@ -2280,7 +2288,11 @@ function classifyState(
     !usage.escaped &&
     (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
     hasSafeCommands &&
-    hasOnlyEventCommandReads(state, new Set(usage.directRenderNodes))
+    hasOnlyEventCommandReads(
+      state,
+      new Set(usage.directRenderNodes),
+      eventTransitionCallbacks
+    )
       ? controlledLeafProjectionCut(
           state,
           usage,
@@ -2334,8 +2346,7 @@ function classifyState(
     !statePublishesReadOnlyGetter(state) &&
     !usage.shadowed &&
     !usage.escaped &&
-    ((usage.eventReads === 0 && usage.effectWrites === 0) ||
-      hasOnlyEventCommandReads(state))
+    ((usage.eventReads === 0 && usage.effectWrites === 0) || hasOnlyEventCommandReads(state))
   ) {
     return {
       action: "use-ref",

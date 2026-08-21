@@ -7,13 +7,13 @@
 | App roots | 12 |
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
-| Manual hook labels | 774 |
-| Known misses | 20 |
+| Manual hook labels | 778 |
+| Known misses | 19 |
 | State groups | 14/14 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (390/390) |
-| Actionable recall | 95.1% (390/410) |
-| Unit tests | 485/485 |
+| Actionable precision | 100% (395/395) |
+| Actionable recall | 95.4% (395/414) |
+| Unit tests | 487/487 |
 
 The latest phase converts five Expensify ImageView pointer snapshots from `review-state` to one grouped `use-ref`
 instruction. Against commit `3205076`, the exact 220-target delta is:
@@ -39,13 +39,26 @@ The emitted instruction keeps the existing listener effects and cleanup. It chan
 reads and writes through `.current`, and removes only those values from callback dependencies. Missing cleanup, direct
 effect execution, async listener work, and render-coupled co-writes are hard negatives.
 
+## Named transition command proof
+
+Against commit `4d3854b`, the exact 220-target delta is five Tree Map controlled fields in
+`landowner-create-modal.tsx`: `phone`, `logoUrl`, `planterName`, `planterEmail`, and `planterPhone` changed from
+`review-state` to `use-observable`. The other 219 targets have zero hook action changes, and all 220 targets have zero
+Legend practice action changes.
+
+The proof resolves a direct callback passed to imported React `startTransition` or a setter from `useTransition`. Named
+callbacks must be immutable local functions, and the exact transition call must be reached from a proven event command.
+State setters inside the callback remain transition-sensitive. A controlled field written outside it can isolate, with
+one command-entry observable snapshot preserving the render snapshot used by lexically nested deferred work. Mutable
+callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
+
 ## Remaining labeled opportunities
 
-Twenty opportunities remain non-enforced:
+Nineteen opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- thirteen observable leaf migrations covering keyed selection, repeated rows, coupled playlist edits, timed feedback,
-  one avatar callback, and three download-failure callbacks;
+- twelve observable leaf migrations covering keyed selection, repeated rows, coupled playlist edits, timed feedback, and
+  three download-failure callbacks;
 - one state move into a throttled statistics leaf whose current child mount lifetime must remain stable;
 - five ref migrations behind async confirmation, form callback, or status-listener contracts.
 

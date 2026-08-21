@@ -864,12 +864,22 @@ test("does not isolate state whose update is scheduled by a React transition", (
         {visible && <Leaf />}
       </main>;
     }
+    export function MutableNamedTransition() {
+      const [visible, setVisible] = useState(false);
+      let update = () => setVisible(true);
+      if (window.disabled) update = () => {};
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => schedule(update)}>Open</button>
+        {visible && <Leaf />}
+      </main>;
+    }
   `, "fixture.tsx");
   const visible = findings.filter(finding => finding.name === "visible");
   assert.deepEqual(
     visible.map(finding => finding.action),
     [
       "use-observable",
+      "review-state",
       "review-state",
       "review-state",
       "review-state",

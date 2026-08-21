@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,336 hooks across 220 source roots. The corpus currently contains
-774 manual hook labels, including 20 non-enforced opportunities, plus fourteen
+778 manual hook labels, including 19 non-enforced opportunities, plus fourteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -168,6 +168,12 @@ Call-site-owned state below alternate returns or state-independent conditional m
 the owner, because moving React state down would change reset lifetime. Direct `setValue`-style child APIs count as value
 transitions; arbitrary callbacks, shared validation projections, repeated children, and unresolved normalization remain
 review findings.
+React transition sensitivity is state-specific when an imported `startTransition` or `useTransition` command receives an
+inline callback or one immutable local function directly. A named callback is an event-command root only when the exact
+transition call is itself event-rooted. Controlled values written outside that callback may isolate; values written inside
+it remain React state. Reads in nested functions lexically owned by that command require one non-tracking snapshot at
+command entry. Mutable bindings, callback aliases, local helper chains, effect-rooted transitions, and unproven call sites
+remain review findings.
 Dependency-driven browser-storage effects stay in React when their bodies contain only guards, storage mutations, and
 bounded `JSON`/`Object`/`Array` serialization helpers. Hydration reads, React setters, timers, async work, cleanup,
 shadowed globals, and arbitrary helpers do not enter this rule.

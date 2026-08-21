@@ -15,12 +15,14 @@ import {
 import type { HookImports } from "../imports.js";
 import {
   bindingContainsName,
+  callbackIsEventRooted,
   localFunctionBinding,
   uniqueVariableDeclaration,
 } from "./state-proofs.js";
 
 export interface ReactCommitContext {
   directTransitionCallbacks: ReadonlyMap<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>;
+  eventTransitionCallbacks: ReadonlyMap<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>;
   effectCalls: readonly ts.CallExpression[];
   lifecycleRegions: ReadonlySet<ts.Node>;
   sensitiveOwners: ReadonlySet<RuntimeFunctionLike>;
@@ -69,18 +71,32 @@ export function collectReactCommitContext(
     }
   });
   const directTransitionCallbacks = new Map<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>();
+  const eventTransitionCallbacks = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
   for (const owner of transitionOwners) {
     if (nonTransitionSensitiveOwners.has(owner)) continue;
-    const callbacks = directInlineTransitionCallbacks(owner, imports);
-    if (callbacks) directTransitionCallbacks.set(owner, callbacks);
+    const transitions = directTransitionContext(owner, imports);
+    if (!transitions) continue;
+    directTransitionCallbacks.set(owner, transitions.callbacks);
+    eventTransitionCallbacks.set(owner, transitions.eventCallbacks);
   }
-  return { directTransitionCallbacks, effectCalls, lifecycleRegions, sensitiveOwners };
+  return {
+    directTransitionCallbacks,
+    effectCalls,
+    eventTransitionCallbacks,
+    lifecycleRegions,
+    sensitiveOwners,
+  };
 }
 
-function directInlineTransitionCallbacks(
+interface DirectTransitionContext {
+  callbacks: readonly RuntimeFunctionLike[];
+  eventCallbacks: ReadonlySet<RuntimeFunctionLike>;
+}
+
+function directTransitionContext(
   owner: RuntimeFunctionLike,
   imports: HookImports
-): readonly RuntimeFunctionLike[] | null {
+): DirectTransitionContext | null {
   if (!owner.body) return null;
   const bindings = new Set<string>();
   visitSkippingNestedRuntimeFunctions(owner.body, node => {
@@ -99,6 +115,7 @@ function directInlineTransitionCallbacks(
   });
 
   const callbacks: RuntimeFunctionLike[] = [];
+  const eventCallbacks = new Set<RuntimeFunctionLike>();
   let safe = true;
   visit(owner.body, node => {
     if (!safe || !ts.isCallExpression(node)) return;
@@ -110,8 +127,10 @@ function directInlineTransitionCallbacks(
       "startTransition"
     );
     if (!directHookTransition && !directStaticTransition) return;
-    const callback = node.arguments[0];
-    if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
+    const callback = node.arguments[0]
+      ? directTransitionCallback(node.arguments[0]!, owner)
+      : null;
+    if (!callback) {
       safe = false;
       return;
     }
@@ -127,6 +146,17 @@ function directInlineTransitionCallbacks(
       }
     });
     callbacks.push(callback);
+    const caller = findAncestor(node, isRuntimeFunctionLike);
+    if (
+      caller &&
+      caller !== owner &&
+      (ts.isArrowFunction(caller) ||
+        ts.isFunctionDeclaration(caller) ||
+        ts.isFunctionExpression(caller)) &&
+      callbackIsEventRooted(caller, owner, "", new Set())
+    ) {
+      eventCallbacks.add(callback);
+    }
   });
 
   if (!safe) return null;
@@ -160,7 +190,44 @@ function directInlineTransitionCallbacks(
     if (ts.isArrayLiteralExpression(node.parent)) return;
     safe = false;
   });
-  return safe ? callbacks : null;
+  return safe ? { callbacks, eventCallbacks } : null;
+}
+
+function directTransitionCallback(
+  expression: ts.Expression,
+  owner: RuntimeFunctionLike
+): RuntimeFunctionLike | null {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) return value;
+  if (!ts.isIdentifier(value)) return null;
+
+  const declaration = uniqueVariableDeclaration(owner, value.text);
+  if (
+    !declaration?.initializer ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0
+  ) {
+    return null;
+  }
+  const callback = unwrapTransparentExpression(declaration.initializer);
+  if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return null;
+
+  let safe = true;
+  let references = 0;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== value.text ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    references += 1;
+    if (node !== value) safe = false;
+  });
+  return safe && references === 1 ? callback : null;
 }
 
 function resolveLifecycleCallback(

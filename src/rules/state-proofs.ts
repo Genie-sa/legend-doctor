@@ -9,6 +9,7 @@ import {
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import {
+  findAncestor,
   findAncestorUntil,
   isRuntimeFunctionLike,
   nearestNestedFunction,
@@ -26,6 +27,7 @@ import {
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
+const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
 
 export { stateMayHoldCallable, stateTypeMayBeCallable } from "./callable-state.js";
 
@@ -166,7 +168,8 @@ export function isDirectPrimitiveExpression(expression: ts.Expression): boolean 
 
 export function hasOnlyEventCommandReads(
   state: StateCandidate,
-  ignored: ReadonlySet<ts.Node> = EMPTY_NODES
+  ignored: ReadonlySet<ts.Node> = EMPTY_NODES,
+  additionalRoots: ReadonlySet<RuntimeFunctionLike> = EMPTY_RUNTIME_FUNCTIONS
 ): boolean {
   let safe = true;
   visit(state.owner.body, node => {
@@ -183,11 +186,12 @@ export function hasOnlyEventCommandReads(
     }
     if (findAncestorUntil(node, isJsxNode, state.owner)) return;
     const callback = nearestNestedFunction(node, state.owner);
-    if (
-      callback &&
-      (ts.isArrowFunction(callback) || ts.isFunctionDeclaration(callback) || ts.isFunctionExpression(callback))
-    ) {
-      safe = callbackIsEventRooted(callback, state.owner, state.valueName, new Set());
+    if (callback) {
+      safe = callbackOrAncestorIsEventRooted(
+        callback,
+        state,
+        additionalRoots
+      );
       return;
     }
     if (isHookDependencyReference(node, new Set(["useCallback"]))) {
@@ -195,12 +199,48 @@ export function hasOnlyEventCommandReads(
       const candidate = call?.arguments[0];
       safe = !!candidate &&
         (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
-        callbackIsEventRooted(candidate, state.owner, state.valueName, new Set());
+        callbackIsEventRooted(
+          candidate,
+          state.owner,
+          state.valueName,
+          new Set(),
+          root => additionalRoots.has(root)
+        );
       return;
     }
     safe = false;
   });
   return safe;
+}
+
+function callbackOrAncestorIsEventRooted(
+  callback: RuntimeFunctionLike,
+  state: StateCandidate,
+  additionalRoots: ReadonlySet<RuntimeFunctionLike>
+): boolean {
+  for (
+    let candidate: ts.Node | undefined = callback;
+    candidate && candidate !== state.owner;
+    candidate = additionalRoots.size > 0
+      ? findAncestor(candidate, isRuntimeFunctionLike) ?? undefined
+      : undefined
+  ) {
+    if (
+      (ts.isArrowFunction(candidate) ||
+        ts.isFunctionDeclaration(candidate) ||
+        ts.isFunctionExpression(candidate)) &&
+      callbackIsEventRooted(
+        candidate,
+        state.owner,
+        state.valueName,
+        new Set(),
+        root => additionalRoots.has(root)
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function callbackIsEventRooted(

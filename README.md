@@ -41,11 +41,11 @@ Measured on pinned real applications:
 | App roots | 12 |
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
-| Manual labels | 774 |
-| Known misses | 20 |
-| Unit tests | 485/485 |
-| Actionable precision | 100% (390/390) |
-| Actionable recall | 95.1% (390/410) |
+| Manual labels | 778 |
+| Known misses | 19 |
+| Unit tests | 487/487 |
+| Actionable precision | 100% (395/395) |
+| Actionable recall | 95.4% (395/414) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -184,6 +184,12 @@ function DeleteDialogState({ deleteTarget$ }) {
 Lazy initializers stay one-shot. The tool does not turn `useState(() => initialValue)` into
 `useObservable(() => initialValue)`, because Legend treats that function as a computed value. It keeps the observable at
 the proven owner lifetime, creates it once from the existing initializer, and subscribes only in the nested leaf.
+
+A direct React transition may receive one immutable named callback without making every owner state transition-sensitive.
+The tool follows that callback only when the exact transition call is event-rooted and the callback does not delegate to
+another local helper. A controlled leaf updated outside the transition can then move to an observable. Its command reads
+are snapshotted once at callback entry so nested deferred work keeps React's original render-snapshot semantics. Mutable
+callbacks, effect-rooted transitions, and state setters inside the transition stay under review.
 
 ### 2. Effect draft → one atomic model
 
