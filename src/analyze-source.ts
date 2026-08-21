@@ -248,7 +248,7 @@ function analyzeParsedSource(
   const localComponents = collectLocalComponents(sourceFile);
   const states: StateCandidate[] = [];
   const unmatchedStateCalls: ts.CallExpression[] = [];
-  const effects = reactCommit.effectCalls.map(effectCandidate);
+  const effects = reactCommit.effectCalls.map(call => effectCandidate(call, imports));
   const useValueBindingsByOwner = collectUseValueBindings(sourceFile, imports);
   const observableSubscriptionsByOwner = collectObservableSubscriptionCounts(sourceFile, imports);
   const useObservableBindingsByOwner = collectStableUseObservableBindings(sourceFile, imports);
@@ -541,16 +541,55 @@ function stateCandidate(call: ts.CallExpression): StateCandidate | null {
   };
 }
 
-function effectCandidate(call: ts.CallExpression): EffectCandidate {
+function effectCandidate(call: ts.CallExpression, imports: HookImports): EffectCandidate {
   const callbackArg = call.arguments[0];
   const dependenciesArg = call.arguments[1];
+  const owner = findAncestor(call, isRuntimeFunctionLike);
   return {
     call,
-    callback:
-      callbackArg && (ts.isArrowFunction(callbackArg) || ts.isFunctionExpression(callbackArg)) ? callbackArg : null,
+    callback: callbackArg
+      ? resolveEffectCallback(callbackArg, owner, imports)
+      : null,
     dependencies: dependenciesArg && ts.isArrayLiteralExpression(dependenciesArg) ? dependenciesArg : null,
-    owner: findAncestor(call, isRuntimeFunctionLike),
+    owner,
   };
+}
+
+function resolveEffectCallback(
+  expression: ts.Expression,
+  owner: RuntimeFunctionLike | null,
+  imports: HookImports
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  const callback = unwrapTransparentExpression(expression);
+  if (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) return callback;
+  if (!owner?.body || !ts.isIdentifier(callback)) return null;
+
+  const declaration = uniqueVariableDeclaration(owner.body, callback.text);
+  if (
+    !declaration?.initializer ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    bindingDeclarationCount(owner, callback.text) !== 1
+  ) {
+    return null;
+  }
+  const initializer = unwrapTransparentExpression(declaration.initializer);
+  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) return initializer;
+  if (
+    !ts.isCallExpression(initializer) ||
+    !isImportedHookCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback") ||
+    initializer.arguments.length !== 2
+  ) {
+    return null;
+  }
+  const hookRoot = ts.isIdentifier(initializer.expression)
+    ? initializer.expression
+    : ts.isPropertyAccessExpression(initializer.expression) && ts.isIdentifier(initializer.expression.expression)
+      ? initializer.expression.expression
+      : null;
+  if (!hookRoot || bindingDeclarationCount(owner, hookRoot.text) !== 0) return null;
+  const inner = initializer.arguments[0];
+  return inner && (ts.isArrowFunction(inner) || ts.isFunctionExpression(inner)) ? inner : null;
 }
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();

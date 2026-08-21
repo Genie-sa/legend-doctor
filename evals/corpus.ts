@@ -5532,7 +5532,6 @@ export const goldCases = [
   },
   {
     action: "keep-effect",
-    enforced: false,
     file: "ReportLifecycleHandler.tsx",
     hook: "useEffect",
     line: 68,
@@ -5542,7 +5541,6 @@ export const goldCases = [
   },
   {
     action: "keep-effect",
-    enforced: false,
     file: "Grid.tsx",
     hook: "useEffect",
     line: 27,

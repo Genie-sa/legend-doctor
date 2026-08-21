@@ -1,6 +1,6 @@
 # Next Phase
 
-Start here after the command-only state safety closeout. The current phase is complete; preserve its gates before adding
+Start here after the local effect-callback closeout. The current phase is complete; preserve its gates before adding
 another rule.
 
 ## Current truth
@@ -12,15 +12,15 @@ another rule.
 | Scored targets | 220 |
 | Scored hooks | 2,336 |
 | Manual hook labels | 774 |
-| Known misses | 36 |
+| Known misses | 34 |
 | State groups | 13/13 |
 | Legend practices | 89/89 |
 | Actionable precision | 100% (379/379) |
 | Actionable recall | 92.4% (379/410) |
-| Tests | 467/467 |
+| Tests | 468/468 |
 
 The full-app output currently contains 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`,
-40 `use-mount`, six `use-observe-effect`, 2,855 `review-state`, and 1,256 `review-effect` findings. Commit `69c38f4`
+40 `use-mount`, six `use-observe-effect`, 2,855 `review-state`, and 1,254 `review-effect` findings. Commit `69c38f4`
 had additionally demoted twenty owners to `keep-state`; the demotion now emits those as evidence-bearing
 `review-state` findings instead, so the twelve-root delta against `69c38f4` is exactly twenty `keep-state` →
 `review-state` restorations (hoalu five, Legend Music nine, Memoria src six) with zero Legend practice action changes.
@@ -39,15 +39,22 @@ The analyzer was audited against its own reliability contract across every pinne
 | Determinism | byte-identical repeated full-app runs |
 | Non-Legend applications | zero practice findings in Tree Map, Tree Wallet, Excalidraw, Expensify, Formbricks, and Outline |
 
-The 36 known misses were re-inventoried against emitted output. Each one needs a proof family the local analysis
+The 34 known misses were re-inventoried against emitted output. Each one needs a proof family the local analysis
 deliberately does not fake: child prop contracts and lifetime resets (dialog, delete, and submit flags), keyed selection
 models with bounded summaries, stable-listener ref contracts
 (Expensify ImageView family), custom-hook command contracts, timer-deferred async status cohesion
-(`FilledButton.isLoading` requires tracing through a reassigned projection), and four distinct effect-keep shapes.
+(`FilledButton.isLoading` requires tracing through a reassigned projection), and two distinct effect-keep shapes.
 No family currently has five equivalent positives across three app roots, so none may reopen under the gate. Forcing
 these labels would trade the 100% actionable precision for score; they remain explicit non-enforced opportunities.
 
 ## What this phase changed
+
+`src/analyze-source.ts` now resolves an effect callback through one immutable local binding. It accepts a direct arrow or
+function expression and a direct React `useCallback` wrapper with unshadowed import provenance. Mutable bindings,
+function declarations, Promise chains, state-mutating callbacks, and unresolved wrappers still abstain. This closes the
+Expensify report-lifecycle and Outline icon-grid labels while preserving their React post-commit timing. The exact
+220-target delta is those two `review-effect` findings becoming `keep-effect`; every other hook action and all Legend
+practice actions are unchanged.
 
 `src/rules/child-contract.ts` adds the first cross-file structural proof. When one transport target resolves through
 the source index, the analyzer opens the child's declaration (including `forwardRef`/`memo` wrappers with React import

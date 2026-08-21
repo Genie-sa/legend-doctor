@@ -5510,6 +5510,44 @@ test("keeps externally prepared dependency-driven navigation in React", () => {
   ]);
 });
 
+test("keeps dependency effects with resolved local callbacks", () => {
+  const effects = analyzeSource(`
+    import React, { useCallback, useEffect, useRef, useState } from "react";
+    import { publish } from "./integration";
+    export function Named({ active, id }: { active: boolean; id: string }) {
+      const clear = () => {
+        if (active) publish(id);
+      };
+      useEffect(clear, [clear]);
+      return null;
+    }
+    export function CommittedRef({ onChange, max }: { onChange: (value: boolean) => void; max: number }) {
+      const offsetRef = useRef(0);
+      const notify = useCallback(() => onChange(offsetRef.current < max), [onChange, max]);
+      React.useEffect(notify, [notify]);
+      return null;
+    }
+    export function PromiseChain({ rows }: { rows: string[] }) {
+      const [selected, setSelected] = useState("");
+      const load = useCallback(() => Promise.resolve(rows[0]).then(setSelected), [rows]);
+      useEffect(load, [load]);
+      return <output>{selected}</output>;
+    }
+    export function Mutable({ id }: { id: string }) {
+      let notify = () => publish(id);
+      useEffect(notify, [notify]);
+      notify = () => publish("changed");
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "keep-effect",
+    "keep-effect",
+    "review-effect",
+    "review-effect",
+  ]);
+});
+
 test("reviews unsafe dependency-driven command preparation", () => {
   const effects = analyzeSource(`
     import { useEffect, useState } from "react";
