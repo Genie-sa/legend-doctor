@@ -65,6 +65,7 @@ import {
   isSetOrMapState,
 } from "./rules/keyed-selection.js";
 import { isLiteralBooleanLeafState } from "./rules/literal-boolean-leaf.js";
+import { findListenerRefStateClusters } from "./rules/listener-ref-state.js";
 import {
   collectReactCommitContext,
 } from "./rules/react-commit-sensitivity.js";
@@ -370,6 +371,12 @@ function analyzeParsedSource(
     subtreeByState,
     statesWithCompanionWrites
   );
+  const listenerRefClusters = findListenerRefStateClusters(
+    states,
+    usageByState,
+    effects,
+    imports,
+  );
   const effectClassifications = new Map<EffectCandidate, ClassifiedEffect>();
   const derivedStates = new Set<StateCandidate>();
   for (const effect of effects) {
@@ -399,7 +406,10 @@ function analyzeParsedSource(
   for (const state of states) {
     const usage = usageByState.get(state);
     if (!usage) continue;
-    const cluster = effectDrafts.clusters.get(state) ?? observableClusters.get(state) ?? subtreeClusters.get(state);
+    const cluster = effectDrafts.clusters.get(state) ??
+      listenerRefClusters.get(state) ??
+      observableClusters.get(state) ??
+      subtreeClusters.get(state);
     const siblingCut = siblingRenderCuts.get(state);
     const directTransitionCallbacks = reactCommit.directTransitionCallbacks.get(state.owner);
     const transitionTouchesState = directTransitionCallbacks?.some(callback =>

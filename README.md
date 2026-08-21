@@ -42,10 +42,10 @@ Measured on pinned real applications:
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
 | Manual labels | 774 |
-| Known misses | 25 |
-| Unit tests | 482/482 |
-| Actionable precision | 100% (385/385) |
-| Actionable recall | 93.9% (385/410) |
+| Known misses | 20 |
+| Unit tests | 485/485 |
+| Actionable precision | 100% (390/390) |
+| Actionable recall | 95.1% (390/410) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -498,6 +498,12 @@ const insert = () => insertElements(chartElementsRef.current);
 ```
 
 The action is `use-ref`; the lifecycle hook, dependency list, and commit timing remain unchanged.
+
+Pointer or listener snapshots can also move as one ref group when one synchronous event writes the complete group and
+every read stays inside event commands or memoized callbacks owned by an exact add/remove listener effect. The tool emits
+one grouped migration because converting only part of that snapshot would keep the original render and split its update.
+Missing cleanup, async callbacks, callback escapes, rendered values, functional updates, and event regions that write any
+remaining React state stay under review.
 
 A cohesive button that intentionally delays its pending flag stays on React state when the timer callback contains only
 the `true` write and the same async command clears that timer immediately before the `false` write in `finally`.

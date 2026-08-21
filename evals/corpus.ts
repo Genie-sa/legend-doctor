@@ -5806,7 +5806,6 @@ export const goldCases = [
   },
   ...([47, 48, 49, 50, 51] as const).map(line => ({
     action: "use-ref" as const,
-    enforced: false,
     file: "index.tsx",
     hook: "useState" as const,
     line,
@@ -5830,6 +5829,13 @@ export const goldCases = [
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [
+  {
+    file: "index.tsx",
+    line: 47,
+    members: ["isMouseDown", "initialScrollLeft", "initialScrollTop", "initialX", "initialY"],
+    rationale: "The pointer-down command writes one listener-only snapshot group; migrate every member together so that event removes one owner render and listener callbacks keep one current ref model.",
+    target: "expensify-image-view",
+  },
   {
     file: "components/gift-trees/reschedule-batch-modal.tsx",
     line: 32,

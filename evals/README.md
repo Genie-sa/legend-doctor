@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,336 hooks across 220 source roots. The corpus currently contains
-774 manual hook labels, including 25 non-enforced opportunities, plus thirteen
+774 manual hook labels, including 20 non-enforced opportunities, plus fourteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -142,6 +142,12 @@ Effect-written command cursors may become refs when one custom hook returns the 
 used only as a switch discriminant, and every branch issues exactly one imported command. One exact default fallback may
 guard an imported command and bare return with an owner parameter before issuing its imported fallback command. Extra
 reads, returned values, other conditional branch work, async callbacks, and any second consumer abstain.
+Listener-only primitive snapshots may become one ref group when at least two members feed imported React `useCallback`
+bindings that are paired by exact `addEventListener` and `removeEventListener` calls in the same React effect. One
+synchronous JSX event must write the complete group and call no remaining React setter, which proves the migration removes
+an owner render. Every callback reference, listener target, event, cleanup, and effect stays in place; only the grouped
+storage and callback dependency reads change. Missing or mismatched cleanup, async work, callback escape, render transport,
+functional updates, and partial event writes abstain.
 Controlled-input labels require one direct value/callback leaf and either no other render read or one complete pure
 validation projection in a disjoint sibling leaf. A separate rendered sibling proves that the owner cut is material.
 The observable stays at the owner across state-independent conditional branches; ref-backed validity, repeated
