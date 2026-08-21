@@ -5762,7 +5762,6 @@ export const goldCases = [
   },
   {
     action: "use-ref",
-    enforced: false,
     file: "useAutoRefresh.ts",
     hook: "useState",
     line: 16,

@@ -2,12 +2,18 @@ import path from "node:path";
 
 import ts from "typescript";
 
-import { exactObjectLiteralKeys } from "./analysis-ast.js";
+import {
+  bindingDeclarationCount,
+  exactObjectLiteralKeys,
+  isDeclarationName,
+  isNonValueIdentifier,
+} from "./analysis-ast.js";
 import {
   AnalysisProject,
   isSupportedAnalysisFile,
   type AnalysisFile,
 } from "./analysis-project.js";
+import { nodeWithin, visit } from "./ast.js";
 import { pathIdentityKey } from "./path-identity.js";
 
 interface ImportBinding {
@@ -22,8 +28,11 @@ interface ReexportBinding {
 
 type ComponentFunction = ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression;
 
+const REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "useLayoutEffect"]);
+
 interface ModuleRecord {
   componentDeclarations: ReadonlyMap<string, ComponentFunction>;
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
   imports: ReadonlyMap<string, ImportBinding>;
   legendValueHooks: ReadonlyMap<string, string>;
   legendValueWriters: ReadonlyMap<string, string>;
@@ -39,6 +48,7 @@ interface ModuleRecord {
 export interface SourceIndex {
   componentDeclarationFor(file: string, name: string): ResolvedSymbol | null;
   componentsFor(file: string): ReadonlySet<string>;
+  deferredCallbackHooksFor(file: string): ReadonlyMap<string, ReadonlySet<number>>;
   legendValueBridgesFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoriesFor(file: string): ReadonlySet<string>;
   observableKeysFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
@@ -52,6 +62,7 @@ export interface ResolvedSymbol {
 
 type SourceSymbolKind =
   | "component"
+  | "deferred-callback-hook"
   | "legend-value-hook"
   | "legend-value-writer"
   | "observable"
@@ -80,6 +91,7 @@ export function buildSourceIndexFromFiles(
 
   const compilerContexts = new Map<string, CompilerContext>();
   const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const deferredCallbackHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const legendValueHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const legendValueWritersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observableFactoriesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
@@ -117,13 +129,15 @@ export function buildSourceIndexFromFiles(
     if (localName) {
       const declared = kind === "component"
         ? record.componentDeclarations.has(localName)
-        : kind === "legend-value-hook"
-          ? record.legendValueHooks.has(localName)
-          : kind === "legend-value-writer"
-            ? record.legendValueWriters.has(localName)
-            : kind === "observable"
-              ? record.observableDeclarations.has(localName)
-              : record.observableFactoryDeclarations.has(localName);
+        : kind === "deferred-callback-hook"
+          ? record.deferredCallbackHooks.has(localName)
+          : kind === "legend-value-hook"
+            ? record.legendValueHooks.has(localName)
+            : kind === "legend-value-writer"
+              ? record.legendValueWriters.has(localName)
+              : kind === "observable"
+                ? record.observableDeclarations.has(localName)
+                : record.observableFactoryDeclarations.has(localName);
       if (declared) return { file, localName };
 
       const factoryName = kind === "observable"
@@ -174,13 +188,15 @@ export function buildSourceIndexFromFiles(
     const importer = normalizeFile(file);
     const cache = kind === "component"
       ? componentsByImporter
-      : kind === "legend-value-hook"
-        ? legendValueHooksByImporter
-        : kind === "legend-value-writer"
-          ? legendValueWritersByImporter
-          : kind === "observable-factory"
-            ? observableFactoriesByImporter
-            : observablesByImporter;
+      : kind === "deferred-callback-hook"
+        ? deferredCallbackHooksByImporter
+        : kind === "legend-value-hook"
+          ? legendValueHooksByImporter
+          : kind === "legend-value-writer"
+            ? legendValueWritersByImporter
+            : kind === "observable-factory"
+              ? observableFactoriesByImporter
+              : observablesByImporter;
     const cached = cache.get(importer);
     if (cached) return cached;
     const symbols = new Map<string, ResolvedSymbol>();
@@ -202,6 +218,14 @@ export function buildSourceIndexFromFiles(
   return {
     componentDeclarationFor: (file, name) => resolvedFor(file, "component").get(name) ?? null,
     componentsFor: file => new Set(resolvedFor(file, "component").keys()),
+    deferredCallbackHooksFor: file => {
+      const hooks = new Map<string, ReadonlySet<number>>();
+      for (const [localName, symbol] of resolvedFor(file, "deferred-callback-hook")) {
+        const parameters = records.get(symbol.file)?.deferredCallbackHooks.get(symbol.localName);
+        if (parameters) hooks.set(localName, parameters);
+      }
+      return hooks;
+    },
     legendValueBridgesFor: file => {
       const bridges = new Map<string, ReadonlySet<string>>();
       const writers = resolvedFor(file, "legend-value-writer");
@@ -264,6 +288,7 @@ function compilerContextFor(
 
 function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const componentDeclarations = new Map<string, ComponentFunction>();
+  const deferredCallbackHooks = new Map<string, ReadonlySet<number>>();
   const imports = new Map<string, ImportBinding>();
   const legendValueHooks = new Map<string, string>();
   const legendValueWriters = new Map<string, string>();
@@ -277,6 +302,8 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const observableFactories = new Set<string>();
   const observableTypes = new Set<string>();
   const legendNamespaces = new Set<string>();
+  const reactEffectHooks = new Set<string>();
+  const reactNamespaces = new Set<string>();
   const useValueHooks = new Set<string>();
 
   for (const statement of sourceFile.statements) {
@@ -287,6 +314,20 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
       continue;
     }
     const bindings = statement.importClause?.namedBindings;
+    if (statement.moduleSpecifier.text === "react") {
+      if (statement.importClause?.name) reactNamespaces.add(statement.importClause.name.text);
+      if (bindings && ts.isNamespaceImport(bindings)) {
+        reactNamespaces.add(bindings.name.text);
+      } else if (bindings && ts.isNamedImports(bindings)) {
+        for (const element of bindings.elements) {
+          const importedName = element.propertyName?.text ?? element.name.text;
+          if (REACT_EFFECT_HOOKS.has(importedName)) {
+            reactEffectHooks.add(element.name.text);
+          }
+        }
+      }
+      continue;
+    }
     if (statement.moduleSpecifier.text === "@legendapp/state/react") {
       if (bindings && ts.isNamedImports(bindings)) {
         for (const element of bindings.elements) {
@@ -316,12 +357,23 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement)) {
       if (statement.name) {
+        const deferredParameters = deferredCallbackParameterIndices(
+          statement,
+          reactEffectHooks,
+          reactNamespaces
+        );
         const hookObservable = directLegendValueHookObservable(statement, useValueHooks);
         const writerObservable = directLegendValueWriterObservable(statement);
+        if (deferredParameters.size > 0) {
+          deferredCallbackHooks.set(statement.name.text, deferredParameters);
+        }
         if (hookObservable) legendValueHooks.set(statement.name.text, hookObservable);
         if (writerObservable) legendValueWriters.set(statement.name.text, writerObservable);
-        if ((hookObservable || writerObservable) && hasExport(statement)) {
+        if ((deferredParameters.size > 0 || hookObservable || writerObservable) && hasExport(statement)) {
           localExports.set(statement.name.text, statement.name.text);
+        }
+        if (deferredParameters.size > 0 && hasDefault(statement)) {
+          localExports.set("default", statement.name.text);
         }
       }
       if (
@@ -445,6 +497,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
 
   return {
     componentDeclarations,
+    deferredCallbackHooks,
     imports,
     legendValueHooks,
     legendValueWriters,
@@ -456,6 +509,73 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     reexports,
     starExports,
   };
+}
+
+function deferredCallbackParameterIndices(
+  declaration: ts.FunctionDeclaration,
+  effectHooks: ReadonlySet<string>,
+  reactNamespaces: ReadonlySet<string>
+): ReadonlySet<number> {
+  const deferred = new Set<number>();
+  if (!declaration.body) return deferred;
+  for (const hook of effectHooks) {
+    if (bindingDeclarationCount(declaration, hook) > 0) return deferred;
+  }
+  for (const namespace of reactNamespaces) {
+    if (bindingDeclarationCount(declaration, namespace) > 0) return deferred;
+  }
+  declaration.parameters.forEach((parameter, index) => {
+    if (!ts.isIdentifier(parameter.name)) return;
+    const parameterName = parameter.name.text;
+    let callbackReference = false;
+    let references = 0;
+    let safe = true;
+    visit(declaration.body!, node => {
+      if (
+        !safe ||
+        !ts.isIdentifier(node) ||
+        node.text !== parameterName ||
+        isDeclarationName(node) ||
+        isNonValueIdentifier(node)
+      ) {
+        return;
+      }
+      references += 1;
+      const effect = enclosingEffectCall(node, declaration, effectHooks, reactNamespaces);
+      if (!effect) {
+        safe = false;
+        return;
+      }
+      if (effect.arguments[0] && nodeWithin(node, effect.arguments[0])) {
+        callbackReference = true;
+      }
+    });
+    if (safe && references > 0 && callbackReference) deferred.add(index);
+  });
+  return deferred;
+}
+
+function enclosingEffectCall(
+  node: ts.Node,
+  boundary: ts.FunctionDeclaration,
+  effectHooks: ReadonlySet<string>,
+  reactNamespaces: ReadonlySet<string>
+): ts.CallExpression | null {
+  for (let current: ts.Node | undefined = node.parent; current && current !== boundary; current = current.parent) {
+    if (!ts.isCallExpression(current) || !current.arguments.some(argument => nodeWithin(node, argument))) {
+      continue;
+    }
+    if (
+      (ts.isIdentifier(current.expression) && effectHooks.has(current.expression.text)) ||
+      (ts.isPropertyAccessExpression(current.expression) &&
+        ts.isIdentifier(current.expression.expression) &&
+        reactNamespaces.has(current.expression.expression.text) &&
+        REACT_EFFECT_HOOKS.has(current.expression.name.text))
+    ) {
+      return current;
+    }
+  }
+  return null;
 }
 
 function directLegendValueHookObservable(

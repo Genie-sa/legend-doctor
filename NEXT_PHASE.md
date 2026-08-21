@@ -12,12 +12,12 @@ another rule.
 | Scored targets | 220 |
 | Scored hooks | 2,336 |
 | Manual hook labels | 774 |
-| Known misses | 41 |
+| Known misses | 40 |
 | State groups | 13/13 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (374/374) |
-| Actionable recall | 91.2% (374/410) |
-| Tests | 465/465 |
+| Actionable precision | 100% (375/375) |
+| Actionable recall | 91.5% (375/410) |
+| Tests | 466/466 |
 
 The full-app output currently contains 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`,
 40 `use-mount`, six `use-observe-effect`, 2,855 `review-state`, and 1,256 `review-effect` findings. Commit `69c38f4`
@@ -39,7 +39,7 @@ The analyzer was audited against its own reliability contract across every pinne
 | Determinism | byte-identical repeated full-app runs |
 | Non-Legend applications | zero practice findings in Tree Map, Tree Wallet, Excalidraw, Expensify, Formbricks, and Outline |
 
-The 41 known misses were re-inventoried against emitted output. Each one needs a proof family the local analysis
+The 40 known misses were re-inventoried against emitted output. Each one needs a proof family the local analysis
 deliberately does not fake: child prop contracts and lifetime resets (dialog, delete, and submit flags), keyed selection
 models with bounded summaries, stable-listener ref contracts
 (Expensify ImageView family), custom-hook command contracts, timer-deferred async status cohesion
@@ -79,7 +79,9 @@ suppressing the opportunity.
 
 `src/rules/command-only-state.ts` owns command-only ref safety. It traces local state-reading callbacks and rejects a
 ref rewrite when React state republishes that callback through rendering, Context, a lifecycle hook, or an imperative
-handle. It also preserves the old render snapshot when a functional updater is followed by a state read.
+handle. A source-resolved callback used exclusively from React effects now admits the exact synchronous counter shape:
+the recommendation snapshots the ref before its functional update and keeps later command reads on that snapshot.
+Mixed immediate/deferred callbacks and async gaps still abstain.
 
 The 12-root delta from commit `91b71da` is exactly seventeen `use-ref` → `review-state` changes:
 

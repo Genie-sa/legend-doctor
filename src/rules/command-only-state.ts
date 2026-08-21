@@ -2,6 +2,7 @@ import ts from "typescript";
 
 import {
   bindingDeclarationCount,
+  isEvaluationInert,
   isDeclarationName,
   isDirectJsxAttributeExpression,
   isNonValueIdentifier,
@@ -70,7 +71,59 @@ export function functionalUpdaterPrecedesSnapshotRead(
   });
 }
 
-export function stateReadCallbackEscapesThroughUnknownHook(state: StateCandidate): boolean {
+export function functionalCounterUpdaterPreservesSnapshot(
+  state: StateCandidate,
+  usage: CommandOnlyUsage,
+  nearestMutationFunction: (node: ts.Node, owner: RuntimeFunctionLike) => RuntimeFunctionLike
+): boolean {
+  const call = usage.setterCallNodes[0];
+  const updater = call?.arguments[0];
+  if (
+    usage.setterCallNodes.length !== 1 ||
+    !call ||
+    !updater ||
+    !ts.isArrowFunction(updater) ||
+    updater.parameters.length !== 1 ||
+    !ts.isIdentifier(updater.parameters[0]!.name) ||
+    ts.isBlock(updater.body)
+  ) {
+    return false;
+  }
+  const expression = updater.body;
+  const parameter = updater.parameters[0]!.name.text;
+  if (
+    !ts.isBinaryExpression(expression) ||
+    ![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken].includes(expression.operatorToken.kind) ||
+    !ts.isIdentifier(expression.left) ||
+    expression.left.text !== parameter ||
+    !isEvaluationInert(expression.right)
+  ) {
+    return false;
+  }
+
+  const region = nearestMutationFunction(call, state.owner);
+  if (!region.body) return false;
+  let readsAfter = 0;
+  let unsafe = false;
+  visitSkippingNestedRuntimeFunctions(region.body, node => {
+    if (ts.isAwaitExpression(node) || ts.isYieldExpression(node)) unsafe = true;
+    if (
+      ts.isIdentifier(node) &&
+      node.text === state.valueName &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      if (node.getStart() <= call.end) unsafe = true;
+      else readsAfter += 1;
+    }
+  });
+  return !unsafe && readsAfter > 0;
+}
+
+export function stateReadCallbackEscapesThroughUnknownHook(
+  state: StateCandidate,
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>> = new Map()
+): boolean {
   let escaped = false;
   visit(state.owner.body, node => {
     if (
@@ -108,6 +161,10 @@ export function stateReadCallbackEscapesThroughUnknownHook(state: StateCandidate
         ].includes(hookName) &&
         bindingDeclarationCount(state.owner, hookName) === 0
       ) {
+        const argumentIndex = current.arguments.findIndex(argument => nodeWithin(node, argument));
+        if (argumentIndex >= 0 && deferredCallbackHooks.get(hookName)?.has(argumentIndex)) {
+          continue;
+        }
         escaped = true;
         return;
       }

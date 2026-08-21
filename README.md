@@ -41,10 +41,10 @@ Measured on pinned real applications:
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
 | Manual labels | 774 |
-| Known misses | 41 |
-| Unit tests | 465/465 |
-| Actionable precision | 100% (374/374) |
-| Actionable recall | 91.2% (374/410) |
+| Known misses | 40 |
+| Unit tests | 466/466 |
+| Actionable precision | 100% (375/375) |
+| Actionable recall | 91.5% (375/410) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -521,8 +521,10 @@ setMinutes(previous => previous + 1);
 if (minutes >= refreshAfter) reload(); // reads the old render snapshot
 ```
 
-The tool now reviews this instead of emitting a generic ref rewrite. A manual ref migration must snapshot
-`minutesRef.current` before the write and keep the later comparison on that snapshot.
+The tool emits a ref migration only when source resolution proves that the custom-hook callback is exclusively deferred
+through a React effect and the updater is one synchronous counter step. The recommendation snapshots
+`minutesRef.current` before the write and keeps the later comparison on that snapshot. Mixed synchronous/deferred hooks,
+async gaps, multiple writes, and non-counter updaters remain review findings.
 
 ### 11. Published getter → keep the notification boundary
 

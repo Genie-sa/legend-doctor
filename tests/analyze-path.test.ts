@@ -319,6 +319,71 @@ test("replaces an exact React mirror of a one-hop Legend value hook", async t =>
   assert.notEqual(report.findings.find(finding => finding.name === "wrongSource")?.action, "use-value");
 });
 
+test("preserves the pre-update snapshot for state read by a source-proven deferred callback", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-deferred-counter-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "use-deferred.ts"),
+    `
+      import { useEffect, useRef } from "react";
+      export default function useDeferred(callback: () => void) {
+        const latest = useRef<(() => void) | undefined>();
+        useEffect(() => { latest.current = callback; }, [callback]);
+        useEffect(() => {
+          const id = setInterval(() => latest.current(), 1000);
+          return () => clearInterval(id);
+        }, []);
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "use-immediate.ts"),
+    `
+      import { useEffect } from "react";
+      export function useMixed(callback: () => void) {
+        callback();
+        useEffect(() => { callback(); }, [callback]);
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "use-counter.ts"),
+    `
+      import { useState } from "react";
+      import useDeferred from "./use-deferred";
+      import { useMixed } from "./use-immediate";
+      export function useCounter(limit: number) {
+        const [ticks, setTicks] = useState(0);
+        const [unsafeTicks, setUnsafeTicks] = useState(0);
+        const [asyncTicks, setAsyncTicks] = useState(0);
+        useDeferred(() => {
+          setTicks(previous => previous + 1);
+          if (ticks >= limit) report();
+        });
+        useMixed(() => {
+          setUnsafeTicks(previous => previous + 1);
+          if (unsafeTicks >= limit) report();
+        });
+        useDeferred(async () => {
+          setAsyncTicks(previous => previous + 1);
+          await load();
+          if (asyncTicks >= limit) report();
+        });
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const ticks = report.findings.find(finding => finding.name === "ticks");
+  assert.equal(ticks?.action, "use-ref");
+  assert.match(ticks?.message ?? "", /pre-update snapshot/);
+  assert.notEqual(report.findings.find(finding => finding.name === "unsafeTicks")?.action, "use-ref");
+  assert.notEqual(report.findings.find(finding => finding.name === "asyncTicks")?.action, "use-ref");
+});
+
 test("shares one cached AST across source indexing and both detector families", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
   t.after(() => rm(root, { force: true, recursive: true }));

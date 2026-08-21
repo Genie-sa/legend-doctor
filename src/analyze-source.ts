@@ -38,6 +38,7 @@ import {
 } from "./rules/child-contract.js";
 import {
   collectCommandOnlyCallableReads,
+  functionalCounterUpdaterPreservesSnapshot,
   functionalUpdaterPrecedesSnapshotRead,
   statePublishesReadOnlyGetter,
   stateReadCallbackEscapesThroughUnknownHook,
@@ -202,7 +203,15 @@ export function analyzeSource(
     true,
     scriptKindForFile(fileName)
   );
-  return analyzeParsedSource(sourceFile, fileName, sourceComponents, new StateFlowIndex(), null, new Map());
+  return analyzeParsedSource(
+    sourceFile,
+    fileName,
+    sourceComponents,
+    new StateFlowIndex(),
+    null,
+    new Map(),
+    new Map()
+  );
 }
 
 export function analyzeSourceFile(
@@ -211,7 +220,8 @@ export function analyzeSourceFile(
   sourceComponents: ReadonlySet<string> = new Set(),
   stateFlow: StateFlowIndex = new StateFlowIndex(),
   childContracts: ChildContractResolver | null = null,
-  legendValueBridges: ReadonlyMap<string, ReadonlySet<string>> = new Map()
+  legendValueBridges: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>> = new Map()
 ): HookFinding[] {
   return analyzeParsedSource(
     file.sourceFile,
@@ -219,7 +229,8 @@ export function analyzeSourceFile(
     sourceComponents,
     stateFlow,
     childContracts,
-    legendValueBridges
+    legendValueBridges,
+    deferredCallbackHooks
   );
 }
 
@@ -229,7 +240,8 @@ function analyzeParsedSource(
   sourceComponents: ReadonlySet<string>,
   stateFlow: StateFlowIndex,
   childContracts: ChildContractResolver | null,
-  legendValueBridges: ReadonlyMap<string, ReadonlySet<string>>
+  legendValueBridges: ReadonlyMap<string, ReadonlySet<string>>,
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
 ): HookFinding[] {
   const imports = collectHookImports(sourceFile);
   const reactCommit = collectReactCommitContext(sourceFile, imports);
@@ -426,7 +438,8 @@ function analyzeParsedSource(
           keyedSelections.secondaryLeafStates.has(state),
           observableSubscriptionsByOwner.get(state.owner) ?? 0,
           siblingCut ?? null,
-          childContracts
+          childContracts,
+          deferredCallbackHooks
         );
     const commitSensitiveOverride = commitSensitive &&
       baseClassification.action !== "review-state" &&
@@ -1686,7 +1699,8 @@ function classifyState(
   isKeyedScalarWithSecondary: boolean,
   ownerObservableSubscriptions: number,
   siblingRenderCut: SiblingRenderCut | null,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
 ): ClassifiedState {
   if (nonProductionHarness) {
     return {
@@ -1954,14 +1968,21 @@ function classifyState(
       message: `Replace controlled state \`${state.valueName}\` with an owner-scoped observable; wrap \`${target}\` and the sibling ${controlledProjectionCut.consumerLabel} projection at line ${controlledProjectionCut.consumerLine} in stable leaf subscribers, derive validation from the subscribed value, keep the input callback API unchanged, and use non-tracking reads in event commands.`,
     };
   }
+  const hasFunctionalSnapshotHazard = functionalUpdaterPrecedesSnapshotRead(
+    state,
+    usage,
+    nearestMutationFunction
+  );
+  const preservesFunctionalSnapshot = hasFunctionalSnapshotHazard &&
+    functionalCounterUpdaterPreservesSnapshot(state, usage, nearestMutationFunction);
   if (
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
     usage.deferredReads > 0 &&
     usage.transportedOccurrences === 0 &&
     usage.jsxTargets.size === 0 &&
-    !functionalUpdaterPrecedesSnapshotRead(state, usage, nearestMutationFunction) &&
-    !stateReadCallbackEscapesThroughUnknownHook(state) &&
+    (!hasFunctionalSnapshotHazard || preservesFunctionalSnapshot) &&
+    !stateReadCallbackEscapesThroughUnknownHook(state, deferredCallbackHooks) &&
     !statePublishesReadOnlyGetter(state) &&
     !usage.shadowed &&
     !usage.escaped &&
@@ -1971,7 +1992,9 @@ function classifyState(
     return {
       action: "use-ref",
       confidence: "probable",
-      message: `Replace \`${state.valueName}\` with a ref or observable handle; preserve any existing React lifecycle hook timing and statement order${usage.setterUsesPreviousValue ? ", evaluating functional updaters against the current handle value" : ""}, because the value is read only by deferred commands and does not render UI.`,
+      message: preservesFunctionalSnapshot
+        ? `Replace \`${state.valueName}\` with a ref; inside the source-proven deferred callback, capture the ref's pre-update snapshot, evaluate the counter updater from that snapshot, and keep every later read on the captured value so the command preserves React's current ordering without rerendering.`
+        : `Replace \`${state.valueName}\` with a ref or observable handle; preserve any existing React lifecycle hook timing and statement order${usage.setterUsesPreviousValue ? ", evaluating functional updaters against the current handle value" : ""}, because the value is read only by deferred commands and does not render UI.`,
     };
   }
   if (usage.shadowed || usage.escaped || usage.effectWrites > 0) {
