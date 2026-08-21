@@ -42,10 +42,10 @@ Measured on pinned real applications:
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
 | Manual labels | 774 |
-| Known misses | 27 |
-| Unit tests | 478/478 |
-| Actionable precision | 100% (384/384) |
-| Actionable recall | 93.7% (384/410) |
+| Known misses | 26 |
+| Unit tests | 480/480 |
+| Actionable precision | 100% (385/385) |
+| Actionable recall | 93.9% (385/410) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -500,8 +500,9 @@ const insert = () => insertElements(chartElementsRef.current);
 The action is `use-ref`; the lifecycle hook, dependency list, and commit timing remain unchanged.
 
 A custom hook can also return one navigation command backed by a ref when the cursor's only read is the discriminant of
-one synchronous switch and every branch issues exactly one imported command. Returned getters, extra reads, async work,
-conditional branches, and callbacks consumed anywhere else remain reviews.
+one synchronous switch and every branch issues exactly one imported command. One default branch may use an exact
+parameter guard that issues an imported command and bare return before one imported fallback command. Returned getters,
+extra reads, async work, other conditional branches, and callbacks consumed anywhere else remain reviews.
 
 ### 10. Render callbacks and old snapshots → review
 

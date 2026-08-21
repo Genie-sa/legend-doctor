@@ -4391,6 +4391,58 @@ test("uses a ref for an effect-written cursor read only by one returned switch c
   assert.equal(findings.find(finding => finding.name === "next")?.action, "use-ref");
 });
 
+test("uses a ref for a returned switch command with one exact guarded fallback", () => {
+  const [finding] = analyzeSource(`
+    import { useEffect, useState } from "react";
+    import { Navigation, resolvePrevious } from "./navigation";
+    export function useSteps(source: string, backTo?: string) {
+      const [previous, setPrevious] = useState<"first">();
+      useEffect(() => setPrevious(resolvePrevious(source)), [source]);
+      const goBack = () => {
+        switch (previous) {
+          case "first":
+            Navigation.goBack("first");
+            break;
+          default:
+            if (backTo) {
+              Navigation.goBack(backTo);
+              return;
+            }
+            Navigation.goBack("root");
+            break;
+        }
+      };
+      return { goBack };
+    }
+  `, "fixture.ts");
+  assert.equal(finding?.action, "use-ref");
+});
+
+test("keeps returned switch fallbacks with unsafe guards or branch work conservative", () => {
+  for (const fallback of [
+    `if (shouldGoBack()) { Navigation.goBack(backTo); return; } Navigation.goBack("root"); break;`,
+    `if (backTo) { Navigation.goBack(backTo); audit(); return; } Navigation.goBack("root"); break;`,
+    `if (backTo) { Navigation.goBack(backTo); return backTo; } Navigation.goBack("root"); break;`,
+  ]) {
+    const [finding] = analyzeSource(`
+      import { useEffect, useState } from "react";
+      import { Navigation, resolvePrevious } from "./navigation";
+      export function useSteps(source: string, backTo?: string) {
+        const [previous, setPrevious] = useState<"first">();
+        useEffect(() => setPrevious(resolvePrevious(source)), [source]);
+        const goBack = () => {
+          switch (previous) {
+            case "first": Navigation.goBack("first"); break;
+            default: ${fallback}
+          }
+        };
+        return { goBack };
+      }
+    `, "fixture.ts");
+    assert.notEqual(finding?.action, "use-ref", fallback);
+  }
+});
+
 test("keeps returned switch cursors with extra reads or non-command branches conservative", () => {
   for (const command of [
     `switch (next) { case "first": Navigation.navigate(next); break; default: Navigation.navigate("done"); }`,

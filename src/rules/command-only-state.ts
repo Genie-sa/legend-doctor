@@ -3,6 +3,7 @@ import ts from "typescript";
 import {
   bindingDeclarationCount,
   callRootIdentifier,
+  collectBindingNames,
   isEvaluationInert,
   isDeclarationName,
   isDirectJsxAttributeExpression,
@@ -243,12 +244,53 @@ function switchClauseIsCommandOnly(
   let commands = 0;
   for (const statement of clause.statements) {
     if (ts.isBreakStatement(statement)) continue;
-    if (!ts.isExpressionStatement(statement)) return false;
-    const expression = unwrapTransparentExpression(statement.expression);
-    if (!ts.isCallExpression(expression) || !callRootIsImported(expression, state)) return false;
+    if (!isImportedCommandStatement(statement, state)) {
+      return ts.isDefaultClause(clause) && guardedFallbackIsCommandOnly(clause, state);
+    }
     commands += 1;
   }
   return commands === 1;
+}
+
+function guardedFallbackIsCommandOnly(
+  clause: ts.DefaultClause,
+  state: StateCandidate
+): boolean {
+  const [guard, fallback, exit, ...extra] = clause.statements;
+  if (
+    extra.length > 0 ||
+    !guard ||
+    !ts.isIfStatement(guard) ||
+    guard.elseStatement ||
+    !fallback ||
+    !isImportedCommandStatement(fallback, state) ||
+    !exit ||
+    !ts.isBreakStatement(exit)
+  ) {
+    return false;
+  }
+  const condition = unwrapTransparentExpression(guard.expression);
+  if (!ts.isIdentifier(condition) || !ownerParameterNames(state.owner).has(condition.text)) {
+    return false;
+  }
+  const branch = guard.thenStatement;
+  return ts.isBlock(branch) &&
+    branch.statements.length === 2 &&
+    isImportedCommandStatement(branch.statements[0]!, state) &&
+    ts.isReturnStatement(branch.statements[1]!) &&
+    branch.statements[1]!.expression === undefined;
+}
+
+function isImportedCommandStatement(statement: ts.Statement, state: StateCandidate): boolean {
+  if (!ts.isExpressionStatement(statement)) return false;
+  const expression = unwrapTransparentExpression(statement.expression);
+  return ts.isCallExpression(expression) && callRootIsImported(expression, state);
+}
+
+function ownerParameterNames(owner: RuntimeFunctionLike): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const parameter of owner.parameters) collectBindingNames(parameter.name, names);
+  return names;
 }
 
 function callRootIsImported(call: ts.CallExpression, state: StateCandidate): boolean {

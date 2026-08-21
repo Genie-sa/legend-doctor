@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,336 hooks across 220 source roots. The corpus currently contains
-774 manual hook labels, including 27 non-enforced opportunities, plus thirteen
+774 manual hook labels, including 26 non-enforced opportunities, plus thirteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -137,8 +137,9 @@ Non-tracking snapshot labels replace zero-argument `.get()` with `.peek()` only 
 React effect, or uniquely event-rooted command. Render reads, Legend tracking callbacks, mixed-use handlers, nested
 unknown callbacks, shallow reads, dynamic paths, and unproven getters abstain.
 Effect-written command cursors may become refs when one custom hook returns the sole synchronous reader, the cursor is
-used only as a switch discriminant, and every branch issues exactly one imported command. Extra reads, returned values,
-conditional branch work, async callbacks, and any second consumer abstain.
+used only as a switch discriminant, and every branch issues exactly one imported command. One exact default fallback may
+guard an imported command and bare return with an owner parameter before issuing its imported fallback command. Extra
+reads, returned values, other conditional branch work, async callbacks, and any second consumer abstain.
 Controlled-input labels require one direct value/callback leaf and either no other render read or one complete pure
 validation projection in a disjoint sibling leaf. A separate rendered sibling proves that the owner cut is material.
 The observable stays at the owner across state-independent conditional branches; ref-backed validity, repeated
