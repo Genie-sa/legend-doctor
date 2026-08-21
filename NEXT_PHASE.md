@@ -14,10 +14,10 @@ another rule.
 | Manual hook labels | 774 |
 | Known misses | 42 |
 | State groups | 13/13 |
-| Legend practices | 82/82 |
+| Legend practices | 89/89 |
 | Actionable precision | 100% (373/373) |
 | Actionable recall | 91.0% (373/410) |
-| Tests | 463/463 |
+| Tests | 464/464 |
 
 The full-app output currently contains 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`,
 40 `use-mount`, six `use-observe-effect`, 2,855 `review-state`, and 1,256 `review-effect` findings. Commit `69c38f4`

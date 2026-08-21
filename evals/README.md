@@ -37,8 +37,9 @@ grouped-instruction labels that verify exact cluster membership, thirty-seven re
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
-`useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Run the eval for
-the current precision/recall table. If the root README publishes those metrics, update them only
+`useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Seven stable leaf-boundary labels verify
+that a transported `useValue` subscription can leave a broad owner without changing observable ownership or child APIs. Run
+the eval for the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol

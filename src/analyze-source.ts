@@ -75,6 +75,7 @@ import {
   hasDirectPrimitiveInitializer,
   hasIndependentRenderCutWitness,
   hasOnlyEventCommandReads,
+  hasUnstableSubtreeLifetime,
   isDirectPrimitiveExpression,
   isHookDependencyReference,
   isInsideJsxEventCallback,
@@ -2828,42 +2829,6 @@ function jsxSubtreeLabel(node: JsxSubtreeNode): string {
   if (ts.isJsxFragment(node)) return "fragment";
   return ts.isJsxElement(node) ? `<${node.openingElement.tagName.getText()}>` : `<${node.tagName.getText()}>`;
 }
-
-function hasUnstableSubtreeLifetime(node: JsxSubtreeNode, boundary: ts.Node): boolean {
-  let renderReturns = 0;
-  visitSkippingNestedRuntimeFunctions(boundary, current => {
-    if (ts.isReturnStatement(current) && current.expression) renderReturns += 1;
-  });
-  if (renderReturns > 1) return true;
-  for (let current: ts.Node | undefined = node; current && current !== boundary; current = current.parent) {
-    if (
-      (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current)) &&
-      (ts.isJsxElement(current) ? current.openingElement : current).attributes.properties.some(
-        property => ts.isJsxAttribute(property) && property.name.getText() === "key"
-      )
-    ) {
-      return true;
-    }
-    if (
-      ts.isConditionalExpression(current) ||
-      ts.isIfStatement(current) ||
-      ts.isSwitchStatement(current) ||
-      ts.isCaseClause(current) ||
-      ts.isDefaultClause(current) ||
-      (ts.isBinaryExpression(current) &&
-        (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
-          current.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
-          current.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)) ||
-      (ts.isCallExpression(current) &&
-        ts.isPropertyAccessExpression(current.expression) &&
-        ["map", "flatMap"].includes(current.expression.name.text))
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 
 function findingFor(
   call: ts.CallExpression,

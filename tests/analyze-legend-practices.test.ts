@@ -687,6 +687,75 @@ test("keeps a broad subscription when every known observable field is consumed",
   );
 });
 
+test("moves a subscription only into one stable isolated JSX leaf", () => {
+  const positive = analyzeLegendPractices(`
+    import { useObservable, useValue } from "@legendapp/state/react";
+    export function Screen() {
+      const open$ = useObservable(false);
+      const open = useValue(open$);
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Search />
+        <Dialog open={open} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(
+    positive.find(finding => finding.location.line === 5)?.action,
+    "move-use-value-down"
+  );
+  assert.match(
+    positive.find(finding => finding.location.line === 5)?.message ?? "",
+    /1 JSX element instead of the 13-element owner/
+  );
+
+  const cohesive = analyzeLegendPractices(`
+    import { useObservable, useValue } from "@legendapp/state/react";
+    export function Dialog() {
+      const open$ = useObservable(false);
+      const open = useValue(open$);
+      return <Popup open={open} />;
+    }
+  `, "fixture.tsx");
+  assert.equal(cohesive.some(finding => finding.action === "move-use-value-down"), false);
+
+  for (const leaf of [
+    "show && <Dialog open={open} />",
+    "items.map(item => <Dialog key={item.id} open={open} />)",
+    "<Dialog key={id} open={open} />",
+    "<Dialog open={open} onOpenChange={() => log(open)} />",
+  ]) {
+    const findings = analyzeLegendPractices(`
+      import { useObservable, useValue } from "@legendapp/state/react";
+      export function Screen({ show, items }) {
+        const open$ = useObservable(false);
+        const open = useValue(open$);
+        return <main>
+          <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+          <Aside /><Help /><Status /><Actions /><Search />
+          {${leaf}}
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.equal(findings.some(finding => finding.action === "move-use-value-down"), false, leaf);
+  }
+
+  const splitReturn = analyzeLegendPractices(`
+    import { useObservable, useValue } from "@legendapp/state/react";
+    export function Screen({ loading }) {
+      const open$ = useObservable(false);
+      const open = useValue(open$);
+      if (loading) return <Loading />;
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Search />
+        <Dialog open={open} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(splitReturn.some(finding => finding.action === "move-use-value-down"), false);
+});
+
 test("splits divergent leaf reads into per-leaf subscriptions", () => {
   const [finding] = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";

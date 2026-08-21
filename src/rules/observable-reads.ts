@@ -12,7 +12,18 @@ import {
 import { findAncestor, isRuntimeFunctionLike, type RuntimeFunctionLike, visit } from "../ast.js";
 import { isImportedHookCall, type HookImports } from "../imports.js";
 import type { LegendPracticeFinding } from "../types.js";
-import { callbackIsEventRooted } from "./state-proofs.js";
+import {
+  callbackIsEventRooted,
+  hasUnstableSubtreeLifetime,
+  isSafeJsxProjectionReference,
+  jsxElementCount,
+  jsxElementCountIn,
+  lowestCommonJsxSubtree,
+  nearestRepeatedRenderCall,
+} from "./state-proofs.js";
+
+const MIN_LEAF_OWNER_ELEMENTS = 12;
+const MAX_LEAF_OWNER_SHARE = 0.4;
 
 export const RESERVED_OBSERVABLE_MEMBERS = new Set([
   "assign",
@@ -47,7 +58,13 @@ export function findObservableReadPractices(
       }
     }
     if (ts.isVariableDeclaration(node)) {
-      const finding = narrowUseValueFinding(
+      const finding = moveUseValueDownFinding(
+        node,
+        imports,
+        observableBindings,
+        sourceFile,
+        fileName
+      ) ?? narrowUseValueFinding(
         node,
         imports,
         observableBindings,
@@ -59,6 +76,105 @@ export function findObservableReadPractices(
     }
   });
   return findings;
+}
+
+function moveUseValueDownFinding(
+  declaration: ts.VariableDeclaration,
+  imports: HookImports,
+  observableBindings: ReadonlySet<string>,
+  sourceFile: ts.SourceFile,
+  fileName: string
+): LegendPracticeFinding | null {
+  const call = declaration.initializer;
+  if (
+    !call ||
+    !ts.isCallExpression(call) ||
+    call.arguments.length !== 1 ||
+    !isUseValueCall(call, imports) ||
+    !ts.isIdentifier(declaration.name) ||
+    !provenObservablePath(call.arguments[0]!, observableBindings)
+  ) {
+    return null;
+  }
+  const owner = findAncestor(declaration, isRuntimeFunctionLike);
+  const localName = declaration.name.text;
+  if (
+    !owner?.body ||
+    bindingDeclarationCount(owner, localName) !== 1 ||
+    jsxElementCount(owner) < MIN_LEAF_OWNER_ELEMENTS
+  ) {
+    return null;
+  }
+
+  const references: ts.Identifier[] = [];
+  let unsafe = false;
+  visit(owner.body, node => {
+    if (
+      unsafe ||
+      !ts.isIdentifier(node) ||
+      node.text !== localName ||
+      node === declaration.name ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (
+      isDeclarationName(node) ||
+      !isWholeValueProjection(node) ||
+      !isSafeJsxProjectionReference(node, owner) ||
+      nearestRepeatedRenderCall(node, owner)
+    ) {
+      unsafe = true;
+      return;
+    }
+    references.push(node);
+  });
+  if (unsafe || references.length === 0) return null;
+
+  const leaf = lowestCommonJsxSubtree(references, owner);
+  if (!leaf || hasUnstableSubtreeLifetime(leaf, owner)) return null;
+  const ownerElements = jsxElementCount(owner);
+  const leafElements = jsxElementCountIn(leaf);
+  if (leafElements / ownerElements > MAX_LEAF_OWNER_SHARE) return null;
+
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(
+    declaration.getStart(sourceFile)
+  );
+  const leafLine = sourceFile.getLineAndCharacterOfPosition(leaf.getStart(sourceFile)).line + 1;
+  const leafLabel = ts.isJsxFragment(leaf)
+    ? "fragment"
+    : `<${ts.isJsxElement(leaf) ? leaf.openingElement.tagName.getText(sourceFile) : leaf.tagName.getText(sourceFile)}>`;
+  const observable = call.arguments[0]!.getText(sourceFile);
+  return {
+    action: "move-use-value-down",
+    confidence: "certain",
+    disposition: "change",
+    evidence: [
+      `${references.length} render read${references.length === 1 ? "" : "s"} of ${localName} occur only inside the stable ${leafLabel} leaf at line ${leafLine}`,
+      `that leaf contains ${leafElements} of the owner's ${ownerElements} JSX elements and is not conditional, keyed, repeated, or split across returns`,
+    ],
+    location: { column: character + 1, file: fileName, line: line + 1 },
+    message: `Move \`useValue(${observable})\` for \`${localName}\` into a stable wrapper around the ${leafLabel} leaf at line ${leafLine}; keep observable ownership where it is and pass the leaf's other inputs as ordinary props so updates rerender ${leafElements} JSX element${leafElements === 1 ? "" : "s"} instead of the ${ownerElements}-element owner.`,
+    practice: "reactivity",
+  };
+}
+
+function isWholeValueProjection(reference: ts.Identifier): boolean {
+  let current: ts.Expression = reference;
+  while (
+    (ts.isParenthesizedExpression(current.parent) ||
+      ts.isAsExpression(current.parent) ||
+      ts.isTypeAssertionExpression(current.parent) ||
+      ts.isSatisfiesExpression(current.parent) ||
+      ts.isNonNullExpression(current.parent)) &&
+    current.parent.expression === current
+  ) {
+    current = current.parent;
+  }
+  return !(
+    (ts.isPropertyAccessExpression(current.parent) || ts.isElementAccessExpression(current.parent)) &&
+    current.parent.expression === current
+  );
 }
 
 function nonTrackingSnapshotObservable(
