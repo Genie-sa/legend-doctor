@@ -25,6 +25,8 @@ type ComponentFunction = ts.ArrowFunction | ts.FunctionDeclaration | ts.Function
 interface ModuleRecord {
   componentDeclarations: ReadonlyMap<string, ComponentFunction>;
   imports: ReadonlyMap<string, ImportBinding>;
+  legendValueHooks: ReadonlyMap<string, string>;
+  legendValueWriters: ReadonlyMap<string, string>;
   localExports: ReadonlyMap<string, string>;
   observableDeclarations: ReadonlySet<string>;
   observableKeys: ReadonlyMap<string, ReadonlySet<string>>;
@@ -37,6 +39,7 @@ interface ModuleRecord {
 export interface SourceIndex {
   componentDeclarationFor(file: string, name: string): ResolvedSymbol | null;
   componentsFor(file: string): ReadonlySet<string>;
+  legendValueBridgesFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoriesFor(file: string): ReadonlySet<string>;
   observableKeysFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
   observablesFor(file: string): ReadonlySet<string>;
@@ -47,7 +50,12 @@ export interface ResolvedSymbol {
   localName: string;
 }
 
-type SourceSymbolKind = "component" | "observable" | "observable-factory";
+type SourceSymbolKind =
+  | "component"
+  | "legend-value-hook"
+  | "legend-value-writer"
+  | "observable"
+  | "observable-factory";
 
 export function buildSourceIndex(
   root: string,
@@ -72,6 +80,8 @@ export function buildSourceIndexFromFiles(
 
   const compilerContexts = new Map<string, CompilerContext>();
   const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const legendValueHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const legendValueWritersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observableFactoriesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observablesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
 
@@ -107,9 +117,13 @@ export function buildSourceIndexFromFiles(
     if (localName) {
       const declared = kind === "component"
         ? record.componentDeclarations.has(localName)
-        : kind === "observable"
-          ? record.observableDeclarations.has(localName)
-          : record.observableFactoryDeclarations.has(localName);
+        : kind === "legend-value-hook"
+          ? record.legendValueHooks.has(localName)
+          : kind === "legend-value-writer"
+            ? record.legendValueWriters.has(localName)
+            : kind === "observable"
+              ? record.observableDeclarations.has(localName)
+              : record.observableFactoryDeclarations.has(localName);
       if (declared) return { file, localName };
 
       const factoryName = kind === "observable"
@@ -160,9 +174,13 @@ export function buildSourceIndexFromFiles(
     const importer = normalizeFile(file);
     const cache = kind === "component"
       ? componentsByImporter
-      : kind === "observable-factory"
-        ? observableFactoriesByImporter
-        : observablesByImporter;
+      : kind === "legend-value-hook"
+        ? legendValueHooksByImporter
+        : kind === "legend-value-writer"
+          ? legendValueWritersByImporter
+          : kind === "observable-factory"
+            ? observableFactoriesByImporter
+            : observablesByImporter;
     const cached = cache.get(importer);
     if (cached) return cached;
     const symbols = new Map<string, ResolvedSymbol>();
@@ -184,6 +202,25 @@ export function buildSourceIndexFromFiles(
   return {
     componentDeclarationFor: (file, name) => resolvedFor(file, "component").get(name) ?? null,
     componentsFor: file => new Set(resolvedFor(file, "component").keys()),
+    legendValueBridgesFor: file => {
+      const bridges = new Map<string, ReadonlySet<string>>();
+      const writers = resolvedFor(file, "legend-value-writer");
+      for (const [hookName, hook] of resolvedFor(file, "legend-value-hook")) {
+        const observable = records.get(hook.file)?.legendValueHooks.get(hook.localName);
+        if (!observable) continue;
+        const matches = new Set<string>();
+        for (const [writerName, writer] of writers) {
+          if (
+            writer.file === hook.file &&
+            records.get(writer.file)?.legendValueWriters.get(writer.localName) === observable
+          ) {
+            matches.add(writerName);
+          }
+        }
+        if (matches.size > 0) bridges.set(hookName, matches);
+      }
+      return bridges;
+    },
     observableFactoriesFor: file => new Set(resolvedFor(file, "observable-factory").keys()),
     observableKeysFor: file => {
       const keys = new Map<string, ReadonlySet<string>>();
@@ -228,6 +265,8 @@ function compilerContextFor(
 function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const componentDeclarations = new Map<string, ComponentFunction>();
   const imports = new Map<string, ImportBinding>();
+  const legendValueHooks = new Map<string, string>();
+  const legendValueWriters = new Map<string, string>();
   const localExports = new Map<string, string>();
   const observableDeclarations = new Set<string>();
   const observableKeys = new Map<string, ReadonlySet<string>>();
@@ -238,16 +277,27 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const observableFactories = new Set<string>();
   const observableTypes = new Set<string>();
   const legendNamespaces = new Set<string>();
+  const useValueHooks = new Set<string>();
 
   for (const statement of sourceFile.statements) {
     if (
       !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      statement.moduleSpecifier.text !== "@legendapp/state"
+      !ts.isStringLiteral(statement.moduleSpecifier)
     ) {
       continue;
     }
     const bindings = statement.importClause?.namedBindings;
+    if (statement.moduleSpecifier.text === "@legendapp/state/react") {
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const element of bindings.elements) {
+          if ((element.propertyName?.text ?? element.name.text) === "useValue") {
+            useValueHooks.add(element.name.text);
+          }
+        }
+      }
+      continue;
+    }
+    if (statement.moduleSpecifier.text !== "@legendapp/state") continue;
     if (bindings && ts.isNamespaceImport(bindings)) {
       legendNamespaces.add(bindings.name.text);
     } else if (bindings && ts.isNamedImports(bindings)) {
@@ -265,6 +315,15 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
 
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement)) {
+      if (statement.name) {
+        const hookObservable = directLegendValueHookObservable(statement, useValueHooks);
+        const writerObservable = directLegendValueWriterObservable(statement);
+        if (hookObservable) legendValueHooks.set(statement.name.text, hookObservable);
+        if (writerObservable) legendValueWriters.set(statement.name.text, writerObservable);
+        if ((hookObservable || writerObservable) && hasExport(statement)) {
+          localExports.set(statement.name.text, statement.name.text);
+        }
+      }
       if (
         statement.name &&
         statement.type &&
@@ -377,9 +436,18 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     }
   }
 
+  for (const [name, observable] of legendValueHooks) {
+    if (!observableDeclarations.has(observable)) legendValueHooks.delete(name);
+  }
+  for (const [name, observable] of legendValueWriters) {
+    if (!observableDeclarations.has(observable)) legendValueWriters.delete(name);
+  }
+
   return {
     componentDeclarations,
     imports,
+    legendValueHooks,
+    legendValueWriters,
     localExports,
     observableDeclarations,
     observableKeys,
@@ -388,6 +456,68 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     reexports,
     starExports,
   };
+}
+
+function directLegendValueHookObservable(
+  declaration: ts.FunctionDeclaration,
+  useValueHooks: ReadonlySet<string>
+): string | null {
+  if (declaration.parameters.length !== 0 || !declaration.body || declaration.body.statements.length !== 1) {
+    return null;
+  }
+  const statement = declaration.body.statements[0];
+  if (!statement || !ts.isReturnStatement(statement) || !statement.expression) return null;
+  let expression = unwrapTransparentExpression(statement.expression);
+  if (
+    ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+  ) {
+    expression = unwrapTransparentExpression(expression.left);
+  }
+  if (
+    !ts.isCallExpression(expression) ||
+    expression.arguments.length !== 1 ||
+    !ts.isIdentifier(expression.expression) ||
+    !useValueHooks.has(expression.expression.text)
+  ) {
+    return null;
+  }
+  const observable = unwrapTransparentExpression(expression.arguments[0]!);
+  return ts.isIdentifier(observable) ? observable.text : null;
+}
+
+function directLegendValueWriterObservable(
+  declaration: ts.FunctionDeclaration
+): string | null {
+  const parameter = declaration.parameters[0];
+  const statement = declaration.body?.statements[0];
+  if (
+    declaration.parameters.length !== 1 ||
+    !parameter ||
+    !ts.isIdentifier(parameter.name) ||
+    declaration.body?.statements.length !== 1 ||
+    !statement ||
+    !ts.isExpressionStatement(statement)
+  ) {
+    return null;
+  }
+  const expression = unwrapTransparentExpression(statement.expression);
+  const argument = ts.isCallExpression(expression) && expression.arguments[0]
+    ? unwrapTransparentExpression(expression.arguments[0])
+    : null;
+  if (
+    !ts.isCallExpression(expression) ||
+    expression.arguments.length !== 1 ||
+    !argument ||
+    !ts.isIdentifier(argument) ||
+    argument.text !== parameter.name.text ||
+    !ts.isPropertyAccessExpression(expression.expression) ||
+    expression.expression.name.text !== "set"
+  ) {
+    return null;
+  }
+  const observable = unwrapTransparentExpression(expression.expression.expression);
+  return ts.isIdentifier(observable) ? observable.text : null;
 }
 
 function isObservableTypeReference(

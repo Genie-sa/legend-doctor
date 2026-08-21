@@ -155,7 +155,8 @@ export async function analyzePathDetailed(
         reportFileName,
         context.sourceIndex.componentsFor(file),
         stateFlow,
-        createChildContractResolver(context, file)
+        createChildContractResolver(context, file),
+        context.sourceIndex.legendValueBridgesFor(file)
       )
     );
     const importedObservables = context.sourceIndex.observablesFor(file);

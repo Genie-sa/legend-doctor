@@ -9,6 +9,7 @@ import {
   isControlledInteractionProp,
   isDeclarationName,
   isDirectJsxAttributeExpression,
+  isEvaluationInert,
   isInsideJsxAttribute,
   isNonValueIdentifier,
   isPureExpression,
@@ -90,6 +91,7 @@ import {
   repeatedRenderHasStableItemKey,
   setterCallUsesPreviousValue,
   stateMayHoldCallable,
+  uniqueVariableDeclaration,
 } from "./rules/state-proofs.js";
 import { StateFlowIndex } from "./state-flow.js";
 import type { EffectAction, HookFinding, StateAction } from "./types.js";
@@ -200,7 +202,7 @@ export function analyzeSource(
     true,
     scriptKindForFile(fileName)
   );
-  return analyzeParsedSource(sourceFile, fileName, sourceComponents, new StateFlowIndex(), null);
+  return analyzeParsedSource(sourceFile, fileName, sourceComponents, new StateFlowIndex(), null, new Map());
 }
 
 export function analyzeSourceFile(
@@ -208,9 +210,17 @@ export function analyzeSourceFile(
   reportFileName: string,
   sourceComponents: ReadonlySet<string> = new Set(),
   stateFlow: StateFlowIndex = new StateFlowIndex(),
-  childContracts: ChildContractResolver | null = null
+  childContracts: ChildContractResolver | null = null,
+  legendValueBridges: ReadonlyMap<string, ReadonlySet<string>> = new Map()
 ): HookFinding[] {
-  return analyzeParsedSource(file.sourceFile, reportFileName, sourceComponents, stateFlow, childContracts);
+  return analyzeParsedSource(
+    file.sourceFile,
+    reportFileName,
+    sourceComponents,
+    stateFlow,
+    childContracts,
+    legendValueBridges
+  );
 }
 
 function analyzeParsedSource(
@@ -218,7 +228,8 @@ function analyzeParsedSource(
   fileName: string,
   sourceComponents: ReadonlySet<string>,
   stateFlow: StateFlowIndex,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
+  legendValueBridges: ReadonlyMap<string, ReadonlySet<string>>
 ): HookFinding[] {
   const imports = collectHookImports(sourceFile);
   const reactCommit = collectReactCommitContext(sourceFile, imports);
@@ -354,6 +365,11 @@ function analyzeParsedSource(
     effectClassifications.set(effect, classification);
     if (classification.derivedState) derivedStates.add(classification.derivedState);
   }
+  const legendValueMirrors = findLegendValueMirrors(
+    states,
+    usageByState,
+    legendValueBridges
+  );
 
   const findings: HookFinding[] = [];
   for (const state of states) {
@@ -387,7 +403,8 @@ function analyzeParsedSource(
           confidence: "certain" as const,
           message: `Delete React state \`${state.valueName}\`; it is assigned only by a derivation effect and should be calculated directly.`,
         }
-      : classifyState(
+      : legendValueMirrors.get(state) ??
+        classifyState(
           state,
           usage,
           localComponents,
@@ -1533,6 +1550,118 @@ function classifyValueReference(
   }
   usage.localRenderReads += 1;
   usage.directRenderNodes.push(node);
+}
+
+function findLegendValueMirrors(
+  states: readonly StateCandidate[],
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+  bridges: ReadonlyMap<string, ReadonlySet<string>>
+): ReadonlyMap<StateCandidate, ClassifiedState> {
+  const mirrors = new Map<StateCandidate, ClassifiedState>();
+  if (bridges.size === 0) return mirrors;
+  for (const state of states) {
+    const usage = usageByState.get(state);
+    const initial = state.call.arguments[0];
+    if (
+      !usage ||
+      !state.setterName ||
+      !initial ||
+      !ts.isIdentifier(initial) ||
+      usage.setterCalls === 0 ||
+      usage.setterReferences !== usage.setterCalls ||
+      usage.setterUsesPreviousValue ||
+      usage.effectReads > 0 ||
+      usage.effectWrites > 0 ||
+      usage.deferredReads > 0 ||
+      usage.eventReads > 0 ||
+      usage.shadowed ||
+      usage.escaped
+    ) {
+      continue;
+    }
+    const sourceName = initial.text;
+    const source = uniqueVariableDeclaration(state.owner, sourceName);
+    const hookCall = source?.initializer
+      ? unwrapTransparentExpression(source.initializer)
+      : null;
+    if (
+      !source ||
+      !hookCall ||
+      !ts.isCallExpression(hookCall) ||
+      hookCall.arguments.length !== 0 ||
+      !ts.isIdentifier(hookCall.expression)
+    ) {
+      continue;
+    }
+    const writers = bridges.get(hookCall.expression.text);
+    if (
+      !writers ||
+      !sourceBindingOnlySeedsState(source, state) ||
+      !usage.setterCallNodes.every(call => hasAdjacentBridgeWrite(call, writers))
+    ) {
+      continue;
+    }
+    mirrors.set(state, {
+      action: "use-value",
+      confidence: "probable",
+      message: `Delete the React mirror \`${state.valueName}\` and render from \`${sourceName}\`, the one-hop \`${hookCall.expression.text}\` value; every React setter call is paired with the same inert argument to its proven observable writer, which remains the sole update path.`,
+    });
+  }
+  return mirrors;
+}
+
+function sourceBindingOnlySeedsState(
+  source: ts.VariableDeclaration,
+  state: StateCandidate
+): boolean {
+  if (!ts.isIdentifier(source.name) || !state.owner.body) return false;
+  const binding = source.name;
+  const initial = state.call.arguments[0];
+  let safe = true;
+  let references = 0;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== binding.text ||
+      node === binding ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    references += 1;
+    if (node !== initial) safe = false;
+  });
+  return safe && references === 1;
+}
+
+function hasAdjacentBridgeWrite(
+  setterCall: ts.CallExpression,
+  writers: ReadonlySet<string>
+): boolean {
+  const statement = setterCall.parent;
+  if (
+    !ts.isExpressionStatement(statement) ||
+    statement.expression !== setterCall ||
+    !ts.isBlock(statement.parent) ||
+    setterCall.arguments.length !== 1 ||
+    !setterCall.arguments[0] ||
+    !isEvaluationInert(setterCall.arguments[0])
+  ) {
+    return false;
+  }
+  const statements = statement.parent.statements;
+  const index = statements.indexOf(statement);
+  return [statements[index - 1], statements[index + 1]].some(candidate => {
+    if (!candidate || !ts.isExpressionStatement(candidate)) return false;
+    const expression = unwrapTransparentExpression(candidate.expression);
+    return ts.isCallExpression(expression) &&
+      expression.arguments.length === 1 &&
+      !!expression.arguments[0] &&
+      ts.isIdentifier(expression.expression) &&
+      writers.has(expression.expression.text) &&
+      expression.arguments[0].getText() === setterCall.arguments[0]!.getText();
+  });
 }
 
 function classifyState(

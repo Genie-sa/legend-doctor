@@ -274,6 +274,51 @@ test("downgrades replace-legacy-use-value to style when the installed useValue i
   );
 });
 
+test("replaces an exact React mirror of a one-hop Legend value hook", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-value-bridge-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "state.ts"),
+    `
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const name$ = observable("");
+      const other$ = observable("");
+      export function useName() { return useValue(name$) ?? ""; }
+      export function setName(next: string) { name$.set(next); }
+      export function setOther(next: string) { other$.set(next); }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { setName as writeName, setOther as writeOther, useName as useSavedName } from "./state";
+      export function Screen() {
+        const saved = useSavedName();
+        const otherSaved = useSavedName();
+        const wrongSaved = useSavedName();
+        const [name, setDraftName] = useState(saved);
+        const [mismatch, setMismatch] = useState(otherSaved);
+        const [wrongSource, setWrongSource] = useState(wrongSaved);
+        const onName = (next: string) => { setDraftName(next); writeName(next); };
+        const onMismatch = (next: string) => { setMismatch(next); writeName(next.trim()); };
+        const onWrongSource = (next: string) => { setWrongSource(next); writeOther(next); };
+        return <><input value={name} onChange={event => onName(event.target.value)} />
+          <input value={mismatch} onChange={event => onMismatch(event.target.value)} />
+          <input value={wrongSource} onChange={event => onWrongSource(event.target.value)} /></>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  assert.equal(report.findings.find(finding => finding.name === "name")?.action, "use-value");
+  assert.notEqual(report.findings.find(finding => finding.name === "mismatch")?.action, "use-value");
+  assert.notEqual(report.findings.find(finding => finding.name === "wrongSource")?.action, "use-value");
+});
+
 test("shares one cached AST across source indexing and both detector families", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
   t.after(() => rm(root, { force: true, recursive: true }));

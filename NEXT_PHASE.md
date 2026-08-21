@@ -12,12 +12,12 @@ another rule.
 | Scored targets | 220 |
 | Scored hooks | 2,336 |
 | Manual hook labels | 774 |
-| Known misses | 42 |
+| Known misses | 41 |
 | State groups | 13/13 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (373/373) |
-| Actionable recall | 91.0% (373/410) |
-| Tests | 464/464 |
+| Actionable precision | 100% (374/374) |
+| Actionable recall | 91.2% (374/410) |
+| Tests | 465/465 |
 
 The full-app output currently contains 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`,
 40 `use-mount`, six `use-observe-effect`, 2,855 `review-state`, and 1,256 `review-effect` findings. Commit `69c38f4`
@@ -39,9 +39,9 @@ The analyzer was audited against its own reliability contract across every pinne
 | Determinism | byte-identical repeated full-app runs |
 | Non-Legend applications | zero practice findings in Tree Map, Tree Wallet, Excalidraw, Expensify, Formbricks, and Outline |
 
-The 43 known misses were re-inventoried against emitted output. Each one needs a proof family the local analysis
-deliberately does not fake: child prop contracts and lifetime resets (dialog, delete, and submit flags), cross-file
-hook summaries (`useWriterName`), keyed selection models with bounded summaries, stable-listener ref contracts
+The 41 known misses were re-inventoried against emitted output. Each one needs a proof family the local analysis
+deliberately does not fake: child prop contracts and lifetime resets (dialog, delete, and submit flags), keyed selection
+models with bounded summaries, stable-listener ref contracts
 (Expensify ImageView family), custom-hook command contracts, timer-deferred async status cohesion
 (`FilledButton.isLoading` requires tracing through a reassigned projection), and four distinct effect-keep shapes.
 No family currently has five equivalent positives across three app roots, so none may reopen under the gate. Forcing

@@ -1893,7 +1893,6 @@ export const goldCases = [
   },
   {
     action: "use-value",
-    enforced: false,
     file: "feature/profile/pages/ProfileEditScreen.tsx",
     hook: "useState",
     line: 19,
