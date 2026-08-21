@@ -2082,7 +2082,6 @@ export const goldCases = [
   })),
   {
     action: "move-state-down",
-    enforced: false,
     file: "feature/import/pages/ImportScreen.tsx",
     hook: "useState",
     line: 45,

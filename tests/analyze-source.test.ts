@@ -3282,6 +3282,66 @@ test("moves controlled state when an inline setter callback belongs to the same 
   );
 });
 
+test("moves branch-local state down when every outside reset provably unmounts the branch", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    type Phase = { kind: "idle" } | { kind: "loading" } | { kind: "done" };
+    function Result(_props: unknown) { return null; }
+    export function Screen() {
+      const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+      const [showDetails, setShowDetails] = useState(false);
+      const begin = () => {
+        setShowDetails(false);
+        setPhase({ kind: "loading" });
+      };
+      return <main>
+        <button onClick={begin}>Begin</button>
+        {phase.kind === "done" ? (
+          <Result
+            showDetails={showDetails}
+            onToggleDetails={() => setShowDetails(value => !value)}
+            onAgain={() => setPhase({ kind: "idle" })}
+          />
+        ) : null}
+      </main>;
+    }
+  `, "fixture.tsx");
+  const finding = findings.find(candidate => candidate.name === "showDetails");
+  assert.equal(finding?.action, "move-state-down");
+  assert.match(finding?.message ?? "", /resets it only when that branch unmounts/);
+});
+
+test("does not move branch-local state when an outside reset can leave the branch mounted", () => {
+  for (const reset of [
+    `setShowDetails(false);`,
+    `setShowDetails(false); setPhase({ kind: "done" });`,
+    `setShowDetails(false); setPhase({ kind: "loading" }); setPhase({ kind: "done" });`,
+    `setShowDetails(false); setPhase({ kind: "loading", kind });`,
+    `setShowDetails(false); setPhase({ kind: "loading", ...nextPhase });`,
+    `setShowDetails(false); setPhase(nextPhase);`,
+    `if (shouldClose) { setShowDetails(false); } setPhase({ kind: "loading" });`,
+  ]) {
+    const findings = analyzeSource(`
+      import { useState } from "react";
+      type Phase = { kind: "idle" } | { kind: "loading" } | { kind: "done" };
+      function Result(_props: unknown) { return null; }
+      export function Screen({ shouldClose }: { shouldClose: boolean }) {
+        const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+        const [showDetails, setShowDetails] = useState(false);
+        const begin = () => { ${reset} };
+        return <main>
+          <button onClick={begin}>Begin</button>
+          {phase.kind === "done" ? (
+            <Result showDetails={showDetails} onToggleDetails={() => setShowDetails(value => !value)} />
+          ) : null}
+        </main>;
+      }
+    `, "fixture.tsx");
+    const finding = findings.find(candidate => candidate.name === "showDetails");
+    assert.notEqual(finding?.action, "move-state-down", reset);
+  }
+});
+
 test("keeps observable ownership when a sibling command opens one exact leaf", () => {
   assert.deepEqual(
     actions(`

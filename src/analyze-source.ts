@@ -174,6 +174,10 @@ interface ControlledProjectionCut {
   consumerLine: number;
 }
 
+interface BranchUnmountMove {
+  target: string;
+}
+
 const LAZY_CALLBACK_LEAF_PROOFS: LazyCallbackLeafProofs = {
   hasUnstableSubtreeLifetime,
   uniqueReturnedExpression,
@@ -310,6 +314,12 @@ function analyzeParsedSource(
   );
   const statesWithCompanionWrites = findStatesWithCompanionWrites(states, stateFlow);
   const independentStateWrites = findIndependentStateWrites(states);
+  const branchUnmountMoves = findBranchUnmountMoves(
+    states,
+    usageByState,
+    safeCommandStates,
+    stateFlow
+  );
   const asyncLeafStatuses = findAsyncLeafStatuses(
     states,
     usageByState,
@@ -444,6 +454,7 @@ function analyzeParsedSource(
           keyedSelections.secondaryLeafStates.has(state),
           observableSubscriptionsByOwner.get(state.owner) ?? 0,
           siblingCut ?? null,
+          branchUnmountMoves.get(state) ?? null,
           childContracts,
           deferredCallbackHooks
         );
@@ -1203,6 +1214,240 @@ function findStatesWithCompanionWrites(
   return result;
 }
 
+function findBranchUnmountMoves(
+  states: readonly StateCandidate[],
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+  safeCommandStates: ReadonlySet<StateCandidate>,
+  stateFlow: StateFlowIndex
+): ReadonlyMap<StateCandidate, BranchUnmountMove> {
+  const result = new Map<StateCandidate, BranchUnmountMove>();
+  for (const state of states) {
+    const usage = usageByState.get(state);
+    if (
+      !state.setterName ||
+      !safeCommandStates.has(state) ||
+      !hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
+      !usage ||
+      usage.localRenderReads !== 0 ||
+      usage.effectReads !== 0 ||
+      usage.effectWrites !== 0 ||
+      usage.deferredReads !== 0 ||
+      usage.valueTransportSites.size !== 1 ||
+      usage.valueTargets.size !== 1 ||
+      usage.repeatedTransport ||
+      usage.setterReferences !== usage.setterCalls ||
+      usage.setterCallNodes.length < 2 ||
+      usage.shadowed ||
+      usage.escaped
+    ) {
+      continue;
+    }
+
+    const callSite = directBranchReturnCallSite(usage, state.owner);
+    const target = [...usage.valueTargets][0];
+    if (!callSite || !target) continue;
+    const subtree: ts.Node = ts.isJsxOpeningElement(callSite.opening)
+      ? callSite.opening.parent
+      : callSite.opening;
+    const gate = exactDiscriminatedBranchGate(callSite.opening, state.owner, states);
+    if (!gate) continue;
+    const controllerUsage = usageByState.get(gate.controller);
+    if (
+      !gate.controller.setterName ||
+      !controllerUsage ||
+      controllerUsage.shadowed ||
+      controllerUsage.escaped
+    ) {
+      continue;
+    }
+
+    const branchCalls = usage.setterCallNodes.filter(call => nodeWithin(call, subtree));
+    const outsideCalls = usage.setterCallNodes.filter(call => !nodeWithin(call, subtree));
+    if (
+      branchCalls.length === 0 ||
+      outsideCalls.length === 0 ||
+      !branchCalls.every(call => isDirectBranchInteractionWrite(call, callSite.opening, state)) ||
+      !outsideCalls.every(call =>
+        isBranchUnmountReset(
+          call,
+          state,
+          gate,
+          controllerUsage,
+          stateFlow
+        )
+      )
+    ) {
+      continue;
+    }
+    result.set(state, { target });
+  }
+  return result;
+}
+
+interface DiscriminatedBranchGate {
+  controller: StateCandidate;
+  property: string;
+  value: string;
+}
+
+function exactDiscriminatedBranchGate(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  owner: RuntimeFunctionLike,
+  states: readonly StateCandidate[]
+): DiscriminatedBranchGate | null {
+  let conditional: ts.ConditionalExpression | null = null;
+  for (let current: ts.Node | undefined = opening.parent; current && current !== owner; current = current.parent) {
+    if (
+      ts.isConditionalExpression(current) &&
+      nodeWithin(opening, current.whenTrue) &&
+      unwrapTransparentExpression(current.whenFalse).kind === ts.SyntaxKind.NullKeyword
+    ) {
+      conditional = current;
+      break;
+    }
+  }
+  if (!conditional) return null;
+  const condition = unwrapTransparentExpression(conditional.condition);
+  if (
+    !ts.isBinaryExpression(condition) ||
+    condition.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    return null;
+  }
+  const left = unwrapTransparentExpression(condition.left);
+  const right = unwrapTransparentExpression(condition.right);
+  if (
+    !ts.isPropertyAccessExpression(left) ||
+    !ts.isIdentifier(left.expression) ||
+    !ts.isStringLiteral(right)
+  ) {
+    return null;
+  }
+  const controllerName = left.expression.text;
+  const matches = states.filter(state =>
+    state.owner === owner && state.valueName === controllerName
+  );
+  return matches.length === 1
+    ? { controller: matches[0]!, property: left.name.text, value: right.text }
+    : null;
+}
+
+function isDirectBranchInteractionWrite(
+  call: ts.CallExpression,
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  state: StateCandidate
+): boolean {
+  const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner);
+  const callback = nearestMutationFunction(call, state.owner);
+  return !!state.setterName &&
+    !!attribute &&
+    /^on[A-Z]/.test(attribute.name.getText()) &&
+    attribute.parent.parent === opening &&
+    callback !== state.owner &&
+    mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName]));
+}
+
+function isBranchUnmountReset(
+  reset: ts.CallExpression,
+  state: StateCandidate,
+  gate: DiscriminatedBranchGate,
+  controllerUsage: StateUsage,
+  stateFlow: StateFlowIndex
+): boolean {
+  if (reset.arguments.length !== 1 || reset.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword) {
+    return false;
+  }
+  const region = nearestMutationFunction(reset, state.owner);
+  if (
+    region === state.owner ||
+    (!ts.isArrowFunction(region) &&
+      !ts.isFunctionDeclaration(region) &&
+      !ts.isFunctionExpression(region)) ||
+    !callbackIsEventRooted(region, state.owner, "", new Set())
+  ) {
+    return false;
+  }
+  const closeCalls = controllerUsage.setterCallNodes.filter(call =>
+    callsAreAdjacentStatements(reset, call) &&
+    callSetsDifferentDiscriminant(call, gate.property, gate.value)
+  );
+  const close = closeCalls.length === 1 ? closeCalls[0] : null;
+  if (!close) return false;
+  return !controllerUsage.setterCallNodes.some(call => {
+    if (
+      call === close ||
+      nearestMutationFunction(call, state.owner) !== region ||
+      !mutationsMayCoexecute(close, call, region, stateFlow)
+    ) {
+      return false;
+    }
+    const value = callDiscriminantValue(call, gate.property);
+    return value === null || value === gate.value;
+  });
+}
+
+function callsAreAdjacentStatements(
+  left: ts.CallExpression,
+  right: ts.CallExpression
+): boolean {
+  const leftStatement = left.parent;
+  const rightStatement = right.parent;
+  if (
+    !ts.isExpressionStatement(leftStatement) ||
+    leftStatement.expression !== left ||
+    !ts.isExpressionStatement(rightStatement) ||
+    rightStatement.expression !== right ||
+    leftStatement.parent !== rightStatement.parent ||
+    !ts.isBlock(leftStatement.parent)
+  ) {
+    return false;
+  }
+  const statements = leftStatement.parent.statements;
+  return Math.abs(statements.indexOf(leftStatement) - statements.indexOf(rightStatement)) === 1;
+}
+
+function callSetsDifferentDiscriminant(
+  call: ts.CallExpression,
+  property: string,
+  activeValue: string
+): boolean {
+  const value = callDiscriminantValue(call, property);
+  return value !== null && value !== activeValue;
+}
+
+function callDiscriminantValue(
+  call: ts.CallExpression,
+  property: string
+): string | null {
+  if (call.arguments.length !== 1 || !call.arguments[0]) return null;
+  const value = unwrapTransparentExpression(call.arguments[0]);
+  if (
+    !ts.isObjectLiteralExpression(value) ||
+    value.properties.some(candidate =>
+      (ts.isShorthandPropertyAssignment(candidate) && candidate.name.text === property) ||
+      (!ts.isShorthandPropertyAssignment(candidate) &&
+        (!ts.isPropertyAssignment(candidate) ||
+          (!ts.isIdentifier(candidate.name) && !ts.isStringLiteral(candidate.name))))
+    )
+  ) {
+    return null;
+  }
+  const matches = value.properties.filter(candidate => {
+    if (!ts.isPropertyAssignment(candidate)) return false;
+    const name = ts.isIdentifier(candidate.name) || ts.isStringLiteral(candidate.name)
+      ? candidate.name.text
+      : null;
+    return name === property;
+  });
+  const assignment = matches.length === 1 && ts.isPropertyAssignment(matches[0]!)
+    ? matches[0]!
+    : null;
+  const discriminator = assignment
+    ? unwrapTransparentExpression(assignment.initializer)
+    : null;
+  return discriminator && ts.isStringLiteral(discriminator) ? discriminator.text : null;
+}
+
 function findIndependentStateWrites(
   states: readonly StateCandidate[]
 ): {
@@ -1744,6 +1989,7 @@ function classifyState(
   isKeyedScalarWithSecondary: boolean,
   ownerObservableSubscriptions: number,
   siblingRenderCut: SiblingRenderCut | null,
+  branchUnmountMove: BranchUnmountMove | null,
   childContracts: ChildContractResolver | null,
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
 ): ClassifiedState {
@@ -1794,6 +2040,16 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace \`${state.valueName}\` with a component-lifetime observable; keep the producer sibling command-only and subscribe only in the sibling ${siblingRenderCut.consumerLabel} boundary at line ${siblingRenderCut.consumerLine}, passing state-independent projection inputs as ordinary snapshots.`,
+    };
+  }
+  if (
+    branchUnmountMove &&
+    (localComponents.has(branchUnmountMove.target) || sourceComponents.has(branchUnmountMove.target))
+  ) {
+    return {
+      action: "move-state-down",
+      confidence: "probable",
+      message: `Move React state \`${state.valueName}\` into \`${branchUnmountMove.target}\`; every read and interactive write belongs to that branch, and the owner resets it only when that branch unmounts.`,
     };
   }
   const unusedStateDeletionConfidence = setterCallsDiscardConfidence(usage.setterCallNodes);
