@@ -2,6 +2,7 @@ import path from "node:path";
 
 import ts from "typescript";
 
+import { exactObjectLiteralKeys } from "./analysis-ast.js";
 import {
   AnalysisProject,
   isSupportedAnalysisFile,
@@ -26,6 +27,7 @@ interface ModuleRecord {
   imports: ReadonlyMap<string, ImportBinding>;
   localExports: ReadonlyMap<string, string>;
   observableDeclarations: ReadonlySet<string>;
+  observableKeys: ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoryCalls: ReadonlyMap<string, string>;
   observableFactoryDeclarations: ReadonlySet<string>;
   reexports: ReadonlyMap<string, ReexportBinding>;
@@ -36,6 +38,7 @@ export interface SourceIndex {
   componentDeclarationFor(file: string, name: string): ResolvedSymbol | null;
   componentsFor(file: string): ReadonlySet<string>;
   observableFactoriesFor(file: string): ReadonlySet<string>;
+  observableKeysFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
   observablesFor(file: string): ReadonlySet<string>;
 }
 
@@ -182,6 +185,14 @@ export function buildSourceIndexFromFiles(
     componentDeclarationFor: (file, name) => resolvedFor(file, "component").get(name) ?? null,
     componentsFor: file => new Set(resolvedFor(file, "component").keys()),
     observableFactoriesFor: file => new Set(resolvedFor(file, "observable-factory").keys()),
+    observableKeysFor: file => {
+      const keys = new Map<string, ReadonlySet<string>>();
+      for (const [localName, symbol] of resolvedFor(file, "observable")) {
+        const observableKeys = records.get(symbol.file)?.observableKeys.get(symbol.localName);
+        if (observableKeys) keys.set(localName, observableKeys);
+      }
+      return keys;
+    },
     observablesFor: file => new Set(resolvedFor(file, "observable").keys()),
   };
 }
@@ -219,6 +230,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const imports = new Map<string, ImportBinding>();
   const localExports = new Map<string, string>();
   const observableDeclarations = new Set<string>();
+  const observableKeys = new Map<string, ReadonlySet<string>>();
   const observableFactoryCalls = new Map<string, string>();
   const observableFactoryDeclarations = new Set<string>();
   const reexports = new Map<string, ReexportBinding>();
@@ -300,6 +312,11 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           isObservableInitializer(declaration.initializer, observableFactories, legendNamespaces)
         ) {
           observableDeclarations.add(declaration.name.text);
+          const initializer = unwrapTransparentExpression(declaration.initializer);
+          const keys = ts.isCallExpression(initializer) && initializer.arguments[0]
+            ? exactObjectLiteralKeys(initializer.arguments[0])
+            : null;
+          if (keys) observableKeys.set(declaration.name.text, keys);
           if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
         }
         if (
@@ -365,6 +382,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     imports,
     localExports,
     observableDeclarations,
+    observableKeys,
     observableFactoryCalls,
     observableFactoryDeclarations,
     reexports,
@@ -418,7 +436,12 @@ function compilerOptionsFor(root: string): ts.CompilerOptions {
   }
   const read = ts.readConfigFile(configFile, ts.sys.readFile);
   if (read.error) return { jsx: ts.JsxEmit.Preserve, moduleResolution: ts.ModuleResolutionKind.Bundler };
-  return ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(configFile)).options;
+  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(configFile));
+  const options = parsed.options;
+  const missingBaseConfig = parsed.errors.some(diagnostic => diagnostic.code === 6053);
+  return options.moduleResolution === undefined && missingBaseConfig
+    ? { ...options, moduleResolution: ts.ModuleResolutionKind.Bundler }
+    : options;
 }
 
 function isSemanticComponentName(name: string): boolean {

@@ -666,6 +666,27 @@ test("uses the deepest common path when sibling leaves are read", () => {
   assert.match(finding?.message ?? "", /useValue\(profile\$\.contact\)/);
 });
 
+test("keeps a broad subscription when every known observable field is consumed", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const single$ = observable({ value: "one" });
+    const pair$ = observable({ first: "one", second: "two" });
+    export function Screen() {
+      const single = useValue(single$);
+      const pair = useValue(pair$);
+      return <span>{single.value}{pair.first}{pair.second}</span>;
+    }
+  `, "fixture.tsx");
+  assert.deepEqual(
+    findings.filter(finding =>
+      finding.action === "narrow-use-value-subscription" ||
+      finding.action === "split-use-value-leaves"
+    ),
+    []
+  );
+});
+
 test("splits divergent leaf reads into per-leaf subscriptions", () => {
   const [finding] = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
@@ -765,7 +786,10 @@ test("stops narrowing at a TypeScript assertion boundary", () => {
   const [finding] = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
-    const profile$ = observable({ contact: { name: "Ada" } as { name: string } | null });
+    const profile$ = observable({
+      contact: { name: "Ada" } as { name: string } | null,
+      status: "active",
+    });
     export function Profile() {
       const profile = useValue(profile$);
       return <span>{(profile.contact!).name}</span>;

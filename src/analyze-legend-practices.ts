@@ -2,6 +2,7 @@ import ts from "typescript";
 
 import {
   containsElementAccess,
+  exactObjectLiteralKeys,
   isEvaluationInert,
   rootIdentifier,
   unwrapTransparentExpression,
@@ -33,7 +34,8 @@ export function analyzeLegendPractices(
   fileName: string,
   importedObservables: ReadonlySet<string> = new Set(),
   importedObservableFactories: ReadonlySet<string> = new Set(),
-  installedLegendState: InstalledLegendState | null = null
+  installedLegendState: InstalledLegendState | null = null,
+  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map()
 ): LegendPracticeFinding[] {
   const sourceFile = ts.createSourceFile(
     fileName,
@@ -49,7 +51,8 @@ export function analyzeLegendPractices(
     fileName,
     importedObservables,
     importedObservableFactories,
-    installedLegendState
+    installedLegendState,
+    importedObservableKeys
   );
 }
 
@@ -59,14 +62,16 @@ export function analyzeLegendPracticesFile(
   importedObservables: ReadonlySet<string> = new Set(),
   importedObservableFactories: ReadonlySet<string> = new Set(),
   includeFindings = true,
-  installedLegendState: InstalledLegendState | null = null
+  installedLegendState: InstalledLegendState | null = null,
+  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map()
 ): LegendPracticeFinding[] {
   const findings = analyzeParsedLegendPractices(
     file.sourceFile,
     reportFileName,
     importedObservables,
     importedObservableFactories,
-    installedLegendState
+    installedLegendState,
+    importedObservableKeys
   );
   return includeFindings ? findings : [];
 }
@@ -76,7 +81,8 @@ function analyzeParsedLegendPractices(
   fileName: string,
   importedObservables: ReadonlySet<string>,
   importedObservableFactories: ReadonlySet<string>,
-  installedLegendState: InstalledLegendState | null
+  installedLegendState: InstalledLegendState | null,
+  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>
 ): LegendPracticeFinding[] {
   if (isNonProductionHarness(fileName)) return [];
   const imports = collectHookImports(sourceFile);
@@ -100,6 +106,13 @@ function analyzeParsedLegendPractices(
   ];
   if (lacksObservableSources) return findings;
   if (observableBindings.size === 0) return findings;
+  const observableKeys = collectObservableKeys(
+    sourceFile,
+    imports,
+    observableBindings,
+    importedObservableFactories,
+    importedObservableKeys
+  );
 
   visit(sourceFile, node => {
     if (!ts.isBlock(node) && !ts.isSourceFile(node)) return;
@@ -140,7 +153,13 @@ function analyzeParsedLegendPractices(
     flush();
   });
 
-  findings.push(...findObservableReadPractices(sourceFile, fileName, imports, observableBindings));
+  findings.push(...findObservableReadPractices(
+    sourceFile,
+    fileName,
+    imports,
+    observableBindings,
+    observableKeys
+  ));
   findings.push(...findObservableCloneWritePractices(sourceFile, fileName, observableBindings));
   findings.push(...findObservableTogglePractices(sourceFile, fileName, observableBindings));
 
@@ -148,6 +167,37 @@ function analyzeParsedLegendPractices(
     (left, right) =>
       left.location.line - right.location.line || left.location.column - right.location.column
   );
+}
+
+function collectObservableKeys(
+  sourceFile: ts.SourceFile,
+  imports: HookImports,
+  observableBindings: ReadonlySet<string>,
+  importedObservableFactories: ReadonlySet<string>,
+  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const keys = new Map(importedObservableKeys);
+  visit(sourceFile, node => {
+    if (
+      !ts.isVariableDeclaration(node) ||
+      !ts.isIdentifier(node.name) ||
+      !node.initializer ||
+      !observableBindings.has(node.name.text)
+    ) {
+      return;
+    }
+    const initializer = unwrapTransparentExpression(node.initializer);
+    if (
+      !ts.isCallExpression(initializer) ||
+      !isObservableFactoryCall(initializer, imports, importedObservableFactories) ||
+      !initializer.arguments[0]
+    ) {
+      return;
+    }
+    const objectKeys = exactObjectLiteralKeys(initializer.arguments[0]);
+    if (objectKeys) keys.set(node.name.text, objectKeys);
+  });
+  return keys;
 }
 
 function isSetStatement(statement: ts.Statement): boolean {

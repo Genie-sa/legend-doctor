@@ -33,7 +33,8 @@ export function findObservableReadPractices(
   sourceFile: ts.SourceFile,
   fileName: string,
   imports: HookImports,
-  observableBindings: ReadonlySet<string>
+  observableBindings: ReadonlySet<string>,
+  observableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map()
 ): LegendPracticeFinding[] {
   const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, node => {
@@ -46,7 +47,14 @@ export function findObservableReadPractices(
       }
     }
     if (ts.isVariableDeclaration(node)) {
-      const finding = narrowUseValueFinding(node, imports, observableBindings, sourceFile, fileName);
+      const finding = narrowUseValueFinding(
+        node,
+        imports,
+        observableBindings,
+        observableKeys,
+        sourceFile,
+        fileName
+      );
       if (finding) findings.push(finding);
     }
   });
@@ -224,6 +232,7 @@ function narrowUseValueFinding(
   declaration: ts.VariableDeclaration,
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
+  observableKeys: ReadonlyMap<string, ReadonlySet<string>>,
   sourceFile: ts.SourceFile,
   fileName: string
 ): LegendPracticeFinding | null {
@@ -240,6 +249,11 @@ function narrowUseValueFinding(
   if (!observable) return null;
 
   if (ts.isObjectBindingPattern(declaration.name)) {
+    const element = declaration.name.elements[0];
+    const property = element && !ts.isOmittedExpression(element)
+      ? element.propertyName?.getText(sourceFile) ?? element.name.getText(sourceFile)
+      : null;
+    if (property && consumesEveryKnownField(observable, [[property]], observableKeys)) return null;
     return narrowObjectBindingFinding(declaration, declaration.name, observable, sourceFile, fileName);
   }
   if (!ts.isIdentifier(declaration.name)) return null;
@@ -276,6 +290,7 @@ function narrowUseValueFinding(
     paths.push(path);
   });
   if (unsafe || paths.length === 0) return null;
+  if (consumesEveryKnownField(observable, paths, observableKeys)) return null;
   const commonPath = paths.slice(1).reduce(commonPathPrefix, paths[0]!);
   if (commonPath.length > 0) {
     return narrowFinding(
@@ -298,6 +313,18 @@ function narrowUseValueFinding(
     sourceFile,
     fileName
   );
+}
+
+function consumesEveryKnownField(
+  observable: ts.Expression,
+  paths: readonly (readonly string[])[],
+  observableKeys: ReadonlyMap<string, ReadonlySet<string>>
+): boolean {
+  if (!ts.isIdentifier(observable) || paths.some(path => path.length !== 1)) return false;
+  const knownKeys = observableKeys.get(observable.text);
+  if (!knownKeys || knownKeys.size === 0) return false;
+  const consumed = new Set(paths.map(path => path[0]!));
+  return consumed.size === knownKeys.size && [...knownKeys].every(key => consumed.has(key));
 }
 
 function splitLeavesFinding(

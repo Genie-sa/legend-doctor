@@ -6387,13 +6387,6 @@ export const goldPracticeCases = [
   },
   {
     action: "narrow-use-value-subscription",
-    file: "feature/settings/pages/ICloudSyncScreen.tsx",
-    line: 27,
-    rationale: "The screen reads only the sync status, so subscribing to the complete iCloud state causes unrelated updates.",
-    target: "memoria-src",
-  },
-  {
-    action: "narrow-use-value-subscription",
     file: "components/PlaybackControls.tsx",
     line: 47,
     rationale: "Playback controls read only library tracks, so sibling library fields should not invalidate the component.",
@@ -6401,23 +6394,9 @@ export const goldPracticeCases = [
   },
   {
     action: "narrow-use-value-subscription",
-    file: "components/PlaybackControls.tsx",
-    line: 48,
-    rationale: "Playback controls read only queue tracks, so sibling queue fields should not invalidate the component.",
-    target: "legend-music",
-  },
-  {
-    action: "narrow-use-value-subscription",
     file: "components/PlaylistSelector.tsx",
     line: 36,
     rationale: "The selector reads only library tracks, making the child observable the exact subscription boundary.",
-    target: "legend-music",
-  },
-  {
-    action: "narrow-use-value-subscription",
-    file: "components/PlaylistSelector.tsx",
-    line: 37,
-    rationale: "The selector reads only queue tracks, making the child observable the exact subscription boundary.",
     target: "legend-music",
   },
   {
@@ -6462,6 +6441,27 @@ export const goldPracticeCases = [
     file: "atoms/filters.ts",
     line: 94,
     rationale: "The selected date-range mode and its custom range form one computed snapshot and must publish as one transaction.",
+    target: "hoalu-app",
+  },
+  {
+    action: "narrow-use-value-subscription",
+    file: "components/categories/category-actions.tsx",
+    line: 136,
+    rationale: "The edit form reads only the selected category id, so name-only updates must not invalidate its query and form owner.",
+    target: "hoalu-app",
+  },
+  {
+    action: "narrow-use-value-subscription",
+    file: "components/categories/category-table.tsx",
+    line: 44,
+    rationale: "The table selection surface reads only the selected category id; the name belongs to the separate detail leaf.",
+    target: "hoalu-app",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "hooks/use-auth.ts",
+    line: 31,
+    rationale: "Sign-out resets the expense and income drafts as one user-visible transition before navigation.",
     target: "hoalu-app",
   },
   {

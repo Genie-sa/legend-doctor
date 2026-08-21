@@ -32,9 +32,9 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,336 hooks across 220 source roots. The corpus currently contains
-774 manual hook labels, including 43 non-enforced opportunities, plus thirteen
-grouped-instruction labels that verify exact cluster membership, thirty-six real Legend transaction labels, eleven direct
-`useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
+774 manual hook labels, including 42 non-enforced opportunities, plus thirteen
+grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
+`useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
 `useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Run the eval for

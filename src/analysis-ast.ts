@@ -59,6 +59,19 @@ export function containsElementAccess(node: ts.Node): boolean {
   return found;
 }
 
+export function exactObjectLiteralKeys(expression: ts.Expression): ReadonlySet<string> | null {
+  const value = unwrapTransparentExpression(expression);
+  if (!ts.isObjectLiteralExpression(value)) return null;
+  const keys = new Set<string>();
+  for (const property of value.properties) {
+    if (ts.isSpreadAssignment(property)) return null;
+    const name = propertyNameText(property.name);
+    if (name === null) return null;
+    keys.add(name);
+  }
+  return keys;
+}
+
 export function hookCallName(call: ts.CallExpression): string | null {
   if (ts.isIdentifier(call.expression)) return call.expression.text;
   return ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : null;
@@ -242,4 +255,10 @@ function bindingNameContains(binding: ts.BindingName, name: string): boolean {
   return binding.elements.some(element =>
     !ts.isOmittedExpression(element) && bindingNameContains(element.name, name)
   );
+}
+
+function propertyNameText(name: ts.PropertyName): string | null {
+  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
+    ? name.text
+    : null;
 }

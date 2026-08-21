@@ -171,7 +171,8 @@ export async function analyzePathDetailed(
           importedObservables,
           importedObservableFactories
         ),
-        context.installedLegendState
+        context.installedLegendState,
+        context.sourceIndex.observableKeysFor(file)
       )
     );
     const stages = analyzedFileCoverage(analysisFile, context, functionEntries, stateFlow);

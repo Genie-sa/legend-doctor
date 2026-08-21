@@ -70,6 +70,31 @@ test("resolves each import with its nearest application tsconfig", async () => {
   );
 });
 
+test("resolves package imports when an extended config is unavailable", async () => {
+  await withProject(
+    {
+      "package.json": JSON.stringify({
+        imports: { "#app/*": "./src/*" },
+        name: "fixture-app",
+        type: "module",
+      }),
+      "tsconfig.json": '{"extends":"@fixture/tsconfig/vite.json","include":["src"]}',
+      "src/state.ts": `
+        import { observable } from "@legendapp/state";
+        export const state$ = observable({ ready: false, message: "" });
+      `,
+      "src/screen.ts": 'import { state$ as appState$ } from "#app/state.ts";',
+    },
+    (root, sources) => {
+      const index = buildSourceIndex(root, sources);
+      const screen = path.join(root, "src/screen.ts");
+      const observables = index.observablesFor(screen);
+      assert.deepEqual([...observables], ["appState$"]);
+      assert.deepEqual([...index.observableKeysFor(screen).get("appState$") ?? []], ["ready", "message"]);
+    }
+  );
+});
+
 test("resolves exported Legend observables through aliases and barrels", async () => {
   await withProject(
     {
