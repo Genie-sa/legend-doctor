@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,336 hooks across 220 source roots. The corpus currently contains
-774 manual hook labels, including 29 non-enforced opportunities, plus thirteen
+774 manual hook labels, including 28 non-enforced opportunities, plus thirteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -105,7 +105,8 @@ Companion writes block per-state isolation even when another event independently
 payload/visibility transition across React and Legend would lose the original atomic workflow transaction. Those cases
 remain review until the complete state machine can be modeled and emitted as one grouped observable instruction.
 Dependency-driven external effects stay in React when one standalone integration follows non-state dependencies. The
-effect may use one imported/module/global precondition and one command-argument builder; finite membership/string queries
+effect may use one imported/module/global precondition, one command-argument builder, or one exact dependency collection
+mapped through a call-free static item-property projection; finite membership/string queries
 and a `Date` value are also accepted. A local translator is accepted only when it comes from `react-i18next`'s imported
 `useTranslation` and is listed in the dependency array. Local-state synchronization, observable snapshots, cleanup,
 timers, nested functions, subscriptions, arbitrary constructors or local builders, and multi-command effects remain

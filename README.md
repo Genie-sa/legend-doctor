@@ -42,8 +42,8 @@ Measured on pinned real applications:
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
 | Manual labels | 774 |
-| Known misses | 29 |
-| Unit tests | 475/475 |
+| Known misses | 28 |
+| Unit tests | 476/476 |
 | Actionable precision | 100% (383/383) |
 | Actionable recall | 93.4% (383/410) |
 | Legend practice precision | 100% (89/89) |

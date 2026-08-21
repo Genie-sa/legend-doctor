@@ -5680,6 +5680,50 @@ test("keeps one dependency-driven external resource command in React", () => {
   assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect", "keep-effect"]);
 });
 
+test("keeps a dependency-driven command with one pure mapped payload projection", () => {
+  const effects = analyzeSource(`
+    import { useEffect } from "react";
+    import { enqueue } from "./integration";
+    export function PureProjection({ result }: { result: { data?: Array<{ media: string }> } }) {
+      useEffect(() => {
+        if (result.data) enqueue(result.data.map(row => row.media));
+      }, [result.data]);
+      return null;
+    }
+    export function MutatingProjection({ rows }: { rows: Array<{ media: string }> }) {
+      useEffect(() => { enqueue(rows.map(row => { row.media = "changed"; return row.media; })); }, [rows]);
+      return null;
+    }
+    export function CallingProjection({ rows }: { rows: Array<{ media: string }> }) {
+      useEffect(() => { enqueue(rows.map(row => normalize(row.media))); }, [rows]);
+      return null;
+    }
+    export function ComputedProjection({ rows }: { rows: Array<{ media: string }> }) {
+      useEffect(() => { enqueue(rows.map(row => row["media"])); }, [rows]);
+      return null;
+    }
+    export function ShadowedSource({ rows }: { rows: string[] }) {
+      useEffect(() => {
+        const rows = [{ media: "local" }];
+        enqueue(rows.map(row => row.media));
+      }, [rows]);
+      return null;
+    }
+    export function DifferentSource({ rows, otherRows }: { rows: string[]; otherRows: string[] }) {
+      useEffect(() => { enqueue(otherRows.map(row => row.length)); }, [rows]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "keep-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+  ]);
+});
+
 test("keeps externally prepared dependency-driven navigation in React", () => {
   const effects = analyzeSource(`
     import { useEffect } from "react";

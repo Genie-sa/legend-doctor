@@ -5034,7 +5034,6 @@ export const goldCases = [
   })),
   {
     action: "keep-effect",
-    enforced: false,
     file: "backend/api/library/queries.ts",
     hook: "useEffect",
     line: 120,

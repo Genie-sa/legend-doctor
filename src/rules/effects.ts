@@ -359,8 +359,14 @@ function isDependencyDrivenExternalCommandEffect(
   const argumentCalls = nestedCalls.filter(candidate =>
     call.arguments.some(argument => nodeWithin(candidate, argument))
   );
+  const projectionCallbacks = new Set<ts.Node>(
+    nestedCalls.flatMap(candidate => {
+      const projection = dependencyMapProjectionCallback(candidate, call, dependencies, callback);
+      return projection ? [projection] : [];
+    })
+  );
   if (
-    containsFunctionLike(callback.body) ||
+    containsFunctionLike(callback.body, projectionCallbacks) ||
     argumentCalls.length > 1 ||
     nestedCalls.length - argumentCalls.length > 1 ||
     nestedCalls.some(
@@ -370,7 +376,8 @@ function isDependencyDrivenExternalCommandEffect(
           call,
           owner,
           dependencies,
-          moduleScopeBindings
+          moduleScopeBindings,
+          callback
         )
     ) ||
     isSubscriptionCall(call)
@@ -395,8 +402,10 @@ function isDependencyEffectSupportCall(
   command: ts.CallExpression,
   owner: RuntimeFunctionLike,
   dependencies: ts.ArrayLiteralExpression,
-  moduleScopeBindings: ReadonlySet<string>
+  moduleScopeBindings: ReadonlySet<string>,
+  effectCallback: ts.ArrowFunction | ts.FunctionExpression
 ): boolean {
+  if (dependencyMapProjectionCallback(call, command, dependencies, effectCallback)) return true;
   if (
     isCallbackDrivenCall(call) ||
     isSubscriptionCall(call)
@@ -420,6 +429,74 @@ function isDependencyEffectSupportCall(
     );
   }
   return moduleScopeBindings.has(root) || KNOWN_GLOBAL_OBJECTS.has(root);
+}
+
+function dependencyMapProjectionCallback(
+  call: ts.CallExpression,
+  command: ts.CallExpression,
+  dependencies: ts.ArrayLiteralExpression,
+  effectCallback: ts.ArrowFunction | ts.FunctionExpression
+): ts.ArrowFunction | null {
+  if (
+    !command.arguments.some(argument => nodeWithin(call, argument)) ||
+    !ts.isPropertyAccessExpression(call.expression) ||
+    call.expression.name.text !== "map" ||
+    call.arguments.length !== 1
+  ) {
+    return null;
+  }
+  const argument = call.arguments[0]!;
+  if (!ts.isArrowFunction(argument)) return null;
+  const callback = argument;
+  const parameter = callback.parameters.length === 1 ? callback.parameters[0]! : null;
+  if (
+    !parameter ||
+    !ts.isIdentifier(parameter.name) ||
+    parameter.dotDotDotToken ||
+    parameter.initializer ||
+    ts.isBlock(callback.body) ||
+    callback.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    !isParameterProjection(callback.body, parameter.name.text)
+  ) {
+    return null;
+  }
+  const receiver = unwrapTransparentExpression(call.expression.expression);
+  const root = staticAccessRoot(receiver);
+  if (!root || bindingDeclarationCount(effectCallback, root.text) !== 0) return null;
+  return dependencies.elements.some(dependency =>
+    sameStaticAccess(receiver, unwrapTransparentExpression(dependency))
+  ) ? callback : null;
+}
+
+function staticAccessRoot(expression: ts.Expression): ts.Identifier | null {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(value)) return value;
+  return ts.isPropertyAccessExpression(value) ? staticAccessRoot(value.expression) : null;
+}
+
+function isParameterProjection(expression: ts.Expression, parameterName: string): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(value)) return value.text === parameterName;
+  return ts.isPropertyAccessExpression(value) &&
+    isParameterProjection(value.expression, parameterName);
+}
+
+function sameStaticAccess(left: ts.Expression, right: ts.Expression): boolean {
+  if (ts.isIdentifier(left) || ts.isIdentifier(right)) {
+    return ts.isIdentifier(left) && ts.isIdentifier(right) && left.text === right.text;
+  }
+  if (ts.isPropertyAccessExpression(left) || ts.isPropertyAccessExpression(right)) {
+    return (
+      ts.isPropertyAccessExpression(left) &&
+      ts.isPropertyAccessExpression(right) &&
+      left.name.text === right.name.text &&
+      sameStaticAccess(
+        unwrapTransparentExpression(left.expression),
+        unwrapTransparentExpression(right.expression)
+      )
+    );
+  }
+  return false;
 }
 
 function isDependencyEffectValueConstructor(node: ts.NewExpression): boolean {
@@ -483,10 +560,10 @@ function isImportedTranslationArgument(
   );
 }
 
-function containsFunctionLike(node: ts.Node): boolean {
+function containsFunctionLike(node: ts.Node, allowed: ReadonlySet<ts.Node> = new Set()): boolean {
   let found = false;
   visit(node, candidate => {
-    if (ts.isFunctionLike(candidate)) found = true;
+    if (ts.isFunctionLike(candidate) && !allowed.has(candidate)) found = true;
   });
   return found;
 }
