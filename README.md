@@ -17,6 +17,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | `useEffect` | Keep, move to event, mount, unmount, or observable reaction |
 | Explicit React-owned effect | `keep-effect`; no lifecycle rewrite |
 | Latest-value `useRef` mirror | `keep-effect`; preserve post-commit timing |
+| Committed previous-value guard | `keep-effect`; preserve skip-mount and transition timing |
 | Coupled fields | One grouped model and one atomic migration |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | One unresolved JSX consumer | One local subscriber wrapper; no child contract required |
@@ -41,8 +42,8 @@ Measured on pinned real applications:
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
 | Manual labels | 774 |
-| Known misses | 34 |
-| Unit tests | 468/468 |
+| Known misses | 33 |
+| Unit tests | 469/469 |
 | Actionable precision | 100% (379/379) |
 | Actionable recall | 92.4% (379/410) |
 | Legend practice precision | 100% (89/89) |
@@ -95,6 +96,21 @@ useEffect(() => {
 The rule requires one imported React `useRef` and one exact assignment. It accepts either no dependency array, meaning
 the mirror runs after every commit, or one dependency that exactly matches the assigned value. Extra work, cleanup,
 calls, mutations, shadowed hooks, `[]`, mismatched dependencies, or a different source remain under review.
+
+An effect guarded by an exact committed previous value also stays in React:
+
+```tsx
+const previousValue = useRef(value);
+useEffect(() => {
+  if (previousValue.current === value) return;
+  previousValue.current = value;
+  synchronize(value);
+}, [value]);
+```
+
+This proof requires one immutable local ref initialized from the sole dependency, the equality-return guard as the first
+statement, and the matching ref assignment immediately after it. Async callbacks and reordered, mismatched, or
+pre-guard work remain under review.
 
 ```json
 {

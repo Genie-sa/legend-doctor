@@ -5871,6 +5871,96 @@ test("keeps exact latest-value ref mirrors in React post-commit timing", () => {
   for (const finding of findings) assert.match(finding.message, /committed ref/i);
 });
 
+test("keeps exact committed previous-value guards in React post-commit timing", () => {
+  const effects = analyzeSource(`
+    import React, { useEffect, useRef } from "react";
+    export function Exact({ value }: { value: string }) {
+      const previous = useRef(value);
+      useEffect(() => {
+        if (previous.current === value) return;
+        previous.current = value;
+        synchronize(value);
+      }, [value]);
+      return null;
+    }
+    export function BlockReturn({ value }: { value: string }) {
+      const previous = React.useRef(value);
+      React.useEffect(() => {
+        if (previous.current === value) { return; }
+        previous.current = value;
+        synchronize(value);
+      }, [value]);
+      return null;
+    }
+    export function WrongInitializer({ value, other }: { value: string; other: string }) {
+      const previous = useRef(other);
+      useEffect(() => {
+        if (previous.current === value) return;
+        previous.current = value;
+        synchronize(value);
+      }, [value]);
+      return null;
+    }
+    export function WrongDependency({ value, other }: { value: string; other: string }) {
+      const previous = useRef(value);
+      useEffect(() => {
+        if (previous.current === value) return;
+        previous.current = value;
+        synchronize(value);
+      }, [other]);
+      return null;
+    }
+    export function MutableRef({ value }: { value: string }) {
+      let previous = useRef(value);
+      useEffect(() => {
+        if (previous.current === value) return;
+        previous.current = value;
+        synchronize(value);
+      }, [value]);
+      return null;
+    }
+    export function WorkBeforeGuard({ value }: { value: string }) {
+      const previous = useRef(value);
+      useEffect(() => {
+        report(value);
+        if (previous.current === value) return;
+        previous.current = value;
+        synchronize(value);
+      }, [value]);
+      return null;
+    }
+    export function DelayedCommit({ value }: { value: string }) {
+      const previous = useRef(value);
+      useEffect(() => {
+        if (previous.current === value) return;
+        synchronize(value);
+        previous.current = value;
+      }, [value]);
+      return null;
+    }
+    export function Async({ value }: { value: string }) {
+      const previous = useRef(value);
+      useEffect(async () => {
+        if (previous.current === value) return;
+        previous.current = value;
+        await synchronize(value);
+      }, [value]);
+      return null;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "keep-effect",
+    "keep-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+  ]);
+  for (const finding of effects.slice(0, 2)) assert.match(finding.message, /committed ref/i);
+});
+
 test("reviews unproven or behaviorally different ref mirror effects", () => {
   const effects = analyzeSource(`
     import { useEffect, useRef } from "react";

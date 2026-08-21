@@ -4782,7 +4782,6 @@ export const goldCases = [
   },
   {
     action: "keep-effect",
-    enforced: false,
     file: "workflow-email-action-form.tsx",
     hook: "useEffect",
     line: 131,

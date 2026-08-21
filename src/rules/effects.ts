@@ -149,6 +149,7 @@ export function classifyEffect(
     !hasCleanup &&
     effect.owner &&
     (isExactLatestValueRefMirror(effect, useRefBindings, reactNamespaces) ||
+      isExactCommittedPreviousValueGuard(effect, useRefBindings, reactNamespaces) ||
       callbackIsCommittedRefIntegration(
         effect.callback,
         effect.owner,
@@ -574,6 +575,124 @@ function isExactLatestValueRefMirror(
     dependency === null ||
     source.getText(sourceFile) === unwrapTransparentExpression(dependency).getText(sourceFile)
   );
+}
+
+function isExactCommittedPreviousValueGuard(
+  effect: EffectCandidate,
+  useRefBindings: ReadonlySet<string>,
+  reactNamespaces: ReadonlySet<string>
+): boolean {
+  const { callback, dependencies, owner } = effect;
+  const callbackBody = callback?.body;
+  const ownerBody = owner?.body;
+  const dependency = dependencies?.elements[0];
+  if (
+    !callback ||
+    !owner ||
+    !ownerBody ||
+    !ts.isBlock(ownerBody) ||
+    !callbackBody ||
+    !ts.isBlock(callbackBody) ||
+    callback.parameters.length > 0 ||
+    callback.asteriskToken ||
+    callback.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    dependencies?.elements.length !== 1 ||
+    !dependency ||
+    !ts.isIdentifier(dependency) ||
+    callbackBody.statements.length < 2
+  ) {
+    return false;
+  }
+
+  const dependencyName = dependency.text;
+  const guard = callbackBody.statements[0]!;
+  if (!ts.isIfStatement(guard) || guard.elseStatement || !isBareReturn(guard.thenStatement)) {
+    return false;
+  }
+  const condition = unwrapTransparentExpression(guard.expression);
+  if (
+    !ts.isBinaryExpression(condition) ||
+    condition.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    return false;
+  }
+  const refName = committedRefComparedWithDependency(condition, dependencyName);
+  if (!refName || localBindingNames(callback, null).has(refName)) return false;
+
+  const commitStatement = callbackBody.statements[1]!;
+  if (!ts.isExpressionStatement(commitStatement)) return false;
+  const commit = unwrapTransparentExpression(commitStatement.expression);
+  const committedValue = ts.isBinaryExpression(commit)
+    ? unwrapTransparentExpression(commit.right)
+    : null;
+  if (
+    !ts.isBinaryExpression(commit) ||
+    commit.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+    committedRefName(commit.left) !== refName ||
+    !committedValue ||
+    !ts.isIdentifier(committedValue) ||
+    committedValue.text !== dependencyName
+  ) {
+    return false;
+  }
+
+  return ownerBody.statements.some(statement => {
+    if (
+      !ts.isVariableStatement(statement) ||
+      !(statement.declarationList.flags & ts.NodeFlags.Const)
+    ) {
+      return false;
+    }
+    return statement.declarationList.declarations.some(declaration =>
+      ts.isIdentifier(declaration.name) &&
+      declaration.name.text === refName &&
+      declaration.initializer !== undefined &&
+      ts.isCallExpression(declaration.initializer) &&
+      isImportedHookCall(
+        declaration.initializer,
+        useRefBindings,
+        reactNamespaces,
+        "useRef"
+      ) &&
+      importedHookIsUnshadowed(declaration.initializer, owner) &&
+      declaration.initializer.arguments.length === 1 &&
+      ts.isIdentifier(declaration.initializer.arguments[0]!) &&
+      declaration.initializer.arguments[0]!.text === dependencyName &&
+      bindingDeclarationCount(owner, refName) === 1
+    );
+  });
+}
+
+function isBareReturn(statement: ts.Statement): boolean {
+  if (ts.isReturnStatement(statement)) return statement.expression === undefined;
+  return ts.isBlock(statement) &&
+    statement.statements.length === 1 &&
+    ts.isReturnStatement(statement.statements[0]!) &&
+    statement.statements[0]!.expression === undefined;
+}
+
+function committedRefComparedWithDependency(
+  condition: ts.BinaryExpression,
+  dependencyName: string
+): string | null {
+  const left = unwrapTransparentExpression(condition.left);
+  const right = unwrapTransparentExpression(condition.right);
+  if (ts.isIdentifier(left) && left.text === dependencyName) {
+    return committedRefName(right);
+  }
+  if (ts.isIdentifier(right) && right.text === dependencyName) {
+    return committedRefName(left);
+  }
+  return null;
+}
+
+function committedRefName(expression: ts.Expression): string | null {
+  const target = unwrapTransparentExpression(expression);
+  return ts.isPropertyAccessExpression(target) &&
+    target.name.text === "current" &&
+    ts.isIdentifier(target.expression)
+    ? target.expression.text
+    : null;
 }
 
 function callbackIsCommittedRefIntegration(
