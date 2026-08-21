@@ -955,6 +955,12 @@ export const repositories = [
       },
       {
         effects: 1,
+        id: "formbricks-google-sheet-wrapper",
+        root: "apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/google-sheets/components/GoogleSheetWrapper.tsx",
+        states: 4,
+      },
+      {
+        effects: 1,
         id: "formbricks-notion-integration",
         root: "apps/web/app/(app)/workspaces/[workspaceId]/settings/workspace/integrations/notion/components/AddIntegrationModal.tsx",
         states: 5,
@@ -1809,6 +1815,15 @@ export const goldCases = [
     name: "isGeneratingReport",
     rationale: "Only the report action in CompaniesHeader renders this pending interval; the table and page content remain independent of it.",
     target: "tree-map",
+  },
+  {
+    action: "use-observable",
+    file: "GoogleSheetWrapper.tsx",
+    hook: "useState",
+    line: 39,
+    name: "showReconnectButton",
+    rationale: "The reconnect flag is written once from a server-action callback and rendered only by the resolved ManageIntegration leaf, whose contract is verified as render-only.",
+    target: "formbricks-google-sheet-wrapper",
   },
   {
     action: "use-observable",

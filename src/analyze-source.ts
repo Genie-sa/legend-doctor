@@ -32,6 +32,10 @@ import { collectHookImports, isImportedHookCall, isLocalHookCall, type HookImpor
 import type { AnalysisFile } from "./analysis-project.js";
 import { findAsyncLeafStatuses } from "./rules/async-leaf-status.js";
 import {
+  type ChildContractResolver,
+  propIsLeafRenderConsumer,
+} from "./rules/child-contract.js";
+import {
   collectCommandOnlyCallableReads,
   functionalUpdaterPrecedesSnapshotRead,
   statePublishesReadOnlyGetter,
@@ -195,23 +199,25 @@ export function analyzeSource(
     true,
     scriptKindForFile(fileName)
   );
-  return analyzeParsedSource(sourceFile, fileName, sourceComponents, new StateFlowIndex());
+  return analyzeParsedSource(sourceFile, fileName, sourceComponents, new StateFlowIndex(), null);
 }
 
 export function analyzeSourceFile(
   file: AnalysisFile,
   reportFileName: string,
   sourceComponents: ReadonlySet<string> = new Set(),
-  stateFlow: StateFlowIndex = new StateFlowIndex()
+  stateFlow: StateFlowIndex = new StateFlowIndex(),
+  childContracts: ChildContractResolver | null = null
 ): HookFinding[] {
-  return analyzeParsedSource(file.sourceFile, reportFileName, sourceComponents, stateFlow);
+  return analyzeParsedSource(file.sourceFile, reportFileName, sourceComponents, stateFlow, childContracts);
 }
 
 function analyzeParsedSource(
   sourceFile: ts.SourceFile,
   fileName: string,
   sourceComponents: ReadonlySet<string>,
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
+  childContracts: ChildContractResolver | null
 ): HookFinding[] {
   const imports = collectHookImports(sourceFile);
   const reactCommit = collectReactCommitContext(sourceFile, imports);
@@ -401,7 +407,8 @@ function analyzeParsedSource(
           keyedSelections.scalarStates.has(state),
           keyedSelections.secondaryLeafStates.has(state),
           observableSubscriptionsByOwner.get(state.owner) ?? 0,
-          siblingCut ?? null
+          siblingCut ?? null,
+          childContracts
         );
     const commitSensitiveOverride = commitSensitive &&
       baseClassification.action !== "review-state" &&
@@ -1548,7 +1555,8 @@ function classifyState(
   isKeyedLeafScalar: boolean,
   isKeyedScalarWithSecondary: boolean,
   ownerObservableSubscriptions: number,
-  siblingRenderCut: SiblingRenderCut | null
+  siblingRenderCut: SiblingRenderCut | null,
+  childContracts: ChildContractResolver | null
 ): ClassifiedState {
   if (nonProductionHarness) {
     return {
@@ -2000,6 +2008,44 @@ function classifyState(
       confidence: "probable",
       message: `Extract one stable local wrapper around \`${target ?? "the receiving child"}\` and move \`${state.valueName}\` into it; this broad owner only transports the value and setter to that leaf.`,
     };
+  }
+  if (
+    childContracts &&
+    usage.jsxTargets.size === 1 &&
+    usage.localRenderReads === 0 &&
+    stableOwnerLevelCallSite(usage, state.owner) !== null &&
+    hasSafeCommands &&
+    !hasCompanionWrites &&
+    !hasReactiveMutationPath &&
+    usage.effectReads === 0 &&
+    usage.effectWrites === 0 &&
+    usage.deferredReads === 0 &&
+    usage.setterCalls >= 1 &&
+    usage.setterReferences === usage.setterCalls &&
+    !usage.setterUsesPreviousValue &&
+    !usage.repeatedTransport &&
+    !usage.shadowed &&
+    !usage.escaped &&
+    !stateMayHoldCallable(state) &&
+    !callSiteIsKeyed(stableOwnerLevelCallSite(usage, state.owner)) &&
+    usage.setterCallNodes.every(call =>
+      call.arguments.length === 1 &&
+      !!call.arguments[0] &&
+      (call.arguments[0].kind === ts.SyntaxKind.TrueKeyword ||
+        call.arguments[0].kind === ts.SyntaxKind.FalseKeyword)
+    )
+  ) {
+    const [target] = [...usage.jsxTargets];
+    const propNames = target ? usage.valueProps.get(target) : undefined;
+    const propName = propNames && propNames.size === 1 ? [...propNames][0]! : null;
+    const child = target ? childContracts.resolveComponent(target) : null;
+    if (target && propName && child && propIsLeafRenderConsumer(child, propName)) {
+      return {
+        action: "use-observable",
+        confidence: "probable",
+        message: `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${target}\` call site in a leaf subscriber; subscribe once with \`useValue\`, pass the same plain value, and leave the child API unchanged. The child contract is verified: \`${target}\` renders the \`${propName}\` value directly and owns none of its lifecycle.`,
+      };
+    }
   }
   return {
     action: "review-state",
@@ -3062,4 +3108,41 @@ function collectLocalComponents(sourceFile: ts.SourceFile): ReadonlySet<string> 
 function isComponentName(name: string): boolean {
   const first = name[0];
   return first !== undefined && first === first.toUpperCase();
+}
+
+function stableOwnerLevelCallSite(
+  usage: StateUsage,
+  owner: RuntimeFunctionLike
+): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
+  const valueSite = [...usage.valueTransportSites][0];
+  if (valueSite === undefined || !owner.body) return null;
+  const openings: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
+  visit(owner.body, node => {
+    if (
+      openings.length === 0 &&
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      node.getStart() === valueSite
+    ) {
+      openings.push(node);
+    }
+  });
+  const opening = openings[0];
+  if (!opening) return null;
+  for (
+    let current: ts.Node | undefined = opening.parent;
+    current && current !== owner;
+    current = current.parent
+  ) {
+    if (isRuntimeFunctionLike(current)) return null;
+  }
+  return opening;
+}
+
+function callSiteIsKeyed(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | null
+): boolean {
+  if (!opening) return true;
+  return opening.attributes.properties.some(
+    property => ts.isJsxAttribute(property) && property.name.getText() === "key"
+  );
 }

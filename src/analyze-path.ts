@@ -3,9 +3,14 @@ import path from "node:path";
 
 import ts from "typescript";
 
+import { unwrapTransparentExpression } from "./analysis-ast.js";
 import { analyzeLegendPracticesFile } from "./analyze-legend-practices.js";
 import { analyzeSourceFile } from "./analyze-source.js";
 import { isRuntimeFunctionLike, type RuntimeFunctionLike } from "./ast.js";
+import {
+  type ChildComponentSource,
+  type ChildContractResolver,
+} from "./rules/child-contract.js";
 import {
   AnalysisCoverageLedger,
   type AnalysisCoverageOutcome,
@@ -149,7 +154,8 @@ export async function analyzePathDetailed(
         analysisFile,
         reportFileName,
         context.sourceIndex.componentsFor(file),
-        stateFlow
+        stateFlow,
+        createChildContractResolver(context, file)
       )
     );
     const importedObservables = context.sourceIndex.observablesFor(file);
@@ -429,4 +435,80 @@ async function collectSourceFiles(root: string): Promise<string[]> {
   }
   await walk(root);
   return files;
+}
+
+function createChildContractResolver(
+  context: AnalysisContext,
+  importerFile: string
+): ChildContractResolver {
+  return {
+    resolveComponent(name: string): ChildComponentSource | null {
+      const resolved = context.sourceIndex.componentDeclarationFor(importerFile, name);
+      if (!resolved) return null;
+      const analysisFile = context.project.getFile(resolved.file);
+      if (!analysisFile) return null;
+      return findComponentDeclaration(analysisFile.sourceFile, resolved.localName);
+    },
+  };
+}
+
+function findComponentDeclaration(
+  sourceFile: ts.SourceFile,
+  localName: string
+): ChildComponentSource | null {
+  const reactWrappers = importedNamesFromReact(sourceFile);
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === localName &&
+      statement.body
+    ) {
+      return { owner: statement, body: statement.body };
+    }
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== localName) continue;
+      if (!declaration.initializer) continue;
+      let initializer = unwrapTransparentExpression(declaration.initializer);
+      const wrapped = wrapperRenderFunction(initializer, reactWrappers);
+      if (wrapped) initializer = wrapped;
+      if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+        return { owner: initializer, body: initializer.body };
+      }
+    }
+  }
+  return null;
+}
+
+function wrapperRenderFunction(
+  initializer: ts.Expression,
+  reactWrappers: ReadonlySet<string>
+): ts.Expression | null {
+  if (
+    !ts.isCallExpression(initializer) ||
+    !ts.isIdentifier(initializer.expression) ||
+    !reactWrappers.has(initializer.expression.text) ||
+    initializer.arguments.length < 1
+  ) {
+    return null;
+  }
+  const inner = unwrapTransparentExpression(initializer.arguments[0]!);
+  return wrapperRenderFunction(inner, reactWrappers) ?? inner;
+}
+
+function importedNamesFromReact(sourceFile: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (statement.moduleSpecifier.text !== "react") continue;
+    const clause = statement.importClause;
+    if (!clause) continue;
+    if (clause.name) names.add(clause.name.text);
+    if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+      for (const element of clause.namedBindings.elements) {
+        names.add(element.name.text);
+      }
+    }
+  }
+  return names;
 }

@@ -20,6 +20,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Coupled fields | One grouped model and one atomic migration |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | One unresolved JSX consumer | One local subscriber wrapper; no child contract required |
+| Resolved leaf consumer with verified render-only contract | Owner observable plus one call-site subscriber; child API unchanged |
 | Broad subscriptions | Lowest proven observable path |
 | Divergent leaf reads from one broad `useValue(parent$)` | Per-leaf `useValue` subscriptions with one mechanical read rewrite |
 | `useValue(leaf$.get())` | `useValue(leaf$)` with types and options preserved |

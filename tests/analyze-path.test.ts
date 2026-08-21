@@ -615,6 +615,138 @@ test("places an observable subscription at one resolved child call site", async 
   assert.match(finding?.message ?? "", /stable `StatusLeaf` call site/);
 });
 
+test("verifies a leaf child contract before promoting the transport", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-leaf-"));
+  await writeFile(
+    path.join(root, "StatusLeaf.tsx"),
+    `
+      export function StatusLeaf({ busy }: { busy: boolean }) {
+        const label = busy ? "Busy" : "Ready";
+        return <section data-busy={busy}><span>{label}</span></section>;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { StatusLeaf } from "./StatusLeaf";
+      export function Screen() {
+        const [busy, setBusy] = useState(true);
+        const run = async () => { setBusy(false); await work(); };
+        ${"\n".repeat(150)}
+        const content = (
+          <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+            <Actions /><Preview /><button onClick={run} /><StatusLeaf busy={busy} /></main>
+        );
+        return <Shell>{content}</Shell>;
+      }
+    `
+  );
+
+  const report = await analyzePath(root);
+  const finding = report.findings.find(candidate => candidate.name === "busy");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /child contract is verified/);
+  assert.match(finding?.message ?? "", /renders the `busy` value directly/);
+});
+
+test("abstains when the resolved child stores the prop in its own state", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-state-"));
+  await writeFile(
+    path.join(root, "StatusLeaf.tsx"),
+    `
+      import { useState } from "react";
+      export function StatusLeaf({ busy }: { busy: boolean }) {
+        const [seen, setSeen] = useState(busy);
+        return <span>{String(seen)}</span>;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { StatusLeaf } from "./StatusLeaf";
+      export function Screen() {
+        const [busy, setBusy] = useState(true);
+        ${"\n".repeat(150)}
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+          <Actions /><Preview /><button onClick={() => setBusy(false)} /><button onClick={() => setBusy(true)} />
+          <StatusLeaf busy={busy} /></main>;
+      }
+    `
+  );
+
+  const report = await analyzePath(root);
+  const finding = report.findings.find(candidate => candidate.name === "busy");
+  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
+});
+
+test("abstains when the resolved child forwards the prop to another component", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-fwd-"));
+  await writeFile(
+    path.join(root, "StatusLeaf.tsx"),
+    `
+      import { Inner } from "./Inner";
+      export function StatusLeaf({ busy }: { busy: boolean }) {
+        return <Inner busy={busy} />;
+      }
+    `
+  );
+  await writeFile(path.join(root, "Inner.tsx"), 'export const Inner = () => null;');
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { StatusLeaf } from "./StatusLeaf";
+      export function Screen() {
+        const [busy, setBusy] = useState(true);
+        ${"\n".repeat(150)}
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+          <Actions /><Preview /><button onClick={() => setBusy(false)} /><button onClick={() => setBusy(true)} />
+          <StatusLeaf busy={busy} /></main>;
+      }
+    `
+  );
+
+  const report = await analyzePath(root);
+  const finding = report.findings.find(candidate => candidate.name === "busy");
+  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
+});
+
+test("abstains when the resolved child reads the prop inside effects or callbacks", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-effect-"));
+  await writeFile(
+    path.join(root, "StatusLeaf.tsx"),
+    `
+      import { useEffect } from "react";
+      export function StatusLeaf({ busy }: { busy: boolean }) {
+        useEffect(() => report(busy), [busy]);
+        return <span>{String(busy)}</span>;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { StatusLeaf } from "./StatusLeaf";
+      export function Screen() {
+        const [busy, setBusy] = useState(true);
+        ${"\n".repeat(150)}
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+          <Actions /><Preview /><button onClick={() => setBusy(false)} /><button onClick={() => setBusy(true)} />
+          <StatusLeaf busy={busy} /></main>;
+      }
+    `
+  );
+
+  const report = await analyzePath(root);
+  const finding = report.findings.find(candidate => candidate.name === "busy");
+  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
+});
+
 test("does not require child prop semantics for a call-site subscription wrapper", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-call-site-"));
   await writeFile(
@@ -827,7 +959,7 @@ test("does not promote imported-child state written by an effect", async () => {
 
   const report = await analyzePath(root);
   const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.notEqual(finding?.action, "use-observable");
+  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
 });
 
 test("does not promote a leaf call site when commands share reactive mutation ownership", async () => {
@@ -854,7 +986,7 @@ test("does not promote a leaf call site when commands share reactive mutation ow
 
   const report = await analyzePath(root);
   const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.notEqual(finding?.action, "use-observable");
+  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
 });
 
 test("does not promote a leaf call site inside an opaque render callback", async () => {

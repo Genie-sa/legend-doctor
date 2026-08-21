@@ -33,12 +33,13 @@ interface ModuleRecord {
 }
 
 export interface SourceIndex {
+  componentDeclarationFor(file: string, name: string): ResolvedSymbol | null;
   componentsFor(file: string): ReadonlySet<string>;
   observableFactoriesFor(file: string): ReadonlySet<string>;
   observablesFor(file: string): ReadonlySet<string>;
 }
 
-interface ResolvedSymbol {
+export interface ResolvedSymbol {
   file: string;
   localName: string;
 }
@@ -178,6 +179,7 @@ export function buildSourceIndexFromFiles(
   }
 
   return {
+    componentDeclarationFor: (file, name) => resolvedFor(file, "component").get(name) ?? null,
     componentsFor: file => new Set(resolvedFor(file, "component").keys()),
     observableFactoriesFor: file => new Set(resolvedFor(file, "observable-factory").keys()),
     observablesFor: file => new Set(resolvedFor(file, "observable").keys()),

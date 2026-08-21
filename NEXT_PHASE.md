@@ -9,15 +9,15 @@ another rule.
 | --- | ---: |
 | Full app roots | 12 |
 | Full app hooks | 6,147 |
-| Scored targets | 218 |
-| Scored hooks | 2,325 |
-| Manual hook labels | 772 |
+| Scored targets | 219 |
+| Scored hooks | 2,330 |
+| Manual hook labels | 773 |
 | Known misses | 43 |
 | State groups | 13/13 |
 | Legend practices | 82/82 |
-| Actionable precision | 100% (370/370) |
-| Actionable recall | 90.7% (370/408) |
-| Tests | 457/457 |
+| Actionable precision | 100% (371/371) |
+| Actionable recall | 90.7% (371/409) |
+| Tests | 461/461 |
 
 The full-app output currently contains 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`,
 40 `use-mount`, six `use-observe-effect`, 2,855 `review-state`, and 1,256 `review-effect` findings. Commit `69c38f4`
@@ -48,6 +48,18 @@ No family currently has five equivalent positives across three app roots, so non
 these labels would trade the 100% actionable precision for score; they remain explicit non-enforced opportunities.
 
 ## What this phase changed
+
+`src/rules/child-contract.ts` adds the first cross-file structural proof. When one transport target resolves through
+the source index, the analyzer opens the child's declaration (including `forwardRef`/`memo` wrappers with React import
+provenance) and proves the prop is a pure render consumer: every read lands in host-element attributes, JSX children,
+or bounded immutable projections; hooks, callbacks, writes, forwarding to other components, and calls abstain. The
+promotion then emits `use-observable` with a call-site subscriber wrapper that leaves the child API unchanged. Gates
+mirror the audited call-site rules: stable owner-level call site, non-keyed, no repeated transport, event-safe literal
+setter commands, no companion writes or reactive mutation paths.
+
+The twelve-root delta is exactly one promotion: Formbricks `GoogleSheetWrapper.showReconnectButton`, now pinned as an
+enforced label (`formbricks-google-sheet-wrapper`). Expensify-style submit flags with companion writes remain
+candidates by doctrine; their future family needs a proven companion-write independence proof.
 
 `src/rules/observable-reads.ts` now emits `split-use-value-leaves`: when every read of a broad
 `useValue(parent$)` binding resolves through static leaf paths but no single path is shared, the rule replaces one
