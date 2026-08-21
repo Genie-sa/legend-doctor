@@ -36,7 +36,8 @@ At the pinned commits, the analyzer inventories 2,325 hooks across 218 source ro
 grouped-instruction labels that verify exact cluster membership, thirty-six real Legend transaction labels, eleven direct
 `useValue` labels, seven lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
-`useSelector`/`use$` to `useValue` migration. Run the eval for
+`useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
+`useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Run the eval for
 the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
 

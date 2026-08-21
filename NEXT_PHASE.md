@@ -14,17 +14,32 @@ another rule.
 | Manual hook labels | 772 |
 | Known misses | 43 |
 | State groups | 13/13 |
-| Legend practices | 77/77 |
+| Legend practices | 82/82 |
 | Actionable precision | 100% (370/370) |
 | Actionable recall | 90.7% (370/408) |
-| Tests | 431/431 |
+| Tests | 457/457 |
 
 The full-app output currently contains 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`,
-40 `use-mount`, six `use-observe-effect`, 2,855 `review-state`, and 1,256 `review-effect` findings.
+40 `use-mount`, six `use-observe-effect`, 2,855 `review-state`, and 1,256 `review-effect` findings. Commit `69c38f4`
+had additionally demoted twenty owners to `keep-state`; the demotion now emits those as evidence-bearing
+`review-state` findings instead, so the twelve-root delta against `69c38f4` is exactly twenty `keep-state` →
+`review-state` restorations (hoalu five, Legend Music nine, Memoria src six) with zero Legend practice action changes.
 
 ## What this phase changed
 
-`src/rules/command-only-state.ts` now owns command-only ref safety. It traces local state-reading callbacks and rejects a
+`src/rules/observable-reads.ts` now emits `split-use-value-leaves`: when every read of a broad
+`useValue(parent$)` binding resolves through static leaf paths but no single path is shared, the rule replaces one
+whole-object subscription with per-leaf `useValue` subscriptions and prescribes the exact read rewrite. Whole-value
+escapes, calls, writes, dynamic or optional access, reserved members, and proposed-name collisions abstain. The
+five-positive/three-app gate is met by Memoria (DataScreen, SpotlightScreen), Legend Music (JumpSearchMenuDropdown,
+LibrarySettings), and Genie Courses (quiz-builder); all five sites were manually audited. Optional-chaining consumers
+such as Hoalu's `customRange?.from` remain correct abstentions.
+
+The same phase restored the `review-state` demotion from commit `69c38f4` to an evidence-bearing review: update
+frequency cannot be proven statically, so findings name the owner's competing observable subscriptions instead of
+suppressing the opportunity.
+
+`src/rules/command-only-state.ts` owns command-only ref safety. It traces local state-reading callbacks and rejects a
 ref rewrite when React state republishes that callback through rendering, Context, a lifecycle hook, or an imperative
 handle. It also preserves the old render snapshot when a functional updater is followed by a state read.
 

@@ -21,6 +21,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | One unresolved JSX consumer | One local subscriber wrapper; no child contract required |
 | Broad subscriptions | Lowest proven observable path |
+| Divergent leaf reads from one broad `useValue(parent$)` | Per-leaf `useValue` subscriptions with one mechanical read rewrite |
 | `useValue(leaf$.get())` | `useValue(leaf$)` with types and options preserved |
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
 | Whole-object clone writes | Direct child `.set()` on the changed path |
@@ -42,7 +43,7 @@ Measured on pinned real applications:
 | Unit tests | 431/431 |
 | Actionable precision | 100% (370/370) |
 | Actionable recall | 90.7% (370/408) |
-| Legend practice precision | 100% (77/77) |
+| Legend practice precision | 100% (82/82) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open WebUI React Native, and Hoalu.

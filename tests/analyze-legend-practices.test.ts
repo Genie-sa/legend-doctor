@@ -666,6 +666,101 @@ test("uses the deepest common path when sibling leaves are read", () => {
   assert.match(finding?.message ?? "", /useValue\(profile\$\.contact\)/);
 });
 
+test("splits divergent leaf reads into per-leaf subscriptions", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const localMusicState$ = observable({ tracks: [], isLocalFilesSelected: false, scanProgress: 0 });
+    export function Playlist() {
+      const state = useValue(localMusicState$);
+      const hasTracks = state.tracks.length > 0;
+      return <section>{hasTracks && String(state.isLocalFilesSelected)}{String(state.tracks)}</section>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "split-use-value-leaves");
+  assert.equal(finding?.confidence, "certain");
+  assert.equal(finding?.disposition, "change");
+  assert.match(finding?.message ?? "", /const tracks = useValue\(localMusicState\$\.tracks\)/);
+  assert.match(
+    finding?.message ?? "",
+    /const isLocalFilesSelected = useValue\(localMusicState\$\.isLocalFilesSelected\)/
+  );
+  assert.match(finding?.evidence.join(" ") ?? "", /3 raw-value reads resolve through 2 distinct static leaf paths/);
+});
+
+test("keeps the single-path narrowing when one shared path exists", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ contact: { name: "Ada" }, other: 1 });
+    export function Profile() {
+      const profile = useValue(profile$);
+      return <span>{profile.contact.name} {profile.contact.name.trim()}</span>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "narrow-use-value-subscription");
+});
+
+test("abstains from the split when the whole value escapes as a bare read", () => {
+  for (const escape of [
+    `track(state);`,
+    `const snapshot = state;`,
+    `<Row item={state} />`,
+    `<Row {...state} />`,
+    `[state].length;`
+  ]) {
+    const findings = analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const state$ = observable({ title: "a", done: false });
+      function Row(props: Record<string, unknown>) { return null; }
+      function track(value: unknown) { return value; }
+      export function Screen() {
+        const state = useValue(state$);
+        ${escape}
+        return <span>{state.title}{String(state.done)}</span>;
+      }
+    `, "fixture.tsx");
+    assert.deepEqual(findings, [], escape);
+  }
+});
+
+test("abstains from the split on writes, calls, dynamic access, and reserved members", () => {
+  for (const hazard of [
+    `state.title = "x";`,
+    `state?.title;`,
+    `state["title"];`,
+    `state.validate();`,
+    `String(state.size);`
+  ]) {
+    const findings = analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const state$ = observable({ title: "a", done: false, validate: () => true, size: 1 });
+      export function Screen() {
+        const state = useValue(state$);
+        ${hazard}
+        return <span>{state.title}{String(state.done)}</span>;
+      }
+    `, "fixture.tsx");
+    assert.deepEqual(findings, [], hazard);
+  }
+});
+
+test("abstains from the split when a proposed leaf name already binds in the owner", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const state$ = observable({ tracks: [], ready: true });
+    export function Screen() {
+      const state = useValue(state$);
+      const tracks = [1, 2, 3];
+      return <span>{String(tracks.length)}{String(state.ready)}{String(state.tracks)}</span>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding, undefined);
+});
+
 test("stops narrowing at a TypeScript assertion boundary", () => {
   const [finding] = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
@@ -770,6 +865,19 @@ test("does not propagate observable provenance through shadowed roots or factori
   assert.equal(findings.some(finding => finding.action === "narrow-use-value-subscription"), false);
 });
 
+test("splits divergent static leaf reads instead of keeping the broad subscription", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const profile$ = observable({ name: "Ada", email: "ada@example.com", rows: [] as string[] });
+    export function Profile({ keyName }: { keyName: "name" }) {
+      const profile = useValue(profile$);
+      return <span>{profile.name} {profile.email}</span>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "split-use-value-leaves");
+});
+
 test("keeps broad useValue reads when the child subscription is not proven equivalent", () => {
   const source = (body: string) => analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
@@ -781,7 +889,6 @@ test("keeps broad useValue reads when the child subscription is not proven equiv
     }
   `, "fixture.tsx");
   for (const body of [
-    `return <span>{profile.name} {profile.email}</span>;`,
     `return <span>{profile?.name}</span>;`,
     `return <span>{profile[keyName]}</span>;`,
     `return <Child profile={profile} />;`,
@@ -791,7 +898,7 @@ test("keeps broad useValue reads when the child subscription is not proven equiv
     `return <span>{profile.name()}</span>;`,
     `return <span>{profile.contact?.name}</span>;`,
     `return <span>{profile.contact[keyName]}</span>;`,
-    `function nested(profile: { name: string }) { return profile.name; } return <span>{profile.name}</span>;`,
+    `function nested(profile: { name: string }) { return profile.name; } return <span>{profile.name}</span>;`
   ]) {
     assert.deepEqual(source(body), [], body);
   }

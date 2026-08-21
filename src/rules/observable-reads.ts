@@ -277,17 +277,101 @@ function narrowUseValueFinding(
   });
   if (unsafe || paths.length === 0) return null;
   const commonPath = paths.slice(1).reduce(commonPathPrefix, paths[0]!);
-  if (commonPath.length === 0) return null;
-  return narrowFinding(
+  if (commonPath.length > 0) {
+    return narrowFinding(
+      declaration,
+      observable,
+      commonPath.join("."),
+      localName,
+      paths.length,
+      false,
+      sourceFile,
+      fileName
+    );
+  }
+  return splitLeavesFinding(
     declaration,
-    observable,
-    commonPath.join("."),
     localName,
-    paths.length,
-    false,
+    observable,
+    paths,
+    owner,
     sourceFile,
     fileName
   );
+}
+
+function splitLeavesFinding(
+  declaration: ts.VariableDeclaration,
+  localName: string,
+  observable: ts.Expression,
+  reads: readonly (readonly string[])[],
+  owner: RuntimeFunctionLike,
+  sourceFile: ts.SourceFile,
+  fileName: string
+): LegendPracticeFinding | null {
+  if (!owner.body) return null;
+  const distinct: string[][] = [];
+  for (const path of reads) {
+    if (!distinct.some(existing => existing.join(".") === path.join("."))) {
+      distinct.push([...path]);
+    }
+  }
+  distinct.sort((left, right) => left.length - right.length);
+  const leaves = distinct.filter(path =>
+    !distinct.some(other =>
+      other.length < path.length &&
+      other.every((segment, index) => segment === path[index])
+    )
+  );
+  if (leaves.length < 2) return null;
+
+  const parentPath = observable.getText(sourceFile);
+  const leafNames = leaves.map(path => ({
+    name: leafSubscriptionName(path),
+    path
+  }));
+  const proposedNames = new Set(leafNames.map(leaf => leaf.name));
+  if (proposedNames.size !== leafNames.length) return null;
+  let collision = false;
+  visit(owner.body, node => {
+    if (
+      !collision &&
+      ts.isIdentifier(node) &&
+      node !== declaration.name &&
+      !isNonValueIdentifier(node) &&
+      proposedNames.has(node.text)
+    ) {
+      collision = true;
+    }
+  });
+  if (collision) return null;
+
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(
+    declaration.getStart(sourceFile)
+  );
+  const declarations = leafNames
+    .map(leaf => `\`const ${leaf.name} = useValue(${parentPath}.${leaf.path.join(".")})\``)
+    .join(", ");
+  return {
+    action: "split-use-value-leaves",
+    confidence: "certain",
+    disposition: "change",
+    evidence: [
+      `${reads.length} raw-value reads resolve through ${leafNames.length} distinct static leaf paths`,
+      "every read is a static property chain and no read escapes as a whole value, call, write, or dynamic access"
+    ],
+    location: { column: character + 1, file: fileName, line: line + 1 },
+    message: `Split \`${localName}\` from \`useValue(${parentPath})\` into per-leaf subscriptions: ${declarations}; rewrite the ${reads.length} raw-value reads of \`${localName}.*\` to those leaf values so sibling fields no longer invalidate this component.`,
+    practice: "reactivity"
+  };
+}
+
+function leafSubscriptionName(path: readonly string[]): string {
+  return path
+    .map((segment, index) =>
+      index === 0 ? segment : segment.charAt(0).toUpperCase() + segment.slice(1)
+    )
+    .join("");
 }
 
 function staticRawValuePath(reference: ts.Identifier): readonly string[] | null {

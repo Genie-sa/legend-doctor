@@ -28,6 +28,7 @@ export type LegendPracticeAction =
   | "narrow-use-value-subscription"
   | "pass-observable-to-use-value"
   | "replace-legacy-use-value"
+  | "split-use-value-leaves"
   | "toggle-observable"
   | "use-peek-for-snapshot";
 
