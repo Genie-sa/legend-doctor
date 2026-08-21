@@ -389,7 +389,12 @@ function analyzeParsedSource(
     if (!usage) continue;
     const cluster = effectDrafts.clusters.get(state) ?? observableClusters.get(state) ?? subtreeClusters.get(state);
     const siblingCut = siblingRenderCuts.get(state);
+    const directTransitionCallbacks = reactCommit.directTransitionCallbacks.get(state.owner);
+    const transitionTouchesState = directTransitionCallbacks?.some(callback =>
+      usage.setterCallNodes.some(call => nodeWithin(call, callback))
+    ) ?? true;
     const commitSensitive = commitSensitiveOwners.has(state.owner) &&
+      transitionTouchesState &&
       state.setterName !== null &&
       !nonProductionHarness;
     const baseClassification = cluster

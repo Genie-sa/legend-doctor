@@ -4007,7 +4007,6 @@ export const goldCases = [
     ["formbricks-dashboard-detail", "dashboard-detail-client.tsx", 194, "editingChartId"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
-    enforced: false,
     file: file as string,
     hook: "useState" as const,
     line: line as number,

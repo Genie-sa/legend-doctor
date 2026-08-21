@@ -863,6 +863,27 @@ test("does not isolate state whose update is scheduled by a React transition", (
   );
 });
 
+test("isolates only state proven outside direct inline React transitions", () => {
+  const findings = analyzeSource(`
+    import { useState, useTransition } from "react";
+    function Leaf(_props: unknown) { return null; }
+    function Shell() { return null; }
+    export function Screen() {
+      const [visible, setVisible] = useState(false);
+      const [busy, setBusy] = useState(false);
+      const [, begin] = useTransition();
+      return <main><Shell /><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+        <button onClick={() => setVisible(true)}>Open</button>
+        <button onClick={() => begin(() => setBusy(true))}>Refresh</button>
+        {visible && <Leaf />}{busy && <Leaf />}
+      </main>;
+    }
+  `, "fixture.tsx");
+
+  assert.equal(findings.find(finding => finding.name === "visible")?.action, "use-observable");
+  assert.equal(findings.find(finding => finding.name === "busy")?.action, "review-state");
+});
+
 test("preserves mutable React state when its owner has an every-commit effect", () => {
   for (const [hookImport, hookCall] of [
     ["useEffect", "useEffect"],
