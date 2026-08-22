@@ -450,14 +450,19 @@ function createChildContractResolver(
       if (!resolved) return null;
       const analysisFile = context.project.getFile(resolved.file);
       if (!analysisFile) return null;
-      return findComponentDeclaration(analysisFile.sourceFile, resolved.localName);
+      return findComponentDeclaration(
+        analysisFile.sourceFile,
+        resolved.localName,
+        context.sourceIndex.deferredCallbackHooksFor(resolved.file)
+      );
     },
   };
 }
 
 function findComponentDeclaration(
   sourceFile: ts.SourceFile,
-  localName: string
+  localName: string,
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
 ): ChildComponentSource | null {
   const reactWrappers = importedNamesFromReact(sourceFile);
   for (const statement of sourceFile.statements) {
@@ -466,7 +471,7 @@ function findComponentDeclaration(
       statement.name?.text === localName &&
       statement.body
     ) {
-      return { owner: statement, body: statement.body };
+      return { owner: statement, body: statement.body, deferredCallbackHooks };
     }
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
@@ -476,7 +481,7 @@ function findComponentDeclaration(
       const wrapped = wrapperRenderFunction(initializer, reactWrappers);
       if (wrapped) initializer = wrapped;
       if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
-        return { owner: initializer, body: initializer.body };
+        return { owner: initializer, body: initializer.body, deferredCallbackHooks };
       }
     }
   }

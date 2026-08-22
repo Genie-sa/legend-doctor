@@ -8,6 +8,7 @@ import { isInsideJsxEventCallback, jsxElementCount } from "./state-proofs.js";
 interface LiteralBooleanLeafOptions {
   branchCallSiteExists: boolean;
   hasCompanionWrites: boolean;
+  hasMemoizedOptionCommand: boolean;
   hasReactiveMutationPath: boolean;
   isCustomHookOwner: boolean;
   localComponents: ReadonlySet<string>;
@@ -45,7 +46,8 @@ export function isLiteralBooleanLeafState(
       return call.arguments.length === 1 &&
         !!value &&
         (value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword) &&
-        isEventRootedLiteralSetterCall(call, state.owner);
+        (isEventRootedLiteralSetterCall(call, state.owner) ||
+          options.hasMemoizedOptionCommand);
     });
 }
 

@@ -3488,12 +3488,11 @@ export const goldCases = [
     ["expensify-workspace-tags", "WorkspaceTagsPage.tsx", 94],
   ].map(([target, file, line]) => ({
     action: "use-observable" as const,
-    enforced: false,
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: "isDownloadFailureModalVisible",
-    rationale: "A manually verified download command owns this failure flag and one stable DecisionModal is its only subscriber; the detector correctly abstains until callback provenance is available.",
+    rationale: "A source-resolved deferred option command owns this failure flag and one stable DecisionModal is its only subscriber; converting the literal commands preserves callback timing while removing broad page rerenders.",
     target: target as string,
   })),
   {

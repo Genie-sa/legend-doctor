@@ -8,22 +8,35 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 789 |
-| Known misses | 10 |
+| Known misses | 7 |
 | State groups | 18/18 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (417/417) |
-| Actionable recall | 97.7% (417/427) |
-| Unit tests | 502/502 |
+| Actionable precision | 100% (420/420) |
+| Actionable recall | 98.4% (420/427) |
+| Unit tests | 503/503 |
 
-The latest phase detects a nullable payload whose timed feedback renders only inside its true branch and whose close
-command clears both values together. Against commit `387f4f3`, the exact current 221-target hook-action delta is:
+The latest phase resolves callback timing for literal boolean state commanded by a memoized option array. Against commit
+`bd67af2`, the exact current 221-target hook-action delta is:
 
-- Tree Map: `generatedPassword` and `copied` in
-  `components/account-management/reset-password-dialog.tsx` change from `review-state` to one grouped
-  `use-observable` instruction.
-- Tree Wallet, Memoria src, Memoria app, Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses,
-  Open WebUI React Native, and Hoalu have zero hook action changes.
+- Expensify: `isDownloadFailureModalVisible` changes from `review-state` to `use-observable` in
+  `WorkspaceCategoriesPage.tsx`, `WorkspacePerDiemPage.tsx`, and `WorkspaceTagsPage.tsx`.
+- Tree Map, Tree Wallet, Memoria src, Memoria app, Legend Music, Excalidraw, Formbricks, Outline, Genie Courses, Open
+  WebUI React Native, and Hoalu have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Memoized option-command proof
+
+The boolean must be false-initialized, render through one stable leaf target in a broad owner, and use only literal setter
+commands. Every non-JSX-event setter must be inside one statically named callback property of one imported React
+`useMemo`. The memo result may be read through `.length` and must otherwise cross exactly one direct JSX prop without
+transformation.
+
+The receiving source component must resolve. Its array prop may be destructured directly or through one unaliased rest
+props object. Callback-field invocations must be behind a stored callback, a host JSX event, or a custom-hook parameter
+whose implementation structurally defers every reference into a React effect. Render-time calls, immediate React hooks,
+synchronous array callbacks, unknown callback hooks, multiple transports, setter escape, effects, functional updates,
+and nonliteral commands abstain. The recommendation keeps the memo and callback timing, replaces only storage and literal
+commands, and subscribes at the existing stable modal leaf.
 
 ## Payload-gated timed-feedback proof
 
@@ -136,10 +149,10 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Ten opportunities remain non-enforced:
+Seven opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- five observable leaf migrations covering repeated rows and three download-failure callbacks;
+- two observable leaf migrations covering repeated rows;
 - four ref migrations behind async confirmation or form callback contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,

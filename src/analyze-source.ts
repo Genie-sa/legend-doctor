@@ -34,6 +34,7 @@ import type { AnalysisFile } from "./analysis-project.js";
 import { findAsyncLeafStatuses } from "./rules/async-leaf-status.js";
 import {
   type ChildContractResolver,
+  propDefersArrayItemCallback,
   propIsLeafRenderConsumer,
 } from "./rules/child-contract.js";
 import {
@@ -280,6 +281,7 @@ function analyzeParsedSource(
   const subtreeByState = new Map<StateCandidate, StateSubtree>();
   const safeCommandStates = new Set<StateCandidate>();
   const selfRefreshingCommandStates = new Set<StateCandidate>();
+  const memoizedOptionCommandStates = new Set<StateCandidate>();
   const reactiveMutationAffectedStates = new Set<StateCandidate>();
   for (const state of states) {
     const usage = usageByState.get(state);
@@ -306,8 +308,18 @@ function analyzeParsedSource(
     ) {
       selfRefreshingCommandStates.add(state);
     }
+    const memoizedOptionCommand = childContracts !== null &&
+      isSourceProvenMemoizedOptionCommand(
+        state,
+        usage,
+        imports,
+        childContracts
+      );
+    if (memoizedOptionCommand) memoizedOptionCommandStates.add(state);
     const projectionAllowed = !reactiveMutationPaths.all &&
-      (!setterCallbackEscapesThroughUnknownHook(state, usage) || effectOwnedMemoizedCommand) &&
+      (!setterCallbackEscapesThroughUnknownHook(state, usage) ||
+        effectOwnedMemoizedCommand ||
+        memoizedOptionCommand) &&
       primitiveSetterUpdatersArePure(state, usage);
     if (projectionAllowed) safeCommandStates.add(state);
     const subtree = analyzeStateSubtree(
@@ -495,7 +507,8 @@ function analyzeParsedSource(
           branchUnmountMoves.get(state) ?? null,
           childContracts,
           deferredCallbackHooks,
-          reactCommit.eventTransitionCallbacks.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS
+          reactCommit.eventTransitionCallbacks.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
+          memoizedOptionCommandStates.has(state)
         );
     const commitSensitiveOverride = commitSensitive &&
       baseClassification.action !== "review-state" &&
@@ -2465,7 +2478,8 @@ function classifyState(
   branchUnmountMove: BranchUnmountMove | null,
   childContracts: ChildContractResolver | null,
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
-  eventTransitionCallbacks: ReadonlySet<RuntimeFunctionLike>
+  eventTransitionCallbacks: ReadonlySet<RuntimeFunctionLike>,
+  hasMemoizedOptionCommand: boolean
 ): ClassifiedState {
   if (nonProductionHarness) {
     return {
@@ -2693,6 +2707,7 @@ function classifyState(
         isCustomHookOwner: isCustomHookOwner(state.owner),
         localComponents,
         sourceComponents,
+        hasMemoizedOptionCommand,
       }
     )
   ) {
@@ -3999,6 +4014,144 @@ function setterCallbackEscapesThroughUnknownHook(
     }
     return false;
   });
+}
+
+function isSourceProvenMemoizedOptionCommand(
+  state: StateCandidate,
+  usage: StateUsage,
+  imports: HookImports,
+  childContracts: ChildContractResolver
+): boolean {
+  if (
+    !state.owner.body ||
+    !hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
+    usage.localRenderReads !== 0 ||
+    usage.effectReads !== 0 ||
+    usage.effectWrites !== 0 ||
+    usage.deferredReads !== 0 ||
+    usage.valueTransportSites.size !== 1 ||
+    usage.valueTargets.size !== 1 ||
+    usage.setterCallNodes.length === 0 ||
+    usage.setterReferences !== usage.setterCalls ||
+    usage.setterUsesPreviousValue ||
+    usage.shadowed ||
+    usage.escaped ||
+    usage.setterCallNodes.some(call => {
+      const value = call.arguments[0];
+      return call.arguments.length !== 1 ||
+        !value ||
+        (value.kind !== ts.SyntaxKind.TrueKeyword && value.kind !== ts.SyntaxKind.FalseKeyword);
+    })
+  ) {
+    return false;
+  }
+
+  const deferredSetters = usage.setterCallNodes.filter(call =>
+    !isInsideJsxEventCallback(call, state.owner)
+  );
+  if (deferredSetters.length === 0) return false;
+
+  let memoCall: ts.CallExpression | null = null;
+  let callbackProp: string | null = null;
+  for (const setter of deferredSetters) {
+    const containingMemo = findAncestorUntil(
+      setter,
+      (node): node is ts.CallExpression =>
+        ts.isCallExpression(node) &&
+        isImportedHookCall(node, imports.useMemo, imports.reactNamespaces, "useMemo"),
+      state.owner
+    );
+    const factory = containingMemo?.arguments[0];
+    const property = factory
+      ? findAncestorUntil(setter, ts.isPropertyAssignment, factory)
+      : null;
+    const propertyName = property ? staticPropertyName(property.name) : null;
+    const callback = property
+      ? nearestNestedFunction(setter, state.owner)
+      : null;
+    if (
+      !containingMemo ||
+      !factory ||
+      (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
+      !property ||
+      !propertyName ||
+      !callback ||
+      callback === factory ||
+      !nodeWithin(callback, property) ||
+      (memoCall !== null && memoCall !== containingMemo) ||
+      (callbackProp !== null && callbackProp !== propertyName)
+    ) {
+      return false;
+    }
+    memoCall = containingMemo;
+    callbackProp = propertyName;
+  }
+  if (!memoCall || !callbackProp) return false;
+
+  const declaration = findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner);
+  if (
+    !declaration?.initializer ||
+    unwrapTransparentExpression(declaration.initializer) !== memoCall ||
+    !ts.isIdentifier(declaration.name) ||
+    bindingDeclarationCount(state.owner, declaration.name.text) !== 1
+  ) {
+    return false;
+  }
+  const memoBinding = declaration.name.text;
+
+  let target: string | null = null;
+  let propName: string | null = null;
+  let transportCount = 0;
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== memoBinding ||
+      node === declaration.name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (
+      ts.isPropertyAccessExpression(node.parent) &&
+      node.parent.expression === node &&
+      node.parent.name.text === "length"
+    ) {
+      return;
+    }
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
+    if (!attribute || !isDirectJsxAttributeExpression(attribute, node)) {
+      safe = false;
+      return;
+    }
+    const opening = jsxOpeningForAttribute(attribute);
+    const nextTarget = opening?.tagName.getText() ?? null;
+    const nextProp = attribute.name.getText();
+    if (
+      !nextTarget ||
+      transportCount > 0 ||
+      (target !== null && target !== nextTarget) ||
+      (propName !== null && propName !== nextProp)
+    ) {
+      safe = false;
+      return;
+    }
+    target = nextTarget;
+    propName = nextProp;
+    transportCount += 1;
+  });
+  if (!safe || transportCount !== 1 || !target || !propName) return false;
+  const child = childContracts.resolveComponent(target);
+  return child !== null &&
+    propDefersArrayItemCallback(child, propName, callbackProp);
+}
+
+function staticPropertyName(name: ts.PropertyName): string | null {
+  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
+    ? name.text
+    : null;
 }
 
 function isEffectOwnedMemoizedPresentationState(

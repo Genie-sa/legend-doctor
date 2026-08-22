@@ -761,6 +761,130 @@ test("verifies a leaf child contract before promoting the transport", async () =
   assert.match(finding?.message ?? "", /renders the `busy` value directly/);
 });
 
+test("proves memoized option commands through a resolved deferred child", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-option-command-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "useDeferredHandler.ts"),
+    `
+      import { useEffect } from "react";
+      export function useDeferredHandler(callback: () => void) {
+        useEffect(() => {
+          window.addEventListener("click", callback);
+          return () => window.removeEventListener("click", callback);
+        }, [callback]);
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "ActionMenu.tsx"),
+    `
+      import { useDeferredHandler } from "./useDeferredHandler";
+      export function ActionMenu({ ref, ...props }: { ref?: unknown; options: Array<{ onSelected?: () => void }> }) {
+        const { options } = props;
+        const first = options.at(0);
+        const runFirst = () => first?.onSelected?.();
+        useDeferredHandler(() => runFirst());
+        return <section>
+          <button onClick={runFirst}>Run</button>
+          <Menu items={options.map(item => ({ ...item, onSelected: () => item.onSelected?.() }))} />
+        </section>;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "ImmediateMenu.tsx"),
+    `
+      import { useEffect } from "react";
+      export function ImmediateMenu({ options }: { options: Array<{ onSelected?: () => void }> }) {
+        const first = options.at(0);
+        first?.onSelected?.();
+        useEffect(() => first?.onSelected?.(), [first]);
+        return <section />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "SynchronousMenu.tsx"),
+    `
+      export function SynchronousMenu({ options }: { options: Array<{ onSelected?: () => void }> }) {
+        options.map(item => runImmediately(() => item.onSelected?.()));
+        return <section />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "UnknownHookMenu.tsx"),
+    `
+      export function UnknownHookMenu({ options }: { options: Array<{ onSelected?: () => void }> }) {
+        const first = options.at(0);
+        const runFirst = () => first?.onSelected?.();
+        useLibraryLifecycle(() => runFirst());
+        return <section />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useMemo, useState } from "react";
+      import { ActionMenu } from "./ActionMenu";
+      import { ImmediateMenu } from "./ImmediateMenu";
+      import { SynchronousMenu } from "./SynchronousMenu";
+      import { UnknownHookMenu } from "./UnknownHookMenu";
+      function DecisionModal(_props: unknown) { return null; }
+      export function SafeScreen() {
+        const [visible, setVisible] = useState(false);
+        const options = useMemo(() => [{ onSelected: () => download(() => setVisible(true)) }], []);
+        ${"\n".repeat(100)}
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+          {options.length > 0 && <ActionMenu options={options} />}
+          <DecisionModal isVisible={visible} onClose={() => setVisible(false)} />
+        </main>;
+      }
+      export function UnsafeScreen() {
+        const [unsafeVisible, setUnsafeVisible] = useState(false);
+        const options = useMemo(() => [{ onSelected: () => download(() => setUnsafeVisible(true)) }], []);
+        ${"\n".repeat(100)}
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+          <ImmediateMenu options={options} />
+          <DecisionModal isVisible={unsafeVisible} onClose={() => setUnsafeVisible(false)} />
+        </main>;
+      }
+      export function SynchronousScreen() {
+        const [syncVisible, setSyncVisible] = useState(false);
+        const options = useMemo(() => [{ onSelected: () => download(() => setSyncVisible(true)) }], []);
+        ${"\n".repeat(100)}
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+          <SynchronousMenu options={options} />
+          <DecisionModal isVisible={syncVisible} onClose={() => setSyncVisible(false)} />
+        </main>;
+      }
+      export function UnknownHookScreen() {
+        const [hookVisible, setHookVisible] = useState(false);
+        const options = useMemo(() => [{ onSelected: () => download(() => setHookVisible(true)) }], []);
+        ${"\n".repeat(100)}
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+          <UnknownHookMenu options={options} />
+          <DecisionModal isVisible={hookVisible} onClose={() => setHookVisible(false)} />
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  assert.equal(report.findings.find(finding => finding.name === "visible")?.action, "use-observable");
+  assert.equal(report.findings.find(finding => finding.name === "unsafeVisible")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "syncVisible")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "hookVisible")?.action, "review-state");
+});
+
 test("isolates a resolved leaf updated outside a named React transition", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-named-transition-"));
   t.after(() => rm(root, { force: true, recursive: true }));
