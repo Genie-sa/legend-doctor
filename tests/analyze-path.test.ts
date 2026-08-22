@@ -384,6 +384,99 @@ test("preserves the pre-update snapshot for state read by a source-proven deferr
   assert.notEqual(report.findings.find(finding => finding.name === "asyncTicks")?.action, "use-ref");
 });
 
+test("proves transitive object callback deferral across source hooks", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-transitive-hook-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "use-guard.ts"),
+    `
+      import { useStoredGuard } from "./use-stored-guard";
+      export function useGuard({ getSnapshot }: { getSnapshot: () => string }) {
+        const hasSnapshot = () => getSnapshot().length > 0;
+        useStoredGuard(hasSnapshot);
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "use-stored-guard.ts"),
+    `
+      import { useEffect, useRef } from "react";
+      export function useStoredGuard(callback: () => boolean) {
+        const callbacksRef = useRef({ callback });
+        useEffect(() => { callbacksRef.current = { callback }; });
+        useEffect(() => subscribe({ run: () => callbacksRef.current.callback() }), []);
+      }
+      export function useUnsafeStoredGuard(callback: () => string) {
+        const callbacksRef = useRef({ callback });
+        callbacksRef.current.callback();
+        useEffect(() => subscribe(() => callbacksRef.current.callback()), []);
+      }
+      export function useStaleStoredGuard(callback: () => string) {
+        const callbacksRef = useRef({ callback });
+        useEffect(() => subscribe(() => callbacksRef.current.callback()), []);
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "use-unsafe-guard.ts"),
+    `
+      import { useUnsafeStoredGuard } from "./use-stored-guard";
+      export function useUnsafeGuard({ getSnapshot }: { getSnapshot: () => string }) {
+        useUnsafeStoredGuard(getSnapshot);
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "use-stale-guard.ts"),
+    `
+      import { useStaleStoredGuard } from "./use-stored-guard";
+      export function useStaleGuard({ getSnapshot }: { getSnapshot: () => string }) {
+        useStaleStoredGuard(getSnapshot);
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { useGuard } from "./use-guard";
+      import { useStaleGuard } from "./use-stale-guard";
+      import { useUnsafeGuard } from "./use-unsafe-guard";
+      export function SafeScreen() {
+        const [draft, setDraft] = useState("");
+        useGuard({ getSnapshot: () => draft });
+        return <input onChange={event => setDraft(event.target.value)} />;
+      }
+      export function UnsafeScreen() {
+        const [unsafeDraft, setUnsafeDraft] = useState("");
+        useUnsafeGuard({ getSnapshot: () => unsafeDraft });
+        return <input onChange={event => setUnsafeDraft(event.target.value)} />;
+      }
+      export function MethodScreen() {
+        const [methodDraft, setMethodDraft] = useState("");
+        useGuard({ getSnapshot() { return methodDraft; } });
+        return <input onChange={event => setMethodDraft(event.target.value)} />;
+      }
+      export function StaleScreen() {
+        const [staleDraft, setStaleDraft] = useState("");
+        useStaleGuard({ getSnapshot: () => staleDraft });
+        return <input onChange={event => setStaleDraft(event.target.value)} />;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  assert.equal(report.findings.find(finding => finding.name === "draft")?.action, "use-ref");
+  assert.equal(report.findings.find(finding => finding.name === "methodDraft")?.action, "use-ref");
+  assert.equal(report.findings.find(finding => finding.name === "unsafeDraft")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "staleDraft")?.action, "review-state");
+});
+
 test("shares one cached AST across source indexing and both detector families", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
   t.after(() => rm(root, { force: true, recursive: true }));

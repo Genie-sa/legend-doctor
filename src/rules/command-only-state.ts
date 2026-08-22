@@ -125,7 +125,12 @@ export function functionalCounterUpdaterPreservesSnapshot(
 
 export function stateReadCallbackEscapesThroughUnknownHook(
   state: StateCandidate,
-  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>> = new Map()
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>> = new Map(),
+  callbackPropertyIsDeferred?: (
+    hookName: string,
+    argumentIndex: number,
+    property: string
+  ) => boolean
 ): boolean {
   let escaped = false;
   visit(state.owner.body, node => {
@@ -168,12 +173,44 @@ export function stateReadCallbackEscapesThroughUnknownHook(
         if (argumentIndex >= 0 && deferredCallbackHooks.get(hookName)?.has(argumentIndex)) {
           continue;
         }
+        const property = argumentIndex >= 0
+          ? objectCallbackProperty(current.arguments[argumentIndex]!, node)
+          : null;
+        if (
+          property &&
+          callbackPropertyIsDeferred?.(hookName, argumentIndex, property) === true
+        ) {
+          continue;
+        }
         escaped = true;
         return;
       }
     }
   });
   return escaped;
+}
+
+function objectCallbackProperty(argument: ts.Expression, node: ts.Node): string | null {
+  const object = unwrapTransparentExpression(argument);
+  if (!ts.isObjectLiteralExpression(object)) return null;
+  const property = findAncestorUntil(node, isObjectCallbackMember, object);
+  if (
+    !property ||
+    property.parent !== object ||
+    (ts.isPropertyAssignment(property) && !nodeWithin(node, property.initializer)) ||
+    (ts.isMethodDeclaration(property) && !property.body)
+  ) {
+    return null;
+  }
+  return ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name)
+    ? property.name.text
+    : null;
+}
+
+function isObjectCallbackMember(
+  node: ts.Node
+): node is ts.MethodDeclaration | ts.PropertyAssignment {
+  return ts.isMethodDeclaration(node) || ts.isPropertyAssignment(node);
 }
 
 export function statePublishesReadOnlyGetter(state: StateCandidate): boolean {

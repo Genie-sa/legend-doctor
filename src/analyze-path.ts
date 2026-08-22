@@ -12,6 +12,11 @@ import {
   type ChildContractResolver,
 } from "./rules/child-contract.js";
 import {
+  sourceHookDefersCallback,
+  type SourceHookDeclaration,
+  type SourceHookResolver,
+} from "./rules/source-callback-contract.js";
+import {
   AnalysisCoverageLedger,
   type AnalysisCoverageOutcome,
   type AnalysisCoverageReport,
@@ -444,7 +449,46 @@ function createChildContractResolver(
   context: AnalysisContext,
   importerFile: string
 ): ChildContractResolver {
+  const callbackContracts = new Map<string, boolean>();
+  const hookSources = new Map<string, SourceHookDeclaration | null>();
+  const hookResolver: SourceHookResolver = {
+    resolveHook(file: string, name: string): SourceHookDeclaration | null {
+      const key = `${file}\0${name}`;
+      if (hookSources.has(key)) return hookSources.get(key) ?? null;
+      const resolved = context.sourceIndex.hookDeclarationFor(file, name);
+      if (!resolved) {
+        hookSources.set(key, null);
+        return null;
+      }
+      const analysisFile = context.project.getFile(resolved.file);
+      if (!analysisFile) {
+        hookSources.set(key, null);
+        return null;
+      }
+      const owner = findHookDeclaration(analysisFile.sourceFile, resolved.localName);
+      const source = owner
+        ? { file: resolved.file, owner, sourceFile: analysisFile.sourceFile }
+        : null;
+      hookSources.set(key, source);
+      return source;
+    },
+  };
   return {
+    callbackPropertyIsDeferred(hookName, argumentIndex, property): boolean {
+      const key = `${hookName}\0${argumentIndex}\0${property}`;
+      const cached = callbackContracts.get(key);
+      if (cached !== undefined) return cached;
+      const source = hookResolver.resolveHook(importerFile, hookName);
+      const deferred = source !== null &&
+        sourceHookDefersCallback(
+          source,
+          argumentIndex,
+          property,
+          hookResolver
+        );
+      callbackContracts.set(key, deferred);
+      return deferred;
+    },
     resolveComponent(name: string): ChildComponentSource | null {
       const resolved = context.sourceIndex.componentDeclarationFor(importerFile, name);
       if (!resolved) return null;
@@ -457,6 +501,36 @@ function createChildContractResolver(
       );
     },
   };
+}
+
+function findHookDeclaration(
+  sourceFile: ts.SourceFile,
+  localName: string
+): SourceHookDeclaration["owner"] | null {
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === localName &&
+      statement.body
+    ) {
+      return statement;
+    }
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        !ts.isIdentifier(declaration.name) ||
+        declaration.name.text !== localName ||
+        !declaration.initializer
+      ) {
+        continue;
+      }
+      const initializer = unwrapTransparentExpression(declaration.initializer);
+      if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+        return initializer;
+      }
+    }
+  }
+  return null;
 }
 
 function findComponentDeclaration(

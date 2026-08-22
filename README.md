@@ -44,11 +44,11 @@ Measured on pinned real applications:
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual labels | 789 |
-| Known misses | 7 |
+| Known misses | 5 |
 | State groups | 18/18 |
-| Unit tests | 503/503 |
-| Actionable precision | 100% (420/420) |
-| Actionable recall | 98.4% (420/427) |
+| Unit tests | 504/504 |
+| Actionable precision | 100% (422/422) |
+| Actionable recall | 98.8% (422/427) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -603,6 +603,11 @@ through a React effect and the updater is one synchronous counter step. The reco
 `minutesRef.current` before the write and keeps the later comparison on that snapshot. Mixed synchronous/deferred hooks,
 async gaps, multiple writes, and non-counter updaters remain review findings.
 
+The same source proof follows a getter passed in a custom-hook options object through imported project hooks. A getter
+stored in a React ref qualifies only when the same property is refreshed by one React effect and every invocation remains
+under a resolved effect-deferred callback. Render-time invocation, missing refresh, aliasing, ref escape, and unresolved
+hooks abstain. This removes command-only React state without introducing an unnecessary observable or render subscriber.
+
 ### 11. Published getter → keep the notification boundary
 
 Before: React state republishes a getter to render consumers.
@@ -683,6 +688,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/effect-drafts.ts` | Effect-synchronized drafts |
 | `src/rules/async-leaf-status.ts` | Event-owned async status leaves |
 | `src/rules/command-only-state.ts` | Command-only state, callback publication, and ref safety |
+| `src/rules/source-callback-contract.ts` | Cross-file custom-hook callback timing and ref-storage proofs |
 | `src/rules/deferred-reveal.ts` | Deferred reveal and render gates |
 | `src/rules/keyed-selection.ts` | Row and collection selection |
 | `src/rules/lazy-callback-leaf.ts` | Lazy owner state rendered in one nested callback leaf |

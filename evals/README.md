@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-789 manual hook labels, including 7 non-enforced opportunities, plus eighteen
+789 manual hook labels, including 5 non-enforced opportunities, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -189,6 +189,10 @@ synchronous JSX event must write the complete group and call no remaining React 
 an owner render. Every callback reference, listener target, event, cleanup, and effect stays in place; only the grouped
 storage and callback dependency reads change. Missing or mismatched cleanup, async work, callback escape, render transport,
 functional updates, and partial event writes abstain.
+Command-only getters passed through a custom-hook options object may become refs when source resolution follows every
+reference through imported project hooks to React effects. A hook may keep the latest callback in an imported React
+`useRef` only when one React effect refreshes the same object property and all reads call that property from a proven
+deferred callback. Render-time calls, stale initial-only storage, aliases, unresolved hooks, and ref escape abstain.
 Controlled-input labels require one direct value/callback leaf and either no other render read or one complete pure
 validation projection in a disjoint sibling leaf. A separate rendered sibling proves that the owner cut is material.
 The observable stays at the owner across state-independent conditional branches; ref-backed validity, repeated

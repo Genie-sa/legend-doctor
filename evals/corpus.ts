@@ -5827,12 +5827,11 @@ export const goldCases = [
     ["expensify-iou-merchant", "IOURequestStepMerchant.tsx", 77, "currentMerchant"],
   ].map(([target, file, line, name]) => ({
     action: "use-ref" as const,
-    enforced: false,
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "This command snapshot can become a ref only after proving the custom form-hook callback contract does not use React state as its notification boundary.",
+    rationale: "The command snapshot never renders, and source resolution proves its custom-hook getter is refreshed through a ref and invoked only from effect-registered navigation commands.",
     target: target as string,
   })),
   ...[

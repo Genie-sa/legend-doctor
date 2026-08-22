@@ -2823,7 +2823,14 @@ function classifyState(
     usage.transportedOccurrences === 0 &&
     usage.jsxTargets.size === 0 &&
     (!hasFunctionalSnapshotHazard || preservesFunctionalSnapshot) &&
-    !stateReadCallbackEscapesThroughUnknownHook(state, deferredCallbackHooks) &&
+    !stateReadCallbackEscapesThroughUnknownHook(
+      state,
+      deferredCallbackHooks,
+      childContracts
+        ? (hookName, argumentIndex, property) =>
+          childContracts.callbackPropertyIsDeferred(hookName, argumentIndex, property)
+        : undefined
+    ) &&
     !statePublishesReadOnlyGetter(state) &&
     !usage.shadowed &&
     !usage.escaped &&

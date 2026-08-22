@@ -26,6 +26,11 @@ export interface ChildComponentSource {
 }
 
 export interface ChildContractResolver {
+  callbackPropertyIsDeferred(
+    hookName: string,
+    argumentIndex: number,
+    property: string
+  ): boolean;
   resolveComponent(name: string): ChildComponentSource | null;
 }
 

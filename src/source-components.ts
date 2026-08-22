@@ -33,6 +33,7 @@ const REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "useLayou
 interface ModuleRecord {
   componentDeclarations: ReadonlyMap<string, ComponentFunction>;
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
+  hookDeclarations: ReadonlyMap<string, ComponentFunction>;
   imports: ReadonlyMap<string, ImportBinding>;
   legendValueHooks: ReadonlyMap<string, string>;
   legendValueWriters: ReadonlyMap<string, string>;
@@ -49,6 +50,7 @@ export interface SourceIndex {
   componentDeclarationFor(file: string, name: string): ResolvedSymbol | null;
   componentsFor(file: string): ReadonlySet<string>;
   deferredCallbackHooksFor(file: string): ReadonlyMap<string, ReadonlySet<number>>;
+  hookDeclarationFor(file: string, name: string): ResolvedSymbol | null;
   legendValueBridgesFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoriesFor(file: string): ReadonlySet<string>;
   observableKeysFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
@@ -63,6 +65,7 @@ export interface ResolvedSymbol {
 type SourceSymbolKind =
   | "component"
   | "deferred-callback-hook"
+  | "hook"
   | "legend-value-hook"
   | "legend-value-writer"
   | "observable"
@@ -92,6 +95,7 @@ export function buildSourceIndexFromFiles(
   const compilerContexts = new Map<string, CompilerContext>();
   const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const deferredCallbackHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const hooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const legendValueHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const legendValueWritersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observableFactoriesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
@@ -131,6 +135,8 @@ export function buildSourceIndexFromFiles(
         ? record.componentDeclarations.has(localName)
         : kind === "deferred-callback-hook"
           ? record.deferredCallbackHooks.has(localName)
+          : kind === "hook"
+            ? record.hookDeclarations.has(localName)
           : kind === "legend-value-hook"
             ? record.legendValueHooks.has(localName)
             : kind === "legend-value-writer"
@@ -190,6 +196,8 @@ export function buildSourceIndexFromFiles(
       ? componentsByImporter
       : kind === "deferred-callback-hook"
         ? deferredCallbackHooksByImporter
+        : kind === "hook"
+          ? hooksByImporter
         : kind === "legend-value-hook"
           ? legendValueHooksByImporter
           : kind === "legend-value-writer"
@@ -225,6 +233,13 @@ export function buildSourceIndexFromFiles(
         if (parameters) hooks.set(localName, parameters);
       }
       return hooks;
+    },
+    hookDeclarationFor: (file, name) => {
+      const normalized = normalizeFile(file);
+      if (records.get(normalized)?.hookDeclarations.has(name)) {
+        return { file: normalized, localName: name };
+      }
+      return resolvedFor(normalized, "hook").get(name) ?? null;
     },
     legendValueBridgesFor: file => {
       const bridges = new Map<string, ReadonlySet<string>>();
@@ -289,6 +304,7 @@ function compilerContextFor(
 function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const componentDeclarations = new Map<string, ComponentFunction>();
   const deferredCallbackHooks = new Map<string, ReadonlySet<number>>();
+  const hookDeclarations = new Map<string, ComponentFunction>();
   const imports = new Map<string, ImportBinding>();
   const legendValueHooks = new Map<string, string>();
   const legendValueWriters = new Map<string, string>();
@@ -357,6 +373,11 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement)) {
       if (statement.name) {
+        if (/^use[A-Z0-9]/.test(statement.name.text)) {
+          hookDeclarations.set(statement.name.text, statement);
+          if (hasExport(statement)) localExports.set(statement.name.text, statement.name.text);
+          if (hasDefault(statement)) localExports.set("default", statement.name.text);
+        }
         const deferredParameters = deferredCallbackParameterIndices(
           statement,
           reactEffectHooks,
@@ -408,6 +429,15 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
         const initializer = declaration.initializer
           ? unwrapTransparentExpression(declaration.initializer)
           : null;
+        if (
+          ts.isIdentifier(declaration.name) &&
+          /^use[A-Z0-9]/.test(declaration.name.text) &&
+          initializer &&
+          (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+        ) {
+          hookDeclarations.set(declaration.name.text, initializer);
+          if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
+        }
         if (
           ts.isIdentifier(declaration.name) &&
           initializer &&
@@ -498,6 +528,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   return {
     componentDeclarations,
     deferredCallbackHooks,
+    hookDeclarations,
     imports,
     legendValueHooks,
     legendValueWriters,

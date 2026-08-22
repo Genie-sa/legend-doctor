@@ -8,21 +8,32 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 789 |
-| Known misses | 7 |
+| Known misses | 5 |
 | State groups | 18/18 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (420/420) |
-| Actionable recall | 98.4% (420/427) |
-| Unit tests | 503/503 |
+| Actionable precision | 100% (422/422) |
+| Actionable recall | 98.8% (422/427) |
+| Unit tests | 504/504 |
 
-The latest phase resolves callback timing for literal boolean state commanded by a memoized option array. Against commit
-`bd67af2`, the exact current 221-target hook-action delta is:
+The latest phase resolves transitive callback timing for command-only getters passed through custom hooks. Against commit
+`31863b5`, the exact current 221-target action delta is:
 
-- Expensify: `isDownloadFailureModalVisible` changes from `review-state` to `use-observable` in
-  `WorkspaceCategoriesPage.tsx`, `WorkspacePerDiemPage.tsx`, and `WorkspaceTagsPage.tsx`.
+- Expensify: `currentDescription` in `IOURequestStepDescription.tsx` and `currentMerchant` in
+  `IOURequestStepMerchant.tsx` change from `review-state` to `use-ref`.
 - Tree Map, Tree Wallet, Memoria src, Memoria app, Legend Music, Excalidraw, Formbricks, Outline, Genie Courses, Open
   WebUI React Native, and Hoalu have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Transitive command-callback proof
+
+The state must have no render, effect, or transported value consumer. Its getter crosses one property of a direct custom
+hook options object, and source resolution must prove every reference is deferred through imported project hooks into a
+React effect. A callback stored in an imported React `useRef` qualifies only when one React effect refreshes the exact
+same property and every invocation of that property remains in an effect-deferred callback.
+
+The emitted instruction uses a ref, preserves all existing hooks, registration, cleanup, statement order, and callback
+ownership, and adds no Legend subscriber because the value never renders. Render-time calls, initial-only stale ref
+storage, aliasing, unresolved hooks, ref escape, and any UI read remain review findings.
 
 ## Memoized option-command proof
 
@@ -149,11 +160,11 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Seven opportunities remain non-enforced:
+Five opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
 - two observable leaf migrations covering repeated rows;
-- four ref migrations behind async confirmation or form callback contracts.
+- two ref migrations behind async confirmation or form callback contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,
 and app-specific allowlists are not proof.
