@@ -13,6 +13,7 @@ import { isNonProductionHarness, visit } from "./ast.js";
 import { collectHookImports, type HookImports } from "./imports.js";
 import type { AnalysisFile } from "./analysis-project.js";
 import type { InstalledLegendState } from "./legend-state-package.js";
+import type { ChildContractResolver } from "./rules/child-contract.js";
 import { findLegacyUseValuePractices } from "./rules/legacy-use-value.js";
 import { findObservableCloneWritePractices } from "./rules/observable-clone-writes.js";
 import {
@@ -54,7 +55,8 @@ export function analyzeLegendPractices(
     importedObservables,
     importedObservableFactories,
     installedLegendState,
-    importedObservableKeys
+    importedObservableKeys,
+    null
   );
 }
 
@@ -65,7 +67,8 @@ export function analyzeLegendPracticesFile(
   importedObservableFactories: ReadonlySet<string> = new Set(),
   includeFindings = true,
   installedLegendState: InstalledLegendState | null = null,
-  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map()
+  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+  childContracts: ChildContractResolver | null = null
 ): LegendPracticeFinding[] {
   const findings = analyzeParsedLegendPractices(
     file.sourceFile,
@@ -73,7 +76,8 @@ export function analyzeLegendPracticesFile(
     importedObservables,
     importedObservableFactories,
     installedLegendState,
-    importedObservableKeys
+    importedObservableKeys,
+    childContracts
   );
   return includeFindings ? findings : [];
 }
@@ -84,7 +88,8 @@ function analyzeParsedLegendPractices(
   importedObservables: ReadonlySet<string>,
   importedObservableFactories: ReadonlySet<string>,
   installedLegendState: InstalledLegendState | null,
-  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>
+  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>,
+  childContracts: ChildContractResolver | null
 ): LegendPracticeFinding[] {
   if (isNonProductionHarness(fileName)) return [];
   const imports = collectHookImports(sourceFile);
@@ -160,7 +165,8 @@ function analyzeParsedLegendPractices(
     fileName,
     imports,
     observableBindings,
-    observableKeys
+    observableKeys,
+    childContracts
   ));
   findings.push(...findObservableCloneWritePractices(sourceFile, fileName, observableBindings));
   findings.push(...findObservableTogglePractices(sourceFile, fileName, observableBindings));

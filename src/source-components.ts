@@ -22,6 +22,11 @@ import {
   visit,
 } from "./ast.js";
 import { pathIdentityKey } from "./path-identity.js";
+import {
+  collectReactComponentWrappers,
+  isReactComponentWrapper,
+  type ReactComponentWrappers,
+} from "./react-component-wrappers.js";
 
 interface ImportBinding {
   importedName: string;
@@ -674,7 +679,6 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const observableTypes = new Set<string>();
   const legendNamespaces = new Set<string>();
   const reactEffectHooks = new Set<string>();
-  const reactComponentWrappers = new Set<string>();
   const reactContextFactories = new Set<string>();
   const reactContextReaders = new Set<string>();
   const reactContexts = new Set<string>();
@@ -706,7 +710,6 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           if (REACT_EFFECT_HOOKS.has(importedName)) {
             reactEffectHooks.add(element.name.text);
           }
-          if (importedName === "memo") reactComponentWrappers.add(element.name.text);
           if (importedName === "createContext") reactContextFactories.add(element.name.text);
           if (importedName === "use" || importedName === "useContext") {
             reactContextReaders.add(element.name.text);
@@ -740,6 +743,8 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
       }
     }
   }
+
+  const componentWrappers = collectReactComponentWrappers(sourceFile);
 
   const observableMemberFactories = localObservableMemberFactories(
     sourceFile,
@@ -901,9 +906,15 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           ts.isIdentifier(declaration.name) &&
           isSemanticComponentName(declaration.name.text) &&
           declaration.initializer &&
-          isComponentInitializer(declaration.initializer)
+          isComponentInitializer(
+            declaration.initializer,
+            componentWrappers
+          )
         ) {
-          const component = componentFunction(declaration.initializer);
+          const component = componentFunction(
+            declaration.initializer,
+            componentWrappers
+          );
           if (!component) continue;
           componentDeclarations.set(declaration.name.text, component);
           if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
@@ -961,8 +972,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
       } else if (ts.isCallExpression(expression)) {
         const wrapped = reactWrappedComponentName(
           expression,
-          reactComponentWrappers,
-          reactNamespaces
+          componentWrappers
         );
         const component = wrapped
           ? staticAssignedComponentName(sourceFile, wrapped, componentDeclarations)
@@ -1099,20 +1109,16 @@ function bindingNameContains(binding: ts.BindingName, name: string): boolean {
 
 function reactWrappedComponentName(
   call: ts.CallExpression,
-  wrappers: ReadonlySet<string>,
-  namespaces: ReadonlySet<string>
+  wrappers: ReactComponentWrappers
 ): string | null {
-  const wrapper = call.expression;
-  const known = ts.isIdentifier(wrapper)
-    ? wrappers.has(wrapper.text)
-    : ts.isPropertyAccessExpression(wrapper) &&
-      ts.isIdentifier(wrapper.expression) &&
-      namespaces.has(wrapper.expression.text) &&
-      wrapper.name.text === "memo";
   const component = call.arguments[0]
     ? unwrapTransparentExpression(call.arguments[0])
     : null;
-  return known && component && ts.isIdentifier(component) ? component.text : null;
+  return isReactComponentWrapper(call.expression, wrappers) &&
+    component &&
+    ts.isIdentifier(component)
+    ? component.text
+    : null;
 }
 
 function isReactContextInitializer(
@@ -1674,30 +1680,53 @@ function isSemanticComponentName(name: string): boolean {
   return first !== undefined && first === first.toUpperCase();
 }
 
-function isComponentInitializer(node: ts.Expression): boolean {
-  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isClassExpression(node)) return true;
+function isComponentInitializer(
+  node: ts.Expression,
+  wrappers: ReactComponentWrappers
+): boolean {
+  const initializer = unwrapTransparentExpression(node);
+  if (
+    ts.isArrowFunction(initializer) ||
+    ts.isFunctionExpression(initializer) ||
+    ts.isClassExpression(initializer)
+  ) {
+    return true;
+  }
   return (
-    ts.isCallExpression(node) &&
-    ts.isIdentifier(node.expression) &&
-    (node.expression.text === "memo" || node.expression.text === "forwardRef") &&
-    node.arguments.length === 1 &&
-    !!node.arguments[0] &&
-    (ts.isArrowFunction(node.arguments[0]) || ts.isFunctionExpression(node.arguments[0]))
+    ts.isCallExpression(initializer) &&
+    isReactComponentWrapper(initializer.expression, wrappers) &&
+    initializer.arguments.length >= 1 &&
+    !!initializer.arguments[0] &&
+    isComponentRenderFunction(initializer.arguments[0])
   );
 }
 
-function componentFunction(node: ts.Expression): ts.ArrowFunction | ts.FunctionExpression | null {
-  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return node;
+function componentFunction(
+  node: ts.Expression,
+  wrappers: ReactComponentWrappers
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  const initializer = unwrapTransparentExpression(node);
+  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) return initializer;
   if (
-    ts.isCallExpression(node) &&
-    ts.isIdentifier(node.expression) &&
-    (node.expression.text === "memo" || node.expression.text === "forwardRef") &&
-    node.arguments.length === 1
+    ts.isCallExpression(initializer) &&
+    isReactComponentWrapper(initializer.expression, wrappers) &&
+    initializer.arguments.length >= 1
   ) {
-    const argument = node.arguments[0];
-    return argument && (ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) ? argument : null;
+    const argument = initializer.arguments[0];
+    return argument ? componentRenderFunction(argument) : null;
   }
   return null;
+}
+
+function isComponentRenderFunction(node: ts.Expression): boolean {
+  return componentRenderFunction(node) !== null;
+}
+
+function componentRenderFunction(
+  node: ts.Expression
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  const render = unwrapTransparentExpression(node);
+  return ts.isArrowFunction(render) || ts.isFunctionExpression(render) ? render : null;
 }
 
 function hasExport(node: ts.Node & { modifiers?: ts.NodeArray<ts.ModifierLike> }): boolean {

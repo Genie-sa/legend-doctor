@@ -6544,6 +6544,13 @@ export const goldPracticeCases = [
     target: "legend-music",
   },
   {
+    action: "use-peek-for-snapshot",
+    file: "legend-kit/react-native/windowDimensions.tsx",
+    line: 30,
+    rationale: "The source-proven HookToObservable contract invokes getValue only from a React layout effect, so the settings check needs a non-tracking snapshot.",
+    target: "legend-music",
+  },
+  {
     action: "narrow-use-value-subscription",
     file: "components/PlaybackControls.tsx",
     line: 47,

@@ -20,6 +20,7 @@ import {
 } from "../ast.js";
 import { isImportedHookCall, type HookImports } from "../imports.js";
 import type { LegendPracticeFinding } from "../types.js";
+import type { ChildContractResolver } from "./child-contract.js";
 import {
   bindingContainsName,
   callbackIsEventRooted,
@@ -54,16 +55,22 @@ export function findObservableReadPractices(
   fileName: string,
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
-  observableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map()
+  observableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+  childContracts: ChildContractResolver | null = null
 ): LegendPracticeFinding[] {
   const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, node => {
     if (ts.isCallExpression(node)) {
       const directInput = directUseValueInput(node, imports, observableBindings);
       if (directInput) findings.push(directUseValueFinding(node, directInput, sourceFile, fileName));
-      const snapshotReceiver = nonTrackingSnapshotObservable(node, imports, observableBindings);
-      if (snapshotReceiver) {
-        findings.push(nonTrackingSnapshotFinding(node, snapshotReceiver, sourceFile, fileName));
+      const snapshot = nonTrackingSnapshotObservable(
+        node,
+        imports,
+        observableBindings,
+        childContracts
+      );
+      if (snapshot) {
+        findings.push(nonTrackingSnapshotFinding(node, snapshot, sourceFile, fileName));
       }
     }
     if (ts.isVariableDeclaration(node)) {
@@ -420,11 +427,17 @@ function isWholeValueProjection(reference: ts.Identifier): boolean {
   );
 }
 
+interface NonTrackingSnapshot {
+  observable: ts.Expression;
+  sourceProvenEffect: boolean;
+}
+
 function nonTrackingSnapshotObservable(
   call: ts.CallExpression,
   imports: HookImports,
-  observableBindings: ReadonlySet<string>
-): ts.Expression | null {
+  observableBindings: ReadonlySet<string>,
+  childContracts: ChildContractResolver | null
+): NonTrackingSnapshot | null {
   if (
     call.arguments.length > 0 ||
     !ts.isPropertyAccessExpression(call.expression) ||
@@ -435,23 +448,52 @@ function nonTrackingSnapshotObservable(
   const observable = provenObservablePath(call.expression.expression, observableBindings);
   if (!observable) return null;
   const callback = findAncestor(call, isRuntimeFunctionLike);
-  return callback && isProvenNonTrackingCallback(callback, imports) ? observable : null;
+  if (!callback) return null;
+  const source = provenNonTrackingCallbackSource(callback, imports, childContracts);
+  return source ? { observable, sourceProvenEffect: source === "source-proven-effect" } : null;
 }
 
-function isProvenNonTrackingCallback(
+function provenNonTrackingCallbackSource(
   callback: RuntimeFunctionLike,
-  imports: HookImports
-): boolean {
+  imports: HookImports,
+  childContracts: ChildContractResolver | null
+): "react-or-event" | "source-proven-effect" | null {
   if (!ts.isArrowFunction(callback) && !ts.isFunctionDeclaration(callback) && !ts.isFunctionExpression(callback)) {
-    return false;
+    return null;
   }
-  if (isDirectReactCallback(callback, imports, "useEffect")) return true;
-  if (isDirectReactCallback(callback, imports, "useState")) return true;
+  if (isDirectReactCallback(callback, imports, "useEffect")) return "react-or-event";
+  if (isDirectReactCallback(callback, imports, "useState")) return "react-or-event";
 
   const owner = findAncestor(callback, isRuntimeFunctionLike);
-  if (!owner) return false;
-  if (isDirectJsxEventCallback(callback)) return true;
-  return callbackIsEventRooted(callback, owner, "", new Set());
+  if (!owner) return null;
+  if (isDirectJsxEventCallback(callback)) return "react-or-event";
+  if (sourceProvenEffectJsxCallback(callback, childContracts)) {
+    return "source-proven-effect";
+  }
+  return callbackIsEventRooted(callback, owner, "", new Set()) ? "react-or-event" : null;
+}
+
+function sourceProvenEffectJsxCallback(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  childContracts: ChildContractResolver | null
+): boolean {
+  if (!childContracts || ts.isFunctionDeclaration(callback)) return false;
+  const expression = callback.parent;
+  if (
+    !ts.isJsxExpression(expression) ||
+    !expression.expression ||
+    unwrapTransparentExpression(expression.expression) !== callback
+  ) {
+    return false;
+  }
+  const attribute = expression.parent;
+  if (!ts.isJsxAttribute(attribute)) return false;
+  const element = attribute.parent.parent;
+  if (!ts.isJsxOpeningElement(element) && !ts.isJsxSelfClosingElement(element)) return false;
+  return childContracts.componentCallbackPropRunsOnlyInReactEffect(
+    element.tagName.getText(),
+    attribute.name.getText()
+  );
 }
 
 function isDirectReactCallback(
@@ -480,19 +522,21 @@ function isDirectJsxEventCallback(
 
 function nonTrackingSnapshotFinding(
   call: ts.CallExpression,
-  observable: ts.Expression,
+  snapshot: NonTrackingSnapshot,
   sourceFile: ts.SourceFile,
   fileName: string
 ): LegendPracticeFinding {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
-  const path = observable.getText(sourceFile);
+  const path = snapshot.observable.getText(sourceFile);
   return {
     action: "use-peek-for-snapshot",
     confidence: "probable",
     disposition: "change",
     evidence: [
       `${path}.get() reads a proven Legend observable path`,
-      "the read is owned by a React snapshot or a uniquely event-rooted command, not a Legend tracking context",
+      snapshot.sourceProvenEffect
+        ? "the source-proven React effect callback runs outside a Legend tracking context"
+        : "the read is owned by a React snapshot or a uniquely event-rooted command, not a Legend tracking context",
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
     message: `Replace \`${path}.get()\` with \`${path}.peek()\`; this code path needs a snapshot, not a reactive dependency.`,

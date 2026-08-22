@@ -16,6 +16,7 @@ import {
   type ChildComponentSource,
   type ChildContractResolver,
   propCallbackIsDeferred,
+  propCallbackRunsOnlyInReactEffect,
   propDefersArrayItemCallback,
   propObjectCallbackIsDeferred,
 } from "./rules/child-contract.js";
@@ -48,6 +49,11 @@ import {
   type InstalledLegendState,
 } from "./legend-state-package.js";
 import { pathIdentityKey } from "./path-identity.js";
+import {
+  collectReactComponentWrappers,
+  isReactComponentWrapper,
+  type ReactComponentWrappers,
+} from "./react-component-wrappers.js";
 import { buildSourceIndexFromFiles, type SourceIndex } from "./source-components.js";
 import { StateFlowIndex, type StateFlowCoverage } from "./state-flow.js";
 import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
@@ -163,13 +169,14 @@ export async function analyzePathDetailed(
       }))
     );
     const stateFlow = new StateFlowIndex();
+    const childContracts = createChildContractResolver(context, file);
     findings.push(
       ...analyzeSourceFile(
         analysisFile,
         reportFileName,
         context.sourceIndex.componentsFor(file),
         stateFlow,
-        createChildContractResolver(context, file),
+        childContracts,
         context.sourceIndex.legendValueBridgesFor(file),
         context.sourceIndex.deferredCallbackHooksFor(file)
       )
@@ -191,7 +198,8 @@ export async function analyzePathDetailed(
           importedObservableFactories
         ),
         context.installedLegendState,
-        context.sourceIndex.observableKeysFor(file)
+        context.sourceIndex.observableKeysFor(file),
+        childContracts
       )
     );
     const stages = analyzedFileCoverage(analysisFile, context, functionEntries, stateFlow);
@@ -464,6 +472,7 @@ function createChildContractResolver(
   const callbackContracts = new Map<string, boolean>();
   const arrayItemCallbackContracts = new Map<string, boolean>();
   const componentCallbackContracts = new Map<string, boolean>();
+  const componentEffectCallbackContracts = new Map<string, boolean>();
   const componentSources = new Map<string, ChildComponentSource | null>();
   const keyedCursorContracts = new Map<string, boolean>();
   const hookSources = new Map<string, SourceHookDeclaration | null>();
@@ -573,6 +582,15 @@ function createChildContractResolver(
       );
       componentCallbackContracts.set(key, deferred);
       return deferred;
+    },
+    componentCallbackPropRunsOnlyInReactEffect(componentName, propName): boolean {
+      const key = `${componentName}\0${propName}`;
+      const cached = componentEffectCallbackContracts.get(key);
+      if (cached !== undefined) return cached;
+      const source = resolveComponent(importerFile, componentName);
+      const effectOnly = source !== null && propCallbackRunsOnlyInReactEffect(source, propName);
+      componentEffectCallbackContracts.set(key, effectOnly);
+      return effectOnly;
     },
     frameworkEventComponent(componentName): boolean {
       return context.sourceIndex.frameworkEventComponentFor(importerFile, componentName);
@@ -705,7 +723,7 @@ function findComponentDeclaration(
   localName: string,
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
 ): ChildComponentSource | null {
-  const reactWrappers = importedNamesFromReact(sourceFile);
+  const reactWrappers = collectReactComponentWrappers(sourceFile);
   for (const statement of sourceFile.statements) {
     if (
       ts.isFunctionDeclaration(statement) &&
@@ -731,33 +749,15 @@ function findComponentDeclaration(
 
 function wrapperRenderFunction(
   initializer: ts.Expression,
-  reactWrappers: ReadonlySet<string>
+  reactWrappers: ReactComponentWrappers
 ): ts.Expression | null {
   if (
     !ts.isCallExpression(initializer) ||
-    !ts.isIdentifier(initializer.expression) ||
-    !reactWrappers.has(initializer.expression.text) ||
+    !isReactComponentWrapper(initializer.expression, reactWrappers) ||
     initializer.arguments.length < 1
   ) {
     return null;
   }
   const inner = unwrapTransparentExpression(initializer.arguments[0]!);
   return wrapperRenderFunction(inner, reactWrappers) ?? inner;
-}
-
-function importedNamesFromReact(sourceFile: ts.SourceFile): Set<string> {
-  const names = new Set<string>();
-  for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-    if (statement.moduleSpecifier.text !== "react") continue;
-    const clause = statement.importClause;
-    if (!clause) continue;
-    if (clause.name) names.add(clause.name.text);
-    if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
-      for (const element of clause.namedBindings.elements) {
-        names.add(element.name.text);
-      }
-    }
-  }
-  return names;
 }

@@ -20,6 +20,7 @@ import {
   isHookDependencyReference,
   isSynchronousRenderCallback,
 } from "./state-proofs.js";
+import { collectHookImports, isImportedHookCall, type HookImports } from "../imports.js";
 
 export interface ChildComponentSource {
   readonly body: ts.ConciseBody;
@@ -68,6 +69,7 @@ export interface ChildContractResolver {
     callbackProperty: string
   ): boolean;
   componentCallbackPropIsDeferred(componentName: string, propName: string): boolean;
+  componentCallbackPropRunsOnlyInReactEffect(componentName: string, propName: string): boolean;
   frameworkEventComponent(componentName: string): boolean;
   pureProjectionBindings(): ReadonlySet<string>;
   resolveComponent(name: string): ChildComponentSource | null;
@@ -232,6 +234,90 @@ export function propCallbackIsDeferred(
     new Set(),
     0
   );
+}
+
+/**
+ * Proves that a callback prop is referenced only by a React effect: direct
+ * invocations and presence checks run in the effect body, while other reads
+ * may only preserve the dependency list. This is intentionally narrower than
+ * the general deferred-callback contract because an unknown deferred consumer
+ * could establish its own Legend tracking context.
+ */
+export function propCallbackRunsOnlyInReactEffect(
+  source: ChildComponentSource,
+  propName: string
+): boolean {
+  const bound = boundPropIdentifier(source.owner, propName);
+  if (!bound || !source.owner.body) return false;
+  if (bindingDeclarationCount(source.owner, bound.text) !== 1) return false;
+
+  const imports = collectHookImports(source.owner.getSourceFile());
+  let invocations = 0;
+  let safe = true;
+  visit(source.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== bound.text ||
+      node === bound ||
+      isNonValueIdentifier(node) ||
+      isBindingName(node)
+    ) {
+      return;
+    }
+    const usage = reactEffectCallbackUsage(node, source.owner, imports);
+    if (usage === "invoke") invocations += 1;
+    if (usage === null) safe = false;
+  });
+  return safe && invocations > 0;
+}
+
+function reactEffectCallbackUsage(
+  reference: ts.Identifier,
+  owner: ChildComponentSource["owner"],
+  imports: HookImports
+): "dependency" | "invoke" | "observe" | null {
+  let current: ts.Node = reference;
+  while (current.parent && current.parent !== owner) {
+    const parent = current.parent;
+    if (ts.isCallExpression(parent) && isReactEffectCall(parent, imports)) {
+      const effect = parent.arguments[0];
+      const dependencies = parent.arguments[1];
+      if (
+        dependencies &&
+        ts.isArrayLiteralExpression(dependencies) &&
+        dependencies.elements.some(element => unwrapTransparentExpression(element) === reference)
+      ) {
+        return "dependency";
+      }
+      if (
+        !effect ||
+        (!ts.isArrowFunction(effect) && !ts.isFunctionExpression(effect)) ||
+        !nodeWithin(reference, effect.body) ||
+        nearestNestedFunction(reference, owner) !== effect
+      ) {
+        return null;
+      }
+      if (callbackReferenceIsObservationOnly(reference)) return "observe";
+      const expression = climbTransparentExpression(reference);
+      return ts.isCallExpression(expression.parent) && expression.parent.expression === expression
+        ? "invoke"
+        : null;
+    }
+    current = parent;
+  }
+  return null;
+}
+
+function isReactEffectCall(call: ts.CallExpression, imports: HookImports): boolean {
+  return isImportedHookCall(call, imports.useEffect, imports.reactNamespaces, "useEffect") ||
+    isImportedHookCall(call, imports.useLayoutEffect, imports.reactNamespaces, "useLayoutEffect") ||
+    isImportedHookCall(
+      call,
+      imports.useInsertionEffect,
+      imports.reactNamespaces,
+      "useInsertionEffect"
+    );
 }
 
 interface TrackedCallbackPath {

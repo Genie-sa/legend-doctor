@@ -151,7 +151,16 @@ export function isImportedHookCall(
   call: ts.CallExpression,
   localNames: ReadonlySet<string>,
   namespaceNames: ReadonlySet<string>,
-  canonicalName: "useCallback" | "useEffect" | "useImperativeHandle" | "useMemo" | "useRef" | "useState" | "useValue"
+  canonicalName:
+    | "useCallback"
+    | "useEffect"
+    | "useImperativeHandle"
+    | "useInsertionEffect"
+    | "useLayoutEffect"
+    | "useMemo"
+    | "useRef"
+    | "useState"
+    | "useValue"
 ): boolean {
   const expression = call.expression;
   if (ts.isIdentifier(expression)) {

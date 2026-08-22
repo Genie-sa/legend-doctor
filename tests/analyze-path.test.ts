@@ -1178,6 +1178,62 @@ test("uses cross-file observable provenance for direct useValue findings", async
   }
 });
 
+test("uses peek only for a source-proven effect callback prop", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-effect-callback-read-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "state.ts"),
+    `
+      import { observable } from "@legendapp/state";
+      export const state$ = observable({ ready: false, mixed: false, forwarded: false });
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "consumers.tsx"),
+    `
+      import { memo, useLayoutEffect } from "react";
+      const typedMemo = memo as typeof memo;
+      export const EffectConsumer = typedMemo(function EffectConsumer({ project }: { project: () => unknown }) {
+        useLayoutEffect(() => { project(); }, [project]);
+        return null;
+      });
+      export function MixedConsumer({ project }: { project: () => unknown }) {
+        project();
+        useLayoutEffect(() => { project(); }, [project]);
+        return null;
+      }
+      export function ForwardedEffectConsumer({ project }: { project: () => unknown }) {
+        useLayoutEffect(() => { subscribe(project); }, [project]);
+        return null;
+      }
+      declare function subscribe(callback: () => unknown): void;
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "screen.tsx"),
+    `
+      import { EffectConsumer, ForwardedEffectConsumer, MixedConsumer } from "./consumers";
+      import { state$ } from "./state";
+      export function Screen() {
+        return <>
+          <EffectConsumer project={() => state$.ready.get()} />
+          <MixedConsumer project={() => state$.mixed.get()} />
+          <ForwardedEffectConsumer project={() => state$.forwarded.get()} />
+        </>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const findings = report.practices.filter(finding => finding.action === "use-peek-for-snapshot");
+  assert.equal(findings.length, 1);
+  assert.match(findings[0]?.message ?? "", /state\$\.ready\.peek\(\)/);
+  assert.match(findings[0]?.evidence.join(" ") ?? "", /source-proven React effect callback/);
+});
+
 test("uses source-proven wrapper member provenance without treating the wrapper as observable", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-member-"));
   try {
