@@ -369,7 +369,8 @@ function analyzeParsedSource(
       projectionAllowed,
       pureProjectionImports,
       directEffectCalls,
-      effectOwnedMemoizedCommand
+      effectOwnedMemoizedCommand,
+      childContracts
     );
     if (subtree) subtreeByState.set(state, subtree);
     if (
@@ -4074,7 +4075,8 @@ function analyzeStateSubtree(
   projectionAllowed: boolean,
   pureProjectionImports: ReadonlySet<string>,
   directEffectCalls: ReadonlySet<ts.CallExpression>,
-  effectOwnedMemoizedCommand: boolean
+  effectOwnedMemoizedCommand: boolean,
+  childContracts: ChildContractResolver | null
 ): StateSubtree | null {
   const ownerJsx = jsxElementCount(state.owner);
   const effectWrittenPresentation =
@@ -4113,6 +4115,10 @@ function analyzeStateSubtree(
   const renderReadsInNestedCallbacks = projectionNodes.some(
     node => nearestNestedFunction(node, state.owner) !== null
   );
+  const safeJsxChildProjection =
+    renderReadsInNestedCallbacks &&
+    sharesJsxChildRenderCallback(projectionNodes, state.owner) &&
+    projectionWritesAreDeferred(usage, state.owner, directEffectCalls, childContracts);
   if (
     !effectWrittenPresentation &&
     usage.transportedOccurrences === 0 &&
@@ -4141,7 +4147,8 @@ function analyzeStateSubtree(
     !projectionAllowed ||
     !(safeProjectionReferences || gateProjection) ||
     (renderReadsInNestedCallbacks &&
-      !isKeyedRepeatedProjection(projectionNodes, state.owner))
+      !isKeyedRepeatedProjection(projectionNodes, state.owner) &&
+      !safeJsxChildProjection)
   ) {
     return null;
   }
@@ -4171,6 +4178,61 @@ function analyzeStateSubtree(
     projectionNodes,
     state
   );
+}
+
+function projectionWritesAreDeferred(
+  usage: StateUsage,
+  owner: RuntimeFunctionLike,
+  directEffectCalls: ReadonlySet<ts.CallExpression>,
+  childContracts: ChildContractResolver | null
+): boolean {
+  return usage.setterCallNodes.every(call => {
+    if (ancestorCallInSet(call, directEffectCalls, owner)) return true;
+    const callback = nearestMutationFunction(call, owner);
+    const attribute = callback === owner
+      ? null
+      : findAncestorUntil(callback, ts.isJsxAttribute, owner);
+    const prop = attribute?.name.getText() ?? null;
+    const target = attribute ? jsxTargetName(attribute) : null;
+    if (!attribute || !prop || !target || !/^on[A-Z]/.test(prop)) return false;
+    if (!isCustomJsxTarget(target)) return true;
+    return childContracts?.frameworkEventComponent(target) === true ||
+      childContracts?.componentCallbackPropIsDeferred(target, prop) === true;
+  });
+}
+
+function sharesJsxChildRenderCallback(
+  nodes: readonly ts.Node[],
+  owner: RuntimeFunctionLike
+): boolean {
+  let common: ts.ArrowFunction | ts.FunctionExpression | null = null;
+  for (const node of nodes) {
+    const callback = nearestNestedFunction(node, owner);
+    if (
+      !callback ||
+      (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+      (common !== null && common !== callback)
+    ) {
+      return false;
+    }
+    common = callback;
+  }
+  if (!common) return false;
+
+  let expression: ts.Expression = common;
+  while (
+    (ts.isParenthesizedExpression(expression.parent) ||
+      ts.isAsExpression(expression.parent) ||
+      ts.isTypeAssertionExpression(expression.parent) ||
+      ts.isSatisfiesExpression(expression.parent) ||
+      ts.isNonNullExpression(expression.parent)) &&
+    expression.parent.expression === expression
+  ) {
+    expression = expression.parent;
+  }
+  const container = expression.parent;
+  return ts.isJsxExpression(container) &&
+    (ts.isJsxElement(container.parent) || ts.isJsxFragment(container.parent));
 }
 
 function isMaterialStateSubtree(

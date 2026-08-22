@@ -1966,6 +1966,42 @@ test("does not promote a leaf call site inside an opaque render callback", async
   assert.notEqual(finding?.action, "use-observable");
 });
 
+test("resolves event producers before isolating projections inside JSX child callbacks", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-callback-projection-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Surfaces.tsx"),
+    `
+      export function DeferredSurface({ onHover, children }) {
+        return <div onMouseEnter={onHover}>{children}</div>;
+      }
+      export function EagerSurface({ onHover, children }) {
+        onHover();
+        return <div>{children}</div>;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { DeferredSurface, EagerSurface } from "./Surfaces";
+      export function Screen() {
+        const [safe, setSafe] = useState(false);
+        const [unsafe, setUnsafe] = useState(false);
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+          <Picker>{() => <DeferredSurface onHover={() => setSafe(true)}><Icon fill={safe ? "green" : "gray"} /></DeferredSurface>}</Picker>
+          <Picker>{() => <EagerSurface onHover={() => setUnsafe(true)}><Icon fill={unsafe ? "green" : "gray"} /></EagerSurface>}</Picker>
+        </main>;
+      }
+    `
+  );
+
+  const report = await analyzePath(root);
+  assert.equal(report.findings.find(finding => finding.name === "safe")?.action, "use-observable");
+  assert.equal(report.findings.find(finding => finding.name === "unsafe")?.action, "review-state");
+});
+
 test("does not miss reactive mutation ownership through a hook result object", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-object-mutation-"));
   await writeFile(path.join(root, "StatusLeaf.tsx"), 'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{String(busy)}</span>; }');

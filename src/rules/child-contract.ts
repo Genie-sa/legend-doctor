@@ -68,6 +68,7 @@ export interface ChildContractResolver {
     callbackProperty: string
   ): boolean;
   componentCallbackPropIsDeferred(componentName: string, propName: string): boolean;
+  frameworkEventComponent(componentName: string): boolean;
   pureProjectionBindings(): ReadonlySet<string>;
   resolveComponent(name: string): ChildComponentSource | null;
 }

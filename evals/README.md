@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,342 hooks across 222 source roots. The corpus currently contains
-791 manual hook labels, including 1 non-enforced opportunity, plus eighteen
+At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
+796 manual hook labels, including 1 non-enforced opportunity, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -247,6 +247,12 @@ Command-only getters passed through a custom-hook options object may become refs
 reference through imported project hooks to React effects. A hook may keep the latest callback in an imported React
 `useRef` only when one React effect refreshes the same object property and all reads call that property from a proven
 deferred callback. Render-time calls, stale initial-only storage, aliases, unresolved hooks, and ref escape abstain.
+Two Expensify labels verify narrow state projections inside JSX child render callbacks. Observable ownership stays at
+the original component, existing layout events, effects, promise continuations, and callback placement stay
+unchanged, and one stable extracted leaf subscribes inside the callback's returned tree. JSX attribute callbacks remain
+opaque; two additional labels reject setters published through a runtime-selected component alias or a platform wrapper
+whose prop spread is unresolved. `key` projections, unkeyed repeated output, impure projections, consumers in different
+callbacks, companion React writes, and non-material cuts also abstain.
 Controlled-input labels require one direct value/callback leaf and either no other render read or one complete pure
 validation projection in a disjoint sibling leaf. A separate rendered sibling proves that the owner cut is material.
 The observable stays at the owner across state-independent conditional branches; ref-backed validity, repeated

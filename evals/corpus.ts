@@ -351,6 +351,24 @@ export const repositories = [
         states: 3,
       },
       {
+        effects: 2,
+        id: "expensify-attachment-picker-menu",
+        root: "src/pages/inbox/report/ReportActionCompose/AttachmentPickerWithMenuItems.tsx",
+        states: 1,
+      },
+      {
+        effects: 4,
+        id: "expensify-report-action-item",
+        root: "src/pages/inbox/report/ReportActionItem.tsx",
+        states: 5,
+      },
+      {
+        effects: 1,
+        id: "expensify-receipt-empty-state",
+        root: "src/components/ReceiptEmptyState.tsx",
+        states: 1,
+      },
+      {
         effects: 1,
         id: "expensify-import-multi-level-tags",
         root: "src/pages/workspace/tags/ImportMultiLevelTagsSettingsPage.tsx",
@@ -1400,6 +1418,51 @@ export const repositories = [
 ] as const satisfies readonly CorpusRepository[];
 
 export const goldCases = [
+  {
+    action: "use-observable",
+    file: "ImportSpreadsheet.tsx",
+    hook: "useState",
+    line: 57,
+    name: "fileTopPosition",
+    rationale: "The layout event can update an owner-lifetime observable while one stable positioned-view leaf inside the existing screen render callback subscribes to the only rendered projection.",
+    target: "expensify-import-spreadsheet",
+  },
+  {
+    action: "use-observable",
+    file: "AttachmentPickerWithMenuItems.tsx",
+    hook: "useState",
+    line: 164,
+    name: "popoverAnchorPosition",
+    rationale: "The existing effect and promise continuation can retain their timing while one stable popover leaf inside the screen render callback subscribes to the calculated anchor position.",
+    target: "expensify-attachment-picker-menu",
+  },
+  {
+    action: "review-state",
+    file: "ReportActionItem.tsx",
+    hook: "useState",
+    line: 227,
+    name: "isReportActionActive",
+    rationale: "Both projections share one narrow frame, but the hover setters cross a platform-selected wrapper and prop spread before reaching their event and effect producers; keep the opportunity under review until that chain is proven.",
+    target: "expensify-report-action-item",
+  },
+  {
+    action: "review-state",
+    file: "ReceiptEmptyState.tsx",
+    hook: "useState",
+    line: 93,
+    name: "isHovered",
+    rationale: "The icon is a narrow consumer, but both hover setters are published through a runtime-selected component alias whose callback timing is unresolved; keep this opportunity under review.",
+    target: "expensify-receipt-empty-state",
+  },
+  {
+    action: "review-effect",
+    file: "ReceiptEmptyState.tsx",
+    hook: "useEffect",
+    line: 111,
+    name: null,
+    rationale: "The ref guard makes this a once-per-owner load notification despite dependency changes; preserve its exact commit and Strict Mode behavior until a lifecycle replacement is proven equivalent.",
+    target: "expensify-receipt-empty-state",
+  },
   {
     action: "review-state",
     file: "components/PlaybackControls.tsx",

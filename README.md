@@ -39,14 +39,14 @@ Measured on the pinned corpus:
 | Metric | Result |
 | --- | ---: |
 | Application roots | 12 |
-| Source targets | 222 |
-| Hooks analyzed | 2,342 |
-| Manually audited hook labels | 791 |
+| Source targets | 225 |
+| Hooks analyzed | 2,356 |
+| Manually audited hook labels | 796 |
 | Known non-enforced opportunities | 1 |
 | State groups | 18/18 |
-| Unit tests | 520/520 |
-| Actionable precision | 100% (424/424) |
-| Actionable recall | 99.8% (424/425) |
+| Unit tests | 524/524 |
+| Actionable precision | 100% (426/426) |
+| Actionable recall | 99.8% (426/427) |
 | Legend practice precision | 100% (100/100) |
 
 These numbers measure analyzer decisions, not runtime speed. The corpus covers Tree Map, Tree Wallet, Memoria, Legend

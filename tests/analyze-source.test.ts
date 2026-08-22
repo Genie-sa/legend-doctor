@@ -3763,6 +3763,52 @@ test("does not move direct state into an opaque render callback", () => {
   );
 });
 
+test("isolates a narrow projection inside a JSX child render callback", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function Screen() {
+      const [hovered, setHovered] = useState(false);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <Picker>{() => <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+          <Icon fill={hovered ? "green" : "gray"} /><Label />
+        </div>}</Picker>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /leaf subscriber/);
+});
+
+test("does not trust an unresolved event producer inside a JSX child render callback", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function Screen() {
+      const [hovered, setHovered] = useState(false);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <Picker>{() => <Wrapper onHoverIn={() => setHovered(true)} onHoverOut={() => setHovered(false)}>
+          <Icon fill={hovered ? "green" : "gray"} /><Label />
+        </Wrapper>}</Picker>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "review-state");
+});
+
+test("does not isolate a key projection inside a JSX child render callback", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function Screen() {
+      const [version, setVersion] = useState(0);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <Picker>{() => <div onClick={() => setVersion(value => value + 1)}>
+          <Icon key={version} /><Label />
+        </div>}</Picker>
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "review-state");
+});
+
 test("requires repeated projections to depend on a stable row key", () => {
   assert.deepEqual(
     actions(`

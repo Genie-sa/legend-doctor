@@ -574,6 +574,9 @@ function createChildContractResolver(
       componentCallbackContracts.set(key, deferred);
       return deferred;
     },
+    frameworkEventComponent(componentName): boolean {
+      return context.sourceIndex.frameworkEventComponentFor(importerFile, componentName);
+    },
     callbackPropertyIsDeferred(hookName, argumentIndex, property): boolean {
       const key = `${hookName}\0${argumentIndex}\0${property}`;
       const cached = callbackContracts.get(key);
