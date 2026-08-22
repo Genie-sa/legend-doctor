@@ -298,7 +298,8 @@ export function expressionContainsJsx(expression: ts.Expression): boolean {
 export function isSafeProjectionExpression(
   expression: ts.Expression,
   reference: ts.Node,
-  allowedIdentifierCalls: ReadonlySet<string> = EMPTY_BINDINGS
+  allowedIdentifierCalls: ReadonlySet<string> = EMPTY_BINDINGS,
+  allowedPropertyCalls: ReadonlySet<string> = EMPTY_BINDINGS
 ): boolean {
   if (!nodeWithin(reference, expression)) return false;
   let safe = true;
@@ -313,7 +314,8 @@ export function isSafeProjectionExpression(
         (node.operator === ts.SyntaxKind.PlusPlusToken ||
           node.operator === ts.SyntaxKind.MinusMinusToken)) ||
       (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind)) ||
-      (ts.isCallExpression(node) && !isSafeProjectionCall(node, allowedIdentifierCalls))
+      (ts.isCallExpression(node) &&
+        !isSafeProjectionCall(node, allowedIdentifierCalls, allowedPropertyCalls))
     ) {
       safe = false;
     }
@@ -323,7 +325,8 @@ export function isSafeProjectionExpression(
 
 function isSafeProjectionCall(
   call: ts.CallExpression,
-  allowedIdentifierCalls: ReadonlySet<string>
+  allowedIdentifierCalls: ReadonlySet<string>,
+  allowedPropertyCalls: ReadonlySet<string>
 ): boolean {
   const callee = call.expression;
   if (ts.isIdentifier(callee)) return allowedIdentifierCalls.has(callee.text);
@@ -331,6 +334,12 @@ function isSafeProjectionCall(
   const name = callee.name.text;
   if (["filter", "findIndex", "join", "slice", "trim"].includes(name)) return true;
   const root = callRootIdentifier(callee);
+  if (
+    ts.isIdentifier(callee.expression) &&
+    allowedPropertyCalls.has(`${callee.expression.text}.${name}`)
+  ) {
+    return true;
+  }
   return root === "styles" || root === "cn";
 }
 

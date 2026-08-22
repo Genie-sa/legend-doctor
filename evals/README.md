@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-796 manual hook labels, including 1 non-enforced opportunity, plus eighteen
+797 manual hook labels, including 1 non-enforced opportunity, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -42,6 +42,11 @@ that a transported `useValue` subscription can leave a broad owner without chang
 Two replace a complete conditional child slot with an always-mounted subscriber while preserving the selected child's mount behavior. Run
 the eval for the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
+
+Two Legend Music labels verify that a measured scalar can cross a bounded chain of immutable pure projections and
+subscribe in one uniquely selected repeated branch. The receiver must be structurally deduplicated, the switch literal
+must match the leaf key, and any later filter must be read-only. Duplicate rows, mutable aliases, shadowed globals,
+arbitrary calls, receiver mutation, fallthrough, and unstable keys abstain.
 
 One Legend Music snapshot label verifies a callback passed across files and invoked directly only inside an imported
 React layout effect. Component resolution accepts immutable aliases of imported `memo` and `forwardRef`; names are not

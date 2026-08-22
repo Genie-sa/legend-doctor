@@ -1464,12 +1464,21 @@ export const goldCases = [
     target: "expensify-receipt-empty-state",
   },
   {
-    action: "review-state",
+    action: "use-observable",
     file: "components/PlaybackControls.tsx",
     hook: "useState",
     line: 50,
     name: "layoutWidth",
-    rationale: "Layout measurement currently re-renders a broad control owner and should be isolated at the JumpSearch consumer.",
+    rationale: "The deduplicated search branch is the only render consumer, so an owner-scoped observable can update one stable leaf without invalidating every playback control.",
+    target: "legend-music",
+  },
+  {
+    action: "use-observable",
+    file: "components/PlaylistSelector.tsx",
+    hook: "useState",
+    line: 39,
+    name: "layoutWidth",
+    rationale: "The deduplicated search branch is the only render consumer, so an owner-scoped observable can update one stable leaf without invalidating the playlist owner.",
     target: "legend-music",
   },
   {

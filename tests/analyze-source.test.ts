@@ -1870,6 +1870,99 @@ test("isolates a leaf reached through one immutable render projection", () => {
   assert.match(finding?.message ?? "", /full state-controlled render expression/);
 });
 
+test("isolates a bounded pure projection in one uniquely selected repeated branch", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function Controls({ configured, windowWidth }: { configured: string[]; windowWidth: number }) {
+      const [layoutWidth, setLayoutWidth] = useState(0);
+      const setWidth = (nextWidth: number) => setLayoutWidth(previous =>
+        Math.abs(previous - nextWidth) < 1 ? previous : nextWidth
+      );
+      const baseWidth = layoutWidth > 0 ? layoutWidth : windowWidth;
+      const dropdownWidth = Math.max(baseWidth - 16, 320);
+      const controls = configured.filter((control, index, array) => array.indexOf(control) === index);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside />
+        <button onClick={() => setWidth(400)} />
+        {controls.map(control => {
+          switch (control) {
+            case "search": return <Search key="search" width={dropdownWidth} />;
+            case "save": return <Save key="save" />;
+            default: return null;
+          }
+        })}
+      </main>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "layoutWidth");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /uniquely selected branch/);
+});
+
+test("requires every proof for a uniquely selected repeated projection", () => {
+  const source = `
+    import { useState } from "react";
+    export function Controls({ configured, windowWidth }: { configured: string[]; windowWidth: number }) {
+      const [layoutWidth, setLayoutWidth] = useState(0);
+      const setWidth = (nextWidth: number) => setLayoutWidth(nextWidth);
+      const baseWidth = layoutWidth > 0 ? layoutWidth : windowWidth;
+      const dropdownWidth = Math.max(baseWidth - 16, 320);
+      const controls = configured.filter((control, index, array) => array.indexOf(control) === index);
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside />
+        <button onClick={() => setWidth(400)} />
+        {controls.map(control => {
+          switch (control) {
+            case "search": return <Search key="search" width={dropdownWidth} />;
+            case "save": return <Save key="save" />;
+            default: return null;
+          }
+        })}
+      </main>;
+    }
+  `;
+  const unsafe = [
+    source.replace(
+      "const controls = configured.filter((control, index, array) => array.indexOf(control) === index);",
+      "const controls = configured;"
+    ),
+    source.replace(
+      "export function Controls({ configured, windowWidth }:",
+      "export function Controls({ configured, windowWidth, Math }:"
+    ),
+    source.replace('key="search"', 'key="wrong"'),
+    source.replace("const baseWidth", "let baseWidth"),
+    source.replace("Math.max(baseWidth - 16, 320)", "clamp(baseWidth - 16, 320)"),
+    source.replace("Math.max(baseWidth - 16, 320)", "Math.geometry.max(baseWidth - 16, 320)"),
+    source.replace(
+      "configured.filter((control, index, array) => array.indexOf(control) === index)",
+      "configured.filter((control, index, array) => array.indexOf(control) === index).filter((control, index, array) => { array.push(control); return true; })"
+    ),
+    source.replace(
+      "configured.filter((control, index, array) => array.indexOf(control) === index)",
+      "configured.filter((control, index, array) => array.indexOf(control) === index).filter(control => inspect(control))"
+    ),
+    source.replace("switch (control) {", "controls.push(control); switch (control) {"),
+    source
+      .replace(
+        "const controls = configured.filter",
+        "const finalWidth = dropdownWidth; const renderedWidth = finalWidth; const controls = configured.filter"
+      )
+      .replace("width={dropdownWidth}", "width={renderedWidth}"),
+    source.replace(
+      `{controls.map(control => {
+          switch (control) {
+            case "search": return <Search key="search" width={dropdownWidth} />;
+            case "save": return <Save key="save" />;
+            default: return null;
+          }
+        })}`,
+      `{controls.map(control => <Search key={control} width={dropdownWidth} />)}`
+    ),
+  ];
+  for (const candidate of unsafe) {
+    const finding = analyzeSource(candidate, "fixture.tsx").find(result => result.name === "layoutWidth");
+    assert.notEqual(finding?.action, "use-observable");
+  }
+});
+
 test("does not isolate mutable, effectful, or externally consumed render aliases", () => {
   for (const alias of [
     `let showImage = !failed;`,

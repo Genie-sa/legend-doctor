@@ -191,14 +191,17 @@ export function isNonValueIdentifier(node: ts.Identifier): boolean {
   );
 }
 
-export function isPureExpression(node: ts.Node): boolean {
+export function isPureExpression(
+  node: ts.Node,
+  allowedCall: (call: ts.CallExpression) => boolean = () => false
+): boolean {
   let pure = true;
   visit(node, current => {
     if (
       ts.isAwaitExpression(current) ||
       ts.isYieldExpression(current) ||
       ts.isNewExpression(current) ||
-      ts.isCallExpression(current) ||
+      (ts.isCallExpression(current) && !allowedCall(current)) ||
       (ts.isPropertyAccessExpression(current) && current.name.text === "current") ||
       ts.isDeleteExpression(current) ||
       ts.isPostfixUnaryExpression(current) ||

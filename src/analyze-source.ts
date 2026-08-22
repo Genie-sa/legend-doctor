@@ -79,6 +79,7 @@ import {
 } from "./rules/lazy-callback-leaf.js";
 import {
   callbackIsEventRooted,
+  boundedRenderProjectionReferences,
   expressionDependsOnBinding,
   hasDirectPrimitiveInitializer,
   hasIndependentRenderCutWitness,
@@ -88,8 +89,10 @@ import {
   isHookDependencyReference,
   isInsideJsxEventCallback,
   isJsxNode,
+  isUniquelySelectedRepeatedProjection,
   isSafeJsxProjectionReference,
   isSynchronousRenderCallback,
+  isUnshadowedMathCall,
   jsxElementCount,
   jsxElementCountIn,
   lowestCommonJsxSubtree,
@@ -719,6 +722,7 @@ function resolveEffectCallback(
 }
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
+const PURE_MATH_METHODS: ReadonlySet<string> = new Set(["abs", "max", "min"]);
 const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
 const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
 const EMPTY_STATE_CANDIDATES: ReadonlyMap<string, StateCandidate> = new Map();
@@ -2474,7 +2478,10 @@ function primitiveSetterUpdatersArePure(
     const argument = call.arguments[0];
     return !argument ||
       (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument)) ||
-      isPureExpression(argument);
+      isPureExpression(
+        argument,
+        call => isUnshadowedMathCall(state.owner, call, PURE_MATH_METHODS)
+      );
   });
 }
 
@@ -3176,7 +3183,7 @@ function classifyState(
   }
   const effectProjectionSubtree = subtree?.kind === "effect-projection" ? subtree : null;
   if (effectProjectionSubtree && !hasCompanionWrites) {
-    const selector = effectProjectionSubtree.repeated ? " with a per-item selector" : "";
+    const selector = repeatedSubscriptionSuffix(effectProjectionSubtree);
     return {
       action: "use-observable",
       confidence: "probable",
@@ -3247,13 +3254,13 @@ function classifyState(
     projectionSubtree &&
     !hasCompanionWrites
   ) {
-    const selector = projectionSubtree.repeated ? " with a per-item selector" : "";
+    const selector = repeatedSubscriptionSuffix(projectionSubtree);
     return {
       action: "use-observable",
       confidence: "probable",
       message: usage.transportedOccurrences > 0
         ? `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; subscribe to the raw value once, pass that snapshot unchanged, derive every existing projection from the same snapshot, and leave the child API unchanged.`
-        : `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; evaluate its existing boolean, equality, or property projections inside that wrapper and leave the child API unchanged.`,
+        : `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; evaluate its existing pure projections inside that wrapper and leave the child API unchanged.`,
     };
   }
   if (hasMultiSurfaceBooleanConsumers) {
@@ -3408,6 +3415,11 @@ function classifyState(
         ? legendCandidateMessage(state, usage, sourceComponents)
         : `Review React state \`${state.valueName}\`; local evidence does not prove a render-boundary improvement.`,
   };
+}
+
+function repeatedSubscriptionSuffix(subtree: StateSubtree): string {
+  if (subtree.uniqueRepeatedBranch) return " inside its uniquely selected branch";
+  return subtree.repeated ? " with a per-item selector" : "";
 }
 
 function isCohesiveDelayedPendingState(
@@ -4066,6 +4078,7 @@ interface StateSubtree {
   line: number;
   node: JsxSubtreeNode;
   repeated: boolean;
+  uniqueRepeatedBranch: boolean;
   unstable: boolean;
 }
 
@@ -4092,7 +4105,7 @@ function analyzeStateSubtree(
       )
     : EMPTY_BINDINGS;
   if (
-    (ownerJsx < 12 && !effectWrittenPresentation) ||
+    (ownerJsx < 8 && !effectWrittenPresentation) ||
     stateMayHoldCallable(state) ||
     usage.directRenderNodes.length === 0 ||
     usage.localRenderReads !== usage.directRenderNodes.length ||
@@ -4110,7 +4123,8 @@ function analyzeStateSubtree(
   const projectionNodes = effectWrittenPresentation
     ? multipleOneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
       usage.directRenderNodes
-    : oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
+    : boundedRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
+      oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
       usage.directRenderNodes;
   const renderReadsInNestedCallbacks = projectionNodes.some(
     node => nearestNestedFunction(node, state.owner) !== null
@@ -4119,6 +4133,8 @@ function analyzeStateSubtree(
     renderReadsInNestedCallbacks &&
     sharesJsxChildRenderCallback(projectionNodes, state.owner) &&
     projectionWritesAreDeferred(usage, state.owner, directEffectCalls, childContracts);
+  const uniqueRepeatedProjection =
+    isUniquelySelectedRepeatedProjection(projectionNodes, state.owner);
   if (
     !effectWrittenPresentation &&
     usage.transportedOccurrences === 0 &&
@@ -4129,7 +4145,7 @@ function analyzeStateSubtree(
     const direct = lowestCommonJsxSubtree(directNodes, state.owner);
     if (direct) {
       const subtreeJsx = jsxElementCountIn(direct);
-      if (subtreeJsx >= 2 && subtreeJsx / ownerJsx <= 0.4) {
+      if (ownerJsx >= 12 && subtreeJsx >= 2 && subtreeJsx / ownerJsx <= 0.4) {
         return stateSubtreeResult("direct", direct, directNodes, state);
       }
     }
@@ -4148,6 +4164,7 @@ function analyzeStateSubtree(
     !(safeProjectionReferences || gateProjection) ||
     (renderReadsInNestedCallbacks &&
       !isKeyedRepeatedProjection(projectionNodes, state.owner) &&
+      !uniqueRepeatedProjection &&
       !safeJsxChildProjection)
   ) {
     return null;
@@ -4155,7 +4172,12 @@ function analyzeStateSubtree(
   const projection = gateProjection ?? lowestCommonJsxSubtree(projectionNodes, state.owner);
   if (
     !projection ||
-    !isMaterialStateSubtree(projection, ownerJsx, effectWrittenPresentation) ||
+    !isMaterialStateSubtree(
+      projection,
+      ownerJsx,
+      effectWrittenPresentation,
+      uniqueRepeatedProjection
+    ) ||
     (usage.transportedOccurrences > 0 &&
       !isSafeMixedProjectionTransport(
         state,
@@ -4176,7 +4198,8 @@ function analyzeStateSubtree(
         : "projection",
     projection,
     projectionNodes,
-    state
+    state,
+    uniqueRepeatedProjection
   );
 }
 
@@ -4238,10 +4261,12 @@ function sharesJsxChildRenderCallback(
 function isMaterialStateSubtree(
   subtree: JsxSubtreeNode,
   ownerJsx: number,
-  effectWrittenPresentation: boolean
+  effectWrittenPresentation: boolean,
+  uniqueRepeatedProjection: boolean
 ): boolean {
   const subtreeJsx = jsxElementCountIn(subtree);
   return (ownerJsx >= 12 && subtreeJsx / ownerJsx <= 0.4) ||
+    (uniqueRepeatedProjection && ownerJsx >= 8 && subtreeJsx / ownerJsx <= 0.25) ||
     (effectWrittenPresentation && ownerJsx < 12 && ownerJsx - subtreeJsx >= 5);
 }
 
@@ -4313,7 +4338,8 @@ function stateSubtreeResult(
   kind: StateSubtree["kind"],
   node: JsxSubtreeNode,
   renderNodes: readonly ts.Node[],
-  state: StateCandidate
+  state: StateCandidate,
+  uniqueRepeatedBranch = false
 ): StateSubtree {
   return {
     kind,
@@ -4321,6 +4347,7 @@ function stateSubtreeResult(
     line: node.getSourceFile().getLineAndCharacterOfPosition(node.getStart()).line + 1,
     node,
     repeated: commonRepeatedRender(renderNodes, state.owner) !== null,
+    uniqueRepeatedBranch,
     unstable: hasUnstableSubtreeLifetime(node, state.owner),
   };
 }

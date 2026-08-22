@@ -215,6 +215,45 @@ function RowState({ row, selectedId$ }: Props) {
 }
 ```
 
+### Isolate a measured value in one selected control
+
+```tsx
+// before: every layout event rerenders every control
+const uniqueControls = controls.filter((control, index, array) => array.indexOf(control) === index);
+const [layoutWidth, setLayoutWidth] = useState(0);
+const updateWidth = (next: number) => setLayoutWidth(previous =>
+  Math.abs(previous - next) < 1 ? previous : next
+);
+const baseWidth = layoutWidth > 0 ? layoutWidth : windowWidth;
+const dropdownWidth = Math.max(baseWidth - 16, 320);
+return uniqueControls.map(control => {
+  switch (control) {
+    case "search": return <Search key="search" width={dropdownWidth} />;
+    default: return null;
+  }
+});
+
+// after: ownership stays here; only SearchWidth subscribes
+const layoutWidth$ = useObservable(0);
+const updateWidth = (next: number) => layoutWidth$.set(previous =>
+  Math.abs(previous - next) < 1 ? previous : next
+);
+return uniqueControls.map(control => {
+  switch (control) {
+    case "search": return <SearchWidth key="search" width$={layoutWidth$} fallback={windowWidth} />;
+    default: return null;
+  }
+});
+
+function SearchWidth({ width$, fallback }: Props) {
+  const measured = useValue(width$);
+  return <Search width={Math.max((measured > 0 ? measured : fallback) - 16, 320)} />;
+}
+```
+
+This finding requires immutable projections, an unshadowed pure calculation, a structurally deduplicated array, one
+literal switch branch, and a matching stable key. Ordinary repeated rows remain candidates.
+
 ### Replace command-only state or a Legend mirror
 
 ```tsx
@@ -430,14 +469,14 @@ The rules follow the official
 
 ## Accuracy
 
-The pinned corpus contains 2,356 hooks across 225 targets, 796 manually audited hook labels, 18 state groups, and 106
+The pinned corpus contains 2,356 hooks across 225 targets, 797 manually audited hook labels, 18 state groups, and 106
 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 530/530 |
-| Actionable precision | 426/426 |
-| Actionable recall | 426/427 |
+| Unit tests | 532/532 |
+| Actionable precision | 428/428 |
+| Actionable recall | 428/429 |
 | Legend practice precision | 106/106 |
 
 The one unresolved opportunity remains non-enforced because its callback timing is not structurally proven.
