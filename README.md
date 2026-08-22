@@ -43,11 +43,11 @@ Measured on pinned real applications:
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual labels | 788 |
-| Known misses | 12 |
+| Known misses | 11 |
 | State groups | 17/17 |
-| Unit tests | 496/496 |
-| Actionable precision | 100% (414/414) |
-| Actionable recall | 97.2% (414/426) |
+| Unit tests | 500/500 |
+| Actionable precision | 100% (415/415) |
+| Actionable recall | 97.4% (415/426) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -241,6 +241,11 @@ Selection mode follows the same atomic rule when one boolean mode and one empty 
 together. Functional row toggles may update only the collection, but every mode transition must clear it in the same
 straight-line block or switch case. The recommendation keeps one observable selection model, with header/control
 selectors and per-key row subscriptions; partial mode transitions remain reviews.
+
+Array selection may also pass through one exact `filter(id => visibleSet.has(id))` and immutable `Set` normalization
+when the filtered array feeds one direct controlled summary leaf and the normalized membership feeds stable-keyed rows.
+The membership source must remain read-only; split summaries, command escapes, transformed props, opaque predicates,
+and selection-controlled row mounts remain reviews.
 
 #### Effect-written presentation state
 

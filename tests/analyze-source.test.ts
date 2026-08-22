@@ -5773,6 +5773,111 @@ test("keeps filtered array selection as review without a general cross-value pro
   assert.notEqual(finding?.action, "use-observable");
 });
 
+test("isolates filtered keyed selection with one controlled summary leaf", () => {
+  const source = `
+    import { useState } from "react";
+    export function SelectionScreen({ rows, visibleIds }: {
+      rows: Array<{ id: string }>;
+      visibleIds: string[];
+    }) {
+      const [selectedIds, setSelectedIds] = useState<string[]>([]);
+      const visibleIdSet = new Set(visibleIds);
+      const activeSelection = selectedIds.filter(id => visibleIdSet.has(id));
+      const activeSelectionSet = new Set(activeSelection);
+      const toggle = (id: string) => setSelectedIds(previous =>
+        previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id]
+      );
+      return <Screen><Header /><Toolbar /><Summary /><Filters /><Actions /><Status /><Help /><Footer /><Sidebar /><Banner /><Search />
+        <SelectionBar selectedIds={activeSelection} visibleIds={visibleIds} onChange={setSelectedIds} />
+        {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => toggle(row.id)} />)}
+      </Screen>;
+    }
+  `;
+  const finding = analyzeSource(source, "fixture.tsx").find(candidate => candidate.name === "selectedIds");
+  assert.equal(finding?.action, "use-observable");
+});
+
+test("requires a filtered keyed selection to have one exact controlled summary leaf", () => {
+  for (const use of [
+    `<SelectionBar selectedIds={activeSelection} visibleIds={visibleIds} onChange={setSelectedIds} />
+     <SelectionCount selectedIds={activeSelection} />`,
+    `<SelectionBar selectedIds={activeSelection} visibleIds={visibleIds} />`,
+    `<SelectionBar selectedIds={activeSelection.map(normalize)} visibleIds={visibleIds} onChange={setSelectedIds} />`,
+    `<SelectionBar selectedIds={activeSelection} visibleIds={visibleIds} onChange={setSelectedIds} />
+     <button onClick={() => save(activeSelection)}>Save</button>`,
+  ]) {
+    const source = `
+      import { useState } from "react";
+      export function SelectionScreen({ rows, visibleIds }: {
+        rows: Array<{ id: string }>;
+        visibleIds: string[];
+      }) {
+        const [selectedIds, setSelectedIds] = useState<string[]>([]);
+        const visibleIdSet = new Set(visibleIds);
+        const activeSelection = selectedIds.filter(id => visibleIdSet.has(id));
+        const activeSelectionSet = new Set(activeSelection);
+        ${"\n".repeat(20)}
+        return <Screen><Header /><Toolbar /><Summary /><Filters /><Actions /><Status /><Help /><Footer /><Sidebar /><Banner /><Search />
+          ${use}
+          {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
+        </Screen>;
+      }
+    `;
+    const finding = analyzeSource(source, "fixture.tsx").find(candidate => candidate.name === "selectedIds");
+    assert.notEqual(finding?.action, "use-observable", use);
+  }
+});
+
+test("requires the filtered selection membership source to remain read-only", () => {
+  for (const [declaration, mutation] of [
+    [`const visibleIdSet = new Set(visibleIds);`, `visibleIdSet.add("extra");`],
+    [`const visibleIdSet = new Set(visibleIds);`, `inspect(visibleIdSet);`],
+    [`let visibleIdSet = new Set(visibleIds);`, `visibleIdSet = new Set();`],
+  ]) {
+    const source = `
+      import { useState } from "react";
+      export function SelectionScreen({ rows, visibleIds }: {
+        rows: Array<{ id: string }>;
+        visibleIds: string[];
+      }) {
+        const [selectedIds, setSelectedIds] = useState<string[]>([]);
+        ${declaration}
+        const activeSelection = selectedIds.filter(id => visibleIdSet.has(id));
+        const activeSelectionSet = new Set(activeSelection);
+        ${mutation}
+        return <Screen><Header /><Toolbar /><Summary /><Filters /><Actions /><Status /><Help /><Footer /><Sidebar /><Banner /><Search />
+          <SelectionBar selectedIds={activeSelection} visibleIds={visibleIds} onChange={setSelectedIds} />
+          {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
+        </Screen>;
+      }
+    `;
+    const finding = analyzeSource(source, "fixture.tsx").find(candidate => candidate.name === "selectedIds");
+    assert.notEqual(finding?.action, "use-observable", mutation);
+  }
+});
+
+test("does not infer filtered selection from a shadowed Set constructor", () => {
+  const [finding] = analyzeSource(`
+    import { useState } from "react";
+    export function SelectionScreen({ rows, visibleIds, FakeSet }: {
+      rows: Array<{ id: string }>;
+      visibleIds: string[];
+      FakeSet: new (values: string[]) => Set<string>;
+    }) {
+      const Set = FakeSet;
+      const [selectedIds, setSelectedIds] = useState<string[]>([]);
+      const visibleIdSet = new Set(visibleIds);
+      const activeSelection = selectedIds.filter(id => visibleIdSet.has(id));
+      const activeSelectionSet = new Set(activeSelection);
+      return <Screen><Header /><Toolbar /><Summary /><Filters /><Actions /><Status /><Help /><Footer /><Sidebar /><Banner /><Search />
+        <SelectionBar selectedIds={activeSelection} visibleIds={visibleIds} onChange={setSelectedIds} />
+        {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
+      </Screen>;
+    }
+  `, "fixture.tsx");
+  assert.notEqual(finding?.action, "use-observable");
+});
+
 test("isolates keyed array membership with one filtered selection summary leaf", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

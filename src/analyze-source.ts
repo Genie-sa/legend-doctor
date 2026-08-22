@@ -2309,7 +2309,7 @@ function classifyState(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace keyed collection state \`${state.valueName}\` with a component-lifetime observable collection; extract the repeated row and subscribe there with a per-row \`useValue\` membership selector, keep any aggregate consumers in separate leaves, and read commands without subscribing.`,
+      message: `Replace keyed collection state \`${state.valueName}\` with a component-lifetime observable collection; extract the repeated row and subscribe there with an equivalent per-row \`useValue\` membership selector, preserve any proven filter inside the row and aggregate leaves, and read commands without subscribing.`,
     };
   }
   if (isKeyedLeafScalar) {

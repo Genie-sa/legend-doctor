@@ -1807,14 +1807,13 @@ export const goldCases = [
     ["components/avatar-management/avatar-catalog-page.tsx", 35, "createOpen"],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
-    ...(file === "routes/(app)/_private/_map/enhancement-requests/index.tsx"
-      ? { enforced: false as const }
-      : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A local observable can retain ownership while moving subscriptions into the narrow row, modal, or panel consumers.",
+    rationale: file === "routes/(app)/_private/_map/enhancement-requests/index.tsx"
+      ? "Manual audit proves one immutable visible-ID filter feeds exactly one controlled selection bar while one stable-keyed row map reads membership; owner resets retain their existing co-write timing."
+      : "A local observable can retain ownership while moving subscriptions into the narrow row, modal, or panel consumers.",
     target: "tree-map",
   })),
   {

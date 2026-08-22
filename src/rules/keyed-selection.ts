@@ -4,7 +4,9 @@ import {
   bindingDeclarationCount,
   callRootIdentifier,
   hookCallName,
+  isControlledInteractionProp,
   isDeclarationName,
+  isDirectJsxAttributeExpression,
   isNonValueIdentifier,
   isPureExpression,
   unwrapTransparentExpression,
@@ -44,6 +46,7 @@ import {
   oneHopRenderProjectionReferences,
   repeatedRenderHasStableItemKey,
   stateMayHoldCallable,
+  uniqueVariableDeclaration,
 } from "./state-proofs.js";
 
 const KEYED_COLLECTION_PROPERTIES = new Set(["entries", "has", "keys", "size", "values"]);
@@ -535,9 +538,20 @@ function isStableRenderedMembership(
     root.text === extractor.parameters[0]!.name.text;
 }
 
-function localSetAliasForArrayState(state: StateCandidate): ts.VariableDeclaration | null {
-  if (!isArrayState(state.call) || !state.owner.body) return null;
-  const matches: ts.VariableDeclaration[] = [];
+interface ArraySetAlias {
+  declaration: ts.VariableDeclaration;
+  stateSource: ts.Identifier;
+}
+
+function localSetAliasForArrayState(state: StateCandidate): ArraySetAlias | null {
+  if (
+    !isArrayState(state.call) ||
+    !state.owner.body ||
+    bindingDeclarationCount(state.owner, "Set") !== 0
+  ) {
+    return null;
+  }
+  const matches: ArraySetAlias[] = [];
   visitSkippingNestedRuntimeFunctions(state.owner.body, node => {
     if (
       !ts.isVariableDeclaration(node) ||
@@ -558,10 +572,179 @@ function localSetAliasForArrayState(state: StateCandidate): ts.VariableDeclarati
       return;
     }
     const source = unwrapTransparentExpression(initializer.arguments[0]!);
-    if (ts.isIdentifier(source) && source.text === state.valueName) matches.push(node);
+    if (ts.isIdentifier(source) && source.text === state.valueName) {
+      matches.push({ declaration: node, stateSource: source });
+      return;
+    }
+    if (!ts.isIdentifier(source)) return;
+    const filtered = filteredSelectionDeclaration(state, source.text);
+    if (filtered && filteredSelectionHasOneControlledLeaf(state, filtered, node)) {
+      matches.push({ declaration: node, stateSource: filtered.stateSource });
+    }
   });
   const match = matches.length === 1 ? matches[0]! : null;
-  return match && bindingDeclarationCount(state.owner, match.name.getText()) === 1 ? match : null;
+  return match && bindingDeclarationCount(state.owner, match.declaration.name.getText()) === 1
+    ? match
+    : null;
+}
+
+interface FilteredSelectionDeclaration {
+  declaration: ts.VariableDeclaration;
+  stateSource: ts.Identifier;
+}
+
+function filteredSelectionDeclaration(
+  state: StateCandidate,
+  name: string
+): FilteredSelectionDeclaration | null {
+  if (!state.owner.body) return null;
+  const declaration = uniqueVariableDeclaration(state.owner.body, name);
+  if (
+    !declaration?.initializer ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    bindingDeclarationCount(state.owner, name) !== 1
+  ) {
+    return null;
+  }
+  const filter = unwrapTransparentExpression(declaration.initializer);
+  if (
+    !ts.isCallExpression(filter) ||
+    filter.arguments.length !== 1 ||
+    !ts.isPropertyAccessExpression(filter.expression) ||
+    filter.expression.name.text !== "filter"
+  ) {
+    return null;
+  }
+  const stateSource = unwrapTransparentExpression(filter.expression.expression);
+  const callback = filter.arguments[0];
+  if (
+    !callback ||
+    !ts.isIdentifier(stateSource) ||
+    stateSource.text !== state.valueName ||
+    (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+    callback.parameters.length !== 1 ||
+    !ts.isIdentifier(callback.parameters[0]!.name) ||
+    ts.isBlock(callback.body)
+  ) {
+    return null;
+  }
+  const membership = unwrapTransparentExpression(callback.body);
+  if (
+    !ts.isCallExpression(membership) ||
+    membership.arguments.length !== 1 ||
+    !ts.isPropertyAccessExpression(membership.expression) ||
+    membership.expression.name.text !== "has"
+  ) {
+    return null;
+  }
+  const membershipSource = unwrapTransparentExpression(membership.expression.expression);
+  return ts.isIdentifier(membershipSource) &&
+    membershipSource.text !== state.valueName &&
+    isReadOnlyMembershipSource(state.owner, membershipSource.text) &&
+    expressionDependsOnBinding(membership.arguments[0]!, callback.parameters[0]!.name, callback)
+    ? { declaration, stateSource }
+    : null;
+}
+
+function isReadOnlyMembershipSource(owner: RuntimeFunctionLike, name: string): boolean {
+  if (!owner.body || bindingDeclarationCount(owner, name) !== 1) return false;
+  const declaration = uniqueVariableDeclaration(owner.body, name);
+  const initializer = declaration?.initializer && unwrapTransparentExpression(declaration.initializer);
+  if (
+    !declaration ||
+    !initializer ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    !ts.isNewExpression(initializer) ||
+    !ts.isIdentifier(initializer.expression) ||
+    initializer.expression.text !== "Set" ||
+    initializer.arguments?.length !== 1
+  ) {
+    return false;
+  }
+  let reads = 0;
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const property = ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node
+      ? node.parent
+      : null;
+    if (
+      property?.name.text === "has" &&
+      ts.isCallExpression(property.parent) &&
+      property.parent.expression === property
+    ) {
+      reads += 1;
+      return;
+    }
+    safe = false;
+  });
+  return safe && reads > 0;
+}
+
+function filteredSelectionHasOneControlledLeaf(
+  state: StateCandidate,
+  filtered: FilteredSelectionDeclaration,
+  setDeclaration: ts.VariableDeclaration
+): boolean {
+  if (!state.setterName || !ts.isIdentifier(filtered.declaration.name)) return false;
+  const references: ts.Identifier[] = [];
+  visit(state.owner.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === filtered.declaration.name.getText() &&
+      node !== filtered.declaration.name &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      references.push(node);
+    }
+  });
+  const setReference = references.find(reference =>
+    !!setDeclaration.initializer && nodeWithin(reference, setDeclaration.initializer)
+  );
+  const leafReferences = references.filter(reference => reference !== setReference);
+  if (!setReference || leafReferences.length !== 1) return false;
+
+  const leafReference = leafReferences[0]!;
+  const attribute = findAncestorUntil(leafReference, ts.isJsxAttribute, state.owner);
+  if (
+    !attribute ||
+    attribute.name.getText() === "key" ||
+    !isDirectJsxAttributeExpression(attribute, leafReference)
+  ) {
+    return false;
+  }
+  const opening = attribute.parent.parent;
+  if (
+    (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) ||
+    !/^[A-Z]/.test(opening.tagName.getText()) ||
+    nearestRepeatedRenderCall(opening, state.owner)
+  ) {
+    return false;
+  }
+  return opening.attributes.properties.some(property => {
+    if (
+      !ts.isJsxAttribute(property) ||
+      !isControlledInteractionProp(property.name.getText()) ||
+      !property.initializer ||
+      !ts.isJsxExpression(property.initializer) ||
+      !property.initializer.expression
+    ) {
+      return false;
+    }
+    const expression = unwrapTransparentExpression(property.initializer.expression);
+    return ts.isIdentifier(expression) && expression.text === state.setterName;
+  });
 }
 
 function hasIndependentRepeatedEventWrite(
@@ -935,7 +1118,7 @@ function isKeyedLeafCollectionState(
   const directCollection = isSetOrMapState(state.call);
   const arraySetAlias = directCollection ? null : localSetAliasForArrayState(state);
   if ((!directCollection && !arraySetAlias) || jsxElementCount(state.owner) < 12) return false;
-  const aliasName = arraySetAlias?.name.getText() ?? null;
+  const aliasName = arraySetAlias?.declaration.name.getText() ?? null;
 
   let repeatedMembership = false;
   let unsafe = false;
@@ -948,7 +1131,7 @@ function isKeyedLeafCollectionState(
       return;
     }
     if (isDeclarationName(node) || isNonValueIdentifier(node)) return;
-    if (arraySetAlias && node.text === state.valueName && nodeWithin(node, arraySetAlias.initializer!)) {
+    if (arraySetAlias && node === arraySetAlias.stateSource) {
       return;
     }
     const property = ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node

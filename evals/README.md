@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-788 manual hook labels, including 12 non-enforced opportunities, plus seventeen
+788 manual hook labels, including 11 non-enforced opportunities, plus seventeen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -216,8 +216,10 @@ the existing initializer; it is not converted into a Legend computed. Render pro
 owners, callable values, effect or deferred reads, and commands that also invalidate sibling React state abstain.
 Keyed-selection labels require stable item-derived row keys, membership that changes row presentation rather than row
 existence, and independently placed summary subscribers. Array-backed selection may use one immutable local `Set`
-normalization; filtered intersections, cross-file normalization, mutable/escaped aliases, aggregate broadcasts, and
-selection-driven list shape remain explicit recall cases rather than widening the detector without proof.
+normalization. One exact filtered intersection is accepted when its read-only membership source feeds one immutable
+`Set`, the filtered array is passed directly to one controlled summary leaf with its setter, and stable-keyed rows own
+the membership reads. Split or transformed summaries, command escapes, opaque predicates, mutable membership sources,
+cross-file normalization, aggregate broadcasts, and selection-driven list shape remain explicit abstentions.
 Scalar row-selection labels additionally require strict equality to the current repeated item key or index, pure setter
 arguments, and event-only command reads. Derived row discriminators, effects, unstable keys, broadcasts, and selectors
 that control row existence remain review findings. A keyed row command may also feed one separate footer or detail leaf

@@ -8,20 +8,34 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 788 |
-| Known misses | 12 |
+| Known misses | 11 |
 | State groups | 17/17 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (414/414) |
-| Actionable recall | 97.2% (414/426) |
-| Unit tests | 496/496 |
+| Actionable precision | 100% (415/415) |
+| Actionable recall | 97.4% (415/426) |
+| Unit tests | 500/500 |
 
-The latest phase detects a self-refreshing effect-owned command snapshot. Against commit `420539e`, the exact current
-221-target delta is:
+The latest phase detects an immutable filtered selection shared by one controlled summary leaf and stable-keyed row
+membership leaves. Against commit `b87b583`, the exact current 221-target hook-action delta is:
 
-- Expensify: `statusBarStyle` in `src/components/CustomStatusBarAndBackground/index.tsx` changes from `review-state` to
-  `use-ref`.
-- The other 220 current targets have zero hook action changes.
+- Tree Map: `selectedIds` in
+  `routes/(app)/_private/_map/enhancement-requests/index.tsx` changes from `review-state` to `use-observable`.
+- Tree Wallet, Memoria src, Memoria app, Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses,
+  Open WebUI React Native, and Hoalu have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Filtered keyed-selection proof
+
+The array state must flow through one immutable `filter(id => membershipSet.has(id))` alias and one immutable `Set`
+normalization. The membership source must be uniquely bound and read only through `.has()`. The filtered array must have
+exactly two consumers: that normalization and one direct prop on a non-repeated custom child whose controlled callback
+receives the original setter. The normalized Set must only drive presentation membership inside a stable-keyed repeated
+render. Existing event-rooted update, effect, mount-control, escape, and independent-write proofs still apply.
+
+The emitted instruction keeps observable ownership at the current owner, preserves the filter in the row and aggregate
+leaves, subscribes per stable row key, and keeps commands non-tracking. Extra summary consumers, command use, transformed
+transport, missing setter pairing, mutable membership sources, opaque predicates, and membership-controlled row shape
+abstain.
 
 ## Self-refreshing command snapshot proof
 
@@ -107,11 +121,10 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Twelve opportunities remain non-enforced:
+Eleven opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- seven observable leaf migrations covering keyed selection, repeated rows, timed feedback, and three
-  download-failure callbacks;
+- six observable leaf migrations covering repeated rows, timed feedback, and three download-failure callbacks;
 - four ref migrations behind async confirmation or form callback contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,
