@@ -1,54 +1,64 @@
 # Legend Doctor
 
-Legend Doctor tells coding agents which React and Legend State edits remove a proven render, subscription, allocation,
-or post-commit update. Each finding includes the edit, its structural proof, and the ownership boundary that must stay
-intact.
+Legend Doctor finds React and Legend State changes that remove proven work. It detects avoidable owner renders,
+post-commit updates, broad subscriptions, duplicate state, and writes that publish intermediate observable states. Every
+enforced finding includes the structural evidence an agent needs to edit safely.
 
-The tool reports. The agent edits the application, validates it, and scans again.
+This is a tool for coding agents. It reports and proves changes. The agent edits the application, runs its checks, and
+scans again.
 
-## Run
+## Run it
 
 ```bash
 npm install
 npm run build
-node dist/src/cli.js /absolute/path/to/app-or-feature --actionable
+node dist/src/cli.js /absolute/path/to/app-or-feature --json --actionable
 ```
 
-Scan the smallest complete root containing the components, hooks, barrels, and observable definitions involved in the
-change.
+Scan the smallest complete root that contains the relevant components, hooks, imports, re-exports, and observable
+definitions. Legend Doctor follows data and callback contracts across files, so scanning one isolated component can
+hide the proof required for a finding.
+
+Useful commands:
 
 ```bash
-# Proven edits
+# Proven changes only
 node dist/src/cli.js /absolute/path/to/root --json --disposition change
 
-# Opportunities that need source inspection
+# Opportunities that still need source proof
 node dist/src/cli.js /absolute/path/to/root --json --disposition candidate
 
-# Analysis coverage
+# Short terminal report for an edit loop
+node dist/src/cli.js /absolute/path/to/root --actionable
+
+# Analysis coverage and skipped files
 node dist/src/cli.js /absolute/path/to/root --json --coverage
 ```
 
 `--actionable` returns `change` and `candidate` findings. It hides intentional `keep` findings.
 
-## Agent loop
+## Agent contract
 
 1. Scan before editing.
 2. Apply one semantic group of `change` findings.
-3. Inspect each `candidate`. Edit only when source proves the missing timing, ownership, or type fact.
-4. Run the application's formatter, typecheck, and relevant tests.
-5. Scan the same root again.
-6. Report every added, removed, or changed finding.
-7. Stop when checks pass and every remaining finding is intentional.
+3. Inspect each `candidate`. Change code only when source proves the missing timing, ownership, or type fact.
+4. Preserve state lifetime, mount identity, effect timing, cleanup, dependencies, write order, keys, and atomic writes.
+5. Run the application's formatter, typecheck, and relevant tests.
+6. Scan the same root again. Report every added, removed, or changed finding.
+7. Stop when checks pass and each remaining finding is intentional.
+
+Give an agent this prompt:
 
 ```text
 Run Legend Doctor on <absolute root> before editing. Apply proven change findings one semantic group at a time.
-Preserve state lifetime, mount identity, effect timing, cleanup, and atomic writes. Inspect candidates and keep the
-code unchanged unless source proves the missing fact. Run the app's checks, scan again, and report the finding delta.
+Preserve state lifetime, mount identity, effect timing, cleanup, dependencies, write order, keys, and atomic writes.
+Inspect candidates and leave code unchanged unless source proves the missing fact. Run the app's checks, scan the same
+root again, and report the exact finding delta.
 ```
 
-## Read the result
+## Read the output
 
-Text keeps the edit loop short:
+Text output is terse:
 
 ```text
 src/MergeTags.tsx:29:29 [delete-unused-state] Delete React state `value` and its setter calls; assigned values are never consumed.
@@ -56,7 +66,8 @@ Scanned 1 files: 2 useState, 0 useEffect, 1 shown.
 Re-run legend-doctor after applying change findings; applied changes can reveal new ones.
 ```
 
-JSON includes the proof and target boundary:
+JSON is the preferred agent interface. It includes the action, disposition, evidence, location, message, and any group
+or ownership details:
 
 ```json
 {
@@ -73,29 +84,29 @@ JSON includes the proof and target boundary:
 }
 ```
 
-| Disposition | Agent action |
+| Disposition | Required agent behavior |
 | --- | --- |
-| `change` | Apply the instruction. The proof is complete. |
-| `candidate` | Read the named source and resolve the uncertainty. |
+| `change` | Apply the instruction. Structural proof is complete. |
+| `candidate` | Inspect the named source and resolve the uncertainty. |
 | `keep` | Preserve the current ownership or lifecycle boundary. |
 | `style` | Apply only when project policy requires the equivalent Legend API. |
 
-## Detection catalog
+## What it detects
 
 | Finding | Work removed |
 | --- | --- |
 | `delete-unused-state` | State cells and updates with no consumer |
 | `delete-derived-state`, `delete-effect` | Effect-driven derived state and its second render |
-| `move-state-down` | Owner renders caused by state used in one stable child |
-| `use-observable` | Owner renders caused by leaf-only, async, dialog, or keyed-row state |
+| `move-state-down` | Parent renders caused by state owned by one stable child |
+| `use-observable` | Parent renders caused by leaf-only, async, dialog, or keyed-row state |
 | `use-ref` | Renders caused by command-only values |
 | `use-value` | Duplicate React mirrors of Legend state |
 | `move-to-event` | Post-commit reset renders caused by event-driven effects |
-| `use-observe-effect` | Component subscriptions used only by an external reaction |
-| `use-mount`, `use-unmount` | Empty-dependency lifecycle effects when semantics match |
+| `use-observe-effect` | Component subscriptions used only by external reactions |
+| `use-mount`, `use-unmount` | Equivalent empty-dependency lifecycle effects |
 | `narrow-use-value-subscription` | Notifications from unused sibling fields |
 | `split-use-value-leaves` | Shared invalidation between independent render leaves |
-| `move-use-value-down` | Broad owner rerenders from a leaf-only subscription |
+| `move-use-value-down` | Parent renders from a leaf-only subscription |
 | `pass-observable-to-use-value` | Redundant selectors and eager reads |
 | `replace-legacy-use-value` | Legacy Legend selector calls |
 | `use-peek-for-snapshot` | Tracking reads in non-tracking commands and callbacks |
@@ -103,30 +114,32 @@ JSON includes the proof and target boundary:
 | `toggle-observable` | Generic boolean updater callbacks |
 | `assign-observable-fields` | Intermediate publications between sibling field writes |
 | `batch-observable-writes` | Intermediate publications across observable roots |
-| `review-state`, `review-effect` | Unproven opportunities that require source inspection |
+| `review-state`, `review-effect` | Unproven opportunities that need source inspection |
 | `keep-state`, `keep-effect` | State or effects whose current boundary is required |
 
 ## React state examples
 
-### Remove unused or derived state
+### Delete state that has no render consumer
 
 ```tsx
-// delete-unused-state, before
-const [value, setValue] = useState("");
+// before
+const [, setValue] = useState("");
 const refresh = () => setValue(loadValue());
 
-// after: preserve argument evaluation
+// after: preserve side-effectful argument evaluation
 const refresh = () => { loadValue(); };
+```
 
-// delete-derived-state + delete-effect
+### Delete derived state and its follow-up render
+
+```tsx
+// before
 const [fullName, setFullName] = useState("");
 useEffect(() => setFullName(`${first} ${last}`), [first, last]);
 
-const fullName = `${first} ${last}`; // after
+// after
+const fullName = `${first} ${last}`;
 ```
-
-The unused-state edit preserves side-effectful setter arguments. The derived-state edit removes the stale commit and
-follow-up render.
 
 ### Move state into its only stable child
 
@@ -147,30 +160,23 @@ function SearchBox() {
 }
 ```
 
-`move-state-down` requires every read and write to belong to the same stable child.
-
-### Keep ownership high and subscribe low
+### Keep page ownership and subscribe in the dialog
 
 ```tsx
-// before
+// before: selecting an account rerenders the page
 const [target, setTarget] = useState<Account | null>(null);
 return <><Accounts onDelete={setTarget} /><DeleteDialog account={target} /></>;
 
-// after
+// after: only the dialog leaf subscribes
 const target$ = useObservable<Account | null>(null);
-return <>
-  <Accounts onDelete={value => target$.set(value)} />
-  <DeleteDialogState target$={target$} />
-</>;
+return <><Accounts onDelete={value => target$.set(value)} /><DeleteDialogState target$={target$} /></>;
 
 function DeleteDialogState({ target$ }: { target$: Observable<Account | null> }) {
   return <DeleteDialog account={useValue(target$)} />;
 }
 ```
 
-`use-observable` keeps page-lifetime ownership while limiting notification to the dialog leaf.
-
-### Isolate async status
+### Isolate async status from the editor
 
 ```tsx
 // before
@@ -194,12 +200,10 @@ function SaveButtonState({ pending$, onPress }: Props) {
 }
 ```
 
-The async completion boundary stays intact. Pending transitions stop rerendering `Editor`.
-
 ### Subscribe once per keyed row
 
 ```tsx
-// before
+// before: selection rerenders the list owner
 const [selectedId, setSelectedId] = useState<string | null>(null);
 return rows.map(row => (
   <Row key={row.id} selected={selectedId === row.id} onPress={() => setSelectedId(row.id)} />
@@ -215,49 +219,43 @@ function RowState({ row, selectedId$ }: Props) {
 }
 ```
 
-### Isolate a measured value in one selected control
+### Keep a measured projection in its only selected leaf
 
 ```tsx
-// before: every layout event rerenders every control
-const uniqueControls = controls.filter((control, index, array) => array.indexOf(control) === index);
-const [layoutWidth, setLayoutWidth] = useState(0);
-const updateWidth = (next: number) => setLayoutWidth(previous =>
-  Math.abs(previous - next) < 1 ? previous : next
-);
-const baseWidth = layoutWidth > 0 ? layoutWidth : windowWidth;
-const dropdownWidth = Math.max(baseWidth - 16, 320);
-return uniqueControls.map(control => {
+// before: layout updates rerender the control owner
+const [width, setWidth] = useState(0);
+const menuWidth = Math.max((width || fallbackWidth) - 16, 320);
+return controls.map(control => {
   switch (control) {
-    case "search": return <Search key="search" width={dropdownWidth} />;
+    case "search": return <Search key="search" width={menuWidth} />;
     default: return null;
   }
 });
 
-// after: ownership stays here; only SearchWidth subscribes
-const layoutWidth$ = useObservable(0);
-const updateWidth = (next: number) => layoutWidth$.set(previous =>
+// after: only SearchWidth subscribes
+const width$ = useObservable(0);
+const updateWidth = (next: number) => width$.set(previous =>
   Math.abs(previous - next) < 1 ? previous : next
 );
-return uniqueControls.map(control => {
+return controls.map(control => {
   switch (control) {
-    case "search": return <SearchWidth key="search" width$={layoutWidth$} fallback={windowWidth} />;
+    case "search": return <SearchWidth key="search" width$={width$} fallback={fallbackWidth} />;
     default: return null;
   }
 });
 
 function SearchWidth({ width$, fallback }: Props) {
   const measured = useValue(width$);
-  return <Search width={Math.max((measured > 0 ? measured : fallback) - 16, 320)} />;
+  return <Search width={Math.max((measured || fallback) - 16, 320)} />;
 }
 ```
 
-This finding requires immutable projections, an unshadowed pure calculation, a structurally deduplicated array, one
-literal switch branch, and a matching stable key. Ordinary repeated rows remain candidates.
+Legend Doctor proves the projection, selected branch, and stable key. Ordinary repeated rows stay candidates.
 
-### Replace command-only state or a Legend mirror
+### Replace render-free state with a ref
 
 ```tsx
-// use-ref, before
+// before
 const [socket, setSocket] = useState<WebSocket | null>(null);
 useEffect(() => { setSocket(connect()); }, []);
 const send = () => socket?.send("ping");
@@ -266,8 +264,12 @@ const send = () => socket?.send("ping");
 const socketRef = useRef<WebSocket | null>(null);
 useEffect(() => { socketRef.current = connect(); }, []);
 const send = () => socketRef.current?.send("ping");
+```
 
-// use-value, before
+### Remove a duplicate Legend mirror
+
+```tsx
+// before
 const savedName = useSavedName();
 const [name, setName] = useState(savedName);
 const rename = (next: string) => { setName(next); writeName(next); };
@@ -277,37 +279,37 @@ const name = useSavedName();
 const rename = writeName;
 ```
 
-`use-ref` applies when render never consumes the value. `use-value` follows source-proven Legend readers and writers
-before removing duplicate storage.
-
 ## Effect examples
 
-### Move an event-caused reset to the event
+### Move an event-caused reset into the event
 
 ```tsx
-// before
+// before: query change commits, then the effect commits page
 useEffect(() => setPage(1), [query]);
 const changeQuery = (next: string) => setQuery(next);
 
-// after
+// after: one event owns one transition
 const changeQuery = (next: string) => {
   setQuery(next);
   setPage(1);
 };
 ```
 
-`move-to-event` requires proof for every source mutation.
+`move-to-event` requires structural proof for every source mutation. An unresolved custom callback keeps the finding as
+a candidate.
 
 ### React to Legend without subscribing the component
 
 ```tsx
-const theme = useValue(settings$.theme);                 // before
+// before
+const theme = useValue(settings$.theme);
 useEffect(() => syncTheme(theme), [theme]);
 
-useObserveEffect(() => syncTheme(settings$.theme.get())); // after
+// after
+useObserveEffect(() => syncTheme(settings$.theme.get()));
 ```
 
-### Express mount and teardown intent
+### Express equivalent mount and teardown intent
 
 ```tsx
 useEffect(() => start(), []);       // before
@@ -317,36 +319,32 @@ useEffect(() => () => stop(), []);  // before
 useUnmount(() => stop());           // after
 ```
 
-Strict Mode replay, setup work, and disposer ownership keep these as candidates when semantics are unresolved.
+Strict Mode replay, setup work, and disposer ownership keep lifecycle changes as candidates when semantics are not
+proven.
 
-## Legend read examples
+## Legend subscription examples
 
-### Narrow broad subscriptions
+### Narrow a broad subscription
 
 ```tsx
-const profile = useValue(profile$);           // before: only profile.contact.name is read
+const profile = useValue(profile$);           // before: only contact.name is rendered
 const name = useValue(profile$.contact.name); // after
 
 const { theme } = useValue(settings$);        // before
 const theme = useValue(settings$.theme);      // after
 ```
 
-`narrow-use-value-subscription` stops unused sibling fields from invalidating the component.
-
-### Split independent leaves
+### Split unrelated render leaves
 
 ```tsx
-// before
-const user = useValue(user$);
+const user = useValue(user$); // before: either field invalidates both leaves
 return <><Name value={user.name} /><Avatar src={user.avatarUrl} /></>;
 
 // after
 return <><NameState name$={user$.name} /><AvatarState avatar$={user$.avatarUrl} /></>;
 ```
 
-`split-use-value-leaves` prevents a name update from rerendering the avatar leaf.
-
-### Move one subscription to its stable leaf
+### Move a subscription into its only stable leaf
 
 ```tsx
 // before
@@ -361,65 +359,47 @@ function DialogState({ open$ }: { open$: Observable<boolean> }) {
 }
 ```
 
-Conditional children keep the condition inside the stable wrapper:
+The stable wrapper preserves child mount identity. Conditional rendering stays inside that wrapper.
+
+### Remove redundant selector work
 
 ```tsx
-function ErrorState({ error$ }: Props) {
-  const error = useValue(error$);
-  return error ? <ErrorMessage>{error}</ErrorMessage> : null;
-}
+useValue(() => profile$.name.get());                 // before
+useValue(profile$.name);                             // after
+
+useValue(profile$.avatar.get(), { suspense: true }); // before
+useValue(profile$.avatar, { suspense: true });       // after
+
+useSelector(profile$.name);                          // before
+useValue(profile$.name);                             // after
 ```
 
-`move-use-value-down` preserves the selected child's mount behavior.
-
-### Remove redundant `useValue` work
+### Read a snapshot without tracking
 
 ```tsx
-useValue(() => profile$.name.get());                    // before
-useValue(profile$.name);                                // after
+const save = () => persist(settings$.theme.get());  // before
+const save = () => persist(settings$.theme.peek()); // after
 
-useValue(profile$.avatar.get(), { suspense: true });    // before
-useValue(profile$.avatar, { suspense: true });           // after
-
-useSelector(profile$.name);                             // before
-useValue(profile$.name);                                // after
+useMount(() => register(panelSize$.get()));          // before
+useMount(() => register(panelSize$.peek()));         // after
 ```
 
-These produce `pass-observable-to-use-value` or `replace-legacy-use-value`. Import provenance prevents lookalike local
-functions from matching.
-
-### Use snapshots outside tracking contexts
-
-```tsx
-const save = () => persist(settings$.theme.get());       // before
-const save = () => persist(settings$.theme.peek());      // after
-
-useMount(() => register(panelSize$.get()));              // before
-useMount(() => register(panelSize$.peek()));             // after
-
-settings$.theme.onChange(() => persist(audit$.latestTheme.get()));  // before
-settings$.theme.onChange(() => persist(audit$.latestTheme.peek())); // after
-```
-
-`use-peek-for-snapshot` also follows effect-only callbacks across files. Render reads, tracking APIs, nested callbacks,
-listener options, and unresolved execution keep `.get()`.
+Render reads, tracking APIs, unresolved callbacks, and listener options keep `.get()`.
 
 ## Legend write examples
 
 ### Replace clone writes with narrow operations
 
 ```tsx
-profile$.set({ ...profile$.peek(), name });       // before
-profile$.name.set(name);                          // after
+profile$.set({ ...profile$.peek(), name });   // before
+profile$.name.set(name);                      // after
 
-rows$.set({ ...rows$.peek(), [id]: row });        // before
-rows$[id].set(row);                               // after
+rows$.set({ ...rows$.peek(), [id]: row });    // before
+rows$[id].set(row);                           // after
 
-items$.set(previous => [...previous, item]);      // before
-items$.push(item);                                // after
+items$.set(previous => [...previous, item]);  // before
+items$.push(item);                            // after
 ```
-
-`narrow-observable-write` preserves the original write when value evaluation or collection identity is unresolved.
 
 ### Use the direct boolean operation
 
@@ -428,13 +408,13 @@ menu$.open.set(value => !value); // before
 menu$.open.toggle();             // after
 ```
 
-### Publish related fields once
+### Publish sibling fields once
 
 ```tsx
-draft$.name.set(name);             // before
+draft$.name.set(name);          // before
 draft$.color.set(color);
 
-draft$.assign({ name, color });    // after
+draft$.assign({ name, color }); // after
 ```
 
 ### Publish related roots once
@@ -451,26 +431,28 @@ batch(() => {
 });
 ```
 
-`batch-observable-writes` preserves overlapping paths, awaits, order-sensitive reads, and partial write runs.
+Legend Doctor keeps the original writes when it finds overlapping paths, awaits, order-sensitive reads, partial write
+runs, or unresolved value evaluation.
 
-## Safety rules
+## Proof boundary
 
-- Check the installed `@legendapp/state` version and types before applying an API migration.
-- Keep cohesive one-off UI state in React unless an observable removes a proven owner render.
-- Keep observable ownership at the lifetime named by `stateModel`.
+Legend Doctor enforces a change only when TypeScript structure proves it. Component names, paths, app allowlists, and
+test-specific exceptions are never proof.
+
+- Keep cohesive one-off UI state in React unless an observable removes a proven parent render.
+- Keep observable ownership at the lifetime reported in `stateModel`.
 - Subscribe with `useValue` at the lowest proven stable render leaf.
-- Use `.peek()` only where the finding proves non-tracking execution.
+- Use `.peek()` only in a proven non-tracking execution path.
 - Apply grouped state findings as one migration.
-- Preserve effect phase, dependencies, cleanup, write order, mount identity, list keys, and conditional cardinality.
-- Treat component names, paths, app allowlists, and corpus exceptions as context, never as proof.
+- Check the installed `@legendapp/state` version and types before an API migration.
 
-The rules follow the official
+These rules follow the official
 [Legend State best-practices skill](https://github.com/LegendApp/legend-skills/tree/main/legend-state-best-practices).
 
-## Accuracy
+## Verified accuracy
 
-The pinned corpus contains 2,356 hooks across 225 targets, 797 manually audited hook labels, 18 state groups, and 106
-Legend practice labels.
+The pinned corpus covers 2,356 hooks across 225 targets, with 797 manually audited hook labels, 18 state groups, and
+106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
@@ -479,4 +461,4 @@ Legend practice labels.
 | Actionable recall | 428/429 |
 | Legend practice precision | 106/106 |
 
-The one unresolved opportunity remains non-enforced because its callback timing is not structurally proven.
+The one unresolved opportunity remains a candidate because its callback timing is not structurally proven.
