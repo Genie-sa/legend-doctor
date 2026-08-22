@@ -15,7 +15,11 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import { hasStateInitializer, isSafeProjectionExpression } from "./deferred-reveal.js";
+import {
+  commonRenderGateSubtree,
+  hasStateInitializer,
+  isSafeProjectionExpression,
+} from "./deferred-reveal.js";
 import {
   callbackIsEventRooted,
   hasIndependentRenderCutWitness,
@@ -23,6 +27,7 @@ import {
   isSafeJsxProjectionReference,
   jsxElementCount,
   localFunctionBinding,
+  lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "./state-proofs.js";
 
@@ -53,9 +58,7 @@ export function findAsyncLeafStatuses(
       usage.effectReads !== 0 ||
       usage.effectWrites !== 0 ||
       usage.deferredReads !== 0 ||
-      usage.transportedOccurrences === 0 ||
-      usage.valueTransportSites.size !== 1 ||
-      usage.valueTargets.size !== 1 ||
+      !hasResolvableAsyncLeafReferences(usage) ||
       usage.repeatedValueTransport ||
       usage.setterCallNodes.length < 2 ||
       usage.setterReferences !== usage.setterCalls ||
@@ -139,6 +142,18 @@ export function findAsyncLeafStatuses(
     }
   }
   return { cohesive, isolated };
+}
+
+function hasResolvableAsyncLeafReferences(usage: StateUsage): boolean {
+  return (
+    usage.transportedOccurrences > 0 &&
+    usage.valueTransportSites.size === 1 &&
+    usage.valueTargets.size === 1
+  ) || (
+    usage.transportedOccurrences === 0 &&
+    usage.valueTransportSites.size === 0 &&
+    usage.valueTargets.size === 0
+  );
 }
 
 function asyncCallbackIsEventRooted(
@@ -536,19 +551,8 @@ function asyncLeafCallSite(
   usage: StateUsage,
   owner: RuntimeFunctionLike
 ): { boundary: ts.Node; returned: ts.Expression } | null {
-  const valueSite = [...usage.valueTransportSites][0];
-  if (valueSite === undefined || !owner.body) return null;
-
-  let opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | null = null;
-  visit(owner.body, node => {
-    if (
-      opening === null &&
-      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      node.getStart() === valueSite
-    ) {
-      opening = node;
-    }
-  });
+  if (!owner.body) return null;
+  const opening = asyncLeafOpening(usage, owner);
   if (
     opening === null ||
     nearestRepeatedRenderCall(opening, owner) ||
@@ -595,6 +599,36 @@ function asyncLeafCallSite(
   if (references.length !== 1) return null;
   const aliasReturn = returned.find(expression => nodeWithin(references[0]!, expression));
   return aliasReturn ? { boundary: references[0]!, returned: aliasReturn } : null;
+}
+
+function asyncLeafOpening(
+  usage: StateUsage,
+  owner: RuntimeFunctionLike
+): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
+  const valueSite = [...usage.valueTransportSites][0];
+  if (valueSite !== undefined) {
+    let opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | null = null;
+    visit(owner.body, node => {
+      if (
+        opening === null &&
+        (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        node.getStart() === valueSite
+      ) {
+        opening = node;
+      }
+    });
+    return opening;
+  }
+
+  const common = lowestCommonJsxSubtree(usage.directRenderNodes, owner);
+  if (
+    !common ||
+    ts.isJsxFragment(common) ||
+    usage.directRenderNodes.some(node => commonRenderGateSubtree([node], owner) !== null)
+  ) {
+    return null;
+  }
+  return ts.isJsxElement(common) ? common.openingElement : common;
 }
 
 function jsxCallSite(

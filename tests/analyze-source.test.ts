@@ -534,7 +534,7 @@ test("does not isolate inline controlled setters with extra or scheduled work", 
         </main>;
       }
     `, "fixture.tsx");
-    assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+    assert.notEqual(finding?.action, "use-observable");
   }
 });
 
@@ -2628,6 +2628,52 @@ test("keeps async status label projections inside the same subscribed leaf", () 
   `, "fixture.tsx");
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /stable `Button` call site/);
+});
+
+test("isolates a direct async status projection in one stable call site", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function Scanner({ queueFull }: { queueFull: boolean }) {
+      const [files, setFiles] = useState(["receipt"]);
+      const [encoding, setEncoding] = useState(false);
+      async function scan() {
+        if (files.length === 0) return;
+        setEncoding(true);
+        try { await encode(); setFiles([]); } finally { setEncoding(false); }
+      }
+      return <main><Header /><Toolbar /><Summary /><Files /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        {files.length > 0 && <Button disabled={encoding || queueFull} onClick={scan}>Scan</Button>}
+      </main>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "encoding");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /async pending flag/);
+  assert.match(finding?.message ?? "", /pending-control call site/);
+});
+
+test("requires one pure non-gating call site for a direct async status projection", () => {
+  const sources = [
+    `{encoding && <Button disabled={encoding} onClick={scan}>Scan</Button>}`,
+    `<><Button disabled={encoding || queueFull} onClick={scan}>Scan</Button><Status>{String(encoding)}</Status></>`,
+    `<Button disabled={audit(encoding)} onClick={scan}>Scan</Button>`,
+    `{rows.map(row => <Button key={row.id} disabled={encoding || row.disabled} onClick={scan}>Scan</Button>)}`,
+  ];
+  for (const render of sources) {
+    const [finding] = analyzeSource(`
+      import { useState } from "react";
+      export function Scanner({ queueFull, rows }: { queueFull: boolean; rows: Array<{ id: string; disabled: boolean }> }) {
+        const [encoding, setEncoding] = useState(false);
+        async function scan() {
+          setEncoding(true);
+          try { await encode(); } finally { setEncoding(false); }
+        }
+        return <main><Header /><Toolbar /><Summary /><Files /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+          ${render}
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+  }
 });
 
 test("does not fold unsafe or external async status projections into a leaf", () => {

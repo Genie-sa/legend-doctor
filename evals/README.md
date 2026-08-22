@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-797 manual hook labels, including 1 non-enforced opportunity, plus eighteen
+798 manual hook labels, including 1 non-enforced opportunity, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -188,8 +188,10 @@ unproven edit paths also remain review findings. An edit may forward the same fr
 upstream command after the local write; unrelated calls, reversed ordering, and local helper-owned state still abstain.
 Async pending labels require a literal-false flag whose pending transition in an event command reaches awaited work
 before any owner-state write or early exit and renders through one proven runtime status leaf. The same leaf may consume
-the flag through loading props and pure label or icon selection. A broad owner qualifies directly; a compact owner must
-have independently rendered content outside the status leaf, while a cohesive one-control owner remains React state.
+the flag through loading props, pure label or icon selection, or one call-free JSX prop projection with state-independent
+inputs. The projection must stay in one non-repeated call site and may not control that site's mount. A broad owner
+qualifies directly; a compact owner must have independently rendered content outside the status leaf, while a cohesive
+one-control owner remains React state.
 Non-mutating validation,
 routing guards, and bounded synchronous command preparation may precede that boundary. Observable ownership stays above
 state-independent conditional branches, while a local subscriber wraps the exact existing call site. The command, await

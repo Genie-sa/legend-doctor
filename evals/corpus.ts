@@ -5679,6 +5679,15 @@ export const goldCases = [
     target: "hoalu-app",
   },
   {
+    action: "use-observable",
+    file: "components/receipt/receipt-scanner.tsx",
+    hook: "useState",
+    line: 90,
+    name: "isEncoding",
+    rationale: "Encoding starts before awaited file work and clears in finally, while one stable queue button renders the flag through a pure disabled projection; a leaf subscription removes the pre-await scanner render without moving the pending-files gate or async boundary.",
+    target: "hoalu-app",
+  },
+  {
     action: "use-unmount",
     file: "components/files/use-files-upload.ts",
     hook: "useEffect",

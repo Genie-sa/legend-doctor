@@ -200,6 +200,9 @@ function SaveButtonState({ pending$, onPress }: Props) {
 }
 ```
 
+The leaf may combine the flag with state-independent input, as in `disabled={pending || queueFull}`. Calls, multiple
+consumers, repeated controls, and pending-controlled mount gates remain candidates.
+
 ### Subscribe once per keyed row
 
 ```tsx
@@ -451,14 +454,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets, with 797 manually audited hook labels, 18 state groups, and
+The pinned corpus covers 2,356 hooks across 225 targets, with 798 manually audited hook labels, 18 state groups, and
 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 532/532 |
-| Actionable precision | 428/428 |
-| Actionable recall | 428/429 |
+| Unit tests | 534/534 |
+| Actionable precision | 429/429 |
+| Actionable recall | 429/430 |
 | Legend practice precision | 106/106 |
 
 The one unresolved opportunity remains a candidate because its callback timing is not structurally proven.

@@ -2934,11 +2934,14 @@ function classifyState(
     };
   }
   if (isAsyncLeafStatus) {
-    const target = [...usage.valueTargets][0] ?? "the pending control";
+    const target = [...usage.valueTargets][0];
+    const boundary = target
+      ? `the stable \`${target}\` call site`
+      : "the stable pending-control call site";
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${target}\` call site in a leaf subscriber; preserve the event command's async completion boundary exactly, changing only the true/false writes so pending transitions do not invalidate independent owner content.`,
+      message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap ${boundary} in a leaf subscriber; preserve the event command's async completion boundary exactly, changing only the true/false writes so pending transitions do not invalidate independent owner content.`,
     };
   }
   if (isCohesiveAsyncStatus) {
