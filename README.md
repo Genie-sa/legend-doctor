@@ -49,10 +49,10 @@ Measured on pinned real applications:
 | Manual labels | 790 |
 | Known misses | 2 |
 | State groups | 18/18 |
-| Unit tests | 509/509 |
+| Unit tests | 510/510 |
 | Actionable precision | 100% (425/425) |
 | Actionable recall | 99.5% (425/427) |
-| Legend practice precision | 100% (89/89) |
+| Legend practice precision | 100% (90/90) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open WebUI React Native, and Hoalu.
@@ -322,6 +322,15 @@ Keep a callback when it computes a value:
 ```tsx
 const fullName = useValue(() => `${profile$.first.get()} ${profile$.last.get()}`);
 ```
+
+An exact dynamically keyed read can also use the observable directly when the key is one explicitly typed, immutable
+`string` or `number` parameter:
+
+```tsx
+const rating = useValue(ratings$[key]);
+```
+
+Mutable, optional, object-coerced, or call-derived keys keep the selector so its evaluation timing does not change.
 
 ### Legacy hook → `useValue`
 

@@ -10,19 +10,20 @@
 | Manual hook labels | 790 |
 | Known misses | 2 |
 | State groups | 18/18 |
-| Legend practices | 89/89 |
+| Legend practices | 90/90 |
 | Actionable precision | 100% (425/425) |
 | Actionable recall | 99.5% (425/427) |
-| Unit tests | 509/509 |
+| Unit tests | 510/510 |
 
-The latest phase proves async effect payloads whose only read reaches a source-proven deferred option command. Against
-commit `22bb98e`, the exact current 221-target action delta is:
+The latest phase simplifies an exact selector read to `useValue(observable[key])` when structural syntax proves that the
+key is one explicitly typed, immutable primitive parameter. Against commit `1f878d0`, the exact current 221-target action
+delta is:
 
-- Expensify: `duplicatedWorkspaceAvatar` in `WorkspaceDuplicateSelectFeaturesForm.tsx` changes from `review-state` to
-  `use-ref`.
-- Tree Map, Tree Wallet, Memoria src, Memoria app, Legend Music, Excalidraw, Formbricks, Outline, Genie Courses, Open
-  WebUI React Native, and Hoalu have zero hook action changes.
-- All 221 current targets have zero Legend practice action changes.
+- Memoria adds one `pass-observable-to-use-value` practice at
+  `backend/api/ratings/ratingOverlayStore.ts:29`.
+- All 221 targets have zero hook action changes.
+- Platform, Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open WebUI React Native, and Hoalu
+  have zero Legend practice action changes.
 
 ## Source-proven option command proof
 

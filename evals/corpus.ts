@@ -6159,6 +6159,13 @@ export const goldPracticeCases = [
     target: "memoria-src",
   },
   {
+    action: "pass-observable-to-use-value",
+    file: "backend/api/ratings/ratingOverlayStore.ts",
+    line: 29,
+    rationale: "The selector reads one dynamically keyed observable leaf, and the explicitly typed key parameter is immutable for that hook render.",
+    target: "memoria-src",
+  },
+  {
     action: "narrow-observable-write",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 115,

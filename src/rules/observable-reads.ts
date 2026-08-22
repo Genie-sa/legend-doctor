@@ -288,13 +288,122 @@ export function directObservableSelectorPath(
   ) {
     return null;
   }
-  return directObservableReadPath(selector.body, observableBindings);
+  return directObservableReadPath(selector.body, observableBindings) ??
+    dynamicallyKeyedObservableReadPath(selector.body, selector, observableBindings);
+}
+
+function dynamicallyKeyedObservableReadPath(
+  expression: ts.Expression,
+  selector: ts.ArrowFunction | ts.FunctionExpression,
+  observableBindings: ReadonlySet<string>
+): ts.Expression | null {
+  const path = directGetReceiver(expression);
+  if (!path) return null;
+  let current = path;
+  while (ts.isPropertyAccessExpression(current)) {
+    if (current.questionDotToken || RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) return null;
+    current = unwrapTransparentExpression(current.expression);
+  }
+  if (
+    !ts.isElementAccessExpression(current) ||
+    current.questionDotToken ||
+    !current.argumentExpression ||
+    !stablePrimitiveParameter(current.argumentExpression, selector)
+  ) {
+    return null;
+  }
+  return provenObservablePath(current.expression, observableBindings) ? path : null;
+}
+
+function stablePrimitiveParameter(
+  expression: ts.Expression,
+  selector: ts.ArrowFunction | ts.FunctionExpression
+): boolean {
+  const key = unwrapTransparentExpression(expression);
+  if (!ts.isIdentifier(key)) return false;
+  const owner = findAncestor(selector, isRuntimeFunctionLike);
+  if (!owner?.body || bindingDeclarationCount(owner, key.text) !== 1) return false;
+  const parameter = owner.parameters.find(candidate =>
+    ts.isIdentifier(candidate.name) && candidate.name.text === key.text
+  );
+  if (
+    !parameter?.type ||
+    parameter.dotDotDotToken ||
+    parameter.questionToken ||
+    parameter.initializer ||
+    !isPrimitiveKeyType(parameter.type)
+  ) {
+    return false;
+  }
+
+  return !bindingIsWritten(owner.body, key.text);
+}
+
+function isPrimitiveKeyType(type: ts.TypeNode): boolean {
+  if (type.kind === ts.SyntaxKind.StringKeyword || type.kind === ts.SyntaxKind.NumberKeyword) {
+    return true;
+  }
+  if (ts.isParenthesizedTypeNode(type)) return isPrimitiveKeyType(type.type);
+  if (ts.isUnionTypeNode(type)) return type.types.length > 0 && type.types.every(isPrimitiveKeyType);
+  if (!ts.isLiteralTypeNode(type)) return false;
+  return ts.isStringLiteral(type.literal) || ts.isNumericLiteral(type.literal);
+}
+
+function bindingIsWritten(body: ts.ConciseBody, name: string): boolean {
+  let written = false;
+  visit(body, node => {
+    if (written) return;
+    if (
+      ts.isBinaryExpression(node) &&
+      isAssignmentOperator(node.operatorToken.kind) &&
+      nodeContainsValueIdentifier(node.left, name)
+    ) {
+      written = true;
+      return;
+    }
+    if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      ts.isIdentifier(node.operand) &&
+      node.operand.text === name
+    ) {
+      written = true;
+      return;
+    }
+    if (
+      (ts.isForInStatement(node) || ts.isForOfStatement(node)) &&
+      ts.isExpression(node.initializer) &&
+      nodeContainsValueIdentifier(node.initializer, name)
+    ) {
+      written = true;
+    }
+  });
+  return written;
+}
+
+function nodeContainsValueIdentifier(node: ts.Node, name: string): boolean {
+  let found = false;
+  visit(node, current => {
+    if (
+      !found &&
+      ts.isIdentifier(current) &&
+      current.text === name &&
+      !isNonValueIdentifier(current)
+    ) {
+      found = true;
+    }
+  });
+  return found;
 }
 
 function directObservableReadPath(
   expression: ts.Expression,
   observableBindings: ReadonlySet<string>
 ): ts.Expression | null {
+  const path = directGetReceiver(expression);
+  return path ? provenObservablePath(path, observableBindings) : null;
+}
+
+function directGetReceiver(expression: ts.Expression): ts.Expression | null {
   const read = unwrapTransparentExpression(expression);
   if (
     !ts.isCallExpression(read) ||
@@ -307,7 +416,7 @@ function directObservableReadPath(
   ) {
     return null;
   }
-  return provenObservablePath(read.expression.expression, observableBindings);
+  return unwrapTransparentExpression(read.expression.expression);
 }
 
 function directUseValueFinding(

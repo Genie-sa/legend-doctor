@@ -256,6 +256,40 @@ test("passes a proven observable directly to useValue", () => {
   assert.match(finding?.message ?? "", /useValue\(theme\$\.accent\)/);
 });
 
+test("passes a dynamically keyed observable directly only for one stable primitive parameter", () => {
+  const positive = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const ratings$ = observable<Record<string, number | null>>({});
+    export function useRating(key: string) {
+      return useValue(() => ratings$[key].get());
+    }
+  `, "fixture.ts");
+  assert.deepEqual(positive.map(finding => finding.action), ["pass-observable-to-use-value"]);
+  assert.match(positive[0]?.message ?? "", /useValue\(ratings\$\[key\]\)/);
+
+  for (const [parameter, setup, key] of [
+    ["key: { toString(): string }", "", "key"],
+    ["key: string", "key = 'other';", "key"],
+    ["key: string", "[key] = ['other'];", "key"],
+    ["key: string", "for (key of ['other']) break;", "key"],
+    ["key: string", "", "nextKey()"],
+    ["key?: string", "", "key"],
+  ] as const) {
+    const findings = analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const ratings$ = observable<Record<string, number | null>>({});
+      declare function nextKey(): string;
+      export function useRating(${parameter}) {
+        ${setup}
+        return useValue(() => ratings$[${key}].get());
+      }
+    `, "fixture.ts");
+    assert.deepEqual(findings, [], `${parameter}; ${setup}; ${key}`);
+  }
+});
+
 test("passes an eagerly read observable directly to useValue", () => {
   const findings = analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
