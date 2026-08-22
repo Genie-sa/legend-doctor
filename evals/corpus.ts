@@ -2011,13 +2011,12 @@ export const goldCases = [
     [69, "editingPlaylistName"],
   ].map(([line, name]) => ({
     action: "use-observable" as const,
-    enforced: false as const,
     file: "components/MediaLibrary/Sidebar.tsx",
     hook: "useState" as const,
     line: line as number,
     name: name as string,
     rationale:
-      "The id and name form one create-or-rename transaction across the header, alternate platform rows, and async finalizer; migrate each pair as one owner-lifetime observable model with leaf subscriptions.",
+      "The id and name form one create-or-rename transaction across the header, alternate platform rows, and async finalizer; migrate each pair as one owner-lifetime observable model, preserve paired transitions with atomic assignments, and subscribe only at leaf reads.",
     target: "legend-music",
   })),
   {
@@ -5874,6 +5873,20 @@ export const goldCases = [
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [
+  {
+    file: "components/MediaLibrary/Sidebar.tsx",
+    line: 65,
+    members: ["tempPlaylistId", "tempPlaylistName"],
+    rationale: "The temporary playlist cursor and editable name open and reset as one atomic draft while controlled text edits update only the name leaf.",
+    target: "legend-music",
+  },
+  {
+    file: "components/MediaLibrary/Sidebar.tsx",
+    line: 68,
+    members: ["editingPlaylistId", "editingPlaylistName"],
+    rationale: "The rename cursor and editable name open and reset as one atomic draft while controlled text edits update only the name leaf.",
+    target: "legend-music",
+  },
   {
     file: "index.tsx",
     line: 47,

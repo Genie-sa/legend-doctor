@@ -1153,15 +1153,25 @@ function findObservableStateClusters(
     }
 
     for (const members of components.values()) {
-      const clusterMembers = normalizeObservableDialogClusterMembers(
+      const dialogMembers = normalizeObservableDialogClusterMembers(
         members,
         usageByState,
         knownComponents,
         calls,
         stateFlow
       );
+      const textDraftMembers = dialogMembers
+        ? null
+        : normalizeObservableTextDraftClusterMembers(
+            members,
+            usageByState,
+            calls,
+            stateFlow
+          );
+      const clusterMembers = dialogMembers ?? textDraftMembers;
       if (!clusterMembers) continue;
       if (
+        !textDraftMembers &&
         clusterMembers.some(member => {
           const usage = usageByState.get(member);
           return usage !== undefined && usage.localRenderReads > 0 && usage.jsxTargets.size === 0;
@@ -1180,7 +1190,9 @@ function findObservableStateClusters(
         action: "use-observable",
         id: `state-cluster:${owner.getStart(sourceFile)}:${names.join(",")}`,
         members: sortedMembers,
-        message: `Replace the co-written React state cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; mutate it from commands and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
+        message: textDraftMembers
+          ? `Replace the co-written editable draft (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
+          : `Replace the co-written React state cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; mutate it from commands and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
         primary,
       };
       for (const member of sortedMembers) result.set(member, cluster);
@@ -1188,6 +1200,152 @@ function findObservableStateClusters(
   }
 
   return result;
+}
+
+function normalizeObservableTextDraftClusterMembers(
+  members: readonly StateCandidate[],
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+  mutations: readonly SetterMutation[],
+  stateFlow: StateFlowIndex
+): readonly StateCandidate[] | null {
+  if (members.length !== 2) return null;
+  const cursor = members.find(state => hasStateInitializer(state, ts.SyntaxKind.NullKeyword));
+  const draft = members.find(state => hasEmptyStringStateInitializer(state));
+  if (!cursor || !draft || cursor === draft) return null;
+
+  const cursorUsage = usageByState.get(cursor);
+  const draftUsage = usageByState.get(draft);
+  if (
+    !cursorUsage ||
+    !draftUsage ||
+    [cursorUsage, draftUsage].some(usage =>
+      usage.shadowed ||
+      usage.escaped ||
+      usage.effectReads > 0 ||
+      usage.effectWrites > 0 ||
+      usage.setterUsesPreviousValue
+    ) ||
+    stateMayHoldCallable(cursor) ||
+    stateMayHoldCallable(draft) ||
+    cursorUsage.localRenderReads + cursorUsage.transportedOccurrences === 0 ||
+    draftUsage.localRenderReads + draftUsage.transportedOccurrences === 0 ||
+    cursorUsage.setterReferences !== cursorUsage.setterCalls ||
+    !setterReferencesAreCallsOrControlledValueWrites(draft)
+  ) {
+    return null;
+  }
+
+  const cursorMutations = mutations.filter(mutation => mutation.state === cursor);
+  const draftMutations = mutations.filter(mutation => mutation.state === draft);
+  if (
+    cursorMutations.length < 2 ||
+    draftMutations.length < 2 ||
+    !cursorMutations.some(mutation => callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)) ||
+    !cursorMutations.some(mutation => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)) ||
+    !draftMutations.some(mutation => callSetsEmptyString(mutation))
+  ) {
+    return null;
+  }
+
+  const coexecutes = (left: SetterMutation, right: SetterMutation) =>
+    left.region === right.region &&
+    (callsAreAdjacentDraftWrites(left.call, right.call) ||
+      mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow));
+  if (
+    cursorMutations.some(cursorMutation =>
+      !draftMutations.some(draftMutation => coexecutes(cursorMutation, draftMutation))
+    ) ||
+    draftMutations.some(draftMutation =>
+      !cursorMutations.some(cursorMutation => coexecutes(draftMutation, cursorMutation))
+    )
+  ) {
+    return null;
+  }
+  return [cursor, draft];
+}
+
+function callsAreAdjacentDraftWrites(
+  left: ts.CallExpression,
+  right: ts.CallExpression
+): boolean {
+  const leftStatement = left.parent;
+  const rightStatement = right.parent;
+  if (
+    !ts.isExpressionStatement(leftStatement) ||
+    leftStatement.expression !== left ||
+    !ts.isExpressionStatement(rightStatement) ||
+    rightStatement.expression !== right ||
+    leftStatement.parent !== rightStatement.parent
+  ) {
+    return false;
+  }
+  const parent = leftStatement.parent;
+  const statements = ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent)
+    ? parent.statements
+    : null;
+  return !!statements &&
+    Math.abs(statements.indexOf(leftStatement) - statements.indexOf(rightStatement)) === 1;
+}
+
+function hasEmptyStringStateInitializer(state: StateCandidate): boolean {
+  const initializer = state.call.arguments[0];
+  if (!initializer) return false;
+  const value = unwrapTransparentExpression(initializer);
+  return ts.isStringLiteral(value) && value.text === "";
+}
+
+function callSetsEmptyString(mutation: SetterMutation): boolean {
+  const argument = mutation.call.arguments[0];
+  if (!argument) return false;
+  const value = unwrapTransparentExpression(argument);
+  return ts.isStringLiteral(value) && value.text === "";
+}
+
+function setterReferencesAreCallsOrControlledValueWrites(state: StateCandidate): boolean {
+  if (!state.setterName) return false;
+  let controlledWrites = 0;
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== state.setterName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (ts.isCallExpression(node.parent) && node.parent.expression === node) return;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
+    if (
+      !attribute ||
+      !/^on[A-Z]/.test(attribute.name.getText()) ||
+      !isDirectJsxAttributeExpression(attribute, node)
+    ) {
+      safe = false;
+      return;
+    }
+    const opening = jsxOpeningForAttribute(attribute);
+    const hasValue = opening?.attributes.properties.some(property => {
+      if (
+        !ts.isJsxAttribute(property) ||
+        property.name.getText() !== "value" ||
+        !property.initializer ||
+        !ts.isJsxExpression(property.initializer) ||
+        !property.initializer.expression
+      ) {
+        return false;
+      }
+      const value = unwrapTransparentExpression(property.initializer.expression);
+      return ts.isIdentifier(value) && value.text === state.valueName;
+    });
+    if (!hasValue) {
+      safe = false;
+      return;
+    }
+    controlledWrites += 1;
+  });
+  return safe && controlledWrites > 0;
 }
 
 function findStatesWithCompanionWrites(

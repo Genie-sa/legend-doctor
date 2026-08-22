@@ -43,10 +43,11 @@ Measured on pinned real applications:
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual labels | 787 |
-| Known misses | 19 |
-| Unit tests | 492/492 |
-| Actionable precision | 100% (406/406) |
-| Actionable recall | 95.5% (406/425) |
+| Known misses | 14 |
+| State groups | 16/16 |
+| Unit tests | 494/494 |
+| Actionable precision | 100% (411/411) |
+| Actionable recall | 96.7% (411/425) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -229,6 +230,12 @@ function NameField({ draft$ }) {
   return <Input value={name} onChangeText={next => draft$.name.set(next)} />;
 }
 ```
+
+A large owner can also replace an editable `{id, name}` pair with one observable object when every cursor transition is
+co-written with the name and the only independent name writes come from matching controlled `value` handlers. The tool
+requires complete open/reset transitions, preserves them with atomic `assign` calls, uses `peek()` for commands, and
+subscribes only at the row or control leaves. Partial cursor writes, effects, functional updaters, and setter escapes
+remain reviews.
 
 #### Effect-written presentation state
 

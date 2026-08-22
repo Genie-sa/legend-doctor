@@ -8,19 +8,32 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 787 |
-| Known misses | 18 |
-| State groups | 14/14 |
+| Known misses | 14 |
+| State groups | 16/16 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (407/407) |
-| Actionable recall | 95.8% (407/425) |
-| Unit tests | 493/493 |
+| Actionable precision | 100% (411/411) |
+| Actionable recall | 96.7% (411/425) |
+| Unit tests | 494/494 |
 
-The latest phase extends the effect-written presentation proof through one effect-owned memoized command. Against commit
-`26bbbe7`, the exact current 221-target delta is:
+The latest phase detects a co-written nullable cursor and editable name as one observable draft. Against commit
+`0b0b6d5`, the exact current 221-target delta is:
 
-- Excalidraw: `sceneDimension` in `components/Stats/index.tsx` changes from `review-state` to `use-observable`.
+- Legend Music: `tempPlaylistId`, `tempPlaylistName`, `editingPlaylistId`, and `editingPlaylistName` in
+  `components/MediaLibrary/Sidebar.tsx` change from `review-state` to `use-observable`.
 - The other 220 current targets have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Co-written editable draft proof
+
+The owner must be large enough to justify a render cut, and the mutation component must contain exactly one
+null-initialized cursor plus one empty-string draft. Every cursor write and every direct draft write must be co-executing
+or adjacent in the same block or switch case. The cursor must have both an opening and a reset; the draft must have an
+empty reset. Additional draft setter references are accepted only as direct JSX handlers on the same element that
+receives the draft through `value`. Effects, functional updaters, callable values, shadowing, escape, partial cursor
+transitions, and unmatched controlled writes abstain.
+
+The emitted group instruction uses one owner-lifetime observable object, atomic `assign` for paired transitions,
+non-tracking `peek()` snapshots in commands, and `useValue` only in rendered row or control leaves.
 
 ## Effect-written presentation proof
 
@@ -69,11 +82,11 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Eighteen opportunities remain non-enforced:
+Fourteen opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- twelve observable leaf migrations covering keyed selection, repeated rows, coupled playlist edits, timed feedback,
-  and three download-failure callbacks;
+- eight observable leaf migrations covering keyed selection, repeated rows, timed feedback, and three
+  download-failure callbacks;
 - five ref migrations behind async confirmation, form callback, or status-listener contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,

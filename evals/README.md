@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-787 manual hook labels, including 18 non-enforced opportunities, plus fourteen
+787 manual hook labels, including 14 non-enforced opportunities, plus sixteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -56,6 +56,12 @@ React `useMemo` factory, the resulting binding is invoked only from direct React
 effect dependencies or method cleanup calls. The command may not escape to JSX or any other callback surface. This keeps
 the throttle, effects, cleanup, dependencies, and statement order unchanged while moving only the presentation storage
 and `<StatsRows>` subscription.
+
+Four Legend Music labels verify co-written editable drafts. Each cluster contains one nullable cursor and one
+empty-string name; every direct cursor and name mutation is paired in the same straight-line block or switch case, while
+additional name writes must be the matching controlled `value` handler. The recommendation keeps one owner-lifetime
+observable object, uses atomic assignments for paired transitions, and moves subscriptions to row or control leaves.
+Independent cursor writes, effects, functional updaters, non-controlled setter references, and escapes are hard negatives.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
 resolution is provenance rather than proof of leaf ownership; production migrations are not emitted for tests; state

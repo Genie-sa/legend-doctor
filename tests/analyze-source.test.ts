@@ -3886,6 +3886,51 @@ test("groups a co-written dialog payload and visibility flag into one observable
   assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
 });
 
+test("groups a co-written cursor and editable name into one observable draft", () => {
+  const source = (independentCursorWrite: string) => `
+    import { useCallback, useState } from "react";
+    interface Item { id: string; name: string }
+    function Screen({ items }: { items: Item[] }) {
+      const [draftId, setDraftId] = useState<string | null>(null);
+      const [draftName, setDraftName] = useState("");
+      const begin = useCallback((item: Item) => {
+        setDraftId(item.id);
+        setDraftName(item.name);
+      }, []);
+      const finish = useCallback(() => {
+        if (!draftId) return;
+        save(draftId, draftName.trim());
+        setDraftId(null);
+        setDraftName("");
+      }, [draftId, draftName]);
+      ${independentCursorWrite}
+      ${"\n".repeat(100)}
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+        <button disabled={draftId !== null} onClick={() => begin(items[0]!)}>Add</button>
+        {items.map(item => item.id === draftId
+          ? <Editor key={item.id} value={draftName} onChange={setDraftName} onBlur={finish} />
+          : <Row key={item.id} item={item} onRename={() => begin(item)} />)}
+      </main>;
+    }
+  `;
+
+  const findings = analyzeSource(source(""), "fixture.tsx");
+  const grouped = findings.filter(finding => finding.group);
+  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  assert.deepEqual(grouped[0]?.group?.members, ["draftId", "draftName"]);
+  assert.match(grouped[0]?.message ?? "", /atomic/i);
+  assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
+
+  const unsafe = analyzeSource(
+    source("const clearCursorOnly = () => setDraftId(null);"),
+    "fixture.tsx"
+  );
+  assert.notEqual(
+    unsafe.find(finding => finding.name === "draftId")?.action,
+    "use-observable"
+  );
+});
+
 test("does not merge mutually exclusive switch branches into one state cluster", () => {
   const findings = analyzeSource(`
     import { useState } from "react";
