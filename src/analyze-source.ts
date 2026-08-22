@@ -31,7 +31,10 @@ import {
 } from "./ast.js";
 import { collectHookImports, isImportedHookCall, isLocalHookCall, type HookImports } from "./imports.js";
 import type { AnalysisFile } from "./analysis-project.js";
-import { findAsyncLeafStatuses } from "./rules/async-leaf-status.js";
+import {
+  directReactHookFormEventCallbacks,
+  findAsyncLeafStatuses,
+} from "./rules/async-leaf-status.js";
 import {
   type ChildContractResolver,
   propIsLeafRenderConsumer,
@@ -296,6 +299,11 @@ function analyzeParsedSource(
   }
   for (const [owner, ownedStates] of statesByOwner) {
     const callbacks = new Set(reactCommit.eventTransitionCallbacks.get(owner) ?? EMPTY_RUNTIME_FUNCTIONS);
+    if (ownedStates.some(state => (usageByState.get(state)?.deferredReads ?? 0) > 0)) {
+      for (const callback of directReactHookFormEventCallbacks(owner)) {
+        callbacks.add(callback);
+      }
+    }
     const needsSourceCallbackProof = ownedStates.some(state => {
       const usage = usageByState.get(state);
       return usage !== undefined &&
@@ -3048,7 +3056,7 @@ function classifyState(
     usage.deferredReads > 0 &&
     usage.transportedOccurrences > 0 &&
     !usage.repeatedTransport &&
-    !usage.setterUsesPreviousValue &&
+    (!usage.setterUsesPreviousValue || isExactControlledArrayMembershipToggle(state, usage)) &&
     !usage.shadowed &&
     !usage.escaped &&
     (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
@@ -3849,7 +3857,13 @@ function hasInteractionSetterAdapter(
     return false;
   }
   const call = usage.setterCallNodes[0];
-  if (!call || call.arguments.some(argument => containsCallExpression(argument))) return false;
+  if (
+    !call ||
+    (call.arguments.some(argument => containsCallExpression(argument)) &&
+      !isExactControlledArrayMembershipToggle(state, usage))
+  ) {
+    return false;
+  }
   const callback = nearestMutationFunction(call, state.owner);
   if (
     callback === state.owner ||
@@ -3877,6 +3891,165 @@ function hasInteractionSetterAdapter(
     callback.body.statements.length === 1 &&
     ts.isExpressionStatement(callback.body.statements[0]!) &&
     callback.body.statements[0]!.expression === call;
+}
+
+function isExactControlledArrayMembershipToggle(
+  state: StateCandidate,
+  usage: StateUsage
+): boolean {
+  if (
+    usage.setterCalls !== 1 ||
+    usage.setterReferences !== 1 ||
+    usage.setterCallNodes.length !== 1
+  ) {
+    return false;
+  }
+  const setterCall = usage.setterCallNodes[0]!;
+  const updater = setterCall.arguments[0] && unwrapTransparentExpression(setterCall.arguments[0]);
+  if (
+    !updater ||
+    (!ts.isArrowFunction(updater) && !ts.isFunctionExpression(updater)) ||
+    updater.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    updater.asteriskToken ||
+    updater.parameters.length !== 1 ||
+    !ts.isIdentifier(updater.parameters[0]!.name)
+  ) {
+    return false;
+  }
+  const previous = updater.parameters[0]!.name.text;
+  const toggle = arrayMembershipToggle(updater);
+  if (!toggle) return false;
+
+  const value = arrayMembershipValue(toggle.condition, previous);
+  if (!value) return false;
+  const adapter = nearestMutationFunction(setterCall, state.owner);
+  if (
+    adapter === state.owner ||
+    !adapter.parameters.some(parameter =>
+      ts.isIdentifier(parameter.name) && parameter.name.text === value
+    )
+  ) {
+    return false;
+  }
+  return isArrayMembershipRemoval(toggle.whenPresent, previous, value) &&
+    isArrayMembershipAppend(toggle.whenAbsent, previous, value);
+}
+
+function arrayMembershipToggle(
+  updater: ts.ArrowFunction | ts.FunctionExpression
+): {
+  condition: ts.Expression;
+  whenAbsent: ts.Expression;
+  whenPresent: ts.Expression;
+} | null {
+  const expression = returnedCallbackExpression(updater);
+  if (expression && ts.isConditionalExpression(expression)) {
+    return {
+      condition: expression.condition,
+      whenAbsent: expression.whenFalse,
+      whenPresent: expression.whenTrue,
+    };
+  }
+  if (!ts.isBlock(updater.body) || updater.body.statements.length !== 1) return null;
+  const statement = updater.body.statements[0]!;
+  if (!ts.isIfStatement(statement) || !statement.elseStatement) return null;
+  const whenPresent = returnedStatementExpression(statement.thenStatement);
+  const whenAbsent = returnedStatementExpression(statement.elseStatement);
+  return whenPresent && whenAbsent
+    ? { condition: statement.expression, whenAbsent, whenPresent }
+    : null;
+}
+
+function returnedStatementExpression(statement: ts.Statement): ts.Expression | null {
+  const returned = ts.isBlock(statement)
+    ? statement.statements.length === 1 && ts.isReturnStatement(statement.statements[0]!)
+      ? statement.statements[0]
+      : null
+    : ts.isReturnStatement(statement)
+      ? statement
+      : null;
+  return returned?.expression ? unwrapTransparentExpression(returned.expression) : null;
+}
+
+function returnedCallbackExpression(
+  callback: ts.ArrowFunction | ts.FunctionExpression
+): ts.Expression | null {
+  if (!ts.isBlock(callback.body)) return unwrapTransparentExpression(callback.body);
+  const statement = callback.body.statements[0];
+  return callback.body.statements.length === 1 &&
+    statement !== undefined &&
+    ts.isReturnStatement(statement) &&
+    statement.expression !== undefined
+    ? unwrapTransparentExpression(statement.expression)
+    : null;
+}
+
+function arrayMembershipValue(condition: ts.Expression, previous: string): string | null {
+  const value = unwrapTransparentExpression(condition);
+  if (
+    !ts.isCallExpression(value) ||
+    value.arguments.length !== 1 ||
+    !ts.isPropertyAccessExpression(value.expression) ||
+    value.expression.name.text !== "includes" ||
+    !isIdentifierNamed(value.expression.expression, previous)
+  ) {
+    return null;
+  }
+  const member = unwrapTransparentExpression(value.arguments[0]!);
+  return ts.isIdentifier(member) ? member.text : null;
+}
+
+function isArrayMembershipRemoval(
+  expression: ts.Expression,
+  previous: string,
+  value: string
+): boolean {
+  const removal = unwrapTransparentExpression(expression);
+  if (
+    !ts.isCallExpression(removal) ||
+    removal.arguments.length !== 1 ||
+    !ts.isPropertyAccessExpression(removal.expression) ||
+    removal.expression.name.text !== "filter" ||
+    !isIdentifierNamed(removal.expression.expression, previous)
+  ) {
+    return false;
+  }
+  const predicate = unwrapTransparentExpression(removal.arguments[0]!);
+  if (
+    (!ts.isArrowFunction(predicate) && !ts.isFunctionExpression(predicate)) ||
+    predicate.parameters.length !== 1 ||
+    !ts.isIdentifier(predicate.parameters[0]!.name)
+  ) {
+    return false;
+  }
+  const item = predicate.parameters[0]!.name.text;
+  const comparison = returnedCallbackExpression(predicate);
+  return comparison !== null &&
+    ts.isBinaryExpression(comparison) &&
+    comparison.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken &&
+    isIdentifierNamed(comparison.left, item) &&
+    isIdentifierNamed(comparison.right, value);
+}
+
+function isArrayMembershipAppend(
+  expression: ts.Expression,
+  previous: string,
+  value: string
+): boolean {
+  const append = unwrapTransparentExpression(expression);
+  if (!ts.isArrayLiteralExpression(append) || append.elements.length !== 2) return false;
+  const [spread, member] = append.elements;
+  return spread !== undefined &&
+    ts.isSpreadElement(spread) &&
+    isIdentifierNamed(spread.expression, previous) &&
+    member !== undefined &&
+    !ts.isSpreadElement(member) &&
+    isIdentifierNamed(member, value);
+}
+
+function isIdentifierNamed(expression: ts.Expression, name: string): boolean {
+  const value = unwrapTransparentExpression(expression);
+  return ts.isIdentifier(value) && value.text === name;
 }
 
 function isValueTransitionAttribute(

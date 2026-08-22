@@ -36,6 +36,39 @@ export interface AsyncLeafStatusAnalysis {
   isolated: ReadonlySet<StateCandidate>;
 }
 
+export function directReactHookFormEventCallbacks(
+  owner: RuntimeFunctionLike
+): ReadonlySet<RuntimeFunctionLike> {
+  const callbacks = new Set<RuntimeFunctionLike>();
+  if (!owner.body) return callbacks;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (
+      !ts.isJsxAttribute(node) ||
+      !/^on[A-Z]/.test(node.name.getText()) ||
+      !node.initializer ||
+      !ts.isJsxExpression(node.initializer) ||
+      !node.initializer.expression
+    ) {
+      return;
+    }
+    const handler = unwrapTransparentExpression(node.initializer.expression);
+    if (!ts.isCallExpression(handler) || !isReactHookFormSubmitAdapter(handler, owner)) return;
+    for (const argument of handler.arguments) {
+      const candidate = unwrapTransparentExpression(argument);
+      if (
+        ts.isArrowFunction(candidate) ||
+        ts.isFunctionExpression(candidate)
+      ) {
+        callbacks.add(candidate);
+      } else if (ts.isIdentifier(candidate)) {
+        const callback = localFunctionBinding(owner, candidate.text);
+        if (callback) callbacks.add(callback);
+      }
+    }
+  });
+  return callbacks;
+}
+
 export function findAsyncLeafStatuses(
   states: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,

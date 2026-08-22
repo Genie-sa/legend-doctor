@@ -3252,6 +3252,15 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    file: "webhook-settings-tab.tsx",
+    hook: "useState",
+    line: 52,
+    name: "selectedTriggers",
+    rationale: "One resolved checkbox-group leaf owns the exact immutable membership toggle and every rendered read, while submit needs one non-tracking snapshot; trigger edits should not rerender the forty-element settings owner.",
+    target: "formbricks-webhook-settings",
+  },
+  {
+    action: "use-observable",
     file: "pricing-table.tsx",
     hook: "useState",
     line: 343,
@@ -4344,6 +4353,15 @@ export const goldCases = [
     rationale: rationale as string,
     target: "formbricks-add-webhook",
   })),
+  {
+    action: "use-ref",
+    file: "add-webhook-modal.tsx",
+    hook: "useState",
+    line: 63,
+    name: "webhookSecret",
+    rationale: "The secret never renders; direct test and imported React Hook Form submit commands read it before any same-command write, while endpoint completion and modal reset own every mutation.",
+    target: "formbricks-add-webhook",
+  },
   {
     action: "review-state",
     file: "WorkspaceCompanyCardAddWorkEmailPage.tsx",

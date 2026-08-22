@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-798 manual hook labels, including 1 non-enforced opportunity, plus eighteen
+801 manual hook labels, including 1 non-enforced opportunity, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -179,6 +179,12 @@ when its source is unresolved; fragments, ancestors, dead JSX, and repeated or u
 One stable JSX call site may also receive an owner-scoped observable through a local subscriber wrapper without proving
 the child prop contract. The wrapper passes the same plain value, while owner commands keep the stable observable handle.
 When the value and every setter already belong to that call-site subtree, the state stays with the cohesive control.
+One Formbricks label proves an exact immutable array membership toggle owned by a resolved checkbox-group leaf. Imported
+React Hook Form `handleSubmit` proves the submit callback is event-rooted, so the command can snapshot the observable
+once without subscribing the forty-element owner. Opaque updater calls, extra updater work, unresolved form adapters,
+additional consumers, and companion writes abstain.
+One adjacent Formbricks command-only label uses the same imported adapter proof to replace a non-rendered webhook secret
+with a ref. Reads precede writes in the shared async command; shadowed form factories and post-write snapshots abstain.
 Effect-synchronized draft labels preserve the original React effect, guard, dependencies, and timing while moving only
 a complete editable state cluster into one observable model. A migration also needs a structural render cut: raw JSX
 count alone is not proof, root-level cohesive controls stay in React, and deferred commands snapshot the observable once at

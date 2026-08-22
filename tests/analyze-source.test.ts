@@ -36,6 +36,45 @@ test("isolates direct controlled child state when a sibling proves an owner rend
   assert.match(finding?.message ?? "", /non-tracking reads in submit or commit commands/);
 });
 
+test("isolates an exact controlled array membership toggle", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    import { useForm } from "react-hook-form";
+    function CheckboxGroup(_props: unknown) { return null; }
+    export function Settings({ initial }: { initial: string[] }) {
+      const [selected, setSelected] = useState(initial);
+      const { handleSubmit } = useForm();
+      const toggle = (value: string) => {
+        setSelected(previous => {
+          if (previous.includes(value)) {
+            return previous.filter(item => item !== value);
+          } else {
+            return [...previous, value];
+          }
+        });
+      };
+      const submit = () => save(selected);
+      return <form onSubmit={handleSubmit(submit)}>
+        <Header /><Details /><Help /><Preview /><History /><Status /><Aside /><Footer /><Actions /><Summary /><Toolbar />
+        <CheckboxGroup selected={selected} onSelectionChange={toggle} />
+        <button type="submit">Save</button>
+      </form>;
+    }
+    export function OpaqueSettings({ initial }: { initial: string[] }) {
+      const [selected, setSelected] = useState(initial);
+      const toggle = (value: string) => setSelected(previous => reconcile(previous, value));
+      const submit = () => save(selected);
+      return <main>
+        <Header /><Details /><Help /><Preview /><History /><Status /><Aside /><Footer /><Actions /><Summary /><Toolbar />
+        <CheckboxGroup selected={selected} onSelectionChange={toggle} />
+        <button onClick={submit}>Save</button>
+      </main>;
+    }
+  `, "fixture.tsx").filter(finding => finding.name === "selected");
+  assert.equal(findings[0]?.action, "use-observable");
+  assert.notEqual(findings[1]?.action, "use-observable");
+});
+
 test("recognizes standard boolean controlled-child callbacks", () => {
   for (const callback of ["onCheckedChange", "onToggle"]) {
     const [finding] = analyzeSource(`
@@ -4788,6 +4827,33 @@ test("preserves React lifecycle timing when command-only state becomes a ref", (
   assert.equal(state?.action, "use-ref");
   assert.match(state?.message ?? "", /preserve any existing React lifecycle hook/i);
   assert.match(state?.evidence[2] ?? "", /effect writes 2/);
+});
+
+test("uses a ref for command state read through imported React Hook Form", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    import { useForm } from "react-hook-form";
+    export function Form() {
+      const [secret, setSecret] = useState<string>();
+      const { handleSubmit } = useForm();
+      const submit = async () => {
+        save(secret);
+        setSecret(await loadSecret());
+      };
+      return <form onSubmit={handleSubmit(submit)}><button type="submit">Save</button></form>;
+    }
+    export function Shadowed({ useForm }: { useForm: () => { handleSubmit: Function } }) {
+      const [secret, setSecret] = useState<string>();
+      const { handleSubmit } = useForm();
+      const submit = async () => {
+        save(secret);
+        setSecret(await loadSecret());
+      };
+      return <form onSubmit={handleSubmit(submit)}><button type="submit">Save</button></form>;
+    }
+  `, "fixture.tsx").filter(finding => finding.name === "secret");
+  assert.equal(findings[0]?.action, "use-ref");
+  assert.notEqual(findings[1]?.action, "use-ref");
 });
 
 test("isolates effect-written presentation state in a leaf subscriber", () => {
