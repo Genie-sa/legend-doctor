@@ -535,6 +535,9 @@ function createChildContractResolver(
       keyedCursorContracts.set(key, safe);
       return safe;
     },
+    pureProjectionBindings(): ReadonlySet<string> {
+      return context.sourceIndex.pureProjectionsFor(importerFile);
+    },
     resolveComponent(name: string): ChildComponentSource | null {
       const resolved = context.sourceIndex.componentDeclarationFor(importerFile, name);
       if (!resolved) return null;

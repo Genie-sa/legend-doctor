@@ -43,6 +43,7 @@ interface ModuleRecord {
   observableKeys: ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoryCalls: ReadonlyMap<string, string>;
   observableFactoryDeclarations: ReadonlySet<string>;
+  pureProjectionDeclarations: ReadonlySet<string>;
   reexports: ReadonlyMap<string, ReexportBinding>;
   starExports: readonly string[];
 }
@@ -59,6 +60,7 @@ export interface SourceIndex {
   observableFactoriesFor(file: string): ReadonlySet<string>;
   observableKeysFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
   observablesFor(file: string): ReadonlySet<string>;
+  pureProjectionsFor(file: string): ReadonlySet<string>;
 }
 
 export interface ResolvedSymbol {
@@ -74,7 +76,8 @@ type SourceSymbolKind =
   | "legend-value-hook"
   | "legend-value-writer"
   | "observable"
-  | "observable-factory";
+  | "observable-factory"
+  | "pure-projection";
 
 export function buildSourceIndex(
   root: string,
@@ -106,6 +109,7 @@ export function buildSourceIndexFromFiles(
   const legendValueWritersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observableFactoriesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observablesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const pureProjectionsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
 
   function resolveModule(importer: string, specifier: string): string | null {
     const { cache, options } = compilerContextFor(importer, root, compilerContexts);
@@ -151,7 +155,9 @@ export function buildSourceIndexFromFiles(
               ? record.legendValueWriters.has(localName)
               : kind === "observable"
                 ? record.observableDeclarations.has(localName)
-                : record.observableFactoryDeclarations.has(localName);
+                : kind === "observable-factory"
+                  ? record.observableFactoryDeclarations.has(localName)
+                  : record.pureProjectionDeclarations.has(localName);
       if (declared) return { file, localName };
 
       const factoryName = kind === "observable"
@@ -214,7 +220,9 @@ export function buildSourceIndexFromFiles(
             ? legendValueWritersByImporter
             : kind === "observable-factory"
               ? observableFactoriesByImporter
-              : observablesByImporter;
+              : kind === "observable"
+                ? observablesByImporter
+                : pureProjectionsByImporter;
     const cached = cache.get(importer);
     if (cached) return cached;
     const symbols = new Map<string, ResolvedSymbol>();
@@ -288,6 +296,7 @@ export function buildSourceIndexFromFiles(
       return keys;
     },
     observablesFor: file => new Set(resolvedFor(file, "observable").keys()),
+    pureProjectionsFor: file => new Set(resolvedFor(file, "pure-projection").keys()),
   };
 }
 
@@ -332,6 +341,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const observableKeys = new Map<string, ReadonlySet<string>>();
   const observableFactoryCalls = new Map<string, string>();
   const observableFactoryDeclarations = new Set<string>();
+  const pureProjectionDeclarations = new Set<string>();
   const reexports = new Map<string, ReexportBinding>();
   const starExports: string[] = [];
   const observableFactories = new Set<string>();
@@ -416,7 +426,13 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
         }
         if (hookObservable) legendValueHooks.set(statement.name.text, hookObservable);
         if (writerObservable) legendValueWriters.set(statement.name.text, writerObservable);
-        if ((deferredParameters.size > 0 || hookObservable || writerObservable) && hasExport(statement)) {
+        if (isPureProjectionDeclaration(statement, imports)) {
+          pureProjectionDeclarations.add(statement.name.text);
+        }
+        if (
+          (deferredParameters.size > 0 || hookObservable || writerObservable || pureProjectionDeclarations.has(statement.name.text)) &&
+          hasExport(statement)
+        ) {
           localExports.set(statement.name.text, statement.name.text);
         }
         if (deferredParameters.size > 0 && hasDefault(statement)) {
@@ -588,6 +604,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     observableKeys,
     observableFactoryCalls,
     observableFactoryDeclarations,
+    pureProjectionDeclarations,
     reexports,
     starExports,
   };
@@ -720,6 +737,75 @@ function directLegendValueWriterObservable(
   }
   const observable = unwrapTransparentExpression(expression.expression.expression);
   return ts.isIdentifier(observable) ? observable.text : null;
+}
+
+function isPureProjectionDeclaration(
+  declaration: ts.FunctionDeclaration,
+  imports: ReadonlyMap<string, ImportBinding>
+): boolean {
+  if (
+    !declaration.body ||
+    declaration.asteriskToken ||
+    declaration.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    declaration.body.statements.length !== 1 ||
+    declaration.parameters.length === 0 ||
+    declaration.parameters.some(parameter =>
+      !ts.isIdentifier(parameter.name) || parameter.initializer !== undefined
+    )
+  ) {
+    return false;
+  }
+  const statement = declaration.body.statements[0];
+  if (!statement || !ts.isReturnStatement(statement) || !statement.expression) return false;
+  const parameters = new Set(declaration.parameters.map(parameter => (parameter.name as ts.Identifier).text));
+  const referenced = new Set<string>();
+  const pure = isPureProjectionExpression(statement.expression, parameters, imports, referenced);
+  return pure && [...parameters].every(parameter => referenced.has(parameter));
+}
+
+function isPureProjectionExpression(
+  expression: ts.Expression,
+  parameters: ReadonlySet<string>,
+  imports: ReadonlyMap<string, ImportBinding>,
+  referenced: Set<string>
+): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(value)) {
+    if (!parameters.has(value.text)) return false;
+    referenced.add(value.text);
+    return true;
+  }
+  if (
+    ts.isStringLiteralLike(value) ||
+    ts.isNumericLiteral(value) ||
+    value.kind === ts.SyntaxKind.TrueKeyword ||
+    value.kind === ts.SyntaxKind.FalseKeyword ||
+    value.kind === ts.SyntaxKind.NullKeyword
+  ) {
+    return true;
+  }
+  if (ts.isArrayLiteralExpression(value)) {
+    return value.elements.every(element =>
+      !ts.isSpreadElement(element) && isPureProjectionExpression(element, parameters, imports, referenced)
+    );
+  }
+  if (
+    !ts.isCallExpression(value) ||
+    !ts.isIdentifier(value.expression) ||
+    parameters.has(value.expression.text)
+  ) {
+    return false;
+  }
+  const binding = imports.get(value.expression.text);
+  if (!binding || !isKnownPureProjectionImport(binding)) return false;
+  return value.arguments.every(argument =>
+    !ts.isSpreadElement(argument) && isPureProjectionExpression(argument, parameters, imports, referenced)
+  );
+}
+
+function isKnownPureProjectionImport(binding: ImportBinding): boolean {
+  return (binding.moduleSpecifier === "clsx" && binding.importedName === "clsx") ||
+    (binding.moduleSpecifier === "tailwind-merge" && binding.importedName === "twMerge");
 }
 
 function deferredRegistrationMethods(

@@ -621,6 +621,76 @@ test("proves an effect-owned custom-hook cursor has only stable keyed row consum
   assert.equal(report.findings.find(finding => finding.name === "setterCursor")?.action, "review-state");
 });
 
+test("isolates an event-owned boolean across small presentation leaves and reactive props", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-multi-leaf-boolean-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "cx.ts"),
+    `
+      import { clsx } from "clsx";
+      export function cx(...values: unknown[]) { return clsx(values); }
+      export function noisy(...values: unknown[]) { console.log(values); return clsx(values); }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useCallback, useState } from "react";
+      import { cx, noisy } from "./cx";
+      export function SafeScreen() {
+        const [active, setActive] = useState(false);
+        const enter = useCallback(() => setActive(true), []);
+        const leave = useCallback(() => setActive(false), []);
+        const surfaceClass = cx(active && "active");
+        return <Surface className={cx("base", surfaceClass)} onEnter={enter} onLeave={leave}>
+          {active && <View><Text>Active</Text></View>}
+          <View>{active ? <Text>Drop</Text> : null}</View>
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function ImpureScreen() {
+        const [noisyActive, setNoisyActive] = useState(false);
+        const enter = useCallback(() => setNoisyActive(true), []);
+        const leave = useCallback(() => setNoisyActive(false), []);
+        return <Surface className={noisy(noisyActive && "active")} onEnter={enter} onLeave={leave}>
+          {noisyActive && <View><Text>Active</Text></View>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function BroadSurfaceScreen() {
+        const [broadActive, setBroadActive] = useState(false);
+        const enter = useCallback(() => setBroadActive(true), []);
+        const leave = useCallback(() => setBroadActive(false), []);
+        return <Surface className={cx(broadActive && "active")} onEnter={enter} onLeave={leave}>
+          {broadActive && <View><Text>One</Text><Text>Two</Text><Text>Three</Text><Text>Four</Text><Text>Five</Text></View>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function BranchScreen({ editable }: { editable: boolean }) {
+        const [branchActive, setBranchActive] = useState(false);
+        const enter = useCallback(() => setBranchActive(true), []);
+        const leave = useCallback(() => setBranchActive(false), []);
+        if (editable) {
+          return <Surface className={cx(branchActive && "active")} onEnter={enter} onLeave={leave}>
+            {branchActive && <Text>Active</Text>}<View/><View/><View/><View/><View/>
+          </Surface>;
+        }
+        return <Surface className={cx(branchActive && "active")} onEnter={enter} onLeave={leave}>
+          {branchActive && <Text>Active</Text>}<View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  assert.equal(report.findings.find(finding => finding.name === "active")?.action, "use-observable");
+  assert.equal(report.findings.find(finding => finding.name === "noisyActive")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "broadActive")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "branchActive")?.action, "review-state");
+});
+
 test("shares one cached AST across source indexing and both detector families", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
   t.after(() => rm(root, { force: true, recursive: true }));

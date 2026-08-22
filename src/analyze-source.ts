@@ -65,7 +65,10 @@ import {
   isSelectionStateName,
   isSetOrMapState,
 } from "./rules/keyed-selection.js";
-import { isLiteralBooleanLeafState } from "./rules/literal-boolean-leaf.js";
+import {
+  isLiteralBooleanLeafState,
+  isMultiSurfaceLiteralBooleanState,
+} from "./rules/literal-boolean-leaf.js";
 import { findListenerRefStateClusters } from "./rules/listener-ref-state.js";
 import {
   collectReactCommitContext,
@@ -251,7 +254,10 @@ function analyzeParsedSource(
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
 ): HookFinding[] {
   const imports = collectHookImports(sourceFile);
-  const pureProjectionImports = collectPureProjectionImports(sourceFile);
+  const pureProjectionImports = new Set([
+    ...collectPureProjectionImports(sourceFile),
+    ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
+  ]);
   const reactCommit = collectReactCommitContext(sourceFile, imports);
   const localComponents = collectLocalComponents(sourceFile);
   const states: StateCandidate[] = [];
@@ -360,6 +366,18 @@ function analyzeParsedSource(
     usageByState
   );
   const statesWithCompanionWrites = findStatesWithCompanionWrites(states, stateFlow);
+  const multiSurfaceBooleanStates = new Set(
+    states.filter(state => {
+      const usage = usageByState.get(state);
+      return usage !== undefined && isMultiSurfaceLiteralBooleanState(state, usage, {
+        hasCompanionWrites: statesWithCompanionWrites.has(state),
+        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+        hasSafeCommands: safeCommandStates.has(state),
+        isCustomHookOwner: isCustomHookOwner(state.owner),
+        pureProjectionImports,
+      });
+    })
+  );
   const independentStateWrites = findIndependentStateWrites(states);
   const branchUnmountMoves = findBranchUnmountMoves(
     states,
@@ -516,7 +534,8 @@ function analyzeParsedSource(
           deferredCallbackHooks,
           reactCommit.eventTransitionCallbacks.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
           memoizedOptionCommandStates.has(state),
-          returnedKeyedCursorStates.has(state)
+          returnedKeyedCursorStates.has(state),
+          multiSurfaceBooleanStates.has(state)
         );
     const commitSensitiveOverride = commitSensitive &&
       baseClassification.action !== "review-state" &&
@@ -2488,7 +2507,8 @@ function classifyState(
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
   eventTransitionCallbacks: ReadonlySet<RuntimeFunctionLike>,
   hasMemoizedOptionCommand: boolean,
-  hasReturnedKeyedCursorConsumer: boolean
+  hasReturnedKeyedCursorConsumer: boolean,
+  hasMultiSurfaceBooleanConsumers: boolean
 ): ClassifiedState {
   if (nonProductionHarness) {
     return {
@@ -2948,6 +2968,13 @@ function classifyState(
       message: usage.transportedOccurrences > 0
         ? `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; subscribe to the raw value once, pass that snapshot unchanged, derive every existing projection from the same snapshot, and leave the child API unchanged.`
         : `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; evaluate its existing boolean, equality, or property projections inside that wrapper and leave the child API unchanged.`,
+    };
+  }
+  if (hasMultiSurfaceBooleanConsumers) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace event-owned boolean \`${state.valueName}\` with one component-lifetime observable; keep the existing event callbacks and write positions, use reactive props for the proven class/style projections, use \`Show\` only at the bounded conditional presentation leaves, and do not subscribe the large owner.`,
     };
   }
   if (

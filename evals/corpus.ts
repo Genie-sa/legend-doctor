@@ -1936,6 +1936,15 @@ export const goldCases = [
   },
   {
     action: "review-state",
+    file: "components/personal-details/detail-row.tsx",
+    hook: "useState",
+    line: 34,
+    name: "isFocused",
+    rationale: "Two mutually exclusive component returns make aggregate JSX counts overstate the focus flag's active render cut; the compact editable branch stays under review.",
+    target: "tree-wallet",
+  },
+  {
+    action: "review-state",
     file: "components/tree-mask-overlay.tsx",
     hook: "useState",
     line: 40,
@@ -1993,7 +2002,6 @@ export const goldCases = [
     ["components/MediaLibrary/Sidebar.tsx", 67, "activeNativeDropPlaylistId", "use-observable"],
   ].map(([file, line, name, action]) => ({
     action: action as "use-observable",
-    ...(name === "isDragOver" ? { enforced: false as const } : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,

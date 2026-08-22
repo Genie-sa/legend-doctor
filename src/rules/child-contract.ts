@@ -41,6 +41,7 @@ export interface ChildContractResolver {
     stateProperty: string,
     setterProperty: string
   ): boolean;
+  pureProjectionBindings(): ReadonlySet<string>;
   resolveComponent(name: string): ChildComponentSource | null;
 }
 

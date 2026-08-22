@@ -40,6 +40,30 @@ test("resolves named, default, and barrel-exported source components", async () 
   );
 });
 
+test("resolves only source-proven pure projection wrappers", async () => {
+  await withProject(
+    {
+      "projection.ts": `
+        import { clsx as merge } from "clsx";
+        import { twMerge } from "tailwind-merge";
+        const normalize = (value: unknown) => String(value);
+        export function cx(...values: unknown[]) { return twMerge(merge(values)); }
+        export function noisy(value: unknown) { console.log(value); return merge(value); }
+        export function defaulted(value = "") { return merge(value); }
+        export function shadowed(merge: (value: unknown) => string, value: unknown) { return merge(value); }
+        export function unknown(value: unknown) { return normalize(value); }
+      `,
+      "index.ts": 'export { cx as classNames, noisy, defaulted, shadowed, unknown } from "./projection";',
+      "screen.tsx": 'import { classNames, noisy, defaulted, shadowed, unknown } from "./index";',
+    },
+    (root, sources) => {
+      const projections = buildSourceIndex(root, sources)
+        .pureProjectionsFor(path.join(root, "screen.tsx"));
+      assert.deepEqual([...projections], ["classNames"]);
+    }
+  );
+});
+
 test("indexes shared UI components as provenance without deciding leaf safety", async () => {
   await withProject(
     {

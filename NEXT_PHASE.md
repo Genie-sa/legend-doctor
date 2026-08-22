@@ -7,22 +7,36 @@
 | App roots | 12 |
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
-| Manual hook labels | 789 |
-| Known misses | 4 |
+| Manual hook labels | 790 |
+| Known misses | 3 |
 | State groups | 18/18 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (423/423) |
-| Actionable recall | 99.1% (423/427) |
-| Unit tests | 505/505 |
+| Actionable precision | 100% (424/424) |
+| Actionable recall | 99.3% (424/427) |
+| Unit tests | 507/507 |
 
-The latest phase proves effect-owned custom-hook cursors whose only UI consumer is a stable-keyed list row. Against commit
-`46d00ca`, the exact current 221-target action delta is:
+The latest phase proves event-owned booleans whose only consumers are bounded presentation surfaces. Against commit
+`bdde55a`, the exact current 221-target action delta is:
 
-- Legend Music: `highlightedIndex` in `components/JumpSearchMenuDropdown/hooks.ts` changes from `review-state` to
+- Legend Music: `isDragOver` in `components/Playlist.tsx` changes from `review-state` to
   `use-observable`.
 - Tree Map, Tree Wallet, Memoria src, Memoria app, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open
   WebUI React Native, and Hoalu have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Multi-surface event boolean proof
+
+The state must be false-initialized in a large, single-return component and use literal setter commands with no effects,
+functional updates, companion React writes, reactive-mutation ownership, transport, shadowing, or escape. Existing event
+provenance must cover every write. Every render read must resolve either to a `className`/`style` attribute or to a
+state-controlled JSX gate containing at most four elements. There must be two to six distinct surfaces, at least one gate,
+no repeated-render consumer, and their combined JSX cost must stay below forty percent of the owner.
+
+One-hop projection aliases are accepted only when immutable and pure. Imported wrappers are source-resolved through
+aliases and barrels, and their entire body must be one return composed from parameters, literals, arrays, and known
+`clsx`/`tailwind-merge` calls. Side effects, default parameters, shadowed callees, unknown calls, broad gates, and multiple
+owner returns abstain. The emitted migration keeps observable ownership at the component, preserves event callbacks and
+write positions, uses reactive props for class/style, and uses `Show` only at the conditional leaves.
 
 ## Effect-owned keyed cursor proof
 
@@ -175,10 +189,9 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Four opportunities remain non-enforced:
+Three opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- one observable leaf migration spanning multiple drop surfaces;
 - two ref migrations behind async confirmation or form callback contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,

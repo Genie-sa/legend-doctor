@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-789 manual hook labels, including 4 non-enforced opportunities, plus eighteen
+790 manual hook labels, including 3 non-enforced opportunities, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -70,6 +70,14 @@ one list, supplies a stable item-derived key, and uses the cursor only as list `
 effects, cleanup, ownership, and write order; changes command reads to non-tracking snapshots; removes the cursor-only
 dependencies and list broadcast; and subscribes only in the keyed row. Synchronous registrations, index keys, mount
 control, multiple consumers, callback escape, and non-production consumers abstain.
+
+One Legend Music label verifies a false-initialized, event-owned boolean whose render fanout is limited to class/style
+projections and several conditional presentation leaves of at most four JSX elements each. Imported projection wrappers
+qualify only when source resolution proves a single pure return composed from `clsx` or `tailwind-merge`; helper names are
+not evidence. The recommendation keeps every event callback and write position, uses reactive props for class/style, uses
+`Show` only at the bounded gates, and never subscribes the large owner. An enforced Tree Wallet review label and local
+fixtures reject multiple owner returns, impure wrappers, broad gates, effects, transports, companion writes, functional
+updaters, repeated output, and non-presentation props.
 
 Two Tree Map labels and one exact group label verify a selection model whose false-initialized mode and empty ID array
 enter and cancel together. Every mode write must pair with an empty-array reset, while independent collection writes must
