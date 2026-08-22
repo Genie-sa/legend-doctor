@@ -461,8 +461,16 @@ function provenNonTrackingCallbackSource(
   if (!ts.isArrowFunction(callback) && !ts.isFunctionDeclaration(callback) && !ts.isFunctionExpression(callback)) {
     return null;
   }
-  if (isDirectReactCallback(callback, imports, "useEffect")) return "react-or-event";
-  if (isDirectReactCallback(callback, imports, "useState")) return "react-or-event";
+  if (
+    isDirectHookCallback(callback, imports.useEffect, imports.reactNamespaces, "useEffect") ||
+    isDirectHookCallback(callback, imports.useInsertionEffect, imports.reactNamespaces, "useInsertionEffect") ||
+    isDirectHookCallback(callback, imports.useLayoutEffect, imports.reactNamespaces, "useLayoutEffect") ||
+    isDirectHookCallback(callback, imports.useState, imports.reactNamespaces, "useState") ||
+    isDirectHookCallback(callback, imports.useMount, imports.legendReactNamespaces, "useMount") ||
+    isDirectHookCallback(callback, imports.useUnmount, imports.legendReactNamespaces, "useUnmount")
+  ) {
+    return "react-or-event";
+  }
 
   const owner = findAncestor(callback, isRuntimeFunctionLike);
   if (!owner) return null;
@@ -496,19 +504,21 @@ function sourceProvenEffectJsxCallback(
   );
 }
 
-function isDirectReactCallback(
+function isDirectHookCallback(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  imports: HookImports,
-  hook: "useEffect" | "useState"
+  localNames: ReadonlySet<string>,
+  namespaceNames: ReadonlySet<string>,
+  hook:
+    | "useEffect"
+    | "useInsertionEffect"
+    | "useLayoutEffect"
+    | "useMount"
+    | "useState"
+    | "useUnmount"
 ): boolean {
   const parent = callback.parent;
   if (!ts.isCallExpression(parent) || parent.arguments[0] !== callback) return false;
-  return isImportedHookCall(
-    parent,
-    hook === "useEffect" ? imports.useEffect : imports.useState,
-    imports.reactNamespaces,
-    hook
-  );
+  return isImportedHookCall(parent, localNames, namespaceNames, hook);
 }
 
 function isDirectJsxEventCallback(

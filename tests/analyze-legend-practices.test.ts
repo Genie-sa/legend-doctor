@@ -564,6 +564,67 @@ test("uses peek for aliased React hooks and direct JSX event callbacks", () => {
   );
 });
 
+test("uses peek in direct React and Legend lifecycle callbacks only", () => {
+  const findings = analyzeLegendPractices(`
+    import * as React from "react";
+    import { useInsertionEffect as useInsert } from "react";
+    import * as LegendReact from "@legendapp/state/react";
+    import { useMount as onMount, useObserve } from "@legendapp/state/react";
+    import { observable } from "@legendapp/state";
+    const state$ = observable({ insertion: 0, layout: 0, mount: 0, nested: 0, tracked: 0, unmount: 0 });
+    export function Screen() {
+      useInsert(() => consume(state$.insertion.get()), []);
+      React.useLayoutEffect(() => consume(state$.layout.get()), []);
+      onMount(() => consume(state$.mount.get()));
+      LegendReact.useUnmount(() => consume(state$.unmount.get()));
+      onMount(() => subscribe(() => consume(state$.nested.get())));
+      useObserve(() => consume(state$.tracked.get()));
+      return null;
+    }
+  `, "fixture.tsx");
+
+  assert.deepEqual(
+    findings
+      .filter(finding => finding.action === "use-peek-for-snapshot")
+      .map(finding => finding.location.line),
+    [9, 10, 11, 12]
+  );
+});
+
+test("uses direct useValue input as observable provenance for lifecycle snapshots", () => {
+  const findings = analyzeLegendPractices(`
+    import { useMount, useValue } from "@legendapp/state/react";
+    import { settings$ } from "./settings";
+    export function Panel({ id }: { id: string }) {
+      const size$ = settings$.panels[id];
+      const size = useValue(size$);
+      useMount(() => register({ id, size: size$.get() }));
+      return <div>{size}</div>;
+    }
+  `, "fixture.tsx", new Set(["settings$"]));
+
+  assert.deepEqual(
+    findings.map(finding => finding.action),
+    ["use-peek-for-snapshot"]
+  );
+});
+
+test("does not promote reserved element access from direct useValue input", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useMount, useValue } from "@legendapp/state/react";
+    const state$ = observable({ value: 1 });
+    export function Screen() {
+      const getter$ = state$["get"];
+      const getter = useValue(getter$);
+      useMount(() => consume(getter$.get()));
+      return <span>{String(getter)}</span>;
+    }
+  `, "fixture.tsx");
+
+  assert.deepEqual(findings, []);
+});
+
 test("keeps get in tracking, render, shallow, and ambiguous callbacks", () => {
   const sources = [
     `
@@ -610,6 +671,15 @@ test("keeps get in tracking, render, shallow, and ambiguous callbacks", () => {
       const state$ = observable({ value: 1 });
       export function Screen() {
         return <button onClick={() => schedule(() => consume(state$.value.get()))}>Read</button>;
+      }
+    `,
+    `
+      import { observable } from "@legendapp/state";
+      import { useMount } from "./hooks";
+      const state$ = observable({ value: 1 });
+      export function Screen() {
+        useMount(() => consume(state$.value.get()));
+        return null;
       }
     `,
   ];

@@ -6551,6 +6551,13 @@ export const goldPracticeCases = [
     target: "legend-music",
   },
   {
+    action: "use-peek-for-snapshot",
+    file: "components/ResizablePanels.tsx",
+    line: 285,
+    rationale: "The imported Legend useMount callback is a non-tracking lifecycle effect, so the initial panel-size read needs a snapshot rather than a reactive dependency.",
+    target: "legend-music",
+  },
+  {
     action: "narrow-use-value-subscription",
     file: "components/PlaybackControls.tsx",
     line: 47,

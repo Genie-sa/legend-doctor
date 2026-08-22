@@ -10,7 +10,7 @@ import {
   unwrapTransparentExpression,
 } from "./analysis-ast.js";
 import { isNonProductionHarness, visit } from "./ast.js";
-import { collectHookImports, type HookImports } from "./imports.js";
+import { collectHookImports, isImportedHookCall, type HookImports } from "./imports.js";
 import type { AnalysisFile } from "./analysis-project.js";
 import type { InstalledLegendState } from "./legend-state-package.js";
 import type { ChildContractResolver } from "./rules/child-contract.js";
@@ -229,9 +229,23 @@ function collectObservableBindings(
   const factoryBindings = new Set(importedObservableFactories);
   const aliases: Array<{ initializer: ts.Expression; name: string }> = [];
   const factoryCalls: Array<{ initializer: ts.Expression; name: string }> = [];
+  const useValueInputs = new Set<string>();
   const typeQueries: Array<{ name: string; type: ts.TypeNode }> = [];
 
   visit(sourceFile, node => {
+    if (
+      ts.isCallExpression(node) &&
+      isImportedHookCall(
+        node,
+        imports.useValue,
+        imports.legendReactNamespaces,
+        "useValue"
+      ) &&
+      node.arguments.length > 0
+    ) {
+      const input = unwrapTransparentExpression(node.arguments[0]!);
+      if (ts.isIdentifier(input)) useValueInputs.add(input.text);
+    }
     if (
       ts.isFunctionDeclaration(node) &&
       node.name &&
@@ -300,6 +314,16 @@ function collectObservableBindings(
     changed = false;
     for (const alias of aliases) {
       if (
+        useValueInputs.has(alias.name) &&
+        declarations.get(alias.name) === 1 &&
+        !candidates.has(alias.name) &&
+        observablePathWithElementAccess(alias.initializer, candidates)
+      ) {
+        candidates.add(alias.name);
+        changed = true;
+        continue;
+      }
+      if (
         declarations.get(alias.name) === 1 &&
         !candidates.has(alias.name) &&
         expressionIsObservablePath(alias.initializer, candidates)
@@ -320,6 +344,29 @@ function collectObservableBindings(
     }
   }
   return candidates;
+}
+
+function observablePathWithElementAccess(
+  expression: ts.Expression,
+  observableBindings: ReadonlySet<string>
+): boolean {
+  let current = unwrapTransparentExpression(expression);
+  let hasDynamicKey = false;
+  while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
+    if (current.questionDotToken) return false;
+    if (ts.isPropertyAccessExpression(current)) {
+      if (RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) return false;
+    } else {
+      if (!current.argumentExpression) return false;
+      const member = unwrapTransparentExpression(current.argumentExpression);
+      if (ts.isStringLiteralLike(member) && RESERVED_OBSERVABLE_MEMBERS.has(member.text)) {
+        return false;
+      }
+      hasDynamicKey = true;
+    }
+    current = unwrapTransparentExpression(current.expression);
+  }
+  return hasDynamicKey && ts.isIdentifier(current) && observableBindings.has(current.text);
 }
 
 function recordDeclaration(counts: Map<string, number>, name: string): void {

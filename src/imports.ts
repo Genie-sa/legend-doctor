@@ -16,11 +16,13 @@ export interface HookImports {
   useImperativeHandle: ReadonlySet<string>;
   useLayoutEffect: ReadonlySet<string>;
   useMemo: ReadonlySet<string>;
+  useMount: ReadonlySet<string>;
   useObservable: ReadonlySet<string>;
   useObserveEffect: ReadonlySet<string>;
   useRef: ReadonlySet<string>;
   useState: ReadonlySet<string>;
   useTransition: ReadonlySet<string>;
+  useUnmount: ReadonlySet<string>;
   useValue: ReadonlySet<string>;
 }
 
@@ -43,11 +45,13 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   const useImperativeHandle = new Set<string>();
   const useLayoutEffect = new Set<string>();
   const useMemo = new Set<string>();
+  const useMount = new Set<string>();
   const useObservable = new Set<string>();
   const useObserveEffect = new Set<string>();
   const useRef = new Set<string>();
   const useState = new Set<string>();
   const useTransition = new Set<string>();
+  const useUnmount = new Set<string>();
   const useValue = new Set<string>();
 
   for (const statement of sourceFile.statements) {
@@ -110,6 +114,8 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
         }
         if (importedName === "useObservable") useObservable.add(localName);
         if (importedName === "useObserveEffect") useObserveEffect.add(localName);
+        if (importedName === "useMount") useMount.add(localName);
+        if (importedName === "useUnmount") useUnmount.add(localName);
         if (importedName === "useValue") useValue.add(localName);
       }
       if (moduleName === "@legendapp/state") {
@@ -138,11 +144,13 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
     useImperativeHandle,
     useLayoutEffect,
     useMemo,
+    useMount,
     useObservable,
     useObserveEffect,
     useRef,
     useState,
     useTransition,
+    useUnmount,
     useValue,
   };
 }
@@ -158,8 +166,10 @@ export function isImportedHookCall(
     | "useInsertionEffect"
     | "useLayoutEffect"
     | "useMemo"
+    | "useMount"
     | "useRef"
     | "useState"
+    | "useUnmount"
     | "useValue"
 ): boolean {
   const expression = call.expression;

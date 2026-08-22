@@ -34,7 +34,7 @@ Acceptance targets for the first useful release:
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
 796 manual hook labels, including 1 non-enforced opportunity, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
-`useValue` labels, sixteen lowest-path subscription labels, twelve non-tracking snapshot labels, and eight narrow observable-write
+`useValue` labels, sixteen lowest-path subscription labels, thirteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
 `useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Nine leaf-boundary labels verify
@@ -47,6 +47,12 @@ One Legend Music snapshot label verifies a callback passed across files and invo
 React layout effect. Component resolution accepts immutable aliases of imported `memo` and `forwardRef`; names are not
 proof. Render-time use, forwarding from the effect to unknown code, nested callbacks, unresolved wrappers, and other
 callback references abstain, because those paths may establish a Legend tracking context.
+
+One Legend Music snapshot label verifies a direct read inside imported Legend `useMount`. Direct imported React layout
+and insertion effects plus Legend mount and unmount callbacks are non-tracking lifecycle boundaries. The nearest callback
+must own the read, so nested registrations and tracking callbacks abstain. A dynamic `const` alias qualifies only when it
+is rooted in a proven observable and passed directly to imported `useValue`; mutable aliases, optional access, reserved
+members, unrelated hook imports, and unproven roots abstain.
 
 The Formbricks tag-merger label verifies deletion of a self-contained state cycle: the current value is read only inside
 an evaluation-inert argument to its own setter, and neither the current nor assigned value reaches rendering or another
