@@ -2951,12 +2951,20 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
-    enforced: false,
+    file: "components/account-management/reset-password-dialog.tsx",
+    hook: "useState",
+    line: 18,
+    name: "generatedPassword",
+    rationale: "The password payload gates one stable dialog-content branch and is atomically cleared with its nested feedback flag; keep both in one owner-lifetime observable model.",
+    target: "tree-map",
+  },
+  {
+    action: "use-observable",
     file: "components/account-management/reset-password-dialog.tsx",
     hook: "useState",
     line: 19,
     name: "copied",
-    rationale: "The visual state belongs in one gated leaf, but its timed reset and parent close transaction need a complete lifetime proof.",
+    rationale: "The timed feedback renders only inside the password-gated branch and shares its close reset; batch that reset and subscribe in a nested button leaf.",
     target: "tree-map",
   },
   {
@@ -5869,6 +5877,13 @@ export const goldCases = [
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [
+  {
+    file: "components/account-management/reset-password-dialog.tsx",
+    line: 18,
+    members: ["generatedPassword", "copied"],
+    rationale: "The payload-gated password content and its nested timed feedback share one close reset; preserve that transition as one batched observable model.",
+    target: "tree-map",
+  },
   {
     file: "components/companies/companies-grid-view-container.tsx",
     line: 26,

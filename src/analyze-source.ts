@@ -1116,7 +1116,8 @@ function findObservableStateClusters(
 
   for (const [owner, ownerStates] of statesByOwner) {
     const ownerElements = jsxElementCount(owner);
-    if (ownerLineSpan(owner, sourceFile) < 100 || ownerElements < 8) continue;
+    if (ownerElements < 8) continue;
+    const hasLargeSourceOwner = ownerLineSpan(owner, sourceFile) >= 100;
     const broadOwner = ownerElements >= 12;
     const mutableStates: StateCandidate[] = ownerStates.filter(state => state.setterName !== null);
     const stateBySetter = new Map(
@@ -1167,7 +1168,7 @@ function findObservableStateClusters(
     }
 
     for (const members of components.values()) {
-      const dialogMembers = broadOwner
+      const dialogMembers = broadOwner && hasLargeSourceOwner
         ? normalizeObservableDialogClusterMembers(
             members,
             usageByState,
@@ -1176,13 +1177,21 @@ function findObservableStateClusters(
             stateFlow
           )
         : null;
-      const textDraftMembers = broadOwner && !dialogMembers
+      const gatedFeedbackMembers = broadOwner && !dialogMembers
+        ? normalizeGatedFeedbackClusterMembers(
+            members,
+            usageByState,
+            calls,
+            stateFlow
+          )
+        : null;
+      const textDraftMembers = broadOwner && hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers
         ? normalizeObservableTextDraftClusterMembers(members, usageByState, calls, stateFlow)
         : null;
-      const selectionMembers = !dialogMembers && !textDraftMembers
+      const selectionMembers = hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers && !textDraftMembers
         ? normalizeObservableSelectionClusterMembers(members, usageByState, calls, stateFlow)
         : null;
-      const clusterMembers = dialogMembers ?? textDraftMembers ?? selectionMembers;
+      const clusterMembers = dialogMembers ?? gatedFeedbackMembers ?? textDraftMembers ?? selectionMembers;
       if (!clusterMembers) continue;
       if (
         dialogMembers &&
@@ -1206,6 +1215,8 @@ function findObservableStateClusters(
         members: sortedMembers,
         message: selectionMembers
           ? `Replace the co-written selection mode (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve mode-and-clear transitions with atomic \`assign\` calls, keep independent collection edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at header, control, and keyed-row leaves.`
+          : gatedFeedbackMembers
+          ? `Replace the payload and timed feedback state (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the timer and command timing, batch the paired reset, read the payload command with \`peek\`, subscribe to the payload-gated content at its stable call site, and subscribe to feedback again only in its nested feedback leaf.`
           : textDraftMembers
           ? `Replace the co-written editable draft (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
           : `Replace the co-written React state cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; mutate it from commands and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
@@ -1926,6 +1937,185 @@ function normalizeObservableDialogClusterMembers(
   const ownerGuardedPayload = payloadControlsOwnerJsx(payload, knownComponents);
   if (ownerGuardedPayload) return null;
   return members;
+}
+
+function normalizeGatedFeedbackClusterMembers(
+  members: readonly StateCandidate[],
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+  mutations: readonly SetterMutation[],
+  stateFlow: StateFlowIndex
+): readonly StateCandidate[] | null {
+  if (members.length !== 2) return null;
+  const payload = members.find(state => hasStateInitializer(state, ts.SyntaxKind.NullKeyword));
+  const feedback = members.find(state => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  if (!payload || !feedback || payload === feedback) return null;
+
+  const payloadUsage = usageByState.get(payload);
+  const feedbackUsage = usageByState.get(feedback);
+  if (
+    !payloadUsage ||
+    !feedbackUsage ||
+    [payloadUsage, feedbackUsage].some(usage =>
+      usage.shadowed ||
+      usage.escaped ||
+      usage.effectReads > 0 ||
+      usage.effectWrites > 0 ||
+      usage.setterUsesPreviousValue ||
+      usage.transportedOccurrences > 0
+    ) ||
+    stateMayHoldCallable(payload) ||
+    stateMayHoldCallable(feedback) ||
+    payloadUsage.localRenderReads === 0 ||
+    feedbackUsage.localRenderReads === 0 ||
+    payloadUsage.setterReferences !== payloadUsage.setterCalls ||
+    feedbackUsage.setterReferences !== feedbackUsage.setterCalls ||
+    !feedbackRenderIsConfinedToPayloadGate(payload, payloadUsage, feedbackUsage)
+  ) {
+    return null;
+  }
+
+  const payloadMutations = mutations.filter(mutation => mutation.state === payload);
+  const feedbackMutations = mutations.filter(mutation => mutation.state === feedback);
+  const payloadResets = payloadMutations.filter(mutation =>
+    callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)
+  );
+  const feedbackResets = feedbackMutations.filter(mutation =>
+    callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)
+  );
+  const feedbackStarts = feedbackMutations.filter(mutation =>
+    callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)
+  );
+  if (
+    payloadMutations.length < 2 ||
+    payloadResets.length === 0 ||
+    !payloadMutations.some(mutation => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)) ||
+    feedbackStarts.length === 0 ||
+    feedbackResets.length < 2 ||
+    !feedbackHasTimedReset(feedbackStarts, feedbackResets, feedback.owner, stateFlow)
+  ) {
+    return null;
+  }
+
+  const hasPairedReset = payloadResets.some(payloadReset =>
+    feedbackResets.some(feedbackReset =>
+      payloadReset.region === feedbackReset.region &&
+      (callsAreAdjacentDraftWrites(payloadReset.call, feedbackReset.call) ||
+        mutationsAreProvenCoexecuting(
+          payloadReset.call,
+          feedbackReset.call,
+          payloadReset.region,
+          stateFlow
+        ))
+    )
+  );
+  return hasPairedReset ? [payload, feedback] : null;
+}
+
+function feedbackRenderIsConfinedToPayloadGate(
+  payload: StateCandidate,
+  payloadUsage: StateUsage,
+  feedbackUsage: StateUsage
+): boolean {
+  if (
+    payloadUsage.directRenderNodes.length === 0 ||
+    payloadUsage.localRenderReads !== payloadUsage.directRenderNodes.length ||
+    feedbackUsage.directRenderNodes.length === 0 ||
+    feedbackUsage.localRenderReads !== feedbackUsage.directRenderNodes.length
+  ) {
+    return false;
+  }
+  const feedbackLeaf = lowestCommonJsxSubtree(
+    feedbackUsage.directRenderNodes,
+    payload.owner
+  );
+  if (!feedbackLeaf || jsxElementCountIn(feedbackLeaf) > 4) return false;
+  const returned = uniqueReturnedExpression(payload.owner) ??
+    uniqueJsxReturnAllowingNullGuard(payload.owner);
+  if (!returned) return false;
+  let confined = false;
+  visit(returned, node => {
+    if (
+      confined ||
+      !ts.isConditionalExpression(node) ||
+      !isDirectTruthyStateCondition(node.condition, payload.valueName)
+    ) {
+      return;
+    }
+    confined = payloadUsage.directRenderNodes.every(read => nodeWithin(read, node)) &&
+      feedbackUsage.directRenderNodes.every(read => nodeWithin(read, node.whenTrue)) &&
+      nodeWithin(feedbackLeaf, node.whenTrue);
+  });
+  return confined;
+}
+
+function uniqueJsxReturnAllowingNullGuard(
+  owner: RuntimeFunctionLike
+): ts.Expression | null {
+  if (!owner.body) return null;
+  const returned: ts.Expression[] = [];
+  let unsafe = false;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (unsafe || !ts.isReturnStatement(node)) return;
+    if (!node.expression) {
+      unsafe = true;
+      return;
+    }
+    const expression = unwrapTransparentExpression(node.expression);
+    if (expression.kind === ts.SyntaxKind.NullKeyword) return;
+    if (
+      !ts.isJsxElement(expression) &&
+      !ts.isJsxSelfClosingElement(expression) &&
+      !ts.isJsxFragment(expression)
+    ) {
+      unsafe = true;
+      return;
+    }
+    returned.push(expression);
+  });
+  return !unsafe && returned.length === 1 ? returned[0]! : null;
+}
+
+function isDirectTruthyStateCondition(
+  expression: ts.Expression,
+  stateName: string
+): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(value)) return value.text === stateName;
+  return ts.isPrefixUnaryExpression(value) &&
+    value.operator === ts.SyntaxKind.ExclamationToken &&
+    ts.isPrefixUnaryExpression(value.operand) &&
+    value.operand.operator === ts.SyntaxKind.ExclamationToken &&
+    ts.isIdentifier(value.operand.operand) &&
+    value.operand.operand.text === stateName;
+}
+
+function feedbackHasTimedReset(
+  starts: readonly SetterMutation[],
+  resets: readonly SetterMutation[],
+  owner: RuntimeFunctionLike,
+  stateFlow: StateFlowIndex
+): boolean {
+  if (bindingDeclarationCount(owner, "setTimeout") > 0) return false;
+  return resets.some(reset => {
+    const timer = findAncestorUntil(
+      reset.call,
+      (node): node is ts.CallExpression =>
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "setTimeout" &&
+        !!node.arguments[0] &&
+        nodeWithin(reset.call, node.arguments[0]),
+      owner
+    );
+    if (!timer) return false;
+    const command = nearestMutationFunction(timer, owner);
+    return starts.some(start =>
+      start.region === command &&
+      start.call.getStart() < timer.getStart() &&
+      (callsAreAdjacentDraftWrites(start.call, timer) ||
+        mutationsAreProvenCoexecuting(start.call, timer, command, stateFlow))
+    );
+  });
 }
 
 function payloadControlsOwnerJsx(

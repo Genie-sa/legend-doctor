@@ -19,6 +19,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Latest-value `useRef` mirror | `keep-effect`; preserve post-commit timing |
 | Committed previous-value guard | `keep-effect`; preserve skip-mount and transition timing |
 | Coupled fields | One grouped model and one atomic migration |
+| Payload-gated timed feedback | One owner observable, batched reset, nested leaf subscription |
 | Effect-written presentation state | Preserve the effect; subscribe only in the proven leaf |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | One unresolved JSX consumer | One local subscriber wrapper; no child contract required |
@@ -42,12 +43,12 @@ Measured on pinned real applications:
 | App roots | 12 |
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
-| Manual labels | 788 |
-| Known misses | 11 |
-| State groups | 17/17 |
-| Unit tests | 500/500 |
-| Actionable precision | 100% (415/415) |
-| Actionable recall | 97.4% (415/426) |
+| Manual labels | 789 |
+| Known misses | 10 |
+| State groups | 18/18 |
+| Unit tests | 502/502 |
+| Actionable precision | 100% (417/417) |
+| Actionable recall | 97.7% (417/427) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,

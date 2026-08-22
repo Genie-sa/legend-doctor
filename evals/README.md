@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-788 manual hook labels, including 11 non-enforced opportunities, plus seventeen
+789 manual hook labels, including 10 non-enforced opportunities, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -74,6 +74,14 @@ its only setter and reads stay within one imported `useCallback`, the callback i
 their nested listeners, and the snapshot appears in that callback's dependency list. A local setter helper is accepted
 only when all references are direct calls and any call before a later snapshot read exits first. JSX escape, async work,
 post-write reads, and execution outside those effects abstain.
+
+Two Tree Map hook labels and one exact group label verify a nullable payload with nested timed feedback. All payload render
+reads must stay in one direct gate, and all feedback reads must share a nested leaf of at most four JSX elements inside
+the gate's true branch. Its true write must precede a global `setTimeout` false reset in the same command, and a separate
+proven transition must clear payload and feedback together. The recommendation keeps one
+component-lifetime observable model, preserves timer and command timing, batches the paired reset, snapshots command reads
+with `peek()`, and places separate subscriptions at the payload branch and nested feedback leaf. Split resets, feedback
+outside the gate, shadowed timers, effects, setter escape, transported values, and untimed flags abstain.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
 resolution is provenance rather than proof of leaf ownership; production migrations are not emitted for tests; state
