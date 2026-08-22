@@ -6552,6 +6552,28 @@ export const goldPracticeCases = [
     rationale: "The review dialog reads only the optional scan job id, so unrelated dialog metadata should not invalidate its editor and queries.",
     target: "hoalu-app",
   },
+  ...[
+    ["components/expenses/expense-actions.tsx", 70, "expense deletion"],
+    ["components/incomes/income-actions.tsx", 64, "income deletion"],
+    ["components/events/event-actions.tsx", 254, "event deletion"],
+    ["components/wallets/wallet-actions.tsx", 246, "wallet editing"],
+    ["components/wallets/wallet-actions.tsx", 260, "wallet deletion"],
+    ["components/recurring-bills/recurring-bill-actions.tsx", 373, "bill archiving"],
+    ["components/recurring-bills/recurring-bill-actions.tsx", 408, "bill restoration"],
+  ].map(([file, line, purpose]) => ({
+    action: "narrow-use-value-subscription" as const,
+    file: file as string,
+    line: line as number,
+    rationale: `The dialog owner reads only the optional data id for ${purpose}; sibling dialog data should not invalidate it.`,
+    target: "hoalu-app",
+  })),
+  {
+    action: "narrow-use-value-subscription",
+    file: "components/events/event-actions.tsx",
+    line: 147,
+    rationale: "The edit dialog uses only the optional event id to select its record, so unrelated dialog data should not invalidate its query owner.",
+    target: "hoalu-app",
+  },
   {
     action: "batch-observable-writes",
     file: "hooks/use-auth.ts",

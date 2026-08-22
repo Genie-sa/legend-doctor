@@ -5,6 +5,7 @@ import ts from "typescript";
 import {
   bindingDeclarationCount,
   exactObjectLiteralKeys,
+  isAssignmentOperator,
   isDeclarationName,
   isNonValueIdentifier,
 } from "./analysis-ast.js";
@@ -48,6 +49,7 @@ interface ModuleRecord {
   localExports: ReadonlyMap<string, string>;
   observableDeclarations: ReadonlySet<string>;
   observableKeys: ReadonlyMap<string, ReadonlySet<string>>;
+  observableMemberDeclarations: ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoryCalls: ReadonlyMap<string, string>;
   observableFactoryDeclarations: ReadonlySet<string>;
   pureProjectionDeclarations: ReadonlySet<string>;
@@ -69,6 +71,7 @@ export interface SourceIndex {
   legendValueBridgesFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoriesFor(file: string): ReadonlySet<string>;
   observableKeysFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
+  observablePathsFor(file: string): ReadonlySet<string>;
   observablesFor(file: string): ReadonlySet<string>;
   pureProjectionsFor(file: string): ReadonlySet<string>;
 }
@@ -87,6 +90,7 @@ type SourceSymbolKind =
   | "legend-value-hook"
   | "legend-value-writer"
   | "observable"
+  | "observable-container"
   | "observable-factory"
   | "pure-projection"
   | "react-context";
@@ -125,9 +129,11 @@ export function buildSourceIndexFromFiles(
   const legendValueHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const legendValueWritersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observableFactoriesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const observableContainersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const observablesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const pureProjectionsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const contextReaders = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
+  const stableObservableContainers = new Map<string, boolean>();
 
   function resolveModule(importer: string, specifier: string): string | null {
     const { cache, options } = compilerContextFor(
@@ -180,6 +186,8 @@ export function buildSourceIndexFromFiles(
                     ? record.legendValueWriters.has(localName)
                     : kind === "observable"
                       ? record.observableDeclarations.has(localName)
+                      : kind === "observable-container"
+                        ? record.observableMemberDeclarations.has(localName)
                       : kind === "observable-factory"
                         ? record.observableFactoryDeclarations.has(localName)
                         : kind === "react-context"
@@ -264,6 +272,8 @@ export function buildSourceIndexFromFiles(
             ? legendValueWritersByImporter
             : kind === "observable-factory"
               ? observableFactoriesByImporter
+              : kind === "observable-container"
+                ? observableContainersByImporter
               : kind === "observable"
                 ? observablesByImporter
                 : pureProjectionsByImporter;
@@ -377,6 +387,35 @@ export function buildSourceIndexFromFiles(
     return consumers;
   }
 
+  function observableContainerIsStable(symbol: ResolvedSymbol): boolean {
+    const key = `${symbol.file}\0${symbol.localName}`;
+    const cached = stableObservableContainers.get(key);
+    if (cached !== undefined) return cached;
+    const members = records.get(symbol.file)?.observableMemberDeclarations.get(symbol.localName);
+    if (!members) return false;
+    for (const [candidateFile, record] of records) {
+      const aliases = new Set<string>();
+      if (candidateFile === symbol.file) aliases.add(symbol.localName);
+      for (const [localName, binding] of record.imports) {
+        const target = resolveModule(candidateFile, binding.moduleSpecifier);
+        const imported = target
+          ? exportedSymbol(target, binding.importedName, "observable-container", new Set(), 0)
+          : null;
+        if (sameResolvedSymbol(imported, symbol)) aliases.add(localName);
+      }
+      const sourceFile = sourceFiles.get(candidateFile);
+      if (
+        sourceFile &&
+        [...aliases].some(alias => !observableContainerReferencesAreStable(sourceFile, alias, members))
+      ) {
+        stableObservableContainers.set(key, false);
+        return false;
+      }
+    }
+    stableObservableContainers.set(key, true);
+    return true;
+  }
+
   function contextReferencesAreKnown(
     sourceFile: ts.SourceFile,
     record: ModuleRecord,
@@ -485,6 +524,21 @@ export function buildSourceIndexFromFiles(
       }
       return keys;
     },
+    observablePathsFor: file => {
+      const paths = new Set<string>();
+      const normalized = normalizeFile(file);
+      for (const [localName, members] of records.get(normalized)?.observableMemberDeclarations ?? []) {
+        if (!observableContainerIsStable({ file: normalized, localName })) continue;
+        for (const member of members) paths.add(`${localName}.${member}`);
+      }
+      for (const [localName, symbol] of resolvedFor(normalized, "observable-container")) {
+        if (!observableContainerIsStable(symbol)) continue;
+        const members = records.get(symbol.file)?.observableMemberDeclarations.get(symbol.localName);
+        if (!members) continue;
+        for (const member of members) paths.add(`${localName}.${member}`);
+      }
+      return paths;
+    },
     observablesFor: file => new Set(resolvedFor(file, "observable").keys()),
     pureProjectionsFor: file => new Set(resolvedFor(file, "pure-projection").keys()),
   };
@@ -517,6 +571,54 @@ function jsxTagUses(expression: ts.PropertyAccessExpression): boolean {
       ts.isJsxSelfClosingElement(parent) ||
       ts.isJsxClosingElement(parent)) &&
     parent.tagName === expression;
+}
+
+function observableContainerReferencesAreStable(
+  sourceFile: ts.SourceFile,
+  containerName: string,
+  observableMembers: ReadonlySet<string>
+): boolean {
+  let stable = true;
+  visit(sourceFile, node => {
+    if (
+      !stable ||
+      !ts.isIdentifier(node) ||
+      node.text !== containerName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node) ||
+      isInsideModuleDeclaration(node)
+    ) {
+      return;
+    }
+    const member = node.parent;
+    if (
+      !ts.isPropertyAccessExpression(member) ||
+      member.expression !== node ||
+      member.questionDotToken
+    ) {
+      stable = false;
+      return;
+    }
+    if (observableMembers.has(member.name.text) && propertyAccessIsWritten(member)) {
+      stable = false;
+    }
+  });
+  return stable;
+}
+
+function propertyAccessIsWritten(access: ts.PropertyAccessExpression): boolean {
+  const parent = access.parent;
+  return (
+    (ts.isBinaryExpression(parent) &&
+      parent.left === access &&
+      isAssignmentOperator(parent.operatorToken.kind)) ||
+    (ts.isPrefixUnaryExpression(parent) &&
+      parent.operand === access &&
+      (parent.operator === ts.SyntaxKind.PlusPlusToken ||
+        parent.operator === ts.SyntaxKind.MinusMinusToken)) ||
+    (ts.isPostfixUnaryExpression(parent) && parent.operand === access) ||
+    (ts.isDeleteExpression(parent) && parent.expression === access)
+  );
 }
 
 function compilerContextFor(
@@ -562,6 +664,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const localExports = new Map<string, string>();
   const observableDeclarations = new Set<string>();
   const observableKeys = new Map<string, ReadonlySet<string>>();
+  const observableMemberDeclarations = new Map<string, ReadonlySet<string>>();
   const observableFactoryCalls = new Map<string, string>();
   const observableFactoryDeclarations = new Set<string>();
   const pureProjectionDeclarations = new Set<string>();
@@ -637,6 +740,12 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
       }
     }
   }
+
+  const observableMemberFactories = localObservableMemberFactories(
+    sourceFile,
+    observableFactories,
+    legendNamespaces
+  );
 
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement)) {
@@ -748,7 +857,32 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           ts.isIdentifier(initializer.expression)
         ) {
           observableFactoryCalls.set(declaration.name.text, initializer.expression.text);
+          const members = observableMemberFactories.get(initializer.expression.text);
+          if (
+            members &&
+            ts.isVariableDeclarationList(declaration.parent) &&
+            (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+          ) {
+            observableMemberDeclarations.set(declaration.name.text, members);
+          }
           if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
+        }
+        if (
+          ts.isIdentifier(declaration.name) &&
+          initializer &&
+          ts.isObjectLiteralExpression(initializer) &&
+          ts.isVariableDeclarationList(declaration.parent) &&
+          (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+        ) {
+          const members = directObservableMembers(
+            initializer,
+            observableFactories,
+            legendNamespaces
+          );
+          if (members.size > 0) {
+            observableMemberDeclarations.set(declaration.name.text, members);
+            if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
+          }
         }
         if (
           ts.isIdentifier(declaration.name) &&
@@ -868,6 +1002,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     localExports,
     observableDeclarations,
     observableKeys,
+    observableMemberDeclarations,
     observableFactoryCalls,
     observableFactoryDeclarations,
     pureProjectionDeclarations,
@@ -1388,6 +1523,121 @@ function isObservableInitializer(
     namespaces.has(value.expression.expression.text) &&
     value.expression.name.text === "observable"
   );
+}
+
+function localObservableMemberFactories(
+  sourceFile: ts.SourceFile,
+  factories: ReadonlySet<string>,
+  namespaces: ReadonlySet<string>
+): ReadonlyMap<string, ReadonlySet<string>> {
+  const declarations = new Map<string, ComponentFunction | null>();
+  const record = (name: string, declaration: ComponentFunction): void => {
+    declarations.set(name, declarations.has(name) ? null : declaration);
+  };
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name) {
+      record(statement.name.text, statement);
+      continue;
+    }
+    if (
+      !ts.isVariableStatement(statement) ||
+      (statement.declarationList.flags & ts.NodeFlags.Const) === 0
+    ) {
+      continue;
+    }
+    for (const declaration of statement.declarationList.declarations) {
+      const initializer = declaration.initializer
+        ? unwrapTransparentExpression(declaration.initializer)
+        : null;
+      if (
+        ts.isIdentifier(declaration.name) &&
+        initializer &&
+        (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+      ) {
+        record(declaration.name.text, initializer);
+      }
+    }
+  }
+
+  const proven = new Map<string, ReadonlySet<string>>();
+  for (const [name, declaration] of declarations) {
+    if (!declaration || bindingIsAssigned(sourceFile, name)) continue;
+    if (
+      [...factories, ...namespaces].some(binding =>
+        bindingDeclarationCount(declaration, binding) > 0
+      )
+    ) {
+      continue;
+    }
+    const object = exactReturnedObject(declaration);
+    if (!object) continue;
+    const members = directObservableMembers(object, factories, namespaces);
+    if (members.size > 0) proven.set(name, members);
+  }
+  return proven;
+}
+
+function bindingIsAssigned(sourceFile: ts.SourceFile, name: string): boolean {
+  let assigned = false;
+  visit(sourceFile, node => {
+    if (assigned || !ts.isIdentifier(node) || node.text !== name) return;
+    const parent = node.parent;
+    if (
+      (ts.isBinaryExpression(parent) &&
+        parent.left === node &&
+        isAssignmentOperator(parent.operatorToken.kind)) ||
+      (ts.isPrefixUnaryExpression(parent) &&
+        parent.operand === node &&
+        (parent.operator === ts.SyntaxKind.PlusPlusToken ||
+          parent.operator === ts.SyntaxKind.MinusMinusToken)) ||
+      (ts.isPostfixUnaryExpression(parent) && parent.operand === node)
+    ) {
+      assigned = true;
+    }
+  });
+  return assigned;
+}
+
+function exactReturnedObject(declaration: ComponentFunction): ts.ObjectLiteralExpression | null {
+  if (ts.isArrowFunction(declaration) && !ts.isBlock(declaration.body)) {
+    const body = unwrapTransparentExpression(declaration.body);
+    return ts.isObjectLiteralExpression(body) ? body : null;
+  }
+  const body = declaration.body;
+  if (!body || !ts.isBlock(body) || body.statements.length !== 1) return null;
+  const statement = body.statements[0];
+  if (!statement || !ts.isReturnStatement(statement) || !statement.expression) return null;
+  const returned = unwrapTransparentExpression(statement.expression);
+  return ts.isObjectLiteralExpression(returned) ? returned : null;
+}
+
+function directObservableMembers(
+  object: ts.ObjectLiteralExpression,
+  factories: ReadonlySet<string>,
+  namespaces: ReadonlySet<string>
+): ReadonlySet<string> {
+  const names = new Set<string>();
+  const observableMembers = new Set<string>();
+  for (const property of object.properties) {
+    if (ts.isSpreadAssignment(property) || !property.name) return new Set();
+    const name = staticObjectMemberName(property.name);
+    if (!name || names.has(name)) return new Set();
+    names.add(name);
+    if (
+      ts.isPropertyAssignment(property) &&
+      isObservableInitializer(property.initializer, factories, namespaces)
+    ) {
+      observableMembers.add(name);
+    }
+  }
+  return observableMembers;
+}
+
+function staticObjectMemberName(name: ts.PropertyName): string | null {
+  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
+    ? name.text
+    : null;
 }
 
 function unwrapTransparentExpression(expression: ts.Expression): ts.Expression {

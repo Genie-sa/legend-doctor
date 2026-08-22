@@ -236,6 +236,32 @@ export function rootIdentifier(expression: ts.Expression): ts.Identifier | null 
   return ts.isIdentifier(current) ? current : null;
 }
 
+export function staticPropertyPath(expression: ts.Expression): readonly string[] | null {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(value)) return [value.text];
+  if (!ts.isPropertyAccessExpression(value) || value.questionDotToken) return null;
+  const parent = staticPropertyPath(value.expression);
+  return parent ? [...parent, value.name.text] : null;
+}
+
+export function staticPathHasBinding(
+  expression: ts.Expression,
+  bindings: ReadonlySet<string>
+): boolean {
+  const path = staticPropertyPath(expression);
+  return path !== null && propertyPathHasBinding(path, bindings);
+}
+
+export function propertyPathHasBinding(
+  path: readonly string[],
+  bindings: ReadonlySet<string>
+): boolean {
+  for (let length = 1; length <= path.length; length += 1) {
+    if (bindings.has(path.slice(0, length).join("."))) return true;
+  }
+  return false;
+}
+
 export function unwrapTransparentExpression(expression: ts.Expression): ts.Expression {
   let current = expression;
   while (

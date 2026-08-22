@@ -5,6 +5,7 @@ import {
   isAssignmentOperator,
   isEvaluationInert,
   rootIdentifier,
+  staticPathHasBinding,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import { findAncestor, isRuntimeFunctionLike, nodeWithin, visit } from "../ast.js";
@@ -59,8 +60,7 @@ function narrowObservableObjectWrite(
     return null;
   }
   const target = unwrapTransparentExpression(call.expression.expression);
-  const root = rootIdentifier(target);
-  if (!root || !observableBindings.has(root.text)) return null;
+  if (!staticPathHasBinding(target, observableBindings)) return null;
 
   const value = unwrapTransparentExpression(call.arguments[0]!);
   if (!ts.isObjectLiteralExpression(value) || value.properties.length !== 2) return null;
@@ -133,7 +133,7 @@ function narrowObservableArrayAppend(
   const root = rootIdentifier(target);
   if (
     !root ||
-    !observableBindings.has(root.text) ||
+    !staticPathHasBinding(target, observableBindings) ||
     !observableTargetStartsAsArray(target, call, sourceFile)
   ) {
     return null;

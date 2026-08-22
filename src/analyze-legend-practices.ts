@@ -4,7 +4,9 @@ import {
   containsElementAccess,
   exactObjectLiteralKeys,
   isEvaluationInert,
+  propertyPathHasBinding,
   rootIdentifier,
+  staticPathHasBinding,
   unwrapTransparentExpression,
 } from "./analysis-ast.js";
 import { isNonProductionHarness, visit } from "./ast.js";
@@ -276,7 +278,7 @@ function collectObservableBindings(
     [...factoryBindings].filter(name => declarations.get(name) === 1)
   );
   const candidates = new Set(
-    [...directCandidates].filter(name => declarations.get(name) === 1)
+    [...directCandidates].filter(name => declarations.get(name.split(".")[0]!) === 1)
   );
   for (const candidate of factoryCalls) {
     if (
@@ -352,8 +354,7 @@ function expressionIsObservablePath(
   for (let current: ts.Expression = value; ts.isPropertyAccessExpression(current); current = current.expression) {
     if (RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) return false;
   }
-  const root = rootIdentifier(value);
-  return root !== null && observableBindings.has(root.text);
+  return staticPathHasBinding(value, observableBindings);
 }
 
 function typeQueriesObservable(
@@ -362,12 +363,15 @@ function typeQueriesObservable(
 ): boolean {
   if (ts.isParenthesizedTypeNode(type)) return typeQueriesObservable(type.type, observableBindings);
   if (!ts.isTypeQueryNode(type)) return false;
+  const path: string[] = [];
   let current: ts.EntityName = type.exprName;
   while (ts.isQualifiedName(current)) {
     if (RESERVED_OBSERVABLE_MEMBERS.has(current.right.text)) return false;
+    path.unshift(current.right.text);
     current = current.left;
   }
-  return observableBindings.has(current.text);
+  path.unshift(current.text);
+  return propertyPathHasBinding(path, observableBindings);
 }
 
 function typeNamesObservable(type: ts.TypeNode, names: ReadonlySet<string>): boolean {
@@ -401,7 +405,7 @@ function observableWrite(
   const receiver = expression.expression.expression;
   if (containsElementAccess(receiver)) return null;
   const root = rootIdentifier(receiver);
-  if (!root || !observableBindings.has(root.text)) return null;
+  if (!root || !expressionIsObservablePath(receiver, observableBindings)) return null;
   const field = ts.isPropertyAccessExpression(receiver) ? receiver : null;
   return {
     argument: expression.arguments[0]!,

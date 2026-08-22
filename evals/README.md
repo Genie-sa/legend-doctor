@@ -34,7 +34,7 @@ Acceptance targets for the first useful release:
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
 790 manual hook labels, including 2 non-enforced opportunities, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
-`useValue` labels, eight lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
+`useValue` labels, sixteen lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
 `useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Seven stable leaf-boundary labels verify
@@ -199,6 +199,12 @@ option are preserved. The path must be statically addressed and proven as Legend
 resolved export. One selector-only dynamic segment is accepted when its key is an explicitly typed, immutable `string`
 or `number` parameter of the owning component or hook. Computed selectors, optional access, mutable or call-derived keys,
 shallow reads, reserved members, shadowed hooks, and unproven getters abstain.
+Imported observable provenance also covers an exact controller member initialized by Legend `observable(...)` in a
+`const` object literal or in the sole returned object literal of one local factory. The proof survives named aliases and
+barrels without promoting the controller root or sibling methods. Spreads, computed or duplicate members, conditional
+or multi-statement factories, shadowed Legend factories, unknown factories, and `$`-shaped names abstain. Qualified
+`typeof` aliases are accepted only through the same proven member prefix. Reassigned factories, whole-controller escape,
+optional controller access, and member replacement through any resolved source alias invalidate the provenance.
 Broad `useValue(parent$)` bindings may narrow through optional raw-value chains when every read shares one static child
 boundary. If the optional chain diverges, uses a dynamic key, or would move short-circuiting ahead of a remaining member
 access or call, the broad subscription stays unchanged.

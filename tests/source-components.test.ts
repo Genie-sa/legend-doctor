@@ -148,6 +148,86 @@ test("resolves exported Legend observables through aliases and barrels", async (
   );
 });
 
+test("resolves only source-proven observable members from local wrapper factories", async () => {
+  await withProject(
+    {
+      "state/controllers.ts": `
+        import { observable as createObservable } from "@legendapp/state";
+
+        function createController() {
+          return {
+            value$: createObservable({ profile: { name: "Ada" } }),
+            set: (value: unknown) => value,
+          };
+        }
+
+        function conditionalController(flag: boolean) {
+          if (flag) return { value$: createObservable({ name: "Ada" }) };
+          return { value$: createObservable({ name: "Grace" }) };
+        }
+
+        function spreadController() {
+          return { ...createController(), extra$: createObservable(1) };
+        }
+
+        function reassignedController() {
+          return { value$: createObservable({ name: "Ada" }) };
+        }
+
+        declare function unknownController(): { value$: unknown };
+        reassignedController = unknownController;
+
+        export const controller = createController();
+        export const conditional = conditionalController(true);
+        export const reassigned = reassignedController();
+        export const spread = spreadController();
+        export const unknown = unknownController();
+        export const namedOnly = { value$: { profile: { name: "Lin" } } };
+      `,
+      "state/index.ts": `
+        export {
+          conditional,
+          controller as dialog,
+          namedOnly,
+          reassigned,
+          spread,
+          unknown,
+        } from "./controllers";
+      `,
+      "screen.ts": 'import { conditional, dialog, namedOnly, reassigned, spread, unknown } from "./state";',
+    },
+    (root, sources) => {
+      const paths = buildSourceIndex(root, sources)
+        .observablePathsFor(path.join(root, "screen.ts"));
+      assert.deepEqual([...paths], ["dialog.value$"]);
+    }
+  );
+});
+
+test("rejects observable controller members replaced through another source file", async () => {
+  await withProject(
+    {
+      "state.ts": `
+        import { observable } from "@legendapp/state";
+        function createController() {
+          return { value$: observable({ name: "Ada" }), set: () => undefined };
+        }
+        export const controller = createController();
+      `,
+      "mutator.ts": `
+        import { controller as dialog } from "./state";
+        dialog.value$ = { name: "not observable" } as never;
+      `,
+      "screen.ts": 'import { controller as dialog } from "./state";',
+    },
+    (root, sources) => {
+      const paths = buildSourceIndex(root, sources)
+        .observablePathsFor(path.join(root, "screen.ts"));
+      assert.deepEqual([...paths], []);
+    }
+  );
+});
+
 test("resolves observables created by explicitly typed project factories", async () => {
   await withProject(
     {

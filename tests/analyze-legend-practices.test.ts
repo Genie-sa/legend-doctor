@@ -946,6 +946,19 @@ test("tracks observable paths created by proven project factories and aliases", 
   assert.match(findings[0]?.message ?? "", /useValue\(value\$\.name\)/);
 });
 
+test("tracks typed aliases of source-proven observable member paths", () => {
+  const findings = analyzeLegendPractices(`
+    import { useValue } from "@legendapp/state/react";
+    import { dialog } from "./state";
+    function Name(value$: typeof dialog.value$.profile) {
+      const profile = useValue(value$);
+      return <span>{profile.name}</span>;
+    }
+  `, "fixture.tsx", new Set(["dialog.value$"]));
+  assert.deepEqual(findings.map(finding => finding.action), ["narrow-use-value-subscription"]);
+  assert.match(findings[0]?.message ?? "", /useValue\(value\$\.name\)/);
+});
+
 test("does not infer mutable, nullable, reserved, or unproven observable aliases", () => {
   const source = (declarations: string, expression: string) => analyzeLegendPractices(`
     import { observable } from "@legendapp/state";

@@ -1178,6 +1178,58 @@ test("uses cross-file observable provenance for direct useValue findings", async
   }
 });
 
+test("uses source-proven wrapper member provenance without treating the wrapper as observable", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-member-"));
+  try {
+    await mkdir(path.join(root, "state"), { recursive: true });
+    await writeFile(
+      path.join(root, "state", "controller.ts"),
+      `
+        import { observable } from "@legendapp/state";
+        function createController() {
+          return {
+            value$: observable({ profile: { name: "Ada", email: "ada@example.com" } }),
+            set: (value: unknown) => value,
+          };
+        }
+        export const controller = createController();
+      `,
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "state", "index.ts"),
+      'export { controller as dialog } from "./controller";',
+      "utf8"
+    );
+    await writeFile(
+      path.join(root, "screen.tsx"),
+      `
+        import { useValue } from "@legendapp/state/react";
+        import { dialog } from "./state";
+        export function Screen() {
+          const value = useValue(dialog.value$);
+          dialog.set({ state: false });
+          return <span>{value.profile.name}</span>;
+        }
+      `,
+      "utf8"
+    );
+
+    const context = await createAnalysisContext(root);
+    assert.deepEqual(
+      [...context.sourceIndex.observablePathsFor(path.join(root, "screen.tsx"))],
+      ["dialog.value$"]
+    );
+    const report = await analyzePath(root, context);
+    assert.deepEqual(report.practices.map(finding => finding.action), [
+      "narrow-use-value-subscription",
+    ]);
+    assert.match(report.practices[0]?.message ?? "", /useValue\(dialog\.value\$\.profile\.name\)/);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
 test("analyzes useValue-only files for the narrowest observable child", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-child-read-"));
   try {

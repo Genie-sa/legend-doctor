@@ -2,7 +2,8 @@ import ts from "typescript";
 
 import {
   containsElementAccess,
-  rootIdentifier,
+  staticPropertyPath,
+  staticPathHasBinding,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import { visit } from "../ast.js";
@@ -112,16 +113,7 @@ function provenStaticObservablePath(
   for (let current: ts.Expression = path; ts.isPropertyAccessExpression(current); current = current.expression) {
     if (current.questionDotToken || RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) return null;
   }
-  const root = rootIdentifier(path);
-  return root && observableBindings.has(root.text) ? path : null;
-}
-
-function staticPropertyPath(expression: ts.Expression): readonly string[] | null {
-  const value = unwrapTransparentExpression(expression);
-  if (ts.isIdentifier(value)) return [value.text];
-  if (!ts.isPropertyAccessExpression(value) || value.questionDotToken) return null;
-  const parent = staticPropertyPath(value.expression);
-  return parent ? [...parent, value.name.text] : null;
+  return staticPathHasBinding(path, observableBindings) ? path : null;
 }
 
 function samePath(left: readonly string[], right: readonly string[]): boolean {

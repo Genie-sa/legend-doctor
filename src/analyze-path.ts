@@ -173,7 +173,10 @@ export async function analyzePathDetailed(
         context.sourceIndex.deferredCallbackHooksFor(file)
       )
     );
-    const importedObservables = context.sourceIndex.observablesFor(file);
+    const importedObservables = new Set([
+      ...context.sourceIndex.observablesFor(file),
+      ...context.sourceIndex.observablePathsFor(file),
+    ]);
     const importedObservableFactories = context.sourceIndex.observableFactoriesFor(file);
     practices.push(
       ...analyzeLegendPracticesFile(

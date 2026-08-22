@@ -7,6 +7,7 @@ import {
   isDeclarationName,
   isNonValueIdentifier,
   rootIdentifier,
+  staticPathHasBinding,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import { findAncestor, isRuntimeFunctionLike, type RuntimeFunctionLike, visit } from "../ast.js";
@@ -804,8 +805,7 @@ function provenObservablePath(
     if (current.questionDotToken || RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) return null;
     current = current.expression;
   }
-  const root = rootIdentifier(path);
-  return root && observableBindings.has(root.text) ? path : null;
+  return staticPathHasBinding(path, observableBindings) ? path : null;
 }
 
 function propertyAccessIsExecutable(access: ts.PropertyAccessExpression): boolean {

@@ -10,25 +10,29 @@
 | Manual hook labels | 790 |
 | Known misses | 2 |
 | State groups | 18/18 |
-| Legend practices | 92/92 |
+| Legend practices | 100/100 |
 | Actionable precision | 100% (425/425) |
 | Actionable recall | 99.5% (425/427) |
-| Unit tests | 511/511 |
+| Unit tests | 515/515 |
 
-The latest phase narrows broad nullable values through one shared optional child path without changing short-circuit
-behavior. Against commit `41272b8`, the exact current 221-target action delta is:
+The latest phase resolves exact Legend observable members inside controller objects without treating the controller or
+its sibling methods as observable. Against commit `dad3c3a`, the exact current 221-target action delta is:
 
-- Hoalu adds two `narrow-use-value-subscription` practices at
-  `components/charts/dashboard-date-filter.tsx:110` and
-  `components/receipt/scan-queue-review-dialog.tsx:83`.
+- Hoalu adds eight `narrow-use-value-subscription` practices: expense deletion, income deletion, event editing and
+  deletion, wallet editing and deletion, and recurring-bill archive and restore dialogs.
 - All 221 targets have zero hook action changes.
 - Platform, Memoria, Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, and Open WebUI React Native
   have zero Legend practice action changes.
 
-The proof requires all raw-value reads to share one static observable prefix. Optional access inside the selected prefix
-is accepted only when the prefix replaces the complete access expression; optional access after the prefix remains in
-place. Divergent optional paths, dynamic keys, whole-value escape, writes, and a later property call after a removed
-short-circuit all abstain.
+The proof accepts a `const` object literal or one local factory whose complete body returns one exact object literal and
+whose member is initialized by an unshadowed Legend `observable(...)` import. It follows named aliases and barrels, and
+qualified path provenance is shared by reads, writes, toggles, clone checks, aliases, and `typeof` queries. Spreads,
+computed or duplicate members, conditional or multi-statement returns, unknown factories, and name-only `$` patterns
+abstain. Reassigned factories, whole-controller escape, optional controller access, and observable-member replacement
+through any resolved source alias invalidate the proof project-wide. The controller root and sibling methods remain
+unproven. The recurring-bill delete dialog remains unchanged
+because its optional id and title reads diverge below `data`, and the existing optional-chain proof deliberately does not
+move short-circuiting ahead of remaining member access.
 
 ## Source-proven option command proof
 

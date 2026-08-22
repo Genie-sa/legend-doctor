@@ -29,6 +29,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Resolved leaf consumer with verified render-only contract | Owner observable plus one call-site subscriber; child API unchanged |
 | Existing `useValue` transported to one stable small leaf | Move the subscription into a leaf wrapper; keep ownership and child APIs unchanged |
 | Broad subscriptions | Lowest proven observable path |
+| Observable members inside controller objects | Resolve the exact member through local factories, aliases, and barrels |
 | Divergent leaf reads from one broad `useValue(parent$)` | Per-leaf `useValue` subscriptions with one mechanical read rewrite |
 | `useValue(leaf$.get())` | `useValue(leaf$)` with types and options preserved |
 | Non-reactive `.get()` | `.peek()` in proven snapshots and commands |
@@ -49,10 +50,10 @@ Measured on pinned real applications:
 | Manual labels | 790 |
 | Known misses | 2 |
 | State groups | 18/18 |
-| Unit tests | 511/511 |
+| Unit tests | 515/515 |
 | Actionable precision | 100% (425/425) |
 | Actionable recall | 99.5% (425/427) |
-| Legend practice precision | 100% (92/92) |
+| Legend practice precision | 100% (100/100) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open WebUI React Native, and Hoalu.
@@ -294,6 +295,14 @@ return <Name>{name}</Name>;
 The rule follows nested children and selects the deepest static path shared by every read. Optional chains qualify only
 when that shared boundary preserves short-circuiting before any remaining member access or call. Divergent optional
 paths, dynamic access, assertion boundaries, calls, writes, and raw object transport stay unchanged.
+
+An imported path may begin at one controller member when source resolution proves that exact member is initialized by
+Legend `observable(...)`. The controller must be a `const` object literal or the result of one local function whose
+entire body returns one exact object literal. Named aliases, barrels, and qualified `typeof` aliases retain the member
+provenance. The controller root and sibling methods never become observable. Spreads, computed or duplicate members,
+conditional or multi-statement factories, shadowed Legend factories, unknown factories, and name-only `$` conventions
+stay unchanged. Reassigned local factories, whole-controller escapes, optional controller access, and observable-member
+replacement through any resolved source alias also invalidate the proof project-wide.
 
 ### Direct leaf → direct `useValue`
 
