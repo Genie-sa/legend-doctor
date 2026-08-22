@@ -8,21 +8,36 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 789 |
-| Known misses | 5 |
+| Known misses | 4 |
 | State groups | 18/18 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (422/422) |
-| Actionable recall | 98.8% (422/427) |
-| Unit tests | 504/504 |
+| Actionable precision | 100% (423/423) |
+| Actionable recall | 99.1% (423/427) |
+| Unit tests | 505/505 |
 
-The latest phase resolves transitive callback timing for command-only getters passed through custom hooks. Against commit
-`31863b5`, the exact current 221-target action delta is:
+The latest phase proves effect-owned custom-hook cursors whose only UI consumer is a stable-keyed list row. Against commit
+`46d00ca`, the exact current 221-target action delta is:
 
-- Expensify: `currentDescription` in `IOURequestStepDescription.tsx` and `currentMerchant` in
-  `IOURequestStepMerchant.tsx` change from `review-state` to `use-ref`.
-- Tree Map, Tree Wallet, Memoria src, Memoria app, Legend Music, Excalidraw, Formbricks, Outline, Genie Courses, Open
+- Legend Music: `highlightedIndex` in `components/JumpSearchMenuDropdown/hooks.ts` changes from `review-state` to
+  `use-observable`.
+- Tree Map, Tree Wallet, Memoria src, Memoria app, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open
   WebUI React Native, and Hoalu have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Effect-owned keyed cursor proof
+
+The state must be a numeric cursor owned by a JSX-free custom hook, returned with its setter, and written only inside
+direct imported React effects. Every state read inside an effect must occur in a callback passed to a source-resolved
+registration method that stores the callback in an owner array and removes the same callback from that array in its
+returned cleanup. The call-site effect must retain and invoke that disposer. Synchronous callback calls, unresolved
+registration sources, missing cleanup, shadowing, callable state, companion writes, and other transports abstain.
+
+Across the project, exactly one production consumer may import the hook. It must destructure the cursor directly, compare
+it with the repeated row index in one imported React `useCallback`, use that equality only in row JSX attributes, pass the
+callback directly as one list's `renderItem`, provide an item-derived key that never uses the index, and broadcast the
+cursor only through that list's `extraData`. Multiple consumers, index keys, conditional row mounting, dependency aliases,
+and any other read abstain. The emitted migration keeps hook ownership, effects, cleanup, and write order; uses `peek()` in
+registered commands; removes the cursor-only dependencies and list broadcast; and places `useValue` at the keyed row.
 
 ## Transitive command-callback proof
 
@@ -160,10 +175,10 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Five opportunities remain non-enforced:
+Four opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- two observable leaf migrations covering repeated rows;
+- one observable leaf migration spanning multiple drop surfaces;
 - two ref migrations behind async confirmation or form callback contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,

@@ -13,7 +13,7 @@ import {
   isSupportedAnalysisFile,
   type AnalysisFile,
 } from "./analysis-project.js";
-import { nodeWithin, visit } from "./ast.js";
+import { nearestNestedFunction, nodeWithin, visit } from "./ast.js";
 import { pathIdentityKey } from "./path-identity.js";
 
 interface ImportBinding {
@@ -32,6 +32,7 @@ const REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "useLayou
 
 interface ModuleRecord {
   componentDeclarations: ReadonlyMap<string, ComponentFunction>;
+  deferredCallbackOwners: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<number>>>;
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
   hookDeclarations: ReadonlyMap<string, ComponentFunction>;
   imports: ReadonlyMap<string, ImportBinding>;
@@ -49,6 +50,9 @@ interface ModuleRecord {
 export interface SourceIndex {
   componentDeclarationFor(file: string, name: string): ResolvedSymbol | null;
   componentsFor(file: string): ReadonlySet<string>;
+  deferredCallbackRegistrationsFor(
+    file: string
+  ): ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<number>>>;
   deferredCallbackHooksFor(file: string): ReadonlyMap<string, ReadonlySet<number>>;
   hookDeclarationFor(file: string, name: string): ResolvedSymbol | null;
   legendValueBridgesFor(file: string): ReadonlyMap<string, ReadonlySet<string>>;
@@ -64,6 +68,7 @@ export interface ResolvedSymbol {
 
 type SourceSymbolKind =
   | "component"
+  | "deferred-callback-owner"
   | "deferred-callback-hook"
   | "hook"
   | "legend-value-hook"
@@ -94,6 +99,7 @@ export function buildSourceIndexFromFiles(
 
   const compilerContexts = new Map<string, CompilerContext>();
   const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const deferredCallbackOwnersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const deferredCallbackHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const hooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const legendValueHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
@@ -133,10 +139,12 @@ export function buildSourceIndexFromFiles(
     if (localName) {
       const declared = kind === "component"
         ? record.componentDeclarations.has(localName)
-        : kind === "deferred-callback-hook"
-          ? record.deferredCallbackHooks.has(localName)
-          : kind === "hook"
-            ? record.hookDeclarations.has(localName)
+        : kind === "deferred-callback-owner"
+          ? record.deferredCallbackOwners.has(localName)
+          : kind === "deferred-callback-hook"
+            ? record.deferredCallbackHooks.has(localName)
+            : kind === "hook"
+              ? record.hookDeclarations.has(localName)
           : kind === "legend-value-hook"
             ? record.legendValueHooks.has(localName)
             : kind === "legend-value-writer"
@@ -194,10 +202,12 @@ export function buildSourceIndexFromFiles(
     const importer = normalizeFile(file);
     const cache = kind === "component"
       ? componentsByImporter
-      : kind === "deferred-callback-hook"
-        ? deferredCallbackHooksByImporter
-        : kind === "hook"
-          ? hooksByImporter
+      : kind === "deferred-callback-owner"
+        ? deferredCallbackOwnersByImporter
+        : kind === "deferred-callback-hook"
+          ? deferredCallbackHooksByImporter
+          : kind === "hook"
+            ? hooksByImporter
         : kind === "legend-value-hook"
           ? legendValueHooksByImporter
           : kind === "legend-value-writer"
@@ -226,6 +236,14 @@ export function buildSourceIndexFromFiles(
   return {
     componentDeclarationFor: (file, name) => resolvedFor(file, "component").get(name) ?? null,
     componentsFor: file => new Set(resolvedFor(file, "component").keys()),
+    deferredCallbackRegistrationsFor: file => {
+      const registrations = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
+      for (const [localName, symbol] of resolvedFor(file, "deferred-callback-owner")) {
+        const methods = records.get(symbol.file)?.deferredCallbackOwners.get(symbol.localName);
+        if (methods) registrations.set(localName, methods);
+      }
+      return registrations;
+    },
     deferredCallbackHooksFor: file => {
       const hooks = new Map<string, ReadonlySet<number>>();
       for (const [localName, symbol] of resolvedFor(file, "deferred-callback-hook")) {
@@ -303,6 +321,7 @@ function compilerContextFor(
 
 function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const componentDeclarations = new Map<string, ComponentFunction>();
+  const deferredCallbackOwners = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
   const deferredCallbackHooks = new Map<string, ReadonlySet<number>>();
   const hookDeclarations = new Map<string, ComponentFunction>();
   const imports = new Map<string, ImportBinding>();
@@ -321,6 +340,13 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const reactEffectHooks = new Set<string>();
   const reactNamespaces = new Set<string>();
   const useValueHooks = new Set<string>();
+  const deferredMethodsByClass = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isClassDeclaration(statement) || !statement.name) continue;
+    const methods = deferredRegistrationMethods(statement);
+    if (methods.size > 0) deferredMethodsByClass.set(statement.name.text, methods);
+  }
 
   for (const statement of sourceFile.statements) {
     if (
@@ -441,6 +467,18 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
         if (
           ts.isIdentifier(declaration.name) &&
           initializer &&
+          ts.isNewExpression(initializer) &&
+          ts.isIdentifier(initializer.expression)
+        ) {
+          const methods = deferredMethodsByClass.get(initializer.expression.text);
+          if (methods) {
+            deferredCallbackOwners.set(declaration.name.text, methods);
+            if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
+          }
+        }
+        if (
+          ts.isIdentifier(declaration.name) &&
+          initializer &&
           ts.isCallExpression(initializer) &&
           ts.isIdentifier(initializer.expression)
         ) {
@@ -513,8 +551,20 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
       }
       continue;
     }
-    if (ts.isExportAssignment(statement) && ts.isIdentifier(statement.expression)) {
-      localExports.set("default", statement.expression.text);
+    if (ts.isExportAssignment(statement)) {
+      const expression = unwrapTransparentExpression(statement.expression);
+      if (ts.isIdentifier(expression)) {
+        localExports.set("default", expression.text);
+      } else if (
+        ts.isNewExpression(expression) &&
+        ts.isIdentifier(expression.expression)
+      ) {
+        const methods = deferredMethodsByClass.get(expression.expression.text);
+        if (methods) {
+          deferredCallbackOwners.set("default", methods);
+          localExports.set("default", "default");
+        }
+      }
     }
   }
 
@@ -527,6 +577,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
 
   return {
     componentDeclarations,
+    deferredCallbackOwners,
     deferredCallbackHooks,
     hookDeclarations,
     imports,
@@ -669,6 +720,151 @@ function directLegendValueWriterObservable(
   }
   const observable = unwrapTransparentExpression(expression.expression.expression);
   return ts.isIdentifier(observable) ? observable.text : null;
+}
+
+function deferredRegistrationMethods(
+  declaration: ts.ClassDeclaration
+): ReadonlyMap<string, ReadonlySet<number>> {
+  const methods = new Map<string, ReadonlySet<number>>();
+  for (const member of declaration.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !ts.isIdentifier(member.name)) continue;
+    const deferred = new Set<number>();
+    member.parameters.forEach((parameter, index) => {
+      if (
+        ts.isIdentifier(parameter.name) &&
+        bindingDeclarationCount(member, parameter.name.text) === 1 &&
+        methodStoresCallbackUntilCleanup(declaration, member, parameter.name)
+      ) {
+        deferred.add(index);
+      }
+    });
+    if (deferred.size > 0) methods.set(member.name.text, deferred);
+  }
+  return methods;
+}
+
+function methodStoresCallbackUntilCleanup(
+  declaration: ts.ClassDeclaration,
+  method: ts.MethodDeclaration,
+  parameter: ts.Identifier
+): boolean {
+  if (!method.body) return false;
+  const returns: ts.ReturnStatement[] = [];
+  const references: ts.Identifier[] = [];
+  visit(method.body, node => {
+    if (ts.isReturnStatement(node) && nearestNestedFunction(node, method) === null) {
+      returns.push(node);
+    }
+    if (
+      ts.isIdentifier(node) &&
+      node.text === parameter.text &&
+      node !== parameter &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      references.push(node);
+    }
+  });
+  if (returns.length !== 1 || !returns[0]!.expression || references.length < 2) return false;
+  const cleanup = unwrapTransparentExpression(returns[0]!.expression!);
+  if (!ts.isArrowFunction(cleanup) && !ts.isFunctionExpression(cleanup)) return false;
+
+  const stored = references.flatMap(reference => {
+    const property = storedCallbackProperty(reference, declaration);
+    return property ? [{ property, reference }] : [];
+  });
+  if (stored.length !== 1 || stored[0]!.reference.getStart() >= returns[0]!.getStart()) return false;
+  const property = stored[0]!.property;
+  return references.every(reference => {
+    if (reference === stored[0]!.reference) return true;
+    return nodeWithin(reference, cleanup) &&
+      callbackReferenceIsRemoved(reference, cleanup, property);
+  });
+}
+
+function callbackReferenceIsRemoved(
+  reference: ts.Identifier,
+  cleanup: ts.ArrowFunction | ts.FunctionExpression,
+  property: string
+): boolean {
+  const comparison = reference.parent;
+  if (
+    !ts.isBinaryExpression(comparison) ||
+    (comparison.left !== reference && comparison.right !== reference) ||
+    ![
+      ts.SyntaxKind.ExclamationEqualsToken,
+      ts.SyntaxKind.ExclamationEqualsEqualsToken,
+    ].includes(comparison.operatorToken.kind)
+  ) {
+    return false;
+  }
+  let filter: ts.CallExpression | null = null;
+  for (let current: ts.Node | undefined = comparison.parent; current && current !== cleanup; current = current.parent) {
+    if (
+      ts.isCallExpression(current) &&
+      ts.isPropertyAccessExpression(current.expression) &&
+      current.expression.name.text === "filter" &&
+      isThisProperty(current.expression.expression, property) &&
+      current.arguments.some(argument => nodeWithin(reference, argument))
+    ) {
+      filter = current;
+      break;
+    }
+  }
+  if (!filter) return false;
+  for (let current: ts.Node | undefined = filter.parent; current && current !== cleanup; current = current.parent) {
+    if (
+      ts.isBinaryExpression(current) &&
+      current.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      isThisProperty(current.left, property) &&
+      unwrapTransparentExpression(current.right) === filter
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function storedCallbackProperty(
+  reference: ts.Identifier,
+  declaration: ts.ClassDeclaration
+): string | null {
+  const call = reference.parent;
+  if (
+    !ts.isCallExpression(call) ||
+    !call.arguments.includes(reference) ||
+    !ts.isPropertyAccessExpression(call.expression) ||
+    call.expression.name.text !== "push" ||
+    !ts.isPropertyAccessExpression(call.expression.expression) ||
+    call.expression.expression.expression.kind !== ts.SyntaxKind.ThisKeyword
+  ) {
+    return null;
+  }
+  const property = call.expression.expression.name.text;
+  const field = declaration.members.find(member =>
+    ts.isPropertyDeclaration(member) &&
+    ts.isIdentifier(member.name) &&
+    member.name.text === property
+  );
+  if (!field || !ts.isPropertyDeclaration(field)) return null;
+  const initializer = field.initializer && unwrapTransparentExpression(field.initializer);
+  return (
+    (initializer && ts.isArrayLiteralExpression(initializer)) ||
+    !!field.type &&
+      (ts.isArrayTypeNode(field.type) ||
+        (ts.isTypeReferenceNode(field.type) &&
+          ts.isIdentifier(field.type.typeName) &&
+          field.type.typeName.text === "Array"))
+  )
+    ? property
+    : null;
+}
+
+function isThisProperty(expression: ts.Expression, property: string): boolean {
+  const value = unwrapTransparentExpression(expression);
+  return ts.isPropertyAccessExpression(value) &&
+    value.expression.kind === ts.SyntaxKind.ThisKeyword &&
+    value.name.text === property;
 }
 
 function isObservableTypeReference(

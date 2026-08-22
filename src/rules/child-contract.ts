@@ -26,10 +26,20 @@ export interface ChildComponentSource {
 }
 
 export interface ChildContractResolver {
+  callbackRegistrationIsDeferred(
+    ownerBinding: string,
+    method: string,
+    argumentIndex: number
+  ): boolean;
   callbackPropertyIsDeferred(
     hookName: string,
     argumentIndex: number,
     property: string
+  ): boolean;
+  hookStateHasKeyedRowConsumer(
+    hookName: string,
+    stateProperty: string,
+    setterProperty: string
   ): boolean;
   resolveComponent(name: string): ChildComponentSource | null;
 }

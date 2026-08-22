@@ -21,6 +21,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Coupled fields | One grouped model and one atomic migration |
 | Payload-gated timed feedback | One owner observable, batched reset, nested leaf subscription |
 | Effect-written presentation state | Preserve the effect; subscribe only in the proven leaf |
+| Effect-owned custom-hook cursor in one stable-keyed list | Preserve effects and cleanup; remove the list broadcast and subscribe per row |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | One unresolved JSX consumer | One local subscriber wrapper; no child contract required |
 | Resolved leaf consumer with verified render-only contract | Owner observable plus one call-site subscriber; child API unchanged |
@@ -44,11 +45,11 @@ Measured on pinned real applications:
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual labels | 789 |
-| Known misses | 5 |
+| Known misses | 4 |
 | State groups | 18/18 |
-| Unit tests | 504/504 |
-| Actionable precision | 100% (422/422) |
-| Actionable recall | 98.8% (422/427) |
+| Unit tests | 505/505 |
+| Actionable precision | 100% (423/423) |
+| Actionable recall | 99.1% (423/427) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -689,6 +690,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/async-leaf-status.ts` | Event-owned async status leaves |
 | `src/rules/command-only-state.ts` | Command-only state, callback publication, and ref safety |
 | `src/rules/source-callback-contract.ts` | Cross-file custom-hook callback timing and ref-storage proofs |
+| `src/rules/hook-keyed-cursor-contract.ts` | Cross-file stable-keyed row cursor consumers |
 | `src/rules/deferred-reveal.ts` | Deferred reveal and render gates |
 | `src/rules/keyed-selection.ts` | Row and collection selection |
 | `src/rules/lazy-callback-leaf.ts` | Lazy owner state rendered in one nested callback leaf |

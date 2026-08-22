@@ -282,6 +282,7 @@ function analyzeParsedSource(
   const safeCommandStates = new Set<StateCandidate>();
   const selfRefreshingCommandStates = new Set<StateCandidate>();
   const memoizedOptionCommandStates = new Set<StateCandidate>();
+  const returnedKeyedCursorStates = new Set<StateCandidate>();
   const reactiveMutationAffectedStates = new Set<StateCandidate>();
   for (const state of states) {
     const usage = usageByState.get(state);
@@ -331,6 +332,12 @@ function analyzeParsedSource(
       effectOwnedMemoizedCommand
     );
     if (subtree) subtreeByState.set(state, subtree);
+    if (
+      childContracts &&
+      isEffectOwnedReturnedKeyedCursor(state, usage, directEffectCalls, childContracts)
+    ) {
+      returnedKeyedCursorStates.add(state);
+    }
   }
   const effectStateScopes = collectEffectStateScopes(states, usageByState);
   const observableSelectionOwners = new Set(
@@ -508,7 +515,8 @@ function analyzeParsedSource(
           childContracts,
           deferredCallbackHooks,
           reactCommit.eventTransitionCallbacks.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
-          memoizedOptionCommandStates.has(state)
+          memoizedOptionCommandStates.has(state),
+          returnedKeyedCursorStates.has(state)
         );
     const commitSensitiveOverride = commitSensitive &&
       baseClassification.action !== "review-state" &&
@@ -2479,7 +2487,8 @@ function classifyState(
   childContracts: ChildContractResolver | null,
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
   eventTransitionCallbacks: ReadonlySet<RuntimeFunctionLike>,
-  hasMemoizedOptionCommand: boolean
+  hasMemoizedOptionCommand: boolean,
+  hasReturnedKeyedCursorConsumer: boolean
 ): ClassifiedState {
   if (nonProductionHarness) {
     return {
@@ -2528,6 +2537,13 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace keyed selection state \`${state.valueName}\` with a component-lifetime observable; keep repeated row events command-only, subscribe per row where equality is rendered, move selected-item or non-null projections into one footer or detail leaf, and snapshot event commands without subscribing.`,
+    };
+  }
+  if (hasReturnedKeyedCursorConsumer && !hasCompanionWrites) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace effect-owned custom-hook cursor \`${state.valueName}\` with a component-lifetime observable; keep every effect and cleanup, use non-tracking reads in registered commands, remove cursor-only dependencies and the list \`extraData\` broadcast, and subscribe with an equality selector only in the stable-keyed row.`,
     };
   }
   if (siblingRenderCut && usage.effectWrites === 0) {
@@ -4572,6 +4588,204 @@ function runtimeFunctionName(owner: RuntimeFunctionLike): string | null {
 function isCustomHookOwner(owner: RuntimeFunctionLike): boolean {
   const name = runtimeFunctionName(owner);
   return name !== null && /^use[A-Z0-9]/.test(name);
+}
+
+function isEffectOwnedReturnedKeyedCursor(
+  state: StateCandidate,
+  usage: StateUsage,
+  directEffectCalls: ReadonlySet<ts.CallExpression>,
+  childContracts: ChildContractResolver
+): boolean {
+  const hookName = runtimeFunctionName(state.owner);
+  if (
+    !hookName ||
+    !isCustomHookOwner(state.owner) ||
+    jsxElementCount(state.owner) !== 0 ||
+    !hasNumericStateInitializer(state) ||
+    usage.localRenderReads !== 1 ||
+    usage.effectReads < 1 ||
+    usage.deferredReads !== 0 ||
+    usage.transportedOccurrences !== 0 ||
+    usage.setterCalls < 1 ||
+    usage.effectWrites !== usage.setterCalls ||
+    usage.setterReferences !== usage.setterCalls + 1 ||
+    usage.shadowed ||
+    stateMayHoldCallable(state) ||
+    !primitiveSetterUpdatersArePure(state, usage) ||
+    !returnsStateAndSetter(state) ||
+    !effectCursorReadsAreDeferred(state, directEffectCalls, childContracts)
+  ) {
+    return false;
+  }
+  return !!state.setterName && childContracts.hookStateHasKeyedRowConsumer(
+    hookName,
+    state.valueName,
+    state.setterName
+  );
+}
+
+function hasNumericStateInitializer(state: StateCandidate): boolean {
+  const initializer = state.call.arguments[0];
+  if (!initializer) return false;
+  const value = unwrapTransparentExpression(initializer);
+  return ts.isNumericLiteral(value) ||
+    (ts.isPrefixUnaryExpression(value) &&
+      value.operator === ts.SyntaxKind.MinusToken &&
+      ts.isNumericLiteral(value.operand));
+}
+
+function returnsStateAndSetter(state: StateCandidate): boolean {
+  if (!state.owner.body || !state.setterName) return false;
+  let returns = 0;
+  let matched = false;
+  visitSkippingNestedRuntimeFunctions(state.owner.body, node => {
+    if (!ts.isReturnStatement(node) || !node.expression) return;
+    returns += 1;
+    const value = unwrapTransparentExpression(node.expression);
+    if (!ts.isObjectLiteralExpression(value)) return;
+    const names = new Set(value.properties.flatMap(property => {
+      if (ts.isShorthandPropertyAssignment(property)) return [property.name.text];
+      if (!ts.isPropertyAssignment(property)) return [];
+      const initializer = unwrapTransparentExpression(property.initializer);
+      return ts.isIdentifier(property.name) &&
+        ts.isIdentifier(initializer) &&
+        property.name.text === initializer.text
+        ? [initializer.text]
+        : [];
+    }));
+    matched = names.has(state.valueName) && names.has(state.setterName!);
+  });
+  return returns === 1 && matched;
+}
+
+function effectCursorReadsAreDeferred(
+  state: StateCandidate,
+  directEffectCalls: ReadonlySet<ts.CallExpression>,
+  childContracts: ChildContractResolver
+): boolean {
+  if (!state.owner.body) return false;
+  const nestedReadEffects = new Set<ts.CallExpression>();
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== state.valueName ||
+      node.parent === state.call.parent ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const returned = findAncestorUntil(node, ts.isReturnStatement, state.owner);
+    if (returned && returned.expression && ts.isObjectLiteralExpression(unwrapTransparentExpression(returned.expression))) {
+      return;
+    }
+    const effect = ancestorCallInSet(node, directEffectCalls, state.owner);
+    if (!effect) {
+      safe = false;
+      return;
+    }
+    const dependencies = effect.arguments[1];
+    if (dependencies && nodeWithin(node, dependencies)) return;
+    const callback = effect.arguments[0];
+    const nested = nearestNestedFunction(node, state.owner);
+    if (
+      !callback ||
+      (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+      !nested ||
+      nested === callback ||
+      (!ts.isArrowFunction(nested) && !ts.isFunctionExpression(nested)) ||
+      !registeredCallbackHasEffectCleanup(nested, callback, childContracts)
+    ) {
+      safe = false;
+      return;
+    }
+    nestedReadEffects.add(effect);
+  });
+  return safe && nestedReadEffects.size > 0 && [...nestedReadEffects].every(effect => {
+    const callback = effect.arguments[0];
+    const dependencies = effect.arguments[1];
+    return !!callback &&
+      (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
+      callbackHasCleanup(callback, EMPTY_STATE_CANDIDATES) &&
+      !!dependencies &&
+      ts.isArrayLiteralExpression(dependencies) &&
+      dependencies.elements.some(element => {
+        const value = unwrapTransparentExpression(element);
+        return ts.isIdentifier(value) && value.text === state.valueName;
+      });
+  });
+}
+
+function registeredCallbackHasEffectCleanup(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  effect: ts.ArrowFunction | ts.FunctionExpression,
+  childContracts: ChildContractResolver
+): boolean {
+  const call = callback.parent;
+  const owner = findAncestor(effect, isRuntimeFunctionLike);
+  if (
+    !owner ||
+    !ts.isCallExpression(call) ||
+    !call.arguments.includes(callback) ||
+    !ts.isPropertyAccessExpression(call.expression) ||
+    !ts.isIdentifier(call.expression.expression) ||
+    bindingDeclarationCount(owner, call.expression.expression.text) > 0 ||
+    !childContracts.callbackRegistrationIsDeferred(
+      call.expression.expression.text,
+      call.expression.name.text,
+      call.arguments.indexOf(callback)
+    )
+  ) {
+    return false;
+  }
+  const declaration = findAncestorUntil(call, ts.isVariableDeclaration, effect);
+  if (
+    !declaration ||
+    !declaration.initializer ||
+    unwrapTransparentExpression(declaration.initializer) !== call ||
+    !ts.isIdentifier(declaration.name) ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    bindingDeclarationCount(effect, declaration.name.text) !== 1
+  ) {
+    return false;
+  }
+  const disposerName = declaration.name.text;
+  const references: ts.Identifier[] = [];
+  visit(effect.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === disposerName &&
+      node !== declaration.name &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      references.push(node);
+    }
+  });
+  return references.length > 0 && references.every(reference => {
+    const returned = findAncestorUntil(reference, ts.isReturnStatement, effect);
+    if (!returned?.expression) return false;
+    const cleanup = unwrapTransparentExpression(returned.expression);
+    if (cleanup === reference) return true;
+    if (!ts.isArrowFunction(cleanup) && !ts.isFunctionExpression(cleanup)) return false;
+    return ts.isCallExpression(reference.parent) &&
+      reference.parent.expression === reference &&
+      nearestNestedFunction(reference, effect) === cleanup;
+  });
+}
+
+function ancestorCallInSet(
+  node: ts.Node,
+  calls: ReadonlySet<ts.CallExpression>,
+  boundary: ts.Node
+): ts.CallExpression | null {
+  for (let current: ts.Node | undefined = node.parent; current && current !== boundary; current = current.parent) {
+    if (ts.isCallExpression(current) && calls.has(current)) return current;
+  }
+  return null;
 }
 
 function jsxTargetName(attribute: ts.JsxAttribute): string | null {

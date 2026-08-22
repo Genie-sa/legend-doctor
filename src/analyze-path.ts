@@ -6,7 +6,11 @@ import ts from "typescript";
 import { unwrapTransparentExpression } from "./analysis-ast.js";
 import { analyzeLegendPracticesFile } from "./analyze-legend-practices.js";
 import { analyzeSourceFile } from "./analyze-source.js";
-import { isRuntimeFunctionLike, type RuntimeFunctionLike } from "./ast.js";
+import {
+  isNonProductionHarness,
+  isRuntimeFunctionLike,
+  type RuntimeFunctionLike,
+} from "./ast.js";
 import {
   type ChildComponentSource,
   type ChildContractResolver,
@@ -16,6 +20,7 @@ import {
   type SourceHookDeclaration,
   type SourceHookResolver,
 } from "./rules/source-callback-contract.js";
+import { keyedCursorConsumerResult } from "./rules/hook-keyed-cursor-contract.js";
 import {
   AnalysisCoverageLedger,
   type AnalysisCoverageOutcome,
@@ -450,6 +455,7 @@ function createChildContractResolver(
   importerFile: string
 ): ChildContractResolver {
   const callbackContracts = new Map<string, boolean>();
+  const keyedCursorContracts = new Map<string, boolean>();
   const hookSources = new Map<string, SourceHookDeclaration | null>();
   const hookResolver: SourceHookResolver = {
     resolveHook(file: string, name: string): SourceHookDeclaration | null {
@@ -473,7 +479,11 @@ function createChildContractResolver(
       return source;
     },
   };
+  const deferredRegistrations = context.sourceIndex.deferredCallbackRegistrationsFor(importerFile);
   return {
+    callbackRegistrationIsDeferred(ownerBinding, method, argumentIndex): boolean {
+      return deferredRegistrations.get(ownerBinding)?.get(method)?.has(argumentIndex) ?? false;
+    },
     callbackPropertyIsDeferred(hookName, argumentIndex, property): boolean {
       const key = `${hookName}\0${argumentIndex}\0${property}`;
       const cached = callbackContracts.get(key);
@@ -489,6 +499,42 @@ function createChildContractResolver(
       callbackContracts.set(key, deferred);
       return deferred;
     },
+    hookStateHasKeyedRowConsumer(hookName, stateProperty, setterProperty): boolean {
+      const key = `${hookName}\0${stateProperty}\0${setterProperty}`;
+      const cached = keyedCursorContracts.get(key);
+      if (cached !== undefined) return cached;
+      const declaration = context.sourceIndex.hookDeclarationFor(importerFile, hookName);
+      if (!declaration) {
+        keyedCursorContracts.set(key, false);
+        return false;
+      }
+      let safeConsumers = 0;
+      let unsafe = false;
+      for (const file of context.project.files) {
+        if (isNonProductionHarness(file.originalPath)) continue;
+        for (const binding of importedHookBindings(file.sourceFile)) {
+          const resolved = context.sourceIndex.hookDeclarationFor(file.identityPath, binding);
+          if (
+            !resolved ||
+            pathIdentityKey(resolved.file) !== pathIdentityKey(declaration.file) ||
+            resolved.localName !== declaration.localName
+          ) {
+            continue;
+          }
+          const result = keyedCursorConsumerResult(
+            file.sourceFile,
+            binding,
+            stateProperty,
+            setterProperty
+          );
+          if (result === "safe") safeConsumers += 1;
+          if (result === "unsafe") unsafe = true;
+        }
+      }
+      const safe = !unsafe && safeConsumers === 1;
+      keyedCursorContracts.set(key, safe);
+      return safe;
+    },
     resolveComponent(name: string): ChildComponentSource | null {
       const resolved = context.sourceIndex.componentDeclarationFor(importerFile, name);
       if (!resolved) return null;
@@ -501,6 +547,24 @@ function createChildContractResolver(
       );
     },
   };
+}
+
+function importedHookBindings(sourceFile: ts.SourceFile): readonly string[] {
+  const bindings: string[] = [];
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || statement.importClause?.isTypeOnly) continue;
+    const clause = statement.importClause;
+    if (clause?.name && /^use[A-Z0-9]/.test(clause.name.text)) {
+      bindings.push(clause.name.text);
+    }
+    if (!clause?.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+    for (const element of clause.namedBindings.elements) {
+      if (!element.isTypeOnly && /^use[A-Z0-9]/.test(element.name.text)) {
+        bindings.push(element.name.text);
+      }
+    }
+  }
+  return bindings;
 }
 
 function findHookDeclaration(

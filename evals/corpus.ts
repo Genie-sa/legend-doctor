@@ -1993,7 +1993,7 @@ export const goldCases = [
     ["components/MediaLibrary/Sidebar.tsx", 67, "activeNativeDropPlaylistId", "use-observable"],
   ].map(([file, line, name, action]) => ({
     action: action as "use-observable",
-    ...(line === 67 ? {} : { enforced: false as const }),
+    ...(name === "isDragOver" ? { enforced: false as const } : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,

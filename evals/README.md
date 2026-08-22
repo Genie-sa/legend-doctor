@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-789 manual hook labels, including 5 non-enforced opportunities, plus eighteen
+789 manual hook labels, including 4 non-enforced opportunities, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -62,6 +62,14 @@ empty-string name; every direct cursor and name mutation is paired in the same s
 additional name writes must be the matching controlled `value` handler. The recommendation keeps one owner-lifetime
 observable object, uses atomic assignments for paired transitions, and moves subscriptions to row or control leaves.
 Independent cursor writes, effects, functional updaters, non-controlled setter references, and escapes are hard negatives.
+
+One Legend Music label verifies an effect-owned numeric cursor returned by a custom hook and broadcast through one keyed
+list. Cross-file source must prove that each state-reading registration stores its callback until an exact cleanup, while
+the only consumer compares the cursor with the row index inside an imported React `useCallback`, passes that callback to
+one list, supplies a stable item-derived key, and uses the cursor only as list `extraData`. The recommendation preserves
+effects, cleanup, ownership, and write order; changes command reads to non-tracking snapshots; removes the cursor-only
+dependencies and list broadcast; and subscribes only in the keyed row. Synchronous registrations, index keys, mount
+control, multiple consumers, callback escape, and non-production consumers abstain.
 
 Two Tree Map labels and one exact group label verify a selection model whose false-initialized mode and empty ID array
 enter and cancel together. Every mode write must pair with an empty-array reset, while independent collection writes must
