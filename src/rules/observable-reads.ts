@@ -7,13 +7,21 @@ import {
   isDeclarationName,
   isNonValueIdentifier,
   rootIdentifier,
+  staticPropertyPath,
   staticPathHasBinding,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
-import { findAncestor, isRuntimeFunctionLike, type RuntimeFunctionLike, visit } from "../ast.js";
+import {
+  findAncestor,
+  isRuntimeFunctionLike,
+  type RuntimeFunctionLike,
+  visit,
+  visitSkippingNestedRuntimeFunctions,
+} from "../ast.js";
 import { isImportedHookCall, type HookImports } from "../imports.js";
 import type { LegendPracticeFinding } from "../types.js";
 import {
+  bindingContainsName,
   callbackIsEventRooted,
   hasUnstableSubtreeLifetime,
   isSafeJsxProjectionReference,
@@ -102,7 +110,8 @@ function moveUseValueDownFinding(
   if (
     !owner?.body ||
     bindingDeclarationCount(owner, localName) !== 1 ||
-    jsxElementCount(owner) < MIN_LEAF_OWNER_ELEMENTS
+    jsxElementCount(owner) < MIN_LEAF_OWNER_ELEMENTS ||
+    hasAncestorUseValueSubscription(owner, call, imports, observableBindings)
   ) {
     return null;
   }
@@ -133,31 +142,264 @@ function moveUseValueDownFinding(
   if (unsafe || references.length === 0) return null;
 
   const leaf = lowestCommonJsxSubtree(references, owner);
-  if (!leaf || hasUnstableSubtreeLifetime(leaf, owner)) return null;
   const ownerElements = jsxElementCount(owner);
-  const leafElements = jsxElementCountIn(leaf);
+  const conditionalSlot = stableConditionalJsxSlot(references, owner, imports);
+  const stableLeaf = conditionalSlot || !leaf || hasUnstableSubtreeLifetime(leaf, owner)
+    ? null
+    : leaf;
+  if (!stableLeaf && !conditionalSlot) return null;
+  const leafElements = stableLeaf
+    ? jsxElementCountIn(stableLeaf)
+    : jsxElementCountIn(conditionalSlot!);
   if (leafElements / ownerElements > MAX_LEAF_OWNER_SHARE) return null;
 
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(
     declaration.getStart(sourceFile)
   );
-  const leafLine = sourceFile.getLineAndCharacterOfPosition(leaf.getStart(sourceFile)).line + 1;
-  const leafLabel = ts.isJsxFragment(leaf)
-    ? "fragment"
-    : `<${ts.isJsxElement(leaf) ? leaf.openingElement.tagName.getText(sourceFile) : leaf.tagName.getText(sourceFile)}>`;
+  const target = stableLeaf ?? conditionalSlot!;
+  const leafLine = sourceFile.getLineAndCharacterOfPosition(target.getStart(sourceFile)).line + 1;
+  const leafLabel = stableLeaf
+    ? ts.isJsxFragment(stableLeaf)
+      ? "fragment"
+      : `<${ts.isJsxElement(stableLeaf) ? stableLeaf.openingElement.tagName.getText(sourceFile) : stableLeaf.tagName.getText(sourceFile)}>`
+    : "complete conditional JSX slot";
   const observable = call.arguments[0]!.getText(sourceFile);
+  const readEvidence = stableLeaf
+    ? `${references.length} render read${references.length === 1 ? "" : "s"} of ${localName} occur${references.length === 1 ? "s" : ""} only inside the stable ${leafLabel} leaf at line ${leafLine}`
+    : `${references.length} render read${references.length === 1 ? "" : "s"} of ${localName} occur${references.length === 1 ? "s" : ""} only inside the complete conditional JSX slot at line ${leafLine}`;
+  const lifetimeEvidence = stableLeaf
+    ? `that leaf contains ${leafElements} of the owner's ${ownerElements} JSX elements and is not conditional, keyed, repeated, or split across returns`
+    : `replacing the complete conditional JSX slot with one always-mounted wrapper preserves the subscription lifetime and the conditional child's mount behavior`;
+  const wrapper = stableLeaf ? "a stable wrapper around" : "an always-mounted wrapper for";
+  const props = stableLeaf ? "the leaf's other inputs" : "non-observable gate values";
   return {
     action: "move-use-value-down",
     confidence: "certain",
     disposition: "change",
     evidence: [
-      `${references.length} render read${references.length === 1 ? "" : "s"} of ${localName} occur only inside the stable ${leafLabel} leaf at line ${leafLine}`,
-      `that leaf contains ${leafElements} of the owner's ${ownerElements} JSX elements and is not conditional, keyed, repeated, or split across returns`,
+      readEvidence,
+      lifetimeEvidence,
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
-    message: `Move \`useValue(${observable})\` for \`${localName}\` into a stable wrapper around the ${leafLabel} leaf at line ${leafLine}; keep observable ownership where it is and pass the leaf's other inputs as ordinary props so updates rerender ${leafElements} JSX element${leafElements === 1 ? "" : "s"} instead of the ${ownerElements}-element owner.`,
+    message: `Move \`useValue(${observable})\` for \`${localName}\` into ${wrapper} the ${leafLabel} at line ${leafLine}; keep observable ownership where it is and pass ${props} as ordinary props so updates rerender ${leafElements} JSX element${leafElements === 1 ? "" : "s"} instead of the ${ownerElements}-element owner.`,
     practice: "reactivity",
   };
+}
+
+function hasAncestorUseValueSubscription(
+  owner: RuntimeFunctionLike,
+  currentCall: ts.CallExpression,
+  imports: HookImports,
+  observableBindings: ReadonlySet<string>
+): boolean {
+  const currentObservable = provenObservablePath(currentCall.arguments[0]!, observableBindings);
+  const currentPath = currentObservable && staticPropertyPath(currentObservable);
+  if (!owner.body || !currentPath) return true;
+
+  let overlap = false;
+  visit(owner.body, node => {
+    if (
+      overlap ||
+      !ts.isCallExpression(node) ||
+      node === currentCall ||
+      findAncestor(node, isRuntimeFunctionLike) !== owner ||
+      !isUseValueCall(node, imports)
+    ) {
+      return;
+    }
+    overlap = trackedUseValuePaths(node, imports, observableBindings).some(otherObservable => {
+      const otherPath = staticPropertyPath(otherObservable);
+      return !!otherPath &&
+        otherPath.length <= currentPath.length &&
+        otherPath.every((part, index) => part === currentPath[index]);
+    });
+  });
+  return overlap;
+}
+
+function trackedUseValuePaths(
+  call: ts.CallExpression,
+  imports: HookImports,
+  observableBindings: ReadonlySet<string>
+): readonly ts.Expression[] {
+  const direct = call.arguments[0] && provenObservablePath(call.arguments[0], observableBindings);
+  const simpleInput = directUseValueInput(call, imports, observableBindings)?.observable;
+  if (direct || simpleInput) return [direct ?? simpleInput!];
+
+  const selector = call.arguments[0];
+  if (!selector || (!ts.isArrowFunction(selector) && !ts.isFunctionExpression(selector))) return [];
+  const paths: ts.Expression[] = [];
+  visit(selector.body, node => {
+    if (!ts.isCallExpression(node)) return;
+    const receiver = directGetReceiver(node);
+    const observable = receiver && provenObservablePath(receiver, observableBindings);
+    if (observable) paths.push(observable);
+  });
+  return paths;
+}
+
+function stableConditionalJsxSlot(
+  references: readonly ts.Identifier[],
+  owner: RuntimeFunctionLike,
+  imports: HookImports
+): ts.Expression | null {
+  const slots = references.map(reference => enclosingConditionalJsxExpression(reference, owner));
+  const slot = slots[0];
+  if (!slot || slots.some(candidate => candidate !== slot) || !slot.expression) return null;
+
+  const expression = unwrapTransparentExpression(slot.expression);
+  if (!isConditionalRenderExpression(expression)) return null;
+  if (!hasRenderOwnedConditionalInputs(expression, references[0]!.text, owner, imports)) {
+    return null;
+  }
+  if (!ts.isJsxElement(slot.parent) && !ts.isJsxFragment(slot.parent)) return null;
+  if (!isInsideOwnerReturn(slot, owner) || hasUnstableSubtreeLifetime(slot.parent, owner)) {
+    return null;
+  }
+
+  let hasKey = false;
+  visit(expression, node => {
+    if (
+      !hasKey &&
+      (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      (ts.isJsxElement(node) ? node.openingElement : node).attributes.properties.some(
+        property => ts.isJsxAttribute(property) && property.name.getText() === "key"
+      )
+    ) {
+      hasKey = true;
+    }
+  });
+  return hasKey ? null : expression;
+}
+
+function enclosingConditionalJsxExpression(
+  node: ts.Node,
+  boundary: ts.Node
+): ts.JsxExpression | null {
+  for (let current: ts.Node | undefined = node.parent; current && current !== boundary; current = current.parent) {
+    if (
+      ts.isJsxExpression(current) &&
+      current.expression &&
+      isConditionalRenderExpression(unwrapTransparentExpression(current.expression)) &&
+      (ts.isJsxElement(current.parent) || ts.isJsxFragment(current.parent))
+    ) {
+      return current;
+    }
+  }
+  return null;
+}
+
+function isConditionalRenderExpression(expression: ts.Expression): boolean {
+  return ts.isConditionalExpression(expression) ||
+    (ts.isBinaryExpression(expression) && [
+      ts.SyntaxKind.AmpersandAmpersandToken,
+      ts.SyntaxKind.BarBarToken,
+      ts.SyntaxKind.QuestionQuestionToken,
+    ].includes(expression.operatorToken.kind));
+}
+
+function hasRenderOwnedConditionalInputs(
+  expression: ts.Expression,
+  observableValue: string,
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+  resolving: ReadonlySet<string> = new Set()
+): boolean {
+  let safe = true;
+  const walk = (node: ts.Node): void => {
+    if (!safe || ts.isJsxElement(node) || ts.isJsxFragment(node) || ts.isJsxSelfClosingElement(node)) {
+      return;
+    }
+    if (
+      ts.isAwaitExpression(node) ||
+      ts.isYieldExpression(node) ||
+      ts.isNewExpression(node) ||
+      ts.isCallExpression(node) ||
+      ts.isDeleteExpression(node) ||
+      ts.isPostfixUnaryExpression(node) ||
+      (ts.isPrefixUnaryExpression(node) &&
+        (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)) ||
+      (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind))
+    ) {
+      safe = false;
+      return;
+    }
+    if (
+      ts.isIdentifier(node) &&
+      !isNonValueIdentifier(node) &&
+      !conditionalIdentifierIsRenderOwned(node.text, observableValue, owner, imports, resolving)
+    ) {
+      safe = false;
+      return;
+    }
+    node.forEachChild(walk);
+  };
+  walk(expression);
+  return safe;
+}
+
+function conditionalIdentifierIsRenderOwned(
+  name: string,
+  observableValue: string,
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+  resolving: ReadonlySet<string>
+): boolean {
+  if (name === observableValue || name === "undefined") return true;
+  if (
+    owner.parameters.some(parameter => bindingContainsName(parameter.name, name)) &&
+    bindingDeclarationCount(owner, name) === 1
+  ) {
+    return true;
+  }
+  if (!owner.body || resolving.has(name)) return false;
+
+  const declarations: ts.VariableDeclaration[] = [];
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (ts.isVariableDeclaration(node) && bindingContainsName(node.name, name)) {
+      declarations.push(node);
+    }
+  });
+  const declaration = declarations.length === 1 ? declarations[0]! : null;
+  if (!declaration?.initializer || !ts.isVariableDeclarationList(declaration.parent)) return false;
+
+  const initializer = unwrapTransparentExpression(declaration.initializer);
+  if (
+    ts.isArrayBindingPattern(declaration.name) &&
+    declaration.name.elements[0] &&
+    !ts.isOmittedExpression(declaration.name.elements[0]) &&
+    bindingContainsName(declaration.name.elements[0].name, name) &&
+    ts.isCallExpression(initializer) &&
+    isImportedHookCall(initializer, imports.useState, imports.reactNamespaces, "useState")
+  ) {
+    return true;
+  }
+  if (ts.isIdentifier(declaration.name) && ts.isCallExpression(initializer) && isUseValueCall(initializer, imports)) {
+    return true;
+  }
+  if (
+    !ts.isIdentifier(declaration.name) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0
+  ) {
+    return false;
+  }
+  return hasRenderOwnedConditionalInputs(
+    initializer,
+    observableValue,
+    owner,
+    imports,
+    new Set([...resolving, name])
+  );
+}
+
+function isInsideOwnerReturn(node: ts.Node, owner: RuntimeFunctionLike): boolean {
+  const body = owner.body;
+  if (!body) return false;
+  if (!ts.isBlock(body)) return node.pos >= body.pos && node.end <= body.end;
+  for (let current: ts.Node | undefined = node.parent; current && current !== owner; current = current.parent) {
+    if (ts.isReturnStatement(current)) return true;
+  }
+  return false;
 }
 
 function isWholeValueProjection(reference: ts.Identifier): boolean {

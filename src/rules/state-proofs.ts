@@ -386,7 +386,7 @@ export function lowestCommonJsxSubtree(
   return first.find(candidate => ancestorLists.every(ancestors => ancestors.includes(candidate))) ?? null;
 }
 
-export function jsxElementCountIn(node: JsxSubtreeNode): number {
+export function jsxElementCountIn(node: ts.Node): number {
   let count = 0;
   visit(node, current => {
     if (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current)) count += 1;

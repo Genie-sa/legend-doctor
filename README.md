@@ -231,6 +231,24 @@ After: a stable status leaf receives `request$.pending` and calls `useValue` its
 
 Value: pending changes no longer rerender the form.
 
+For a conditional child, keep the subscriber wrapper mounted:
+
+```tsx
+// before
+const error = useValue(request$.error);
+return <Page>{error ? <ErrorMessage>{error}</ErrorMessage> : null}</Page>;
+
+// after
+return <Page><ErrorState error$={request$.error} /></Page>;
+function ErrorState({ error$ }: { error$: Observable<string> }) {
+  const error = useValue(error$);
+  return error ? <ErrorMessage>{error}</ErrorMessage> : null;
+}
+```
+
+Value: error changes rerender only the conditional slot. The wrapper remains mounted, so subscription lifetime and the
+conditional child's mount behavior stay unchanged.
+
 ### `[pass-observable-to-use-value]` Use the direct subscription API
 
 Before: `useValue(() => profile$.name.get())`
@@ -316,12 +334,13 @@ Component names, file paths, and application allowlists never count as proof.
 
 ## Verified baseline
 
-The pinned corpus contains 2,356 hooks across 225 targets and 796 manually audited labels.
+The pinned corpus contains 2,356 hooks across 225 targets, 796 manually audited hook labels, 18 state groups, and 102
+Legend practice labels.
 
-- Unit tests: 524/524
+- Unit tests: 525/525
 - Actionable precision: 100% at 426/426
 - Actionable recall: 99.8% at 426/427
-- Legend practice precision: 100% at 100/100
+- Legend practice precision: 100% at 102/102
 
 The one known opportunity remains visible as a non-enforced recall miss. The corpus covers Tree Map, Tree Wallet, Memoria,
 Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open WebUI React Native, and Hoalu.

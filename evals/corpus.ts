@@ -6629,6 +6629,13 @@ export const goldPracticeCases = [
     rationale: "The review dialog reads only the optional scan job id, so unrelated dialog metadata should not invalidate its editor and queries.",
     target: "hoalu-app",
   },
+  {
+    action: "move-use-value-down",
+    file: "components/expenses/expense-filter-dropdown.tsx",
+    line: 67,
+    rationale: "The transaction kind is rendered only by the category panel's conditional child slot, so an always-mounted wrapper can retain the subscription while preventing kind changes from rebuilding the full filter dropdown.",
+    target: "hoalu-app",
+  },
   ...[
     ["components/expenses/expense-actions.tsx", 70, "expense deletion"],
     ["components/incomes/income-actions.tsx", 64, "income deletion"],
@@ -6684,6 +6691,13 @@ export const goldPracticeCases = [
     file: "settings/GeneralSettings.tsx",
     line: 15,
     rationale: "The hotkey value is transported only to HotkeyCapture, so updates need not rerender unrelated settings sections.",
+    target: "legend-music",
+  },
+  {
+    action: "move-use-value-down",
+    file: "visualizer/VisualizerWindow.tsx",
+    line: 13,
+    rationale: "Playback state controls only the two-element stopped overlay, so an always-mounted wrapper can subscribe without rebuilding the visualizer and control panel.",
     target: "legend-music",
   },
   {
