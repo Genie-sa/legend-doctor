@@ -1797,6 +1797,7 @@ export const goldCases = [
     target: "memoria-src",
   },
   ...[
+    ["components/companies/companies-grid-view-container.tsx", 26, "isSelectionMode"],
     ["components/companies/companies-grid-view-container.tsx", 27, "selectedCompanyIds"],
     ["components/species-management/species-management-page.tsx", 158, "selected"],
     ["routes/(app)/_private/_map/enhancement-requests/index.tsx", 45, "selectedIds"],
@@ -1806,10 +1807,7 @@ export const goldCases = [
     ["components/avatar-management/avatar-catalog-page.tsx", 35, "createOpen"],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
-    ...([
-      "components/companies/companies-grid-view-container.tsx",
-      "routes/(app)/_private/_map/enhancement-requests/index.tsx",
-    ].includes(file as string)
+    ...(file === "routes/(app)/_private/_map/enhancement-requests/index.tsx"
       ? { enforced: false as const }
       : {}),
     file: file as string,
@@ -5873,6 +5871,13 @@ export const goldCases = [
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [
+  {
+    file: "components/companies/companies-grid-view-container.tsx",
+    line: 26,
+    members: ["isSelectionMode", "selectedCompanyIds"],
+    rationale: "Selection mode and its ID collection enter and cancel together; keep those transitions atomic while row toggles update only the collection leaf.",
+    target: "tree-map",
+  },
   {
     file: "components/MediaLibrary/Sidebar.tsx",
     line: 65,

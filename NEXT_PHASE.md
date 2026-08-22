@@ -7,21 +7,34 @@
 | App roots | 12 |
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
-| Manual hook labels | 787 |
-| Known misses | 14 |
-| State groups | 16/16 |
+| Manual hook labels | 788 |
+| Known misses | 13 |
+| State groups | 17/17 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (411/411) |
-| Actionable recall | 96.7% (411/425) |
-| Unit tests | 494/494 |
+| Actionable precision | 100% (413/413) |
+| Actionable recall | 96.9% (413/426) |
+| Unit tests | 495/495 |
 
-The latest phase detects a co-written nullable cursor and editable name as one observable draft. Against commit
-`0b0b6d5`, the exact current 221-target delta is:
+The latest phase detects a complete selection-mode model. Against commit `6566623`, the exact current 221-target delta
+is:
 
-- Legend Music: `tempPlaylistId`, `tempPlaylistName`, `editingPlaylistId`, and `editingPlaylistName` in
-  `components/MediaLibrary/Sidebar.tsx` change from `review-state` to `use-observable`.
+- Tree Map: `isSelectionMode` and `selectedCompanyIds` in
+  `components/companies/companies-grid-view-container.tsx` change from `review-state` to `use-observable` and are emitted
+  as one exact state group.
 - The other 220 current targets have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Selection-mode proof
+
+The mutation component must contain exactly one literal-false mode and one empty-array selection. The owner spans at
+least 100 lines and eight JSX elements, and every render read stays in JSX attributes. Every mode write must pair with an
+empty-array reset in the same proven execution path or an adjacent straight-line block or switch case. Both true and
+false mode transitions are required. Independent collection edits must be functional updaters. Effects, setter escape,
+callable values, owner control-flow reads, direct independent collection replacements, and partial mode transitions
+abstain.
+
+The emitted group instruction keeps one owner-lifetime observable selection model, uses atomic `assign` for enter/cancel,
+uses `peek()` in commands, and subscribes only in header, control, and stable-key row leaves.
 
 ## Co-written editable draft proof
 
@@ -82,10 +95,10 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Fourteen opportunities remain non-enforced:
+Thirteen opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- eight observable leaf migrations covering keyed selection, repeated rows, timed feedback, and three
+- seven observable leaf migrations covering keyed selection, repeated rows, timed feedback, and three
   download-failure callbacks;
 - five ref migrations behind async confirmation, form callback, or status-listener contracts.
 

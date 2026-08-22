@@ -3931,6 +3931,51 @@ test("groups a co-written cursor and editable name into one observable draft", (
   );
 });
 
+test("groups selection mode with its independently editable ID collection", () => {
+  const source = (partialModeWrite: string) => `
+    import { useCallback, useState } from "react";
+    function Screen({ rows }: { rows: Array<{ id: number }> }) {
+      const [selectionMode, setSelectionMode] = useState(false);
+      const [selectedIds, setSelectedIds] = useState<number[]>([]);
+      const enter = useCallback(() => {
+        setSelectionMode(true);
+        setSelectedIds([]);
+      }, []);
+      const cancel = useCallback(() => {
+        setSelectionMode(false);
+        setSelectedIds([]);
+      }, []);
+      const toggle = useCallback((id: number) => {
+        setSelectedIds(previous => previous.includes(id)
+          ? previous.filter(value => value !== id)
+          : [...previous, id]);
+      }, []);
+      ${partialModeWrite}
+      ${"\n".repeat(100)}
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help />
+        <SelectionHeader active={selectionMode} count={selectedIds.length} onEnter={enter} onCancel={cancel} />
+        {rows.map(row => <Row key={row.id} selected={selectedIds.includes(row.id)} onToggle={() => toggle(row.id)} />)}
+      </main>;
+    }
+  `;
+
+  const findings = analyzeSource(source(""), "fixture.tsx");
+  const grouped = findings.filter(finding => finding.group);
+  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  assert.deepEqual(grouped[0]?.group?.members, ["selectionMode", "selectedIds"]);
+  assert.match(grouped[0]?.message ?? "", /atomic/i);
+  assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
+
+  const unsafe = analyzeSource(
+    source("const suspend = () => setSelectionMode(false);"),
+    "fixture.tsx"
+  );
+  assert.notEqual(
+    unsafe.find(finding => finding.name === "selectionMode")?.group?.members.join(","),
+    "selectionMode,selectedIds"
+  );
+});
+
 test("does not merge mutually exclusive switch branches into one state cluster", () => {
   const findings = analyzeSource(`
     import { useState } from "react";

@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-787 manual hook labels, including 14 non-enforced opportunities, plus sixteen
+788 manual hook labels, including 13 non-enforced opportunities, plus seventeen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -62,6 +62,12 @@ empty-string name; every direct cursor and name mutation is paired in the same s
 additional name writes must be the matching controlled `value` handler. The recommendation keeps one owner-lifetime
 observable object, uses atomic assignments for paired transitions, and moves subscriptions to row or control leaves.
 Independent cursor writes, effects, functional updaters, non-controlled setter references, and escapes are hard negatives.
+
+Two Tree Map labels and one exact group label verify a selection model whose false-initialized mode and empty ID array
+enter and cancel together. Every mode write must pair with an empty-array reset, while independent collection writes must
+be functional updaters. Render reads must stay in JSX attributes so header summaries and keyed rows can subscribe without
+moving owner control flow. Partial mode transitions, effects, escapes, direct collection replacements, and small owners
+abstain.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
 resolution is provenance rather than proof of leaf ownership; production migrations are not emitted for tests; state

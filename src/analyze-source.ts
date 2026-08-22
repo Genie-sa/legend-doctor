@@ -1103,7 +1103,9 @@ function findObservableStateClusters(
   }
 
   for (const [owner, ownerStates] of statesByOwner) {
-    if (ownerLineSpan(owner, sourceFile) < 100 || jsxElementCount(owner) < 12) continue;
+    const ownerElements = jsxElementCount(owner);
+    if (ownerLineSpan(owner, sourceFile) < 100 || ownerElements < 8) continue;
+    const broadOwner = ownerElements >= 12;
     const mutableStates: StateCandidate[] = ownerStates.filter(state => state.setterName !== null);
     const stateBySetter = new Map(
       mutableStates.flatMap(state => state.setterName ? [[state.setterName, state] as const] : [])
@@ -1153,25 +1155,25 @@ function findObservableStateClusters(
     }
 
     for (const members of components.values()) {
-      const dialogMembers = normalizeObservableDialogClusterMembers(
-        members,
-        usageByState,
-        knownComponents,
-        calls,
-        stateFlow
-      );
-      const textDraftMembers = dialogMembers
-        ? null
-        : normalizeObservableTextDraftClusterMembers(
+      const dialogMembers = broadOwner
+        ? normalizeObservableDialogClusterMembers(
             members,
             usageByState,
+            knownComponents,
             calls,
             stateFlow
-          );
-      const clusterMembers = dialogMembers ?? textDraftMembers;
+          )
+        : null;
+      const textDraftMembers = broadOwner && !dialogMembers
+        ? normalizeObservableTextDraftClusterMembers(members, usageByState, calls, stateFlow)
+        : null;
+      const selectionMembers = !dialogMembers && !textDraftMembers
+        ? normalizeObservableSelectionClusterMembers(members, usageByState, calls, stateFlow)
+        : null;
+      const clusterMembers = dialogMembers ?? textDraftMembers ?? selectionMembers;
       if (!clusterMembers) continue;
       if (
-        !textDraftMembers &&
+        dialogMembers &&
         clusterMembers.some(member => {
           const usage = usageByState.get(member);
           return usage !== undefined && usage.localRenderReads > 0 && usage.jsxTargets.size === 0;
@@ -1190,7 +1192,9 @@ function findObservableStateClusters(
         action: "use-observable",
         id: `state-cluster:${owner.getStart(sourceFile)}:${names.join(",")}`,
         members: sortedMembers,
-        message: textDraftMembers
+        message: selectionMembers
+          ? `Replace the co-written selection mode (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve mode-and-clear transitions with atomic \`assign\` calls, keep independent collection edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at header, control, and keyed-row leaves.`
+          : textDraftMembers
           ? `Replace the co-written editable draft (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
           : `Replace the co-written React state cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; mutate it from commands and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
         primary,
@@ -1200,6 +1204,85 @@ function findObservableStateClusters(
   }
 
   return result;
+}
+
+function normalizeObservableSelectionClusterMembers(
+  members: readonly StateCandidate[],
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+  mutations: readonly SetterMutation[],
+  stateFlow: StateFlowIndex
+): readonly StateCandidate[] | null {
+  if (members.length !== 2) return null;
+  const mode = members.find(state => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  const selection = members.find(hasEmptyArrayStateInitializer);
+  if (!mode || !selection || mode === selection) return null;
+
+  const modeUsage = usageByState.get(mode);
+  const selectionUsage = usageByState.get(selection);
+  if (
+    !modeUsage ||
+    !selectionUsage ||
+    [modeUsage, selectionUsage].some(usage =>
+      usage.shadowed || usage.escaped || usage.effectReads > 0 || usage.effectWrites > 0
+    ) ||
+    modeUsage.setterUsesPreviousValue ||
+    stateMayHoldCallable(mode) ||
+    stateMayHoldCallable(selection) ||
+    modeUsage.setterReferences !== modeUsage.setterCalls ||
+    selectionUsage.setterReferences !== selectionUsage.setterCalls ||
+    !renderReadsStayInJsxAttributes(mode, modeUsage) ||
+    !renderReadsStayInJsxAttributes(selection, selectionUsage)
+  ) {
+    return null;
+  }
+
+  const modeMutations = mutations.filter(mutation => mutation.state === mode);
+  const selectionMutations = mutations.filter(mutation => mutation.state === selection);
+  const resets = selectionMutations.filter(mutation => callSetsEmptyArray(mutation));
+  const edits = selectionMutations.filter(mutation => !callSetsEmptyArray(mutation));
+  if (
+    modeMutations.length < 2 ||
+    resets.length < 1 ||
+    edits.length < 1 ||
+    !modeMutations.some(mutation => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)) ||
+    !modeMutations.some(mutation => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) ||
+    edits.some(mutation => !setterCallUsesPreviousValue(mutation.call))
+  ) {
+    return null;
+  }
+
+  const paired = (left: SetterMutation, right: SetterMutation) =>
+    left.region === right.region &&
+    (callsAreAdjacentDraftWrites(left.call, right.call) ||
+      mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow));
+  if (modeMutations.some(modeMutation => !resets.some(reset => paired(modeMutation, reset)))) {
+    return null;
+  }
+  return [mode, selection];
+}
+
+function hasEmptyArrayStateInitializer(state: StateCandidate): boolean {
+  const initializer = state.call.arguments[0];
+  if (!initializer) return false;
+  const value = unwrapTransparentExpression(initializer);
+  return ts.isArrayLiteralExpression(value) && value.elements.length === 0;
+}
+
+function callSetsEmptyArray(mutation: SetterMutation): boolean {
+  const argument = mutation.call.arguments[0];
+  if (!argument) return false;
+  const value = unwrapTransparentExpression(argument);
+  return ts.isArrayLiteralExpression(value) && value.elements.length === 0;
+}
+
+function renderReadsStayInJsxAttributes(
+  state: StateCandidate,
+  usage: StateUsage
+): boolean {
+  return usage.localRenderReads + usage.transportedOccurrences > 0 &&
+    usage.directRenderNodes.every(node =>
+      findAncestorUntil(node, ts.isJsxAttribute, state.owner) !== null
+    );
 }
 
 function normalizeObservableTextDraftClusterMembers(

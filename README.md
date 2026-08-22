@@ -42,12 +42,12 @@ Measured on pinned real applications:
 | App roots | 12 |
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
-| Manual labels | 787 |
-| Known misses | 14 |
-| State groups | 16/16 |
-| Unit tests | 494/494 |
-| Actionable precision | 100% (411/411) |
-| Actionable recall | 96.7% (411/425) |
+| Manual labels | 788 |
+| Known misses | 13 |
+| State groups | 17/17 |
+| Unit tests | 495/495 |
+| Actionable precision | 100% (413/413) |
+| Actionable recall | 96.9% (413/426) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -236,6 +236,11 @@ co-written with the name and the only independent name writes come from matching
 requires complete open/reset transitions, preserves them with atomic `assign` calls, uses `peek()` for commands, and
 subscribes only at the row or control leaves. Partial cursor writes, effects, functional updaters, and setter escapes
 remain reviews.
+
+Selection mode follows the same atomic rule when one boolean mode and one empty ID array always enter and cancel
+together. Functional row toggles may update only the collection, but every mode transition must clear it in the same
+straight-line block or switch case. The recommendation keeps one observable selection model, with header/control
+selectors and per-key row subscriptions; partial mode transitions remain reviews.
 
 #### Effect-written presentation state
 
