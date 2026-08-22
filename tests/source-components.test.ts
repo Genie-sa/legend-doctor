@@ -84,12 +84,22 @@ test("resolves each import with its nearest application tsconfig", async () => {
       "tsconfig.json": '{"compilerOptions":{"moduleResolution":"Bundler"}}',
       "apps/web/tsconfig.json": '{"compilerOptions":{"moduleResolution":"Bundler","baseUrl":".","paths":{"@/*":["src/*"]}}}',
       "apps/web/src/Leaf.tsx": 'export function Leaf({ open }: { open: boolean }) { return open ? <aside /> : null; }',
-      "apps/web/src/Screen.tsx": 'import { Leaf } from "@/Leaf"; export function Screen() { return <Leaf open={false} />; }',
+      "apps/web/src/Panel.tsx": 'export function Panel() { return <main />; }',
+      "apps/web/src/Screen.tsx": 'import { Leaf } from "@/Leaf"; import { Panel } from "@/Panel"; export function Screen() { return <><Leaf open={false} /><Panel /></>; }',
+      "apps/native/tsconfig.json": '{"compilerOptions":{"moduleResolution":"Bundler","baseUrl":".","paths":{"@/*":["src/*"]}}}',
+      "apps/native/src/Row.tsx": 'export function Row() { return <span />; }',
+      "apps/native/src/Screen.tsx": 'import { Row } from "@/Row"; export function Screen() { return <Row />; }',
     },
     (root, sources) => {
-      const components = buildSourceIndex(root, sources)
-        .componentsFor(path.join(root, "apps/web/src/Screen.tsx"));
-      assert.deepEqual([...components], ["Leaf"]);
+      const index = buildSourceIndex(root, sources);
+      assert.deepEqual(
+        [...index.componentsFor(path.join(root, "apps/web/src/Screen.tsx"))].sort(),
+        ["Leaf", "Panel"]
+      );
+      assert.deepEqual(
+        [...index.componentsFor(path.join(root, "apps/native/src/Screen.tsx"))],
+        ["Row"]
+      );
     }
   );
 });

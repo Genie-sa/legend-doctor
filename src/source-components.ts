@@ -116,6 +116,7 @@ export function buildSourceIndexFromFiles(
   }
 
   const compilerContexts = new Map<string, CompilerContext>();
+  const compilerContextsByImporter = new Map<string, CompilerContext>();
   const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const contextReaderHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const deferredCallbackOwnersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
@@ -129,7 +130,12 @@ export function buildSourceIndexFromFiles(
   const contextReaders = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
 
   function resolveModule(importer: string, specifier: string): string | null {
-    const { cache, options } = compilerContextFor(importer, root, compilerContexts);
+    const { cache, options } = compilerContextFor(
+      importer,
+      root,
+      compilerContexts,
+      compilerContextsByImporter
+    );
     const resolution = ts.resolveModuleName(
       specifier,
       importer,
@@ -516,12 +522,19 @@ function jsxTagUses(expression: ts.PropertyAccessExpression): boolean {
 function compilerContextFor(
   importer: string,
   fallbackRoot: string,
-  contexts: Map<string, CompilerContext>
+  contexts: Map<string, CompilerContext>,
+  contextsByImporter: Map<string, CompilerContext>
 ): CompilerContext {
+  const importerKey = normalizeFile(importer);
+  const importerContext = contextsByImporter.get(importerKey);
+  if (importerContext) return importerContext;
   const configFile = ts.findConfigFile(path.dirname(importer), ts.sys.fileExists);
   const key = configFile ? normalizeFile(configFile) : normalizeFile(fallbackRoot);
   const cached = contexts.get(key);
-  if (cached) return cached;
+  if (cached) {
+    contextsByImporter.set(importerKey, cached);
+    return cached;
+  }
   const base = configFile ? path.dirname(configFile) : fallbackRoot;
   const options = compilerOptionsFor(base);
   const context = {
@@ -533,6 +546,7 @@ function compilerContextFor(
     options,
   };
   contexts.set(key, context);
+  contextsByImporter.set(importerKey, context);
   return context;
 }
 
