@@ -49,10 +49,10 @@ Measured on pinned real applications:
 | Manual labels | 790 |
 | Known misses | 2 |
 | State groups | 18/18 |
-| Unit tests | 510/510 |
+| Unit tests | 511/511 |
 | Actionable precision | 100% (425/425) |
 | Actionable recall | 99.5% (425/427) |
-| Legend practice precision | 100% (90/90) |
+| Legend practice precision | 100% (92/92) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
 Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open WebUI React Native, and Hoalu.
@@ -291,8 +291,9 @@ const name = useValue(profile$.name);
 return <Name>{name}</Name>;
 ```
 
-The rule follows nested children and selects the deepest static path shared by every read. Divergent fields, dynamic or
-optional access, assertion boundaries, calls, writes, and raw object transport stay unchanged.
+The rule follows nested children and selects the deepest static path shared by every read. Optional chains qualify only
+when that shared boundary preserves short-circuiting before any remaining member access or call. Divergent optional
+paths, dynamic access, assertion boundaries, calls, writes, and raw object transport stay unchanged.
 
 ### Direct leaf → direct `useValue`
 

@@ -34,7 +34,7 @@ Acceptance targets for the first useful release:
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
 790 manual hook labels, including 2 non-enforced opportunities, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
-`useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
+`useValue` labels, eight lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
 `useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Seven stable leaf-boundary labels verify
@@ -199,6 +199,9 @@ option are preserved. The path must be statically addressed and proven as Legend
 resolved export. One selector-only dynamic segment is accepted when its key is an explicitly typed, immutable `string`
 or `number` parameter of the owning component or hook. Computed selectors, optional access, mutable or call-derived keys,
 shallow reads, reserved members, shadowed hooks, and unproven getters abstain.
+Broad `useValue(parent$)` bindings may narrow through optional raw-value chains when every read shares one static child
+boundary. If the optional chain diverges, uses a dynamic key, or would move short-circuiting ahead of a remaining member
+access or call, the broad subscription stays unchanged.
 Legacy-hook labels replace calls imported as `useSelector` or `use$` from `@legendapp/state/react` with `useValue`.
 An exact zero-argument `.get()` on a proven static observable path becomes the direct `useValue(path)` form; computed,
 dynamic, and unproven selectors preserve their callback. Named aliases and namespace imports are resolved; unrelated and

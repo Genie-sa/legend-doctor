@@ -10,20 +10,25 @@
 | Manual hook labels | 790 |
 | Known misses | 2 |
 | State groups | 18/18 |
-| Legend practices | 90/90 |
+| Legend practices | 92/92 |
 | Actionable precision | 100% (425/425) |
 | Actionable recall | 99.5% (425/427) |
-| Unit tests | 510/510 |
+| Unit tests | 511/511 |
 
-The latest phase simplifies an exact selector read to `useValue(observable[key])` when structural syntax proves that the
-key is one explicitly typed, immutable primitive parameter. Against commit `1f878d0`, the exact current 221-target action
-delta is:
+The latest phase narrows broad nullable values through one shared optional child path without changing short-circuit
+behavior. Against commit `41272b8`, the exact current 221-target action delta is:
 
-- Memoria adds one `pass-observable-to-use-value` practice at
-  `backend/api/ratings/ratingOverlayStore.ts:29`.
+- Hoalu adds two `narrow-use-value-subscription` practices at
+  `components/charts/dashboard-date-filter.tsx:110` and
+  `components/receipt/scan-queue-review-dialog.tsx:83`.
 - All 221 targets have zero hook action changes.
-- Platform, Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open WebUI React Native, and Hoalu
+- Platform, Memoria, Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, and Open WebUI React Native
   have zero Legend practice action changes.
+
+The proof requires all raw-value reads to share one static observable prefix. Optional access inside the selected prefix
+is accepted only when the prefix replaces the complete access expression; optional access after the prefix remains in
+place. Divergent optional paths, dynamic keys, whole-value escape, writes, and a later property call after a removed
+short-circuit all abstain.
 
 ## Source-proven option command proof
 

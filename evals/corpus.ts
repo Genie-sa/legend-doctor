@@ -6539,6 +6539,20 @@ export const goldPracticeCases = [
     target: "hoalu-app",
   },
   {
+    action: "narrow-use-value-subscription",
+    file: "components/charts/dashboard-date-filter.tsx",
+    line: 110,
+    rationale: "The group-by effect reads only the optional custom range, so changes to the selected range mode should not invalidate this control.",
+    target: "hoalu-app",
+  },
+  {
+    action: "narrow-use-value-subscription",
+    file: "components/receipt/scan-queue-review-dialog.tsx",
+    line: 83,
+    rationale: "The review dialog reads only the optional scan job id, so unrelated dialog metadata should not invalidate its editor and queries.",
+    target: "hoalu-app",
+  },
+  {
     action: "batch-observable-writes",
     file: "hooks/use-auth.ts",
     line: 31,

@@ -1005,6 +1005,39 @@ test("splits divergent static leaf reads instead of keeping the broad subscripti
   assert.equal(finding?.action, "split-use-value-leaves");
 });
 
+test("narrows optional raw-value reads only when they share one static child path", () => {
+  const [finding] = analyzeLegendPractices(`
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const dialog$ = observable<{ state: boolean; data?: { id: string } } | undefined>(undefined);
+    export function Dialog() {
+      const dialog = useValue(dialog$);
+      return <span>{dialog?.data?.id}{dialog?.data?.id}</span>;
+    }
+  `, "fixture.tsx");
+  assert.equal(finding?.action, "narrow-use-value-subscription");
+  assert.match(finding?.message ?? "", /useValue\(dialog\$\.data\.id\)/);
+
+  for (const body of [
+    `return <span>{dialog?.state}{dialog?.data?.id}</span>;`,
+    `return <span>{dialog?.data?.[key]}</span>;`,
+    `return <span>{dialog?.data?.id.trim()}</span>;`,
+    `return <Child value={dialog} />;`,
+  ]) {
+    const findings = analyzeLegendPractices(`
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const dialog$ = observable<{ state: boolean; data?: Record<string, string> } | undefined>(undefined);
+      function Child({ value }: { value: unknown }) { return <>{String(value)}</>; }
+      export function Dialog({ key }: { key: string }) {
+        const dialog = useValue(dialog$);
+        ${body}
+      }
+    `, "fixture.tsx");
+    assert.deepEqual(findings, [], body);
+  }
+});
+
 test("keeps broad useValue reads when the child subscription is not proven equivalent", () => {
   const source = (body: string) => analyzeLegendPractices(`
     import { observable } from "@legendapp/state";
@@ -1016,14 +1049,12 @@ test("keeps broad useValue reads when the child subscription is not proven equiv
     }
   `, "fixture.tsx");
   for (const body of [
-    `return <span>{profile?.name}</span>;`,
     `return <span>{profile[keyName]}</span>;`,
     `return <Child profile={profile} />;`,
     `profile.name = "Grace"; return <span>{profile.name}</span>;`,
     `profile.contact.name = "Grace"; return <span>{profile.contact.name}</span>;`,
     `delete profile.contact.name; return <span>{String(profile.contact)}</span>;`,
     `return <span>{profile.name()}</span>;`,
-    `return <span>{profile.contact?.name}</span>;`,
     `return <span>{profile.contact[keyName]}</span>;`,
     `function nested(profile: { name: string }) { return profile.name; } return <span>{profile.name}</span>;`
   ]) {

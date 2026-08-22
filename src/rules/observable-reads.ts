@@ -492,6 +492,7 @@ function narrowUseValueFinding(
   }
 
   const paths: (readonly string[])[] = [];
+  const optionalReferences: ts.Identifier[] = [];
   let unsafe = false;
   visit(owner.body, node => {
     if (
@@ -512,12 +513,18 @@ function narrowUseValueFinding(
       unsafe = true;
       return;
     }
+    if (rawValuePathHasOptionalAccess(node)) optionalReferences.push(node);
     paths.push(path);
   });
   if (unsafe || paths.length === 0) return null;
   if (consumesEveryKnownField(observable, paths, observableKeys)) return null;
   const commonPath = paths.slice(1).reduce(commonPathPrefix, paths[0]!);
   if (commonPath.length > 0) {
+    if (
+      optionalReferences.some(reference => !optionalAccessPreservesSuffix(reference, commonPath.length))
+    ) {
+      return null;
+    }
     return narrowFinding(
       declaration,
       observable,
@@ -529,6 +536,7 @@ function narrowUseValueFinding(
       fileName
     );
   }
+  if (optionalReferences.length > 0) return null;
   return splitLeavesFinding(
     declaration,
     localName,
@@ -637,7 +645,7 @@ function staticRawValuePath(reference: ts.Identifier): readonly string[] | null 
     }
     if (ts.isElementAccessExpression(parent) && parent.expression === current) return null;
     if (!ts.isPropertyAccessExpression(parent) || parent.expression !== current) break;
-    if (parent.questionDotToken || propertyAccessIsWritten(parent)) return null;
+    if (propertyAccessIsWritten(parent)) return null;
     if (RESERVED_OBSERVABLE_MEMBERS.has(parent.name.text) || propertyAccessIsExecutable(parent)) {
       return path.length > 0 ? path : null;
     }
@@ -645,6 +653,54 @@ function staticRawValuePath(reference: ts.Identifier): readonly string[] | null 
     current = parent;
   }
   return path.length > 0 ? path : null;
+}
+
+function rawValuePathHasOptionalAccess(reference: ts.Identifier): boolean {
+  let current: ts.Expression = reference;
+  while (
+    (ts.isPropertyAccessExpression(current.parent) || ts.isElementAccessExpression(current.parent)) &&
+    current.parent.expression === current
+  ) {
+    const access = current.parent;
+    if (access.questionDotToken) return true;
+    current = access;
+  }
+  return false;
+}
+
+function optionalAccessPreservesSuffix(reference: ts.Identifier, commonLength: number): boolean {
+  let current: ts.Expression = reference;
+  let optionalInsideBoundary = false;
+  let segments = 0;
+  while (ts.isPropertyAccessExpression(current.parent) && current.parent.expression === current) {
+    const access = current.parent;
+    if (RESERVED_OBSERVABLE_MEMBERS.has(access.name.text) || propertyAccessIsExecutable(access)) {
+      return !optionalInsideBoundary;
+    }
+    if (access.questionDotToken) optionalInsideBoundary = true;
+    segments += 1;
+    current = access;
+    if (segments !== commonLength || !optionalInsideBoundary) continue;
+
+    while (
+      (ts.isParenthesizedExpression(current.parent) ||
+        ts.isAsExpression(current.parent) ||
+        ts.isTypeAssertionExpression(current.parent) ||
+        ts.isSatisfiesExpression(current.parent) ||
+        ts.isNonNullExpression(current.parent)) &&
+      current.parent.expression === current
+    ) {
+      current = current.parent;
+    }
+    const parent = current.parent;
+    return !(
+      ((ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) &&
+        parent.expression === current) ||
+      (ts.isCallExpression(parent) && parent.expression === current) ||
+      (ts.isTaggedTemplateExpression(parent) && parent.tag === current)
+    );
+  }
+  return true;
 }
 
 function commonPathPrefix(left: readonly string[], right: readonly string[]): readonly string[] {
