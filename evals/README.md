@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,336 hooks across 220 source roots. The corpus currently contains
-778 manual hook labels, including 19 non-enforced opportunities, plus fourteen
+784 manual hook labels, including 19 non-enforced opportunities, plus fourteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -41,6 +41,13 @@ labels. Three boolean-toggle labels require the direct `.toggle()` operation. On
 that a transported `useValue` subscription can leave a broad owner without changing observable ownership or child APIs. Run
 the eval for the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
+
+Six effect-written presentation labels across three app roots verify that owner-lifetime observable storage can remove a
+broad owner render while the original `useEffect`, cleanup, dependencies, and write order stay intact. Every setter call
+must be lexically inside a direct imported React `useEffect`; named callbacks and other lifecycle hooks abstain. The value
+may flow through pure immutable projections, one safe raw-value transport inside the same bounded gate, an imported
+unshadowed `clsx` call, or a stable-keyed repeated render. Effect reads, previous-value updaters, companion writes,
+callback escape, unkeyed lists, and large or disjoint render surfaces remain review findings.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
 resolution is provenance rather than proof of leaf ownership; production migrations are not emitted for tests; state

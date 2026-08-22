@@ -2449,13 +2449,14 @@ export const goldCases = [
     target: "excalidraw",
   },
   {
-    action: "move-state-down",
+    action: "use-observable",
     enforced: false,
     file: "components/Stats/index.tsx",
     hook: "useState",
     line: 148,
     name: "sceneDimension",
-    rationale: "Throttled dimensions are consumed only by the scene-dimension rows inside a much broader statistics owner.",
+    rationale:
+      "Throttled dimensions need owner-lifetime observable storage because Collapsible unmounts its rows while closed; subscribe only in the scene-dimension rows while preserving the owner effect and throttle cleanup.",
     target: "excalidraw",
   },
   ...[
@@ -5829,6 +5830,23 @@ export const goldCases = [
     line: line as number,
     name: name as string,
     rationale: "This command snapshot can become a ref only after proving the custom form-hook callback contract does not use React state as its notification boundary.",
+    target: target as string,
+  })),
+  ...[
+    ["tree-map", "components/avatar-management/create-avatar-style-dialog.tsx", 37, "previewUrl"],
+    ["tree-map", "components/impersonation-badge.tsx", 36, "peeked"],
+    ["excalidraw", "components/TTDDialog/Chat/ChatMessage.tsx", 33, "canRetry"],
+    ["excalidraw", "components/ImageExportDialog.tsx", 91, "renderError"],
+    ["memoria-src", "feature/profile/components/ArtPickerScreen.tsx", 81, "logos"],
+    ["memoria-src", "ui/components/media/WatchNextButton.tsx", 102, "glowColor"],
+  ].map(([target, file, line, name]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale:
+      "State written only by React effects can retain owner lifetime in an observable while one small presentation subtree subscribes; preserve the original effect, cleanup, and statement order.",
     target: target as string,
   })),
 ] as const satisfies readonly GoldHookCase[];

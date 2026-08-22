@@ -4332,6 +4332,138 @@ test("preserves React lifecycle timing when command-only state becomes a ref", (
   assert.match(state?.evidence[2] ?? "", /effect writes 2/);
 });
 
+test("isolates effect-written presentation state in a leaf subscriber", () => {
+  const [finding] = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Dashboard() {
+      const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+      useEffect(() => {
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+      }, []);
+      return <Page><Header /><Nav /><Summary /><Filters /><Chart /><Table /><Sidebar />
+        <Help /><Footer /><Actions /><Status>
+          {previewUrl ? <Preview src={previewUrl} /> : <EmptyPreview />}
+        </Status></Page>;
+    }
+  `, "fixture.tsx");
+
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /preserve the React effect/i);
+  assert.match(finding?.message ?? "", /leaf subscriber/i);
+});
+
+test("accepts an effect-written projection through the imported clsx package", () => {
+  const [finding] = analyzeSource(`
+    import clsx from "clsx";
+    import { useEffect, useState } from "react";
+    export function Dashboard() {
+      const [canRetry, setCanRetry] = useState(false);
+      useEffect(() => {
+        const timer = setTimeout(() => setCanRetry(true), 200);
+        return () => clearTimeout(timer);
+      }, []);
+      return <Page><Header /><Nav /><Summary /><Filters /><Chart /><Table /><Sidebar />
+        <Help /><Footer /><Actions /><Status>
+          <button className={clsx("retry", { invisible: !canRetry })}>Retry</button>
+        </Status></Page>;
+    }
+  `, "fixture.tsx");
+
+  assert.equal(finding?.action, "use-observable");
+
+  const [shadowed] = analyzeSource(`
+    import clsx from "clsx";
+    import { useEffect, useState } from "react";
+    export function Dashboard() {
+      const clsx = (...values: unknown[]) => { audit(values); return ""; };
+      const [canRetry, setCanRetry] = useState(false);
+      useEffect(() => { setCanRetry(true); }, []);
+      return <Page><Header /><Nav /><Summary /><Filters /><Chart /><Table /><Sidebar />
+        <Help /><Footer /><Actions /><Status>
+          <button className={clsx("retry", { invisible: !canRetry })}>Retry</button>
+        </Status></Page>;
+    }
+  `, "fixture.tsx");
+  assert.notEqual(shadowed?.action, "use-observable");
+});
+
+test("combines effect-written presentation state projected through two const aliases", () => {
+  const [finding] = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Gallery() {
+      const [items, setItems] = useState<string[] | null>(null);
+      useEffect(() => {
+        let alive = true;
+        setItems(null);
+        loadItems().then(next => { if (alive) setItems(next); });
+        return () => { alive = false; };
+      }, []);
+      const loading = items === null;
+      const list = items ?? [];
+      return <Page><Header /><Nav /><Summary /><Filters /><Chart /><Table /><Sidebar />
+        <Help /><Footer /><Actions /><ScrollView>
+          {loading ? <Skeleton /> : list.length === 0 ? <Empty /> :
+            list.map(item => <Tile key={item} value={item} />)}
+        </ScrollView></Page>;
+    }
+  `, "fixture.tsx");
+
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /<ScrollView>/);
+
+  const unkeyed = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Gallery() {
+      const [items, setItems] = useState<string[] | null>(null);
+      useEffect(() => { setItems([]); }, []);
+      const loading = items === null;
+      const list = items ?? [];
+      return <Page><Header /><Nav /><Summary /><Filters /><Chart /><Table /><Sidebar />
+        <Help /><Footer /><Actions /><ScrollView>
+          {loading ? <Skeleton /> : list.map(item => <Tile value={item} />)}
+        </ScrollView></Page>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "items");
+  assert.notEqual(unkeyed?.action, "use-observable");
+});
+
+test("keeps unsafe effect-written presentation state under review", () => {
+  for (const body of [
+    `setElapsed(next); setReady(true);`,
+    `if (elapsed < next) setElapsed(next);`,
+    `setElapsed(previous => { audit(previous); return previous + 1; });`,
+  ]) {
+    const findings = analyzeSource(`
+      import { useEffect, useState } from "react";
+      export function Dashboard({ next }: { next: number }) {
+        const [elapsed, setElapsed] = useState(0);
+        const [ready, setReady] = useState(false);
+        useEffect(() => { ${body} }, [next]);
+        return <Page><Header /><Nav /><Summary /><Filters /><Chart /><Table /><Sidebar />
+          <Help /><Footer /><Actions /><Status><Progress value={elapsed} /></Status>
+          <Ready value={ready} /></Page>;
+      }
+    `, "fixture.tsx");
+    const elapsed = findings.find(finding => finding.name === "elapsed");
+    assert.notEqual(elapsed?.action, "use-observable", body);
+  }
+
+  const opaqueGate = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Dashboard() {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => { setVisible(true); }, []);
+      return <Page><Header /><Nav /><Summary /><Filters /><Chart /><Table /><Sidebar />
+        <Help /><Footer /><Actions /><Status>
+          {dangerous(visible) ? <Ready /> : <Waiting />}
+        </Status></Page>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "visible");
+  assert.notEqual(opaqueGate?.action, "use-observable");
+});
+
 test("does not move lifecycle-written rendered or self-read state into a ref", () => {
   const rendered = analyzeSource(`
     import { useLayoutEffect, useState } from "react";

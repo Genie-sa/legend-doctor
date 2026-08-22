@@ -7,21 +7,31 @@
 | App roots | 12 |
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
-| Manual hook labels | 778 |
+| Manual hook labels | 784 |
 | Known misses | 19 |
 | State groups | 14/14 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (395/395) |
-| Actionable recall | 95.4% (395/414) |
-| Unit tests | 487/487 |
+| Actionable precision | 100% (401/401) |
+| Actionable recall | 95.5% (401/420) |
+| Unit tests | 491/491 |
 
-The latest phase converts five Expensify ImageView pointer snapshots from `review-state` to one grouped `use-ref`
-instruction. Against commit `3205076`, the exact 220-target delta is:
+The latest phase converts six effect-written presentation states from `review-state` to `use-observable`. Against commit
+`250270a`, the exact 220-target delta is:
 
-- Expensify `src/components/ImageView/index.tsx`: `isMouseDown`, `initialScrollLeft`, `initialScrollTop`, `initialX`, and
-  `initialY` changed from `review-state` to `use-ref`.
-- The other 219 targets have zero hook action changes.
+- Tree Map: `previewUrl` in `create-avatar-style-dialog.tsx` and `peeked` in `impersonation-badge.tsx`.
+- Memoria: `logos` in `ArtPickerScreen.tsx` and `glowColor` in `WatchNextButton.tsx`.
+- Excalidraw: `renderError` in `ImageExportDialog.tsx` and `canRetry` in `ChatMessage.tsx`.
+- The other 217 targets have zero hook action changes.
 - All 220 targets have zero Legend practice action changes.
+
+## Effect-written presentation proof
+
+Every setter call must be lexically inside a direct imported React `useEffect`, with no state read in any effect, no
+previous-value updater, no callback escape, no companion state write, and no transported command surface. The state may
+flow through immutable one-hop aliases only when all downstream reads fit one bounded render boundary. Raw value
+transport is limited to one safe prop target inside that same boundary; repeated output needs a stable item-derived key;
+and `clsx` is accepted only from the real package import without owner shadowing. The recommendation preserves the effect,
+cleanup, dependency list, statement order, and owner lifetime, changing only storage and the leaf subscription.
 
 ## Listener snapshot proof
 
@@ -57,9 +67,8 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 Nineteen opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- twelve observable leaf migrations covering keyed selection, repeated rows, coupled playlist edits, timed feedback, and
-  three download-failure callbacks;
-- one state move into a throttled statistics leaf whose current child mount lifetime must remain stable;
+- thirteen observable leaf migrations covering keyed selection, repeated rows, coupled playlist edits, throttled
+  statistics, timed feedback, and three download-failure callbacks;
 - five ref migrations behind async confirmation, form callback, or status-listener contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,

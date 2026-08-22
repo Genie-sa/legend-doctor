@@ -250,6 +250,7 @@ function analyzeParsedSource(
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
 ): HookFinding[] {
   const imports = collectHookImports(sourceFile);
+  const pureProjectionImports = collectPureProjectionImports(sourceFile);
   const reactCommit = collectReactCommitContext(sourceFile, imports);
   const localComponents = collectLocalComponents(sourceFile);
   const states: StateCandidate[] = [];
@@ -274,6 +275,7 @@ function analyzeParsedSource(
   });
 
   const lifecycleRegions = reactCommit.lifecycleRegions;
+  const directEffectCalls = new Set(reactCommit.effectCalls);
   const usageByState = new Map(states.map(state => [state, collectStateUsage(state, lifecycleRegions, imports)]));
   const subtreeByState = new Map<StateCandidate, StateSubtree>();
   const safeCommandStates = new Set<StateCandidate>();
@@ -291,7 +293,13 @@ function analyzeParsedSource(
       !setterCallbackEscapesThroughUnknownHook(state, usage) &&
       primitiveSetterUpdatersArePure(state, usage);
     if (projectionAllowed) safeCommandStates.add(state);
-    const subtree = analyzeStateSubtree(state, usage, projectionAllowed);
+    const subtree = analyzeStateSubtree(
+      state,
+      usage,
+      projectionAllowed,
+      pureProjectionImports,
+      directEffectCalls
+    );
     if (subtree) subtreeByState.set(state, subtree);
   }
   const effectStateScopes = collectEffectStateScopes(states, usageByState);
@@ -2356,6 +2364,15 @@ function classifyState(
         : `Replace \`${state.valueName}\` with a ref or observable handle; preserve any existing React lifecycle hook timing and statement order${usage.setterUsesPreviousValue ? ", evaluating functional updaters against the current handle value" : ""}, because the value is read only by deferred commands and does not render UI.`,
     };
   }
+  const effectProjectionSubtree = subtree?.kind === "effect-projection" ? subtree : null;
+  if (effectProjectionSubtree && !hasCompanionWrites) {
+    const selector = effectProjectionSubtree.repeated ? " with a per-item selector" : "";
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace effect-written presentation state \`${state.valueName}\` with an owner-scoped observable, preserve the React effect, cleanup, dependencies, and statement order, and wrap the full ${effectProjectionSubtree.label} render boundary at line ${effectProjectionSubtree.line} in an always-mounted leaf subscriber${selector}; evaluate the existing projection or gate inside that subscriber.`,
+    };
+  }
   if (usage.shadowed || usage.escaped || usage.effectWrites > 0) {
     return {
       action: "review-state",
@@ -3213,7 +3230,7 @@ function combineDiscardConfidence(
 }
 
 interface StateSubtree {
-  kind: "direct" | "gate" | "projection";
+  kind: "direct" | "effect-projection" | "gate" | "projection";
   label: string;
   line: number;
   node: JsxSubtreeNode;
@@ -3224,9 +3241,23 @@ interface StateSubtree {
 function analyzeStateSubtree(
   state: StateCandidate,
   usage: StateUsage,
-  projectionAllowed: boolean
+  projectionAllowed: boolean,
+  pureProjectionImports: ReadonlySet<string>,
+  directEffectCalls: ReadonlySet<ts.CallExpression>
 ): StateSubtree | null {
   const ownerJsx = jsxElementCount(state.owner);
+  const effectWrittenPresentation =
+    usage.effectWrites > 0 &&
+    usage.effectWrites === usage.setterCalls &&
+    usage.setterReferences === usage.setterCalls &&
+    usage.setterCallNodes.every(call => hasAncestorInSet(call, directEffectCalls)) &&
+    usage.deferredReads === 0 &&
+    !usage.setterUsesPreviousValue;
+  const allowedProjectionCalls = effectWrittenPresentation
+    ? new Set(
+        [...pureProjectionImports].filter(name => !ownerDeclaresBinding(state.owner, name))
+      )
+    : EMPTY_BINDINGS;
   if (
     ownerJsx < 12 ||
     stateMayHoldCallable(state) ||
@@ -3235,7 +3266,7 @@ function analyzeStateSubtree(
     usage.setterCallNodes.length === 0 ||
     usage.setterReferences !== usage.setterCalls ||
     usage.effectReads > 0 ||
-    usage.effectWrites > 0 ||
+    (usage.effectWrites > 0 && !effectWrittenPresentation) ||
     (usage.deferredReads > 0 && !hasOnlyEventCommandReads(state)) ||
     usage.shadowed ||
     usage.escaped
@@ -3243,12 +3274,16 @@ function analyzeStateSubtree(
     return null;
   }
 
-  const projectionNodes = oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
-    usage.directRenderNodes;
+  const projectionNodes = effectWrittenPresentation
+    ? multipleOneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
+      usage.directRenderNodes
+    : oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
+      usage.directRenderNodes;
   const renderReadsInNestedCallbacks = projectionNodes.some(
     node => nearestNestedFunction(node, state.owner) !== null
   );
   if (
+    !effectWrittenPresentation &&
     usage.transportedOccurrences === 0 &&
     projectionAllowed &&
     !renderReadsInNestedCallbacks
@@ -3266,12 +3301,14 @@ function analyzeStateSubtree(
   const gateProjection = renderReadsInNestedCallbacks
     ? null
     : commonRenderGateSubtree(projectionNodes, state.owner);
+  const safeProjectionReferences = projectionNodes.every(node =>
+    isSafeJsxProjectionReference(node, state.owner, allowedProjectionCalls) ||
+    (effectWrittenPresentation &&
+      isSafeEffectPresentationReference(node, state.owner))
+  );
   if (
     !projectionAllowed ||
-    !(
-      projectionNodes.every(node => isSafeJsxProjectionReference(node, state.owner)) ||
-      gateProjection
-    ) ||
+    !(safeProjectionReferences || gateProjection) ||
     (renderReadsInNestedCallbacks &&
       !isKeyedRepeatedProjection(projectionNodes, state.owner))
   ) {
@@ -3282,16 +3319,58 @@ function analyzeStateSubtree(
     !projection ||
     jsxElementCountIn(projection) / ownerJsx > 0.4 ||
     (usage.transportedOccurrences > 0 &&
-      !isSafeMixedProjectionTransport(state, usage, projection))
+      !isSafeMixedProjectionTransport(
+        state,
+        usage,
+        projection,
+        effectWrittenPresentation
+      ))
   ) {
     return null;
   }
   return stateSubtreeResult(
-    gateProjection ? "gate" : "projection",
+    effectWrittenPresentation
+      ? "effect-projection"
+      : gateProjection
+        ? "gate"
+        : "projection",
     projection,
     projectionNodes,
     state
   );
+}
+
+function multipleOneHopRenderProjectionReferences(
+  owner: RuntimeFunctionLike,
+  renderNodes: readonly ts.Node[]
+): readonly ts.Identifier[] | null {
+  const references = new Set<ts.Identifier>();
+  for (const renderNode of renderNodes) {
+    const projected = oneHopRenderProjectionReferences(owner, [renderNode]);
+    if (!projected) return null;
+    for (const reference of projected) references.add(reference);
+  }
+  return references.size > 0 ? [...references] : null;
+}
+
+function isSafeEffectPresentationReference(
+  node: ts.Node,
+  owner: RuntimeFunctionLike
+): boolean {
+  if (!findAncestorUntil(node, isJsxNode, owner)) return false;
+  if (commonRenderGateSubtree([node], owner)) return true;
+  const repeated = nearestRepeatedRenderCall(node, owner);
+  if (
+    !repeated ||
+    !ts.isPropertyAccessExpression(repeated.expression) ||
+    repeated.expression.expression !== node
+  ) {
+    return false;
+  }
+  const callback = repeated.arguments[0];
+  return !!callback &&
+    (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
+    repeatedRenderHasStableItemKey(callback);
 }
 
 function isKeyedRepeatedProjection(
@@ -3344,7 +3423,8 @@ function stateSubtreeResult(
 function isSafeMixedProjectionTransport(
   state: StateCandidate,
   usage: StateUsage,
-  common: JsxSubtreeNode
+  common: JsxSubtreeNode,
+  allowNestedSite = false
 ): boolean {
   const site = [...usage.valueTransportSites][0];
   const target = [...usage.valueTargets][0];
@@ -3355,7 +3435,8 @@ function isSafeMixedProjectionTransport(
     usage.repeatedTransport ||
     !hasStateInitializer(state, ts.SyntaxKind.NullKeyword) ||
     site === undefined ||
-    site !== common.getStart() ||
+    (site !== common.getStart() &&
+      !(allowNestedSite && common.getStart() <= site && site < common.end)) ||
     !target
   ) {
     return false;
@@ -3695,6 +3776,48 @@ function collectLocalComponents(sourceFile: ts.SourceFile): ReadonlySet<string> 
     }
   });
   return names;
+}
+
+function collectPureProjectionImports(sourceFile: ts.SourceFile): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== "clsx" ||
+      statement.importClause?.isTypeOnly
+    ) {
+      continue;
+    }
+    const clause = statement.importClause;
+    if (!clause) continue;
+    if (clause.name) names.add(clause.name.text);
+    if (!clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+    for (const specifier of clause.namedBindings.elements) {
+      if (
+        !specifier.isTypeOnly &&
+        (specifier.propertyName?.text ?? specifier.name.text) === "clsx"
+      ) {
+        names.add(specifier.name.text);
+      }
+    }
+  }
+  return names;
+}
+
+function ownerDeclaresBinding(owner: RuntimeFunctionLike, name: string): boolean {
+  let declared = false;
+  visit(owner, node => {
+    if (
+      node !== owner &&
+      ts.isIdentifier(node) &&
+      node.text === name &&
+      isDeclarationName(node)
+    ) {
+      declared = true;
+    }
+  });
+  return declared;
 }
 
 function isComponentName(name: string): boolean {

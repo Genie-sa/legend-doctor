@@ -19,6 +19,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Latest-value `useRef` mirror | `keep-effect`; preserve post-commit timing |
 | Committed previous-value guard | `keep-effect`; preserve skip-mount and transition timing |
 | Coupled fields | One grouped model and one atomic migration |
+| Effect-written presentation state | Preserve the effect; subscribe only in the proven leaf |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | One unresolved JSX consumer | One local subscriber wrapper; no child contract required |
 | Resolved leaf consumer with verified render-only contract | Owner observable plus one call-site subscriber; child API unchanged |
@@ -41,11 +42,11 @@ Measured on pinned real applications:
 | App roots | 12 |
 | Source targets | 220 |
 | Hooks analyzed | 2,336 |
-| Manual labels | 778 |
+| Manual labels | 784 |
 | Known misses | 19 |
-| Unit tests | 487/487 |
-| Actionable precision | 100% (395/395) |
-| Actionable recall | 95.4% (395/414) |
+| Unit tests | 491/491 |
+| Actionable precision | 100% (401/401) |
+| Actionable recall | 95.5% (401/420) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -228,6 +229,14 @@ function NameField({ draft$ }) {
   return <Input value={name} onChangeText={next => draft$.name.set(next)} />;
 }
 ```
+
+#### Effect-written presentation state
+
+When every write is lexically inside one or more direct React `useEffect` callbacks and the value only controls one
+small render boundary, the tool keeps the effect, cleanup, dependencies, statement order, and owner lifetime unchanged.
+Only the storage becomes an owner-scoped observable, and an always-mounted leaf subscribes around the complete projection
+or gate. Companion writes, effect reads, previous-value updaters, named effect callbacks, callback escape, broad render
+surfaces, and unkeyed repeated output remain review findings.
 
 ### 3. Broad read → lowest observable path
 
