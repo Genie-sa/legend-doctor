@@ -429,7 +429,7 @@ function isWholeValueProjection(reference: ts.Identifier): boolean {
 
 interface NonTrackingSnapshot {
   observable: ts.Expression;
-  sourceProvenEffect: boolean;
+  source: "observable-listener" | "react-or-event" | "source-proven-effect";
 }
 
 function nonTrackingSnapshotObservable(
@@ -449,15 +449,21 @@ function nonTrackingSnapshotObservable(
   if (!observable) return null;
   const callback = findAncestor(call, isRuntimeFunctionLike);
   if (!callback) return null;
-  const source = provenNonTrackingCallbackSource(callback, imports, childContracts);
-  return source ? { observable, sourceProvenEffect: source === "source-proven-effect" } : null;
+  const source = provenNonTrackingCallbackSource(
+    callback,
+    imports,
+    observableBindings,
+    childContracts
+  );
+  return source ? { observable, source } : null;
 }
 
 function provenNonTrackingCallbackSource(
   callback: RuntimeFunctionLike,
   imports: HookImports,
+  observableBindings: ReadonlySet<string>,
   childContracts: ChildContractResolver | null
-): "react-or-event" | "source-proven-effect" | null {
+): NonTrackingSnapshot["source"] | null {
   if (!ts.isArrowFunction(callback) && !ts.isFunctionDeclaration(callback) && !ts.isFunctionExpression(callback)) {
     return null;
   }
@@ -471,6 +477,9 @@ function provenNonTrackingCallbackSource(
   ) {
     return "react-or-event";
   }
+  if (isDirectObservableOnChangeCallback(callback, observableBindings)) {
+    return "observable-listener";
+  }
 
   const owner = findAncestor(callback, isRuntimeFunctionLike);
   if (!owner) return null;
@@ -479,6 +488,26 @@ function provenNonTrackingCallbackSource(
     return "source-proven-effect";
   }
   return callbackIsEventRooted(callback, owner, "", new Set()) ? "react-or-event" : null;
+}
+
+function isDirectObservableOnChangeCallback(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  observableBindings: ReadonlySet<string>
+): boolean {
+  const parent = callback.parent;
+  if (
+    !ts.isCallExpression(parent) ||
+    parent.arguments.length !== 1 ||
+    parent.arguments[0] !== callback ||
+    parent.questionDotToken
+  ) {
+    return false;
+  }
+  const method = unwrapTransparentExpression(parent.expression);
+  return ts.isPropertyAccessExpression(method) &&
+    !method.questionDotToken &&
+    method.name.text === "onChange" &&
+    provenObservablePath(method.expression, observableBindings) !== null;
 }
 
 function sourceProvenEffectJsxCallback(
@@ -544,9 +573,11 @@ function nonTrackingSnapshotFinding(
     disposition: "change",
     evidence: [
       `${path}.get() reads a proven Legend observable path`,
-      snapshot.sourceProvenEffect
+      snapshot.source === "source-proven-effect"
         ? "the source-proven React effect callback runs outside a Legend tracking context"
-        : "the read is owned by a React snapshot or a uniquely event-rooted command, not a Legend tracking context",
+        : snapshot.source === "observable-listener"
+          ? "the direct Legend observable onChange listener runs outside an observing context"
+          : "the read is owned by a React snapshot or a uniquely event-rooted command, not a Legend tracking context",
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
     message: `Replace \`${path}.get()\` with \`${path}.peek()\`; this code path needs a snapshot, not a reactive dependency.`,

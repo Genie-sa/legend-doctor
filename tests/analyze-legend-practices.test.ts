@@ -625,6 +625,26 @@ test("does not promote reserved element access from direct useValue input", () =
   assert.deepEqual(findings, []);
 });
 
+test("uses peek only in direct callbacks of proven observable onChange listeners", () => {
+  const findings = analyzeLegendPractices(`
+    import { observable, observe } from "@legendapp/state";
+    const state$ = observable({ nested: 0, snapshot: 0, tracked: 0, trigger: 0 });
+    const external = { onChange: (callback: () => void) => callback() };
+    const named = () => consume(state$.nested.get());
+    state$.trigger.onChange(() => consume(state$.snapshot.get()));
+    state$.trigger.onChange(() => schedule(() => consume(state$.nested.get())));
+    state$.trigger.onChange(named);
+    observe(() => state$.trigger.onChange(() => consume(state$.nested.get()), { initial: true }));
+    external.onChange(() => consume(state$.snapshot.get()));
+    observe(() => consume(state$.tracked.get()));
+  `, "fixture.ts");
+
+  assert.deepEqual(
+    findings.map(finding => ({ action: finding.action, line: finding.location.line })),
+    [{ action: "use-peek-for-snapshot", line: 6 }]
+  );
+});
+
 test("keeps get in tracking, render, shallow, and ambiguous callbacks", () => {
   const sources = [
     `

@@ -318,11 +318,15 @@ const save = () => persist(settings$.theme.peek());
 
 // lifecycle snapshot
 useMount(() => register(panelSize$.peek()));
+
+// observable listener snapshot
+settings$.theme.onChange(() => persist(audit$.latestTheme.peek()));
 ```
 
 `use-peek-for-snapshot` replaces zero-argument `.get()` in a proven event, initializer, direct React effect, or direct
-Legend mount or unmount callback. Tracking callbacks, render reads, nested registrations, and unproven getters stay
-unchanged.
+Legend mount or unmount callback. It also handles an inline, one-argument `.onChange()` listener on a proven Legend
+observable. Listener options, named or nested callbacks, tracking callbacks, render reads, and unproven getters stay
+unchanged because their execution or tracking context is not fully proven.
 
 It also follows callback contracts across files:
 
@@ -403,13 +407,13 @@ Component names, file paths, app allowlists, and corpus-specific exceptions neve
 
 ## Verified baseline
 
-The pinned corpus contains 2,356 hooks across 225 targets, 796 manually audited hook labels, 18 state groups, and 104
+The pinned corpus contains 2,356 hooks across 225 targets, 796 manually audited hook labels, 18 state groups, and 106
 Legend practice labels.
 
-- Unit tests: 529/529
+- Unit tests: 530/530
 - Actionable precision: 100% at 426/426
 - Actionable recall: 99.8% at 426/427
-- Legend practice precision: 100% at 104/104
+- Legend practice precision: 100% at 106/106
 
 The one known opportunity remains visible as a non-enforced recall miss because moving it could change callback timing.
 The corpus covers Tree Map, Tree Wallet, Memoria, Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses,

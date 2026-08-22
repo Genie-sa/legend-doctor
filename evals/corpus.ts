@@ -6578,6 +6578,20 @@ export const goldPracticeCases = [
     rationale: "The component destructures only width, so it can subscribe directly to the width child observable.",
     target: "legend-music",
   },
+  {
+    action: "use-peek-for-snapshot",
+    file: "components/DropdownMenu.tsx",
+    line: 422,
+    rationale: "The direct observable onChange listener reads the latest dropdown flag as a snapshot and does not establish another tracked dependency.",
+    target: "legend-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    file: "systems/LocalMusicState.ts",
+    line: 1334,
+    rationale: "The library-path onChange listener snapshots the independent scanning flag before deciding whether to start a scan.",
+    target: "legend-music",
+  },
   ...[145, 146, 155, 156].map(
     (line): GoldPracticeCase => ({
       action: "use-peek-for-snapshot",

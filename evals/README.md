@@ -34,7 +34,7 @@ Acceptance targets for the first useful release:
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
 796 manual hook labels, including 1 non-enforced opportunity, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
-`useValue` labels, sixteen lowest-path subscription labels, thirteen non-tracking snapshot labels, and eight narrow observable-write
+`useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
 `useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Nine leaf-boundary labels verify
@@ -53,6 +53,11 @@ and insertion effects plus Legend mount and unmount callbacks are non-tracking l
 must own the read, so nested registrations and tracking callbacks abstain. A dynamic `const` alias qualifies only when it
 is rooted in a proven observable and passed directly to imported `useValue`; mutable aliases, optional access, reserved
 members, unrelated hook imports, and unproven roots abstain.
+
+Two Legend Music snapshot labels verify inline callbacks passed as the only argument to `onChange` on a proven Legend
+observable. Legend registers and dispatches those listeners without opening an observing context. Listener options are
+excluded because `initial: true` can run synchronously inside an outer observer. Named callbacks, nested callbacks,
+optional or dynamic receivers, unrelated `onChange` methods, and tracking APIs also abstain.
 
 The Formbricks tag-merger label verifies deletion of a self-contained state cycle: the current value is read only inside
 an evaluation-inert argument to its own setter, and neither the current nor assigned value reaches rendering or another
