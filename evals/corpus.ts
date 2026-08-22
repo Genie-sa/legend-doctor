@@ -1573,12 +1573,11 @@ export const goldCases = [
   },
   {
     action: "move-to-event",
-    enforced: false,
     file: "components/cockpit/pages/recent.tsx",
     hook: "useEffect",
     line: 124,
     name: null,
-    rationale: "Manual review proves all reset sources are same-owner events, but the detector now abstains because their custom-component callback contract is not locally proven.",
+    rationale: "Every period, type, and member mutation resolves through local wrappers to imported Base UI value-change callbacks, so the page reset can join each mutation and delete the follow-up commit.",
     target: "tree-map",
   },
   {

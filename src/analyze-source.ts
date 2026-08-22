@@ -500,7 +500,8 @@ function analyzeParsedSource(
       imports.useRef,
       imports.reactNamespaces,
       moduleScopeBindings,
-      nonProductionHarness
+      nonProductionHarness,
+      childContracts
     );
     effectClassifications.set(effect, classification);
     if (classification.derivedState) derivedStates.add(classification.derivedState);

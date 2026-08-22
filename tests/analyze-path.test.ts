@@ -1790,6 +1790,79 @@ test("proves direct source-component callback timing before replacing command-on
   assert.equal(states.get("effect"), "review-state");
 });
 
+test("moves reset effects through source wrappers into Base UI event callbacks", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-base-ui-reset-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Controls.tsx"),
+    `
+      import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
+      import { Select as SelectPrimitive } from "@base-ui/react/select";
+      export function Tabs({ className, ...props }: TabsPrimitive.Root.Props) {
+        return <TabsPrimitive.Root className={className} {...props} />;
+      }
+      function Select(props: SelectPrimitive.Root.Props<string>) {
+        return <SelectPrimitive.Root {...props} />;
+      }
+      function FilterSelect({ value, onValueChange }: { value: string; onValueChange: (value: string) => void }) {
+        return <Select value={value} onValueChange={next => onValueChange(String(next))} />;
+      }
+      export function Toolbar({ filters = [] }: { filters?: { value: string; onChange: (value: string) => void }[] }) {
+        return filters.map(filter => filter.onChange ? (
+          <FilterSelect key={filter.value} value={filter.value} onValueChange={filter.onChange} />
+        ) : null);
+      }
+      export function EagerToolbar({ filters }: { filters: { onChange: (value: string) => void }[] }) {
+        filters[0]?.onChange("render");
+        return null;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useEffect, useState } from "react";
+      import { EagerToolbar, Tabs, Toolbar } from "./Controls";
+      export function SafeTabsScreen() {
+        const [period, setPeriod] = useState("week");
+        const [page, setPage] = useState(1);
+        useEffect(() => setPage(1), [period]);
+        return <main>
+          <Tabs value={period} onValueChange={value => setPeriod(String(value))} />
+          <button onClick={() => setPage(value => value + 1)}>{page}</button>
+        </main>;
+      }
+      export function SafeToolbarScreen() {
+        const [type, setType] = useState("all");
+        const [member, setMember] = useState("all");
+        const [page, setPage] = useState(1);
+        useEffect(() => setPage(1), [type, member]);
+        return <main>
+          <Toolbar filters={[{ value: type, onChange: setType }, { value: member, onChange: setMember }]} />
+          <button onClick={() => setPage(value => value + 1)}>{page}</button>
+        </main>;
+      }
+      export function UnsafeScreen() {
+        const [type, setType] = useState("all");
+        const [page, setPage] = useState(1);
+        useEffect(() => setPage(1), [type]);
+        return <main>
+          <EagerToolbar filters={[{ onChange: setType }]} />
+          <button onClick={() => setPage(value => value + 1)}>{page}</button>
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const effects = report.findings.filter(finding => finding.hook === "useEffect");
+  assert.equal(effects[0]?.action, "move-to-event");
+  assert.equal(effects[1]?.action, "move-to-event");
+  assert.equal(effects[2]?.action, "review-effect");
+});
+
 test("wraps a shared primitive locally without changing its API", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-shared-primitive-"));
   await mkdir(path.join(root, "components", "ui"), { recursive: true });

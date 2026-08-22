@@ -163,7 +163,7 @@ export function propDefersArrayItemCallback(
   });
   if (itemNames.size === 0) return false;
 
-  let calls = 0;
+  let references = 0;
   let safe = true;
   visit(source.owner.body, node => {
     if (
@@ -175,27 +175,52 @@ export function propDefersArrayItemCallback(
     ) {
       return;
     }
-    if (!ts.isCallExpression(node.parent) || node.parent.expression !== node) return;
-    calls += 1;
-    const callback = nearestNestedFunction(node, source.owner);
+    references += 1;
+    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+      const callback = nearestNestedFunction(node, source.owner);
+      if (
+        !callback ||
+        (!ts.isArrowFunction(callback) &&
+          !ts.isFunctionDeclaration(callback) &&
+          !ts.isFunctionExpression(callback)) ||
+        callback === source.owner ||
+        !callbackInvocationIsDeferred(
+          callback,
+          source.owner,
+          source.deferredCallbackHooks,
+          resolver ? source : undefined,
+          resolver
+        )
+      ) {
+        safe = false;
+      }
+      return;
+    }
+    if (callbackReferenceIsObservationOnly(node)) return;
+
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, source.owner);
+    if (!resolver || !attribute || !jsxAttributeDirectlyCarries(attribute, node)) {
+      safe = false;
+      return;
+    }
+    const prop = attribute.name.getText();
+    const target = jsxOwnerTarget(attribute);
+    if (!/^on[A-Z]/.test(prop) || !target) {
+      safe = false;
+      return;
+    }
+    if (jsxOwnerIsIntrinsic(attribute) || resolver.frameworkEventComponent(source.file, target)) {
+      return;
+    }
+    const child = resolver.resolveComponent(source.file, target);
     if (
-      !callback ||
-      (!ts.isArrowFunction(callback) &&
-        !ts.isFunctionDeclaration(callback) &&
-        !ts.isFunctionExpression(callback)) ||
-      callback === source.owner ||
-      !callbackInvocationIsDeferred(
-        callback,
-        source.owner,
-        source.deferredCallbackHooks,
-        resolver ? source : undefined,
-        resolver
-      )
+      child === null ||
+      !sourceInputCallbackIsDeferred(child, 0, [prop], resolver, new Set(), 0)
     ) {
       safe = false;
     }
   });
-  return safe && calls > 0;
+  return safe && references > 0;
 }
 
 /**
@@ -552,6 +577,14 @@ function callbackPathExpressionIsDeferred(
     unwrapTransparentExpression(spread.expression) === unwrapTransparentExpression(value)
   ) {
     const target = jsxOwnerTarget(spread);
+    if (
+      target &&
+      path.length === 1 &&
+      /^on[A-Z]/.test(path[0] ?? "") &&
+      resolver.frameworkEventComponent(source.file, target)
+    ) {
+      return true;
+    }
     const child = target ? resolver.resolveComponent(source.file, target) : null;
     return child !== null && sourceInputCallbackIsDeferred(
       child,
@@ -926,7 +959,9 @@ function jsxOwnerIsIntrinsic(attribute: ts.JsxAttribute): boolean {
 }
 
 function jsxTagName(name: ts.JsxTagNameExpression): string | null {
-  return ts.isIdentifier(name) ? name.text : null;
+  return ts.isIdentifier(name) || ts.isPropertyAccessExpression(name)
+    ? name.getText()
+    : null;
 }
 
 function bindingElementPropertyName(element: ts.BindingElement): string | null {
@@ -1634,7 +1669,7 @@ function boundPropIdentifier(
       if (ts.isIdentifier(element.name)) restBinding = element.name;
       continue;
     }
-    if (!ts.isIdentifier(element.name) || element.initializer) continue;
+    if (!ts.isIdentifier(element.name)) continue;
     const source =
       element.propertyName && ts.isIdentifier(element.propertyName)
         ? element.propertyName.text

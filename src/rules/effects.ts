@@ -33,6 +33,7 @@ import type {
   StateUsage,
 } from "../analyze-source.js";
 import { isDependencyDrivenBrowserStorageEffect } from "./browser-storage-effect.js";
+import type { ChildContractResolver } from "./child-contract.js";
 
 export function classifyEffect(
   effect: EffectCandidate,
@@ -44,7 +45,8 @@ export function classifyEffect(
   useRefBindings: ReadonlySet<string>,
   reactNamespaces: ReadonlySet<string>,
   moduleScopeBindings: ReadonlySet<string>,
-  nonProductionHarness: boolean
+  nonProductionHarness: boolean,
+  childContracts: ChildContractResolver | null
 ): ClassifiedEffect {
   if (hasReactEffectOwnershipDirective(effect)) {
     return {
@@ -83,7 +85,8 @@ export function classifyEffect(
     stateBySetter,
     stateByValue,
     usageBySetter,
-    nonProductionHarness
+    nonProductionHarness,
+    childContracts
   );
   if (eventReset) {
     return {
@@ -1205,7 +1208,8 @@ function findMutationSiteReset(
   stateBySetter: ReadonlyMap<string, StateCandidate>,
   stateByValue: ReadonlyMap<string, StateCandidate>,
   usageBySetter: ReadonlyMap<string, StateUsage>,
-  nonProductionHarness: boolean
+  nonProductionHarness: boolean,
+  childContracts: ChildContractResolver | null
 ): MutationSiteReset | null {
   if (
     !effect.callback ||
@@ -1252,7 +1256,7 @@ function findMutationSiteReset(
       usage.escaped ||
       usage.effectWrites > 0 ||
       usage.setterReferences === 0 ||
-      !allSetterReferencesAreEventBoundaries(source)
+      !allSetterReferencesAreEventBoundaries(source, childContracts)
     ) {
       return null;
     }
@@ -1302,7 +1306,10 @@ function nodesHaveSameText(left: ts.Node, right: ts.Node): boolean {
   return left.getText(left.getSourceFile()) === right.getText(right.getSourceFile());
 }
 
-function allSetterReferencesAreEventBoundaries(state: StateCandidate): boolean {
+function allSetterReferencesAreEventBoundaries(
+  state: StateCandidate,
+  childContracts: ChildContractResolver | null
+): boolean {
   if (!state.setterName) return false;
   let references = 0;
   let valid = true;
@@ -1318,7 +1325,7 @@ function allSetterReferencesAreEventBoundaries(state: StateCandidate): boolean {
     if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
       const callback = nearestNestedFunction(node, state.owner);
       if (
-        !jsxAttributeHasProvenEventContract(attribute) ||
+        !jsxAttributeHasProvenEventContract(attribute, childContracts) ||
         !callback ||
         !isInsideJsxAttribute(callback, attribute)
       ) {
@@ -1327,14 +1334,25 @@ function allSetterReferencesAreEventBoundaries(state: StateCandidate): boolean {
       return;
     }
     if (isDirectJsxAttributeExpression(attribute, node)) {
-      if (!jsxAttributeHasProvenEventContract(attribute)) valid = false;
+      if (!jsxAttributeHasProvenEventContract(attribute, childContracts)) valid = false;
       return;
     }
     const property = findAncestorUntil(node, ts.isPropertyAssignment, attribute);
+    const opening = jsxOpeningForAttribute(attribute);
+    const target = opening?.tagName.getText() ?? null;
+    const propName = attribute.name.getText();
+    const callbackProperty = property ? staticPropertyName(property.name) : null;
     if (
       !property ||
       property.initializer !== node ||
-      !isValueTransitionProp(property.name.getText())
+      !callbackProperty ||
+      !isValueTransitionProp(callbackProperty) ||
+      !target ||
+      !childContracts?.componentArrayItemCallbackIsDeferred(
+        target,
+        propName,
+        callbackProperty
+      )
     ) {
       valid = false;
     }
@@ -1342,14 +1360,33 @@ function allSetterReferencesAreEventBoundaries(state: StateCandidate): boolean {
   return valid && references > 0;
 }
 
-function jsxAttributeHasProvenEventContract(attribute: ts.JsxAttribute): boolean {
+function jsxAttributeHasProvenEventContract(
+  attribute: ts.JsxAttribute,
+  childContracts: ChildContractResolver | null
+): boolean {
+  const opening = jsxOpeningForAttribute(attribute);
+  if (!opening) return false;
+  const propName = attribute.name.getText();
+  if (!isValueTransitionProp(propName) && !/^on[A-Z]/.test(propName)) return false;
+  const target = opening.tagName.getText();
+  return /^[a-z]/.test(target) ||
+    childContracts?.frameworkEventComponent(target) === true ||
+    childContracts?.componentCallbackPropIsDeferred(target, propName) === true;
+}
+
+function jsxOpeningForAttribute(
+  attribute: ts.JsxAttribute
+): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
   const opening = attribute.parent.parent;
-  return (
-    (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
-    /^[a-z]/.test(opening.tagName.getText()) &&
-    (isValueTransitionProp(attribute.name.getText()) ||
-      /^on[A-Z]/.test(attribute.name.getText()))
-  );
+  return ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
+    ? opening
+    : null;
+}
+
+function staticPropertyName(name: ts.PropertyName): string | null {
+  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
+    ? name.text
+    : null;
 }
 
 export function callbackHasCleanup(

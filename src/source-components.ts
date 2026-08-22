@@ -490,9 +490,12 @@ export function buildSourceIndexFromFiles(
       return hooks;
     },
     frameworkEventComponentFor: (file, name) => {
-      const binding = records.get(normalizeFile(file))?.imports.get(name);
+      const rootName = name.split(".", 1)[0] ?? name;
+      const binding = records.get(normalizeFile(file))?.imports.get(rootName);
       return binding?.moduleSpecifier === "react-native" ||
-        binding?.moduleSpecifier === "react-native-web";
+        binding?.moduleSpecifier === "react-native-web" ||
+        binding?.moduleSpecifier === "@base-ui/react" ||
+        binding?.moduleSpecifier.startsWith("@base-ui/react/") === true;
     },
     hookDeclarationFor: (file, name) => {
       const normalized = normalizeFile(file);
