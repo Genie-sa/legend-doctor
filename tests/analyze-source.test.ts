@@ -4354,6 +4354,38 @@ test("isolates effect-written presentation state in a leaf subscriber", () => {
   assert.match(finding?.message ?? "", /leaf subscriber/i);
 });
 
+test("isolates presentation state written by an effect-owned memoized command", () => {
+  const source = (escape: string) => `
+    import { useEffect, useMemo, useState } from "react";
+    export function Dashboard({ values }: { values: number[] }) {
+      const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+      const updateDimensions = useMemo(
+        () => throttle((items: number[]) => {
+          setDimensions({ width: items.length, height: items.length * 2 });
+        }, 200),
+        []
+      );
+      useEffect(() => { updateDimensions(values); }, [updateDimensions, values]);
+      useEffect(() => () => updateDimensions.cancel(), [updateDimensions]);
+      return <Page><Header /><Nav /><Summary /><Filters /><Chart /><Table /><Sidebar />
+        <Help /><Footer /><Actions ${escape}/><Stats>
+          <Row>{dimensions.width}</Row><Row>{dimensions.height}</Row>
+        </Stats></Page>;
+    }
+  `;
+
+  const [finding] = analyzeSource(source(""), "fixture.tsx");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /memoized command/i);
+  assert.match(finding?.message ?? "", /effect and cleanup/i);
+
+  const escaped = analyzeSource(
+    source("onUpdate={updateDimensions}"),
+    "fixture.tsx"
+  ).find(candidate => candidate.name === "dimensions");
+  assert.notEqual(escaped?.action, "use-observable");
+});
+
 test("requires a material five-element cut in a compact effect-written owner", () => {
   const analyze = (siblings: string) => analyzeSource(`
     import { useEffect, useState } from "react";

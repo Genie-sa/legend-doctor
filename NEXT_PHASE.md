@@ -8,20 +8,18 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 787 |
-| Known misses | 19 |
+| Known misses | 18 |
 | State groups | 14/14 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (406/406) |
-| Actionable recall | 95.5% (406/425) |
-| Unit tests | 492/492 |
+| Actionable precision | 100% (407/407) |
+| Actionable recall | 95.8% (407/425) |
+| Unit tests | 493/493 |
 
-The latest phase extends the effect-written presentation proof to compact owners only when the leaf cut excludes at least
-five JSX elements. Against commit `410ceff`, the exact current 221-target delta is:
+The latest phase extends the effect-written presentation proof through one effect-owned memoized command. Against commit
+`26bbbe7`, the exact current 221-target delta is:
 
-- Tree Wallet: `islandReady` in `forest-scene.tsx`, plus `buttonReady` and `svgReady` in `news-step.tsx`.
-- Legend Music: `fadeOg` in `DraggableItem.tsx`.
-- Open WebUI: `isFocused` in the newly pinned archived-search target.
-- The other 218 current targets have zero hook action changes.
+- Excalidraw: `sceneDimension` in `components/Stats/index.tsx` changes from `review-state` to `use-observable`.
+- The other 220 current targets have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
 
 ## Effect-written presentation proof
@@ -34,6 +32,11 @@ and `clsx` is accepted only from the real package import without owner shadowing
 cleanup, dependency list, statement order, and owner lifetime, changing only storage and the leaf subscription.
 Owners with twelve or more JSX elements keep the existing 40% subtree ceiling. Smaller owners qualify only when at least
 five JSX elements remain outside the subscriber; four or fewer is an enforced abstention.
+
+A narrow extension accepts setters enclosed by one imported React `useMemo` factory only when the resulting command
+binding is invoked exclusively by direct React effects. Exact effect dependency references and method cleanup calls are
+allowed; JSX transport and every other escape abstain. The recommendation preserves the memoized command, effect and
+cleanup, dependencies, statement order, and owner lifetime, and moves only storage plus the bounded leaf subscription.
 
 ## Listener snapshot proof
 
@@ -66,11 +69,11 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Nineteen opportunities remain non-enforced:
+Eighteen opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- thirteen observable leaf migrations covering keyed selection, repeated rows, coupled playlist edits, throttled
-  statistics, timed feedback, and three download-failure callbacks;
+- twelve observable leaf migrations covering keyed selection, repeated rows, coupled playlist edits, timed feedback,
+  and three download-failure callbacks;
 - five ref migrations behind async confirmation, form callback, or status-listener contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,

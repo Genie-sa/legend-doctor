@@ -15,6 +15,7 @@ export interface HookImports {
   useInsertionEffect: ReadonlySet<string>;
   useImperativeHandle: ReadonlySet<string>;
   useLayoutEffect: ReadonlySet<string>;
+  useMemo: ReadonlySet<string>;
   useObservable: ReadonlySet<string>;
   useObserveEffect: ReadonlySet<string>;
   useRef: ReadonlySet<string>;
@@ -41,6 +42,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   const useInsertionEffect = new Set<string>();
   const useImperativeHandle = new Set<string>();
   const useLayoutEffect = new Set<string>();
+  const useMemo = new Set<string>();
   const useObservable = new Set<string>();
   const useObserveEffect = new Set<string>();
   const useRef = new Set<string>();
@@ -97,6 +99,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
         if (importedName === "useInsertionEffect") useInsertionEffect.add(localName);
         if (importedName === "useImperativeHandle") useImperativeHandle.add(localName);
         if (importedName === "useLayoutEffect") useLayoutEffect.add(localName);
+        if (importedName === "useMemo") useMemo.add(localName);
         if (importedName === "useRef") useRef.add(localName);
         if (importedName === "useTransition") useTransition.add(localName);
         if (importedName === "startTransition") startTransition.add(localName);
@@ -134,6 +137,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
     useInsertionEffect,
     useImperativeHandle,
     useLayoutEffect,
+    useMemo,
     useObservable,
     useObserveEffect,
     useRef,
@@ -147,7 +151,7 @@ export function isImportedHookCall(
   call: ts.CallExpression,
   localNames: ReadonlySet<string>,
   namespaceNames: ReadonlySet<string>,
-  canonicalName: "useCallback" | "useEffect" | "useImperativeHandle" | "useRef" | "useState" | "useValue"
+  canonicalName: "useCallback" | "useEffect" | "useImperativeHandle" | "useMemo" | "useRef" | "useState" | "useValue"
 ): boolean {
   const expression = call.expression;
   if (ts.isIdentifier(expression)) {

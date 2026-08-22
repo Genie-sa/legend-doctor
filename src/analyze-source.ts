@@ -289,8 +289,14 @@ function analyzeParsedSource(
       reactiveMutationsByOwner.get(state.owner) ?? EMPTY_BINDINGS
     );
     if (reactiveMutationPaths.any) reactiveMutationAffectedStates.add(state);
+    const effectOwnedMemoizedCommand = isEffectOwnedMemoizedPresentationState(
+      state,
+      usage,
+      directEffectCalls,
+      imports
+    );
     const projectionAllowed = !reactiveMutationPaths.all &&
-      !setterCallbackEscapesThroughUnknownHook(state, usage) &&
+      (!setterCallbackEscapesThroughUnknownHook(state, usage) || effectOwnedMemoizedCommand) &&
       primitiveSetterUpdatersArePure(state, usage);
     if (projectionAllowed) safeCommandStates.add(state);
     const subtree = analyzeStateSubtree(
@@ -298,7 +304,8 @@ function analyzeParsedSource(
       usage,
       projectionAllowed,
       pureProjectionImports,
-      directEffectCalls
+      directEffectCalls,
+      effectOwnedMemoizedCommand
     );
     if (subtree) subtreeByState.set(state, subtree);
   }
@@ -2364,6 +2371,14 @@ function classifyState(
         : `Replace \`${state.valueName}\` with a ref or observable handle; preserve any existing React lifecycle hook timing and statement order${usage.setterUsesPreviousValue ? ", evaluating functional updaters against the current handle value" : ""}, because the value is read only by deferred commands and does not render UI.`,
     };
   }
+  const effectCommandProjectionSubtree = subtree?.kind === "effect-command-projection" ? subtree : null;
+  if (effectCommandProjectionSubtree && !hasCompanionWrites) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace presentation state \`${state.valueName}\` with an owner-scoped observable, preserve the memoized command, React effect and cleanup, dependencies, and statement order, and wrap the full ${effectCommandProjectionSubtree.label} render boundary at line ${effectCommandProjectionSubtree.line} in an always-mounted leaf subscriber.`,
+    };
+  }
   const effectProjectionSubtree = subtree?.kind === "effect-projection" ? subtree : null;
   if (effectProjectionSubtree && !hasCompanionWrites) {
     const selector = effectProjectionSubtree.repeated ? " with a per-item selector" : "";
@@ -3230,7 +3245,7 @@ function combineDiscardConfidence(
 }
 
 interface StateSubtree {
-  kind: "direct" | "effect-projection" | "gate" | "projection";
+  kind: "direct" | "effect-command-projection" | "effect-projection" | "gate" | "projection";
   label: string;
   line: number;
   node: JsxSubtreeNode;
@@ -3243,7 +3258,8 @@ function analyzeStateSubtree(
   usage: StateUsage,
   projectionAllowed: boolean,
   pureProjectionImports: ReadonlySet<string>,
-  directEffectCalls: ReadonlySet<ts.CallExpression>
+  directEffectCalls: ReadonlySet<ts.CallExpression>,
+  effectOwnedMemoizedCommand: boolean
 ): StateSubtree | null {
   const ownerJsx = jsxElementCount(state.owner);
   const effectWrittenPresentation =
@@ -3329,7 +3345,9 @@ function analyzeStateSubtree(
     return null;
   }
   return stateSubtreeResult(
-    effectWrittenPresentation
+    effectOwnedMemoizedCommand
+      ? "effect-command-projection"
+      : effectWrittenPresentation
       ? "effect-projection"
       : gateProjection
         ? "gate"
@@ -3530,6 +3548,90 @@ function setterCallbackEscapesThroughUnknownHook(
     }
     return false;
   });
+}
+
+function isEffectOwnedMemoizedPresentationState(
+  state: StateCandidate,
+  usage: StateUsage,
+  directEffectCalls: ReadonlySet<ts.CallExpression>,
+  imports: HookImports
+): boolean {
+  if (
+    !state.owner.body ||
+    usage.setterCallNodes.length === 0 ||
+    usage.setterReferences !== usage.setterCalls ||
+    usage.effectWrites !== 0 ||
+    usage.setterUsesPreviousValue
+  ) {
+    return false;
+  }
+
+  let memoCall: ts.CallExpression | null = null;
+  for (const setterCall of usage.setterCallNodes) {
+    const containingMemo = findAncestorUntil(
+      setterCall,
+      (node): node is ts.CallExpression =>
+        ts.isCallExpression(node) &&
+        isImportedHookCall(
+          node,
+          imports.useMemo,
+          imports.reactNamespaces,
+          "useMemo"
+        ),
+      state.owner
+    );
+    if (!containingMemo || (memoCall !== null && memoCall !== containingMemo)) return false;
+    memoCall = containingMemo;
+  }
+  if (!memoCall) return false;
+
+  const factory = memoCall.arguments[0];
+  const declaration = findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner);
+  if (
+    !factory ||
+    (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
+    !declaration?.initializer ||
+    unwrapTransparentExpression(declaration.initializer) !== memoCall ||
+    !ts.isIdentifier(declaration.name) ||
+    bindingDeclarationCount(state.owner, declaration.name.text) !== 1 ||
+    !usage.setterCallNodes.every(call => nodeWithin(call, factory))
+  ) {
+    return false;
+  }
+
+  const binding = declaration.name.text;
+  let invokedByEffect = false;
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== binding ||
+      node === declaration.name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const effectCall = [...directEffectCalls].find(effect => nodeWithin(node, effect));
+    if (!effectCall) {
+      safe = false;
+      return;
+    }
+    const directCall = ts.isCallExpression(node.parent) && node.parent.expression === node;
+    if (directCall) {
+      invokedByEffect = true;
+      return;
+    }
+    const memberCall = ts.isPropertyAccessExpression(node.parent) &&
+      node.parent.expression === node &&
+      ts.isCallExpression(node.parent.parent) &&
+      node.parent.parent.expression === node.parent;
+    const dependencies = effectCall.arguments[1];
+    if (memberCall || (dependencies !== undefined && nodeWithin(node, dependencies))) return;
+    safe = false;
+  });
+  return safe && invokedByEffect;
 }
 
 function commonRepeatedRender(

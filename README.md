@@ -238,6 +238,11 @@ Only the storage becomes an owner-scoped observable, and an always-mounted leaf 
 or gate. Companion writes, effect reads, previous-value updaters, named effect callbacks, callback escape, broad render
 surfaces, and unkeyed repeated output remain review findings.
 
+The same storage-only migration applies when every setter is enclosed by one imported React `useMemo` command whose
+binding is invoked only by direct React effects. Effect dependency references and method cleanup calls are allowed; any
+JSX prop, callback, or other escape keeps the state under review. The recommendation still preserves the memoized
+command, effect scheduling, cleanup, dependencies, and write order.
+
 For compact owners below 12 JSX elements, the same proof emits an action only when the leaf boundary excludes at least
 five elements. This retains the existing material-render-cut requirement without hiding useful deferred or frame-scheduled
 leaves in smaller components.
@@ -622,7 +627,8 @@ cohesive leaf makes React the better owner.
 ## Next steps
 
 1. Legend-native value: expand proven batching, `peek()` versus `get()`, direct observable reads, narrow subscriptions, and child writes.
-2. Hook recall: resume only when five equivalent positives across three apps share one structural proof.
+2. Hook recall: require five equivalent positives across three apps for a new proof family; a narrow extension to an
+   existing family may instead use one pinned positive, adversarial escape negatives, and a zero-regression full-corpus delta.
 3. Publish hardening: add a license, package files, install smoke test, and CI release workflow.
 
 The current phase, exact deltas, deferred opportunities, and restart criteria are in [NEXT_PHASE.md](NEXT_PHASE.md).
@@ -632,7 +638,7 @@ The current phase, exact deltas, deferred opportunities, and restart criteria ar
 | Step | Done when |
 | --- | --- |
 | Pin evidence | A new app commit reproduces exact hook counts and includes both actionable cases and hard negatives. |
-| Prove one family | At least five equivalent positives across three app roots share one structural proof, and evil fixtures cover lifecycle, alias, repeated-render, async, and atomicity failures. |
+| Prove one family | A new family has five equivalent positives across three app roots; a narrow extension has a pinned positive, adversarial negatives, and zero unrelated corpus deltas. |
 | Release the rule | Typecheck, every unit test, grouped migrations, and the complete pinned eval pass; the app-by-app action delta is recorded. |
 
 Start from corpus evidence. Extend one existing proof family when possible. Keep unmatched lifecycle, cross-file ownership,

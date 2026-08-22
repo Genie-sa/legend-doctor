@@ -2452,7 +2452,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "components/Stats/index.tsx",
     hook: "useState",
     line: 148,

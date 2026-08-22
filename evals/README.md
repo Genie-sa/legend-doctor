@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-787 manual hook labels, including 19 non-enforced opportunities, plus fourteen
+787 manual hook labels, including 18 non-enforced opportunities, plus fourteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -51,6 +51,11 @@ callback escape, unkeyed lists, and large or disjoint render surfaces remain rev
 Compact owners below twelve JSX elements additionally require the leaf boundary to exclude at least five elements; a
 four-element saving is an enforced hard negative. The Open WebUI archived-search screen is pinned as its own target so
 the cross-app proof is evaluated rather than inferred from an unsampled repository file.
+One additional Excalidraw label verifies the narrow memoized-command extension: every setter is enclosed by one imported
+React `useMemo` factory, the resulting binding is invoked only from direct React effects, and its other references are
+effect dependencies or method cleanup calls. The command may not escape to JSX or any other callback surface. This keeps
+the throttle, effects, cleanup, dependencies, and statement order unchanged while moving only the presentation storage
+and `<StatsRows>` subscription.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
 resolution is provenance rather than proof of leaf ownership; production migrations are not emitted for tests; state
