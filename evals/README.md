@@ -42,6 +42,12 @@ that a transported `useValue` subscription can leave a broad owner without chang
 the eval for the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
 
+The Formbricks tag-merger label verifies deletion of a self-contained state cycle: the current value is read only inside
+an evaluation-inert argument to its own setter, and neither the current nor assigned value reaches rendering or another
+command. Fixtures require an inert initializer and reject calls, mutations, coercions, functional updaters, shadowed
+bindings, effect writes, and external reads. Property access in otherwise unused setter arguments retains its evaluation
+at the original statement position.
+
 Six effect-written presentation labels across three app roots verify that owner-lifetime observable storage can remove a
 broad owner render while the original `useEffect`, cleanup, dependencies, and write order stay intact. Every setter call
 must be lexically inside a direct imported React `useEffect`; named callbacks and other lifecycle hooks abstain. The value

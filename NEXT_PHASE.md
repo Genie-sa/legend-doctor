@@ -13,10 +13,30 @@
 | Legend practices | 100/100 |
 | Actionable precision | 100% (424/424) |
 | Actionable recall | 99.8% (424/425) |
-| Unit tests | 517/517 |
+| Unit tests | 520/520 |
 
-The latest phase rejects ref migrations that change React render-snapshot ordering inside one command. The exact current
-222-target action delta is:
+The latest phase deletes self-contained React state cycles whose current value is used only to calculate an inert argument
+for their own setter. The exact current 222-target action delta against `eb4f9b9` is:
+
+- Formbricks `merge-tags-combobox.tsx` changes `value` from `use-ref` to `delete-unused-state`; the value neither renders
+  nor escapes, and the selection command behaves identically without the state cycle.
+- The other 221 targets have zero hook action changes.
+- All 222 targets have zero Legend practice action changes.
+- Full parent/current scans confirm zero action changes across Expensify (6,864 files, 2,952 hooks), Outline (827 files,
+  618 hooks), and Open WebUI React Native (908 files, 104 hooks, 20 Legend practices). Formbricks has exactly the one
+  audited change across 2,624 files and 1,086 hooks.
+
+The proof requires an evaluation-inert initializer, no shadowing, and no render, effect, transport, or escape reads. Every
+value read must stay inside an evaluation-inert argument to its own setter. Calls, mutations, coercions, functional
+updaters, effect writes, and reads used by any other command abstain. Property access in an otherwise removable setter
+argument is preserved with a `void` expression at the same statement position. Fixtures cover the positive state cycle,
+external reads, calls, mutation, coercion, functional updaters, shadowing, side-effectful initialization, and property
+evaluation.
+
+## Command render-snapshot ordering
+
+The previous phase rejects ref migrations that change React render-snapshot ordering inside one command. Its exact
+222-target action delta was:
 
 - Expensify's awaited domain-close decision changes from `use-ref` to `review-state` because its custom modal flow does
   not prove a committed render before a later invocation can observe the reset.

@@ -2851,21 +2851,28 @@ function classifyState(
     };
   }
   const unusedStateDeletionConfidence = setterCallsDiscardConfidence(usage.setterCallNodes);
+  const onlyCalculatesOwnSetter = stateReadsOnlyCalculateOwnSetter(state, usage);
   if (
     usage.setterCalls > 0 &&
     usage.setterReferences === usage.setterCalls &&
     !usage.setterUsesPreviousValue &&
     !usage.escaped &&
+    !usage.shadowed &&
+    !stateMayHoldCallable(state) &&
+    state.call.arguments.length <= 1 &&
+    (state.call.arguments[0] === undefined || isEvaluationInert(state.call.arguments[0])) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
-    usage.deferredReads === 0 &&
+    (usage.deferredReads === 0 || onlyCalculatesOwnSetter) &&
     usage.transportedOccurrences === 0 &&
-    unusedStateDeletionConfidence !== null
+    (unusedStateDeletionConfidence !== null || onlyCalculatesOwnSetter)
   ) {
     return {
       action: "delete-unused-state",
-      confidence: unusedStateDeletionConfidence,
-      message: `Delete React state \`${state.valueName}\` and its setter calls; assigned values are never consumed.`,
+      confidence: unusedStateDeletionConfidence ?? "certain",
+      message: unusedStateDeletionConfidence === "probable"
+        ? `Delete React state \`${state.valueName}\`; replace each setter call with a \`void\` expression that evaluates the same argument at the same position, because the assigned value is never consumed but property evaluation must be preserved.`
+        : `Delete React state \`${state.valueName}\` and its setter calls; assigned values are never consumed.`,
     };
   }
   const directCallSite = directUniqueReturnCallSite(usage, state.owner);
@@ -3980,49 +3987,63 @@ function setterCallsDiscardConfidence(
   return confidence;
 }
 
+function stateReadsOnlyCalculateOwnSetter(
+  state: StateCandidate,
+  usage: StateUsage
+): boolean {
+  if (
+    usage.effectWrites > 0 ||
+    usage.setterCallNodes.length === 0 ||
+    usage.setterCallNodes.some(call =>
+      nearestMutationFunction(call, state.owner) === state.owner ||
+      call.arguments.length !== 1 ||
+      !call.arguments[0] ||
+      !isEvaluationInert(call.arguments[0])
+    )
+  ) {
+    return false;
+  }
+
+  let reads = 0;
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== state.valueName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    reads += 1;
+    safe = usage.setterCallNodes.some(call =>
+      call.arguments[0] !== undefined && nodeWithin(node, call.arguments[0])
+    );
+  });
+  return safe && reads > 0;
+}
+
 function discardableExpressionConfidence(
   node: ts.Expression
 ): "certain" | "probable" | null {
-  if (
-    ts.isIdentifier(node) ||
-    ts.isStringLiteralLike(node) ||
-    ts.isNumericLiteral(node) ||
-    node.kind === ts.SyntaxKind.TrueKeyword ||
-    node.kind === ts.SyntaxKind.FalseKeyword ||
-    node.kind === ts.SyntaxKind.NullKeyword
-  ) {
-    return "certain";
+  if (isEvaluationInert(node)) return "certain";
+  const value = unwrapTransparentExpression(node);
+  if (ts.isPropertyAccessExpression(value)) {
+    return discardableExpressionConfidence(value.expression) ? "probable" : null;
   }
-  if (ts.isPropertyAccessExpression(node)) {
-    return discardableExpressionConfidence(node.expression) ? "probable" : null;
-  }
-  if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node)) {
-    return discardableExpressionConfidence(node.expression);
-  }
-  if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node)) {
-    return discardableExpressionConfidence(node.expression);
-  }
-  if (ts.isPrefixUnaryExpression(node)) {
-    if (
-      node.operator === ts.SyntaxKind.PlusPlusToken ||
-      node.operator === ts.SyntaxKind.MinusMinusToken
-    ) {
-      return null;
-    }
-    return discardableExpressionConfidence(node.operand);
-  }
-  if (ts.isArrayLiteralExpression(node)) {
+  if (ts.isArrayLiteralExpression(value)) {
     return combineDiscardConfidence(
-      node.elements.map(element =>
+      value.elements.map(element =>
         ts.isSpreadElement(element) ? null : discardableExpressionConfidence(element)
       )
     );
   }
-  if (ts.isObjectLiteralExpression(node)) {
+  if (ts.isObjectLiteralExpression(value)) {
     return combineDiscardConfidence(
-      node.properties.map(property => {
+      value.properties.map(property => {
         if (ts.isShorthandPropertyAssignment(property)) return "certain";
-        return ts.isPropertyAssignment(property)
+        return ts.isPropertyAssignment(property) && !ts.isComputedPropertyName(property.name)
           ? discardableExpressionConfidence(property.initializer)
           : null;
       })

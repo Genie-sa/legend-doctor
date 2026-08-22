@@ -50,7 +50,7 @@ Measured on pinned real applications:
 | Manual labels | 791 |
 | Known misses | 1 |
 | State groups | 18/18 |
-| Unit tests | 517/517 |
+| Unit tests | 520/520 |
 | Actionable precision | 100% (424/424) |
 | Actionable recall | 99.8% (424/425) |
 | Legend practice precision | 100% (100/100) |
@@ -523,6 +523,12 @@ After:
 ```tsx
 useUnmount(() => tooltip.hide());
 ```
+
+Setter-only state is deleted when its initializer is evaluation-inert and every state read exists only to calculate an
+evaluation-inert argument for its own setter. Calls, mutations, coercions, functional updaters, shadowed bindings, effect
+writes, and reads that render, escape, or reach another command remain reviews. When an otherwise removable setter
+argument contains property access, the recommendation preserves that evaluation at the same statement position with a
+`void` expression.
 
 ### 9. Commit-sensitive state → review before moving
 

@@ -5223,6 +5223,23 @@ test("deletes setter-only state when no assigned value is consumed", () => {
   );
 });
 
+test("deletes state whose only reads calculate inert arguments for its own setter", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    export function Picker({ next }: { next: string }) {
+      const [choice, setChoice] = useState("");
+      const [called, setCalled] = useState("");
+      const [published, setPublished] = useState("");
+      return <><Button onPress={() => setChoice(next === choice ? "" : next)} />
+        <Button onPress={() => setCalled(normalize(called))} />
+        <Button onPress={() => { setPublished(next === published ? "" : next); save(published); }} /></>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "choice")?.action, "delete-unused-state");
+  assert.notEqual(findings.find(finding => finding.name === "called")?.action, "delete-unused-state");
+  assert.notEqual(findings.find(finding => finding.name === "published")?.action, "delete-unused-state");
+});
+
 test("deletes setter-only state written by an effect when arguments are discardable", () => {
   const findings = analyzeSource(`
     import { useEffect, useState } from "react";
@@ -5235,8 +5252,8 @@ test("deletes setter-only state written by an effect when arguments are discarda
   assert.equal(findings.find(finding => finding.name === "_failed")?.action, "delete-unused-state");
 });
 
-test("does not delete setter-only state when removing the call would erase side effects", () => {
-  for (const write of ["recordAndReturnValue()", "++sequence"]) {
+test("does not delete setter-only state when removing the call would erase evaluation", () => {
+  for (const write of ["recordAndReturnValue()", "++sequence", "+source"]) {
     assert.deepEqual(
       actions(`
       import { useState } from "react";
@@ -5249,6 +5266,29 @@ test("does not delete setter-only state when removing the call would erase side 
       ["review-state"]
     );
   }
+});
+
+test("preserves property evaluation while deleting otherwise unused state", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function Resource({ source }: { source: { value: number } }) {
+      const [_value, setValue] = useState(0);
+      return <Button onPress={() => setValue(source.value)} />;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.equal(finding?.action, "delete-unused-state");
+  assert.match(finding?.message ?? "", /evaluation.*preserved/i);
+});
+
+test("does not delete unused state when removing its initializer would erase evaluation", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    export function Resource() {
+      const [_value, setValue] = useState(loadInitialValue());
+      return <Button onPress={() => setValue(0)} />;
+    }
+  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  assert.notEqual(finding?.action, "delete-unused-state");
 });
 
 test("does not delete setter-only state when an updater consumes the previous value", () => {

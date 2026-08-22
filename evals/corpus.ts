@@ -3643,15 +3643,15 @@ export const goldCases = [
   },
   ...[
     [28, "open", "review-state"],
-    [29, "value", "use-ref"],
+    [29, "value", "delete-unused-state"],
   ].map(([line, name, action]) => ({
-    action: action as "review-state" | "use-ref",
+    action: action as "delete-unused-state" | "review-state",
     file: "merge-tags-combobox.tsx",
     hook: "useState" as const,
     line: line as number,
     name: name as string,
     rationale: line === 29
-      ? "The remembered merge value is read only by the item-selection command and never renders."
+      ? "The merge value is read only to calculate its own inert setter argument; neither the current nor assigned value escapes, renders, or affects the selection command."
       : "Popover visibility owns the cohesive combobox boundary, so no smaller proven subscription exists.",
     target: "formbricks-merge-tags",
   })),
