@@ -8,21 +8,33 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 788 |
-| Known misses | 13 |
+| Known misses | 12 |
 | State groups | 17/17 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (413/413) |
-| Actionable recall | 96.9% (413/426) |
-| Unit tests | 495/495 |
+| Actionable precision | 100% (414/414) |
+| Actionable recall | 97.2% (414/426) |
+| Unit tests | 496/496 |
 
-The latest phase detects a complete selection-mode model. Against commit `6566623`, the exact current 221-target delta
-is:
+The latest phase detects a self-refreshing effect-owned command snapshot. Against commit `420539e`, the exact current
+221-target delta is:
 
-- Tree Map: `isSelectionMode` and `selectedCompanyIds` in
-  `components/companies/companies-grid-view-container.tsx` change from `review-state` to `use-observable` and are emitted
-  as one exact state group.
+- Expensify: `statusBarStyle` in `src/components/CustomStatusBarAndBackground/index.tsx` changes from `review-state` to
+  `use-ref`.
 - The other 220 current targets have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Self-refreshing command snapshot proof
+
+The state must have no render or transport consumer and exactly one direct setter call inside one imported React
+`useCallback`. Every value read stays in that callback body or its dependency list. The command binding must be invoked
+only by direct React effects or their nested listener callbacks; effect dependency references are the only other allowed
+uses. A local setter helper is accepted only when it is uniquely bound and every reference is a direct call. Any helper
+call lexically before a later snapshot read must be followed by an unconditional return from its branch, preventing a
+ref write from changing a later same-invocation comparison.
+
+The emitted instruction preserves the memoized command, all effects, listener registration and cleanup, and statement
+order. It changes the comparison and write to `.current` and removes only the old state dependency. Async callbacks,
+JSX escape, functional updates, effect writes, post-write reads, and other command consumers abstain.
 
 ## Selection-mode proof
 
@@ -95,12 +107,12 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Thirteen opportunities remain non-enforced:
+Twelve opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
 - seven observable leaf migrations covering keyed selection, repeated rows, timed feedback, and three
   download-failure callbacks;
-- five ref migrations behind async confirmation, form callback, or status-listener contracts.
+- four ref migrations behind async confirmation or form callback contracts.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,
 and app-specific allowlists are not proof.

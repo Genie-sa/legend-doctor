@@ -5800,12 +5800,11 @@ export const goldCases = [
   })),
   {
     action: "use-ref",
-    enforced: false,
     file: "index.tsx",
     hook: "useState",
     line: 31,
     name: "statusBarStyle",
-    rationale: "The style is consumed only by listener commands and can become a latest-value ref, but that migration must preserve callback and listener registration cadence.",
+    rationale: "The style is a previous-command snapshot inside one effect-owned memoized callback; a ref preserves the comparison while removing only the state-driven callback refresh and listener churn.",
     target: "expensify-custom-status-bar",
   },
   ...([47, 48, 49, 50, 51] as const).map(line => ({

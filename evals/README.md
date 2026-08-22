@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-788 manual hook labels, including 13 non-enforced opportunities, plus seventeen
+788 manual hook labels, including 12 non-enforced opportunities, plus seventeen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -68,6 +68,12 @@ enter and cancel together. Every mode write must pair with an empty-array reset,
 be functional updaters. Render reads must stay in JSX attributes so header summaries and keyed rows can subscribe without
 moving owner control flow. Partial mode transitions, effects, escapes, direct collection replacements, and small owners
 abstain.
+
+One Expensify status-bar label verifies a self-refreshing memoized command snapshot. The state has no render consumer;
+its only setter and reads stay within one imported `useCallback`, the callback is invoked only by direct React effects or
+their nested listeners, and the snapshot appears in that callback's dependency list. A local setter helper is accepted
+only when all references are direct calls and any call before a later snapshot read exits first. JSX escape, async work,
+post-write reads, and execution outside those effects abstain.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
 resolution is provenance rather than proof of leaf ownership; production migrations are not emitted for tests; state

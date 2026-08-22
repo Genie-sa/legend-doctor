@@ -43,11 +43,11 @@ Measured on pinned real applications:
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual labels | 788 |
-| Known misses | 13 |
+| Known misses | 12 |
 | State groups | 17/17 |
-| Unit tests | 495/495 |
-| Actionable precision | 100% (413/413) |
-| Actionable recall | 96.9% (413/426) |
+| Unit tests | 496/496 |
+| Actionable precision | 100% (414/414) |
+| Actionable recall | 97.2% (414/426) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -540,6 +540,11 @@ every read stays inside event commands or memoized callbacks owned by an exact a
 one grouped migration because converting only part of that snapshot would keep the original render and split its update.
 Missing cleanup, async callbacks, callback escapes, rendered values, functional updates, and event regions that write any
 remaining React state stay under review.
+
+One previous-command snapshot inside an imported `useCallback` can also become a ref when that command is invoked only
+from direct React effects and their nested listeners. The proof keeps every effect and cleanup, rejects callback escape
+and post-write reads, and removes only the snapshot from the callback dependencies. This eliminates the state-driven
+callback refresh and listener re-registration without moving lifecycle ownership.
 
 A cohesive button that intentionally delays its pending flag stays on React state when the timer callback contains only
 the `true` write and the same async command clears that timer immediately before the `false` write in `finally`.

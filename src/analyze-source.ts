@@ -279,6 +279,7 @@ function analyzeParsedSource(
   const usageByState = new Map(states.map(state => [state, collectStateUsage(state, lifecycleRegions, imports)]));
   const subtreeByState = new Map<StateCandidate, StateSubtree>();
   const safeCommandStates = new Set<StateCandidate>();
+  const selfRefreshingCommandStates = new Set<StateCandidate>();
   const reactiveMutationAffectedStates = new Set<StateCandidate>();
   for (const state of states) {
     const usage = usageByState.get(state);
@@ -295,6 +296,16 @@ function analyzeParsedSource(
       directEffectCalls,
       imports
     );
+    if (
+      isEffectOwnedSelfRefreshingCommandState(
+        state,
+        usage,
+        directEffectCalls,
+        imports
+      )
+    ) {
+      selfRefreshingCommandStates.add(state);
+    }
     const projectionAllowed = !reactiveMutationPaths.all &&
       (!setterCallbackEscapesThroughUnknownHook(state, usage) || effectOwnedMemoizedCommand) &&
       primitiveSetterUpdatersArePure(state, usage);
@@ -467,6 +478,7 @@ function analyzeParsedSource(
           nonProductionHarness,
           subtreeByState.get(state) ?? null,
           safeCommandStates.has(state),
+          selfRefreshingCommandStates.has(state),
           observableSelectionOwners.has(state.owner),
           statesWithCompanionWrites.has(state),
           independentStateWrites.directEventWrites.has(state),
@@ -2246,6 +2258,7 @@ function classifyState(
   nonProductionHarness: boolean,
   subtree: StateSubtree | null,
   hasSafeCommands: boolean,
+  isSelfRefreshingCommand: boolean,
   belongsToObservableSelection: boolean,
   hasCompanionWrites: boolean,
   hasIndependentDirectEventWrite: boolean,
@@ -2276,6 +2289,13 @@ function classifyState(
       action: "keep-state",
       confidence: "certain",
       message: `Keep \`${state.valueName}\` as React state; it owns a stable component-lifetime value and has no setter.`,
+    };
+  }
+  if (isSelfRefreshingCommand) {
+    return {
+      action: "use-ref",
+      confidence: "probable",
+      message: `Replace self-refreshing command snapshot \`${state.valueName}\` with a ref; keep the memoized command, effects, listener registration and cleanup in place, compare and assign through \`.current\` at the same statement positions, and remove only this snapshot from the command dependency list.`,
     };
   }
   if (isDeferredReveal) {
@@ -3873,6 +3893,184 @@ function isEffectOwnedMemoizedPresentationState(
     safe = false;
   });
   return safe && invokedByEffect;
+}
+
+function isEffectOwnedSelfRefreshingCommandState(
+  state: StateCandidate,
+  usage: StateUsage,
+  directEffectCalls: ReadonlySet<ts.CallExpression>,
+  imports: HookImports
+): boolean {
+  const setterCall = usage.setterCallNodes[0];
+  if (
+    !state.owner.body ||
+    !setterCall ||
+    usage.setterCallNodes.length !== 1 ||
+    usage.setterReferences !== 1 ||
+    usage.effectWrites !== 0 ||
+    usage.setterUsesPreviousValue ||
+    usage.localRenderReads !== 0 ||
+    usage.transportedOccurrences !== 0
+  ) {
+    return false;
+  }
+
+  const memoCall = findAncestorUntil(
+    setterCall,
+    (node): node is ts.CallExpression =>
+      ts.isCallExpression(node) &&
+      isImportedHookCall(
+        node,
+        imports.useCallback,
+        imports.reactNamespaces,
+        "useCallback"
+      ),
+    state.owner
+  );
+  const factory = memoCall?.arguments[0];
+  const declaration = memoCall
+    ? findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner)
+    : null;
+  if (
+    !memoCall ||
+    !factory ||
+    (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
+    !declaration?.initializer ||
+    unwrapTransparentExpression(declaration.initializer) !== memoCall ||
+    !ts.isIdentifier(declaration.name) ||
+    bindingDeclarationCount(state.owner, declaration.name.text) !== 1 ||
+    factory.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+  ) {
+    return false;
+  }
+
+  let bodyReads = 0;
+  let dependencyReads = 0;
+  let unsafe = false;
+  const reads: ts.Identifier[] = [];
+  visit(state.owner.body, node => {
+    if (unsafe || ts.isAwaitExpression(node) || ts.isYieldExpression(node)) {
+      if (nodeWithin(node, factory)) unsafe = true;
+      return;
+    }
+    if (
+      !ts.isIdentifier(node) ||
+      node.text !== state.valueName ||
+      node.parent === state.call.parent ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const dependencies = memoCall.arguments[1];
+    if (dependencies && nodeWithin(node, dependencies)) {
+      dependencyReads += 1;
+      return;
+    }
+    if (nodeWithin(node, factory.body)) {
+      bodyReads += 1;
+      reads.push(node);
+      return;
+    }
+    unsafe = true;
+  });
+  if (unsafe || bodyReads === 0 || dependencyReads === 0) return false;
+
+  const writeSites = memoizedCommandWriteSites(setterCall, factory, state.owner);
+  if (
+    !writeSites ||
+    writeSites.some(write =>
+      reads.some(read =>
+        write.getStart() < read.getStart() &&
+        !writeIsFollowedByReturnBeforeRead(write, read, factory)
+      )
+    )
+  ) {
+    return false;
+  }
+
+  const binding = declaration.name.text;
+  let invokedByEffect = false;
+  visit(state.owner.body, node => {
+    if (
+      unsafe ||
+      !ts.isIdentifier(node) ||
+      node.text !== binding ||
+      node === declaration.name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const effectCall = [...directEffectCalls].find(effect => nodeWithin(node, effect));
+    if (!effectCall) {
+      unsafe = true;
+      return;
+    }
+    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+      invokedByEffect = true;
+      return;
+    }
+    const dependencies = effectCall.arguments[1];
+    if (!dependencies || !nodeWithin(node, dependencies)) unsafe = true;
+  });
+  return !unsafe && invokedByEffect;
+}
+
+function memoizedCommandWriteSites(
+  setterCall: ts.CallExpression,
+  factory: ts.ArrowFunction | ts.FunctionExpression,
+  owner: RuntimeFunctionLike
+): readonly ts.CallExpression[] | null {
+  const region = nearestMutationFunction(setterCall, owner);
+  if (region === factory) return [setterCall];
+  if (
+    !ts.isArrowFunction(region) &&
+    !ts.isFunctionDeclaration(region) &&
+    !ts.isFunctionExpression(region)
+  ) {
+    return null;
+  }
+  const name = localCallbackBindingName(region);
+  if (!name || bindingDeclarationCount(factory, name) !== 1) return null;
+
+  const calls: ts.CallExpression[] = [];
+  let safe = true;
+  visit(factory.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+      calls.push(node.parent);
+    } else {
+      safe = false;
+    }
+  });
+  return safe && calls.length > 0 ? calls : null;
+}
+
+function writeIsFollowedByReturnBeforeRead(
+  write: ts.CallExpression,
+  read: ts.Identifier,
+  boundary: ts.Node
+): boolean {
+  for (let current: ts.Node | undefined = write.parent; current && current !== boundary; current = current.parent) {
+    if (!ts.isBlock(current) || nodeWithin(read, current)) continue;
+    const writeIndex = current.statements.findIndex(statement => nodeWithin(write, statement));
+    if (
+      writeIndex >= 0 &&
+      current.statements.slice(writeIndex + 1).some(statement => ts.isReturnStatement(statement))
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function commonRepeatedRender(

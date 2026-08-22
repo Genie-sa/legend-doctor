@@ -4656,6 +4656,44 @@ test("does not call lifecycle or render-callback state command-only", () => {
   assert.notEqual(renderCallback?.action, "use-ref");
 });
 
+test("replaces a self-refreshing effect-owned command snapshot with a ref", () => {
+  const source = (escape: string, readAfterWrite: string) => `
+    import { useCallback, useEffect, useState } from "react";
+    export function Listener({ next }: { next: string }) {
+      const [previous, setPrevious] = useState<string>();
+      const update = useCallback(() => {
+        if (next !== previous) {
+          apply(next);
+          setPrevious(next);
+          ${readAfterWrite}
+        }
+      }, [next, previous]);
+      useEffect(() => {
+        update();
+        const listener = () => update();
+        source.addListener("change", listener);
+        return () => source.removeListener("change", listener);
+      }, [update]);
+      return <Status ${escape}/>;
+    }
+  `;
+
+  const [finding] = analyzeSource(source("", ""), "fixture.tsx");
+  assert.equal(finding?.action, "use-ref");
+  assert.match(finding?.message ?? "", /listener/i);
+  assert.match(finding?.message ?? "", /dependency/i);
+
+  for (const unsafe of [
+    source("onUpdate={update}", ""),
+    source("", "report(previous);"),
+  ]) {
+    assert.notEqual(
+      analyzeSource(unsafe, "fixture.tsx").find(candidate => candidate.name === "previous")?.action,
+      "use-ref"
+    );
+  }
+});
+
 test("groups listener-only pointer snapshots into one ref migration", () => {
   const findings = analyzeSource(`
     import { useCallback, useEffect, useState } from "react";
