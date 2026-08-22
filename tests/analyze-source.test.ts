@@ -2651,6 +2651,56 @@ test("isolates a direct async status projection in one stable call site", () => 
   assert.match(finding?.message ?? "", /pending-control call site/);
 });
 
+test("keeps a pure conditional status label inside the direct async leaf", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    export function Copier({ destination }: { destination: string | null }) {
+      const [copying, setCopying] = useState(false);
+      async function copy() {
+        if (!destination) return;
+        setCopying(true);
+        try { await duplicate(destination); } finally { setCopying(false); }
+      }
+      return <main><Header /><Toolbar /><Summary /><Options /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <Button disabled={!destination || copying} onClick={copy}>
+          {copying ? \`\${translate("Copying")}...\` : translate("Copy")}
+        </Button>
+      </main>;
+    }
+    export function MountGate() {
+      const [copying, setCopying] = useState(false);
+      async function copy() {
+        setCopying(true);
+        try { await duplicate(); } finally { setCopying(false); }
+      }
+      return <main><Header /><Toolbar /><Summary /><Options /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <button onClick={copy}>Copy</button>
+        {copying && <Button disabled={copying}>Copying...</Button>}
+      </main>;
+    }
+    export function ConditionalWork({ enabled }: { enabled: boolean }) {
+      const [copying, setCopying] = useState(false);
+      async function copy() {
+        setCopying(true);
+        try {
+          if (enabled) await duplicate();
+        } finally {
+          setCopying(false);
+        }
+      }
+      return <main><Header /><Toolbar /><Summary /><Options /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <Button disabled={!enabled || copying} onClick={copy}>
+          {copying ? \`\${translate("Copying")}...\` : translate("Copy")}
+        </Button>
+      </main>;
+    }
+  `, "fixture.tsx").filter(candidate => candidate.name === "copying");
+  assert.equal(findings[0]?.action, "use-observable");
+  assert.match(findings[0]?.message ?? "", /async pending flag/);
+  assert.notEqual(findings[1]?.action, "use-observable");
+  assert.notEqual(findings[2]?.action, "use-observable");
+});
+
 test("requires one pure non-gating call site for a direct async status projection", () => {
   const sources = [
     `{encoding && <Button disabled={encoding} onClick={scan}>Scan</Button>}`,

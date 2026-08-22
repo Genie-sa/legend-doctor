@@ -124,7 +124,8 @@ export function findAsyncLeafStatuses(
         pendingStart,
         usage.setterCallNodes,
         ownerSetters,
-        state.owner
+        state.owner,
+        leaf.requiresUnconditionalAwait
       ) &&
       !hasEarlierOwnerStateWrite(
         region,
@@ -337,7 +338,8 @@ function startsAsyncCommandSegment(
   call: ts.CallExpression,
   setterCalls: readonly ts.CallExpression[],
   ownerSetters: ReadonlySet<string>,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
+  requiresUnconditionalAwait: boolean
 ): boolean {
   const statement = call.parent;
   const block = statement.parent;
@@ -348,11 +350,14 @@ function startsAsyncCommandSegment(
   const following = block.statements.slice(index + 1);
   for (let offset = 0; offset < following.length; offset += 1) {
     const candidate = following[offset]!;
-    const awaitPosition = firstAwaitPosition(candidate);
+    const awaitExpression = firstAwaitExpression(candidate);
+    const awaitPosition = awaitExpression?.getStart() ?? null;
     const promiseBoundary = containsPromiseCompletionReset(candidate, setterCalls);
     const boundary = awaitPosition ?? (promiseBoundary ? candidate.end : null);
     if (boundary !== null) {
-      return !containsOwnerStateWrite(
+      return (!requiresUnconditionalAwait || awaitExpression === null ||
+        awaitIsUnconditionallyReached(awaitExpression, candidate)) &&
+        !containsOwnerStateWrite(
         candidate,
         boundary,
         ownerSetters,
@@ -426,14 +431,51 @@ function hasFollowingSynchronousOwnerWrite(
   return found;
 }
 
-function firstAwaitPosition(statement: ts.Statement): number | null {
-  let position: number | null = null;
+function firstAwaitExpression(statement: ts.Statement): ts.AwaitExpression | null {
+  let first: ts.AwaitExpression | null = null;
   visitSkippingNestedRuntimeFunctions(statement, node => {
-    if (ts.isAwaitExpression(node) && (position === null || node.getStart() < position)) {
-      position = node.getStart();
+    if (ts.isAwaitExpression(node) && (first === null || node.getStart() < first.getStart())) {
+      first = node;
     }
   });
-  return position;
+  return first;
+}
+
+function awaitIsUnconditionallyReached(
+  awaitExpression: ts.AwaitExpression,
+  boundary: ts.Statement
+): boolean {
+  for (
+    let current: ts.Node = awaitExpression;
+    current !== boundary;
+    current = current.parent
+  ) {
+    const parent = current.parent;
+    if (
+      (ts.isIfStatement(parent) &&
+        (nodeWithin(awaitExpression, parent.thenStatement) ||
+          (parent.elseStatement !== undefined &&
+            nodeWithin(awaitExpression, parent.elseStatement)))) ||
+      (ts.isConditionalExpression(parent) &&
+        (nodeWithin(awaitExpression, parent.whenTrue) ||
+          nodeWithin(awaitExpression, parent.whenFalse))) ||
+      (ts.isBinaryExpression(parent) &&
+        isShortCircuitOperator(parent.operatorToken.kind) &&
+        nodeWithin(awaitExpression, parent.right)) ||
+      ts.isIterationStatement(parent, false) ||
+      ts.isCaseOrDefaultClause(parent) ||
+      ts.isCatchClause(parent)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isShortCircuitOperator(kind: ts.SyntaxKind): boolean {
+  return kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+    kind === ts.SyntaxKind.BarBarToken ||
+    kind === ts.SyntaxKind.QuestionQuestionToken;
 }
 
 function containsPromiseCompletionReset(
@@ -550,17 +592,21 @@ function containsEarlyExit(root: ts.Node, before: number): boolean {
 function asyncLeafCallSite(
   usage: StateUsage,
   owner: RuntimeFunctionLike
-): { boundary: ts.Node; returned: ts.Expression } | null {
+): {
+  boundary: ts.Node;
+  requiresUnconditionalAwait: boolean;
+  returned: ts.Expression;
+} | null {
   if (!owner.body) return null;
   const opening = asyncLeafOpening(usage, owner);
   if (
     opening === null ||
-    nearestRepeatedRenderCall(opening, owner) ||
-    !nestedFunctionsAreJsxChildren(opening, owner)
+    nearestRepeatedRenderCall(opening.opening, owner) ||
+    !nestedFunctionsAreJsxChildren(opening.opening, owner)
   ) {
     return null;
   }
-  const callSite = jsxCallSite(opening);
+  const callSite = jsxCallSite(opening.opening);
   if (
     usage.directRenderNodes.some(node =>
       !nodeWithin(node, callSite) ||
@@ -571,10 +617,16 @@ function asyncLeafCallSite(
     return null;
   }
   const returned = returnedExpressions(owner);
-  const directReturn = returned.find(expression => nodeWithin(opening!, expression));
-  if (directReturn) return { boundary: callSite, returned: directReturn };
+  const directReturn = returned.find(expression => nodeWithin(opening.opening, expression));
+  if (directReturn) {
+    return {
+      boundary: callSite,
+      requiresUnconditionalAwait: opening.requiresUnconditionalAwait,
+      returned: directReturn,
+    };
+  }
 
-  const declaration = findAncestorUntil(opening, ts.isVariableDeclaration, owner);
+  const declaration = findAncestorUntil(opening.opening, ts.isVariableDeclaration, owner);
   if (
     !declaration?.initializer ||
     !ts.isIdentifier(declaration.name) ||
@@ -598,13 +650,22 @@ function asyncLeafCallSite(
   });
   if (references.length !== 1) return null;
   const aliasReturn = returned.find(expression => nodeWithin(references[0]!, expression));
-  return aliasReturn ? { boundary: references[0]!, returned: aliasReturn } : null;
+  return aliasReturn
+    ? {
+      boundary: references[0]!,
+      requiresUnconditionalAwait: opening.requiresUnconditionalAwait,
+      returned: aliasReturn,
+    }
+    : null;
 }
 
 function asyncLeafOpening(
   usage: StateUsage,
   owner: RuntimeFunctionLike
-): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
+): {
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
+  requiresUnconditionalAwait: boolean;
+} | null {
   const valueSite = [...usage.valueTransportSites][0];
   if (valueSite !== undefined) {
     let opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | null = null;
@@ -617,18 +678,24 @@ function asyncLeafOpening(
         opening = node;
       }
     });
-    return opening;
+    return opening
+      ? { opening, requiresUnconditionalAwait: false }
+      : null;
   }
 
   const common = lowestCommonJsxSubtree(usage.directRenderNodes, owner);
+  const gates = usage.directRenderNodes.map(node => commonRenderGateSubtree([node], owner));
   if (
     !common ||
     ts.isJsxFragment(common) ||
-    usage.directRenderNodes.some(node => commonRenderGateSubtree([node], owner) !== null)
+    gates.some(gate => gate !== null && gate !== common)
   ) {
     return null;
   }
-  return ts.isJsxElement(common) ? common.openingElement : common;
+  return {
+    opening: ts.isJsxElement(common) ? common.openingElement : common,
+    requiresUnconditionalAwait: gates.some(gate => gate === common),
+  };
 }
 
 function jsxCallSite(

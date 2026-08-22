@@ -2297,6 +2297,15 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
+    file: "app/(private)/forest/tree/share.tsx",
+    hook: "useState",
+    line: 62,
+    name: "isSharing",
+    rationale: "The share command sets and clears exact async status while one stable footer Pressable consumes its pure enabled projection and conditional label; the share card and alert remain outside the leaf subscription.",
+    target: "tree-wallet",
+  },
+  {
+    action: "use-observable",
     file: "feature/media/pages/EpisodeScreen.tsx",
     hook: "useState",
     line: 75,
@@ -3838,7 +3847,7 @@ export const goldCases = [
   },
   ...[
     [26, "publish", "use-observable"],
-    [27, "copying", "review-state"],
+    [27, "copying", "use-observable"],
     [28, "recursive", "use-observable"],
     [29, "selectedPath", "review-state"],
   ].map(([line, name, action]) => ({
@@ -3850,7 +3859,7 @@ export const goldCases = [
     rationale: line === 26 || line === 28
       ? "The option has one conditionally mounted Switch subscriber and is otherwise read only by the Copy event command."
       : line === 27
-        ? "Copying status belongs to the asynchronous duplicate workflow and updates several submit presentations."
+        ? "The exact async copying lifecycle renders only the stable Copy button's disabled prop and conditional label, so one leaf subscription removes duplicate-workflow renders without changing command timing."
         : "The selected destination drives the explorer callback, footer summary, and submit availability rather than one controlled leaf.",
     target: "outline-document-copy",
   })),
