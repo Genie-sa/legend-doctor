@@ -5,18 +5,38 @@
 | Measure | Result |
 | --- | ---: |
 | App roots | 12 |
-| Source targets | 221 |
-| Hooks analyzed | 2,338 |
-| Manual hook labels | 790 |
+| Source targets | 222 |
+| Hooks analyzed | 2,342 |
+| Manual hook labels | 791 |
 | Known misses | 1 |
 | State groups | 18/18 |
 | Legend practices | 100/100 |
-| Actionable precision | 100% (425/425) |
-| Actionable recall | 99.8% (425/426) |
-| Unit tests | 516/516 |
+| Actionable precision | 100% (424/424) |
+| Actionable recall | 99.8% (424/425) |
+| Unit tests | 517/517 |
 
-The latest phase proves direct callback timing through source-resolved component props while preserving render-captured
-semantics. The exact current 221-target action delta is:
+The latest phase rejects ref migrations that change React render-snapshot ordering inside one command. The exact current
+222-target action delta is:
+
+- Expensify's awaited domain-close decision changes from `use-ref` to `review-state` because its custom modal flow does
+  not prove a committed render before a later invocation can observe the reset.
+- The new Expensify file-validation target pins a returned concurrency guard as `review-state`; its read-before-write
+  command can be called twice synchronously without a React commit between calls.
+- The other 220 existing targets have zero hook action changes.
+- All 222 targets have zero Legend practice action changes.
+- A full 6,864-file Expensify scan inventories 2,952 hooks in about 16 seconds and removes five unsafe ref suggestions:
+  the file-validation guard, two domain-close snapshots, and two Copilot selections whose commands clear before reading.
+
+The proof compares the runtime-function ancestry of every state read and setter call. A write before a later read always
+abstains. A read-before-write command also abstains unless every read is structurally event-rooted; returned commands and
+unresolved custom lifecycle boundaries remain review findings. Separate event commands stay eligible, and the existing
+source-proven functional-counter snapshot remains the narrow exception. Fixtures cover returned reentrancy guards,
+write-before-read commands, and safe reads and writes in separate event callbacks.
+
+## Source-proven direct component callback timing
+
+The previous phase proves direct callback timing through source-resolved component props while preserving render-captured
+semantics. Its exact 221-target action delta was:
 
 - All 221 targets have zero hook action changes.
 - All 221 targets have zero Legend practice action changes.

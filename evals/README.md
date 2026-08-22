@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-790 manual hook labels, including 1 non-enforced opportunity, plus eighteen
+At the pinned commits, the analyzer inventories 2,342 hooks across 222 source roots. The corpus currently contains
+791 manual hook labels, including 1 non-enforced opportunity, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -94,6 +94,12 @@ Every callback reference must be a direct JSX publication, every publication mus
 terminate at an intrinsic or framework event. An enforced Expensify validation label remains `review-state` because the
 resolved form provider also invokes validation from a child effect; a ref could replace that effect's render-captured
 snapshot with a newer mutable value. Eager render calls, mixed publications, effects, and unresolved consumers abstain.
+
+Command-only ref labels also preserve render-snapshot ordering. A returned or otherwise unproven command that reads and
+writes the same state abstains because a ref exposes writes synchronously across invocations. Any write before a later read
+also abstains, including reads in nested callbacks under that command. Read-before-write commands remain eligible only
+when every read is proven event-rooted; the dedicated source-proven counter snapshot is the narrow functional-updater
+exception. Expensify's file-validation guard and awaited domain-close decision are enforced `review-state` cases.
 
 Two Tree Map labels and one exact group label verify a selection model whose false-initialized mode and empty ID array
 enter and cancel together. Every mode write must pair with an empty-array reset, while independent collection writes must

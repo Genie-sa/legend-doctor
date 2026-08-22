@@ -40,6 +40,7 @@ import {
   collectCommandOnlyCallableReads,
   functionalCounterUpdaterPreservesSnapshot,
   functionalUpdaterPrecedesSnapshotRead,
+  refWouldChangeCommandSnapshot,
   stateFeedsReturnedSwitchCommand,
   statePublishesReadOnlyGetter,
   stateReadCallbackEscapesThroughUnknownHook,
@@ -3098,6 +3099,16 @@ function classifyState(
   );
   const preservesFunctionalSnapshot = hasFunctionalSnapshotHazard &&
     functionalCounterUpdaterPreservesSnapshot(state, usage, nearestMutationFunction);
+  const hasEventCommandReadProof = hasOnlyEventCommandReads(
+    state,
+    EMPTY_NODES,
+    eventTransitionCallbacks
+  );
+  const hasCommandSnapshotHazard = refWouldChangeCommandSnapshot(
+    state,
+    usage,
+    hasEventCommandReadProof
+  );
   if (
     isCustomHookOwner(state.owner) &&
     usage.localRenderReads === 0 &&
@@ -3125,6 +3136,7 @@ function classifyState(
     usage.transportedOccurrences === 0 &&
     usage.jsxTargets.size === 0 &&
     (!hasFunctionalSnapshotHazard || preservesFunctionalSnapshot) &&
+    (!hasCommandSnapshotHazard || preservesFunctionalSnapshot) &&
     !stateReadCallbackEscapesThroughUnknownHook(
       state,
       deferredCallbackHooks,
@@ -3136,8 +3148,7 @@ function classifyState(
     !statePublishesReadOnlyGetter(state) &&
     !usage.shadowed &&
     !usage.escaped &&
-    ((usage.eventReads === 0 && usage.effectWrites === 0) ||
-      hasOnlyEventCommandReads(state, EMPTY_NODES, eventTransitionCallbacks))
+    ((usage.eventReads === 0 && usage.effectWrites === 0) || hasEventCommandReadProof)
   ) {
     return {
       action: "use-ref",

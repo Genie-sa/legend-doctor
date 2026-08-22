@@ -45,14 +45,14 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 12 |
-| Source targets | 221 |
-| Hooks analyzed | 2,338 |
-| Manual labels | 790 |
+| Source targets | 222 |
+| Hooks analyzed | 2,342 |
+| Manual labels | 791 |
 | Known misses | 1 |
 | State groups | 18/18 |
-| Unit tests | 516/516 |
-| Actionable precision | 100% (425/425) |
-| Actionable recall | 99.8% (425/426) |
+| Unit tests | 517/517 |
+| Actionable precision | 100% (424/424) |
+| Actionable recall | 99.8% (424/425) |
 | Legend practice precision | 100% (100/100) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -634,6 +634,12 @@ A directly bound callback passed to a custom component prop uses the same cross-
 an audited JSX publication, every resolved component chain must terminate at an intrinsic or framework event, and all
 publications must pass. Render calls, child-effect calls, mixed consumers, unresolved components, and any other callback
 reference abstain so a ref cannot replace a render-captured snapshot with a newer mutable value.
+
+Ref advice also preserves React's render-snapshot ordering within a command. A returned or otherwise unproven command
+that both reads and writes the state remains under review because `.current` would expose the first synchronous write to
+the next invocation immediately. A write before a later read always abstains. A read-before-write command remains eligible
+only when every read is already proven event-rooted; the existing source-proven counter-snapshot rule is the narrow
+functional-updater exception.
 
 ### 11. Published getter → keep the notification boundary
 

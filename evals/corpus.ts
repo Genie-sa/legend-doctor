@@ -562,6 +562,12 @@ export const repositories = [
         states: 1,
       },
       {
+        effects: 1,
+        id: "expensify-files-validation-state",
+        root: "src/hooks/useFilesValidation.tsx",
+        states: 3,
+      },
+      {
         effects: 0,
         id: "expensify-attachment-state-provider",
         root: "src/pages/media/AttachmentModalScreen/AttachmentModalBaseContent/AttachmentStateContextProvider.tsx",
@@ -3272,12 +3278,12 @@ export const goldCases = [
     target: "expensify-chronos",
   },
   {
-    action: "use-ref",
+    action: "review-state",
     file: "DomainMemberDetailsPage.tsx",
     hook: "useState",
     line: 58,
     name: "shouldForceCloseAccount",
-    rationale: "This decision payload is command-only; the modal visibility transition already provides the render required before the hide callback reads it.",
+    rationale: "The command reads and later resets this decision snapshot across an awaited custom-modal flow; source does not prove a committed render before another invocation can observe the reset.",
     target: "expensify-domain-member",
   },
   {
@@ -5728,6 +5734,15 @@ export const goldCases = [
     name: "shouldEnableValidation",
     rationale: "Source resolution proves the form invokes validation from a child effect as well as commands; a ref could replace the effect's render-captured latch snapshot with a newer mutable value.",
     target: "expensify-workspace-new-room-state",
+  },
+  {
+    action: "review-state",
+    file: "useFilesValidation.tsx",
+    hook: "useState",
+    line: 46,
+    name: "isValidatingFiles",
+    rationale: "The returned validation command reads this reentrancy guard before writing it; a ref would expose the first synchronous call's write to a second call before React commits a new render snapshot.",
+    target: "expensify-files-validation-state",
   },
   {
     action: "review-state",

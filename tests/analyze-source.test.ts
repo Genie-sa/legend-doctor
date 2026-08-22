@@ -4517,11 +4517,11 @@ test("treats React Native host props as owner render reads", () => {
   );
 });
 
-test("suggests a ref for command-only state that never reaches rendering", () => {
+test("keeps a returned command reentrancy guard on its React render snapshot", () => {
   assert.deepEqual(
     actions(`
       import { useState } from "react";
-      export function Actions() {
+      export function useActions() {
         const [busy, setBusy] = useState(false);
         const run = async () => {
           if (busy) return;
@@ -4529,10 +4529,10 @@ test("suggests a ref for command-only state that never reaches rendering", () =>
           await work();
           setBusy(false);
         };
-        return <Button onPress={run} />;
+        return { run };
       }
     `),
-    ["use-ref"]
+    ["review-state"]
   );
 });
 
@@ -5178,6 +5178,21 @@ test("does not replace functional-updater state when commands observe its render
     }
   `, "fixture.tsx").find(candidate => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
+});
+
+test("does not replace a command snapshot written before a later read", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    export function ValidationActions() {
+      const [selection, setSelection] = useState<string>();
+      const [draft, setDraft] = useState("");
+      return <><Button onPress={() => { setSelection(undefined); open(selection); }} />
+        <Button onPress={() => setDraft("next")} />
+        <Button onPress={() => save(draft)} /></>;
+    }
+  `, "fixture.tsx");
+  assert.notEqual(findings.find(finding => finding.name === "selection")?.action, "use-ref");
+  assert.equal(findings.find(finding => finding.name === "draft")?.action, "use-ref");
 });
 
 test("keeps the ref recommendation when a functional updater has no later snapshot read", () => {

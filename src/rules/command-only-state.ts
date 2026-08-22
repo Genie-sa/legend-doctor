@@ -13,6 +13,7 @@ import {
 import type { StateCandidate } from "../analyze-source.js";
 import {
   findAncestorUntil,
+  isRuntimeFunctionLike,
   nearestNestedFunction,
   nodeWithin,
   type RuntimeFunctionLike,
@@ -35,6 +36,51 @@ export interface CommandOnlyCallableReads {
 interface CommandOnlyUsage {
   setterCallNodes: readonly ts.CallExpression[];
   setterUsesPreviousValue: boolean;
+}
+
+export function refWouldChangeCommandSnapshot(
+  state: StateCandidate,
+  usage: CommandOnlyUsage,
+  readsAreEventRooted: boolean
+): boolean {
+  const writes = usage.setterCallNodes.map(call => ({
+    call,
+    regions: commandRuntimeRegions(call, state.owner),
+  }));
+  if (writes.every(write => write.regions.length === 0)) return false;
+
+  let shared = false;
+  visit(state.owner.body, node => {
+    if (
+      shared ||
+      !ts.isIdentifier(node) ||
+      node.text !== state.valueName ||
+      node.parent === state.call.parent ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const readRegions = commandRuntimeRegions(node, state.owner);
+    shared = writes.some(write => {
+      const commonRegions = readRegions.filter(region => write.regions.includes(region));
+      if (commonRegions.length === 0) return false;
+      const readBeforeWrite = nodeWithin(node, write.call) || node.getStart() < write.call.getStart();
+      return !readBeforeWrite || !readsAreEventRooted;
+    });
+  });
+  return shared;
+}
+
+function commandRuntimeRegions(
+  node: ts.Node,
+  owner: RuntimeFunctionLike
+): RuntimeFunctionLike[] {
+  const regions: RuntimeFunctionLike[] = [];
+  for (let current: ts.Node | undefined = node.parent; current && current !== owner; current = current.parent) {
+    if (isRuntimeFunctionLike(current)) regions.push(current);
+  }
+  return regions;
 }
 
 export function collectCommandOnlyCallableReads(
