@@ -292,7 +292,7 @@ function analyzeParsedSource(
   }
   for (const [owner, ownedStates] of statesByOwner) {
     const callbacks = new Set(reactCommit.eventTransitionCallbacks.get(owner) ?? EMPTY_RUNTIME_FUNCTIONS);
-    const needsSourceOptionProof = ownedStates.some(state => {
+    const needsSourceCallbackProof = ownedStates.some(state => {
       const usage = usageByState.get(state);
       return usage !== undefined &&
         usage.localRenderReads === 0 &&
@@ -302,7 +302,10 @@ function analyzeParsedSource(
         (usage.eventReads > 0 || usage.effectWrites > 0) &&
         !hasOnlyEventCommandReads(state, EMPTY_NODES, callbacks);
     });
-    if (childContracts && needsSourceOptionProof) {
+    if (childContracts && needsSourceCallbackProof) {
+      for (const callback of sourceProvenDirectEventCallbacks(owner, imports, childContracts)) {
+        callbacks.add(callback);
+      }
       for (const callback of sourceProvenOptionEventCallbacks(owner, imports, childContracts)) {
         callbacks.add(callback);
         if (callback.body) {
@@ -1153,6 +1156,33 @@ function localCallbackBindingName(
     : null;
 }
 
+function sourceProvenDirectEventCallbacks(
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+  childContracts: ChildContractResolver
+): ReadonlySet<RuntimeFunctionLike> {
+  const callbacks = new Set<RuntimeFunctionLike>();
+  if (!owner.body) return callbacks;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return;
+    const callback = localCallbackByBinding(owner, node.name.text, imports);
+    if (!callback) return;
+    const publications = jsxComponentPublications(owner, node.name.text);
+    if (
+      publications.length > 0 &&
+      publications.every(publication =>
+        childContracts.componentCallbackPropIsDeferred(
+          publication.component,
+          publication.prop
+        )
+      )
+    ) {
+      callbacks.add(callback);
+    }
+  });
+  return callbacks;
+}
+
 function sourceProvenOptionEventCallbacks(
   owner: RuntimeFunctionLike,
   imports: HookImports,
@@ -1171,7 +1201,7 @@ function sourceProvenOptionEventCallbacks(
     }
     const memo = memoizedObjectLiteral(node.initializer, imports);
     if (!memo || memo.object.properties.some(ts.isSpreadAssignment)) return;
-    const publications = optionObjectPublications(
+    const publications = jsxComponentPublications(
       owner,
       node.name.text
     );
@@ -1253,16 +1283,16 @@ function memoizedObjectLiteral(
     : null;
 }
 
-interface OptionObjectPublication {
+interface ComponentPublication {
   component: string;
   prop: string;
 }
 
-function optionObjectPublications(
+function jsxComponentPublications(
   owner: RuntimeFunctionLike,
   binding: string
-): readonly OptionObjectPublication[] {
-  const publications: OptionObjectPublication[] = [];
+): readonly ComponentPublication[] {
+  const publications: ComponentPublication[] = [];
   let safe = true;
   visit(owner.body, node => {
     if (

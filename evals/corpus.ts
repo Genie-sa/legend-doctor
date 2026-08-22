@@ -5721,13 +5721,12 @@ export const goldCases = [
     target: "expensify-workspace-duplicate-features-state",
   },
   {
-    action: "use-ref",
-    enforced: false,
+    action: "review-state",
     file: "WorkspaceNewRoomPage.tsx",
     hook: "useState",
     line: 93,
     name: "shouldEnableValidation",
-    rationale: "The focus-owned validation latch never renders and is read only when the form invokes its validation command; conversion requires a resolved form-callback contract.",
+    rationale: "Source resolution proves the form invokes validation from a child effect as well as commands; a ref could replace the effect's render-captured latch snapshot with a newer mutable value.",
     target: "expensify-workspace-new-room-state",
   },
   {

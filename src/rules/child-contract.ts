@@ -67,6 +67,7 @@ export interface ChildContractResolver {
     propName: string,
     callbackProperty: string
   ): boolean;
+  componentCallbackPropIsDeferred(componentName: string, propName: string): boolean;
   pureProjectionBindings(): ReadonlySet<string>;
   resolveComponent(name: string): ChildComponentSource | null;
 }
@@ -211,6 +212,21 @@ export function propObjectCallbackIsDeferred(
     source,
     0,
     [propName, callbackProperty],
+    resolver,
+    new Set(),
+    0
+  );
+}
+
+export function propCallbackIsDeferred(
+  source: ChildComponentSource,
+  propName: string,
+  resolver: CallbackContractSourceResolver
+): boolean {
+  return sourceInputCallbackIsDeferred(
+    source,
+    0,
+    [propName],
     resolver,
     new Set(),
     0

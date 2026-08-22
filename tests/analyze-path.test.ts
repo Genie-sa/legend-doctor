@@ -1668,6 +1668,72 @@ test("does not require child prop semantics for a call-site subscription wrapper
   assert.equal(finding?.action, "use-observable");
 });
 
+test("proves direct source-component callback timing before replacing command-only state", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-source-callback-state-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Forms.tsx"),
+    `
+      import { useEffect } from "react";
+      export function DeferredForm({ validate }: { validate: () => boolean }) {
+        return <button onClick={() => validate()}>Validate</button>;
+      }
+      export function EagerForm({ validate }: { validate: () => boolean }) {
+        const valid = validate();
+        return <span>{String(valid)}</span>;
+      }
+      export function EffectForm({ validate }: { validate: () => boolean }) {
+        useEffect(() => { validate(); }, [validate]);
+        return null;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useCallback, useEffect, useState } from "react";
+      import { DeferredForm, EagerForm, EffectForm } from "./Forms";
+      export function SafeScreen() {
+        const [enabled, setEnabled] = useState(false);
+        useEffect(() => setEnabled(true), []);
+        const validate = useCallback(() => enabled, [enabled]);
+        return <DeferredForm validate={validate} />;
+      }
+      export function UnsafeScreen() {
+        const [eager, setEager] = useState(false);
+        useEffect(() => setEager(true), []);
+        const validate = useCallback(() => eager, [eager]);
+        return <EagerForm validate={validate} />;
+      }
+      export function MixedScreen() {
+        const [mixed, setMixed] = useState(false);
+        useEffect(() => setMixed(true), []);
+        const validate = useCallback(() => mixed, [mixed]);
+        return <><DeferredForm validate={validate} /><EagerForm validate={validate} /></>;
+      }
+      export function EffectScreen() {
+        const [effect, setEffect] = useState(false);
+        useEffect(() => setEffect(true), []);
+        const validate = useCallback(() => effect, [effect]);
+        return <EffectForm validate={validate} />;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const states = new Map(
+    report.findings
+      .filter(finding => finding.hook === "useState")
+      .map(finding => [finding.name, finding.action])
+  );
+  assert.equal(states.get("enabled"), "use-ref");
+  assert.equal(states.get("eager"), "review-state");
+  assert.equal(states.get("mixed"), "review-state");
+  assert.equal(states.get("effect"), "review-state");
+});
+
 test("wraps a shared primitive locally without changing its API", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-shared-primitive-"));
   await mkdir(path.join(root, "components", "ui"), { recursive: true });

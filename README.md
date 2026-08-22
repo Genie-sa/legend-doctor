@@ -48,11 +48,11 @@ Measured on pinned real applications:
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual labels | 790 |
-| Known misses | 2 |
+| Known misses | 1 |
 | State groups | 18/18 |
-| Unit tests | 515/515 |
+| Unit tests | 516/516 |
 | Actionable precision | 100% (425/425) |
-| Actionable recall | 99.5% (425/427) |
+| Actionable recall | 99.8% (425/426) |
 | Legend practice precision | 100% (100/100) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -629,6 +629,11 @@ The same source proof follows a getter passed in a custom-hook options object th
 stored in a React ref qualifies only when the same property is refreshed by one React effect and every invocation remains
 under a resolved effect-deferred callback. Render-time invocation, missing refresh, aliasing, ref escape, and unresolved
 hooks abstain. This removes command-only React state without introducing an unnecessary observable or render subscriber.
+
+A directly bound callback passed to a custom component prop uses the same cross-file timing proof. Every reference must be
+an audited JSX publication, every resolved component chain must terminate at an intrinsic or framework event, and all
+publications must pass. Render calls, child-effect calls, mixed consumers, unresolved components, and any other callback
+reference abstain so a ref cannot replace a render-captured snapshot with a newer mutable value.
 
 ### 11. Published getter → keep the notification boundary
 

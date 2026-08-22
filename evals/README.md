@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-790 manual hook labels, including 2 non-enforced opportunities, plus eighteen
+790 manual hook labels, including 1 non-enforced opportunity, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -88,6 +88,12 @@ deferred registration; eager invocation, unknown calls, extra publications, muta
 unresolved wrappers or context readers abstain. The migration
 preserves the loading effect and callback timing, writes and reads one ref at the existing positions, and removes only the
 payload from callback dependencies.
+
+Direct callback props are also resolved across source components before a command-only state is converted to a ref.
+Every callback reference must be a direct JSX publication, every publication must resolve, and every component chain must
+terminate at an intrinsic or framework event. An enforced Expensify validation label remains `review-state` because the
+resolved form provider also invokes validation from a child effect; a ref could replace that effect's render-captured
+snapshot with a newer mutable value. Eager render calls, mixed publications, effects, and unresolved consumers abstain.
 
 Two Tree Map labels and one exact group label verify a selection model whose false-initialized mode and empty ID array
 enter and cancel together. Every mode write must pair with an empty-array reset, while independent collection writes must

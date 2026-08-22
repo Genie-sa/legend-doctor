@@ -8,15 +8,33 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 790 |
-| Known misses | 2 |
+| Known misses | 1 |
 | State groups | 18/18 |
 | Legend practices | 100/100 |
 | Actionable precision | 100% (425/425) |
-| Actionable recall | 99.5% (425/427) |
-| Unit tests | 515/515 |
+| Actionable recall | 99.8% (425/426) |
+| Unit tests | 516/516 |
 
-The latest phase resolves exact Legend observable members inside controller objects without treating the controller or
-its sibling methods as observable. Against commit `dad3c3a`, the exact current 221-target action delta is:
+The latest phase proves direct callback timing through source-resolved component props while preserving render-captured
+semantics. The exact current 221-target action delta is:
+
+- All 221 targets have zero hook action changes.
+- All 221 targets have zero Legend practice action changes.
+- Tree Map, Tree Wallet, Memoria, Legend Music, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open WebUI
+  React Native, and Hoalu each have zero finding deltas.
+- The Expensify workspace-new-room label is now an enforced `review-state`: source resolution proves its validation
+  callback is invoked from a child effect as well as commands, so a ref could observe a newer value than that effect's
+  render snapshot. The only remaining non-enforced label is Tree Map's external-tab callback boundary.
+
+A direct local callback qualifies only when every reference is a direct JSX publication and every source-resolved
+component chain terminates at an intrinsic or framework event. All publications must pass. Eager render calls, child
+effects, mixed consumers, unresolved components, aliases with other uses, and unknown callback paths abstain. Minimal
+fixtures cover deferred-only, eager, mixed-publication, and effect-invoked consumers.
+
+## Source-proven observable wrapper-member paths
+
+The previous phase resolves exact Legend observable members inside controller objects without treating the controller or
+its sibling methods as observable. Against commit `dad3c3a`, its exact 221-target action delta was:
 
 - Hoalu adds eight `narrow-use-value-subscription` practices: expense deletion, income deletion, event editing and
   deletion, wallet editing and deletion, and recurring-bill archive and restore dialogs.

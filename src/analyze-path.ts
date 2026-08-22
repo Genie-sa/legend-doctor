@@ -15,6 +15,7 @@ import {
   type CallbackContractSourceResolver,
   type ChildComponentSource,
   type ChildContractResolver,
+  propCallbackIsDeferred,
   propDefersArrayItemCallback,
   propObjectCallbackIsDeferred,
 } from "./rules/child-contract.js";
@@ -559,6 +560,19 @@ function createChildContractResolver(
     },
     callbackRegistrationIsDeferred(ownerBinding, method, argumentIndex): boolean {
       return deferredRegistrations.get(ownerBinding)?.get(method)?.has(argumentIndex) ?? false;
+    },
+    componentCallbackPropIsDeferred(componentName, propName): boolean {
+      const key = `${componentName}\0${propName}\0`;
+      const cached = componentCallbackContracts.get(key);
+      if (cached !== undefined) return cached;
+      const source = resolveComponent(importerFile, componentName);
+      const deferred = source !== null && propCallbackIsDeferred(
+        source,
+        propName,
+        callbackSourceResolver
+      );
+      componentCallbackContracts.set(key, deferred);
+      return deferred;
     },
     callbackPropertyIsDeferred(hookName, argumentIndex, property): boolean {
       const key = `${hookName}\0${argumentIndex}\0${property}`;
