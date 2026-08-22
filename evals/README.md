@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
-790 manual hook labels, including 3 non-enforced opportunities, plus eighteen
+790 manual hook labels, including 2 non-enforced opportunities, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -78,6 +78,16 @@ not evidence. The recommendation keeps every event callback and write position, 
 `Show` only at the bounded gates, and never subscribes the large owner. An enforced Tree Wallet review label and local
 fixtures reject multiple owner returns, impure wrappers, broad gates, effects, transports, companion writes, functional
 updaters, repeated output, and non-presentation props.
+
+One Expensify label verifies an asynchronously loaded payload that never renders and is read only by an eventual confirm
+command. The command may cross local `useCallback` calls, a single-return memoized options object, component rest/spread wrappers,
+object destructuring, static `Object.assign` composition, a `React.memo` default export, React context with all imports and reader hooks
+resolved, source-resolved custom hooks and higher-order callback guards, and nested promise callbacks. Every component and
+hook path must end in an intrinsic or framework event, a recursively proven custom event component, or a structurally proven
+deferred registration; eager invocation, unknown calls, extra publications, mutable aliases, missing dependencies, and
+unresolved wrappers or context readers abstain. The migration
+preserves the loading effect and callback timing, writes and reads one ref at the existing positions, and removes only the
+payload from callback dependencies.
 
 Two Tree Map labels and one exact group label verify a selection model whose false-initialized mode and empty ID array
 enter and cancel together. Every mode write must pair with an empty-array reset, while independent collection writes must

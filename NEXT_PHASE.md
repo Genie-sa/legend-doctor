@@ -8,21 +8,36 @@
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual hook labels | 790 |
-| Known misses | 3 |
+| Known misses | 2 |
 | State groups | 18/18 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (424/424) |
-| Actionable recall | 99.3% (424/427) |
-| Unit tests | 507/507 |
+| Actionable precision | 100% (425/425) |
+| Actionable recall | 99.5% (425/427) |
+| Unit tests | 509/509 |
 
-The latest phase proves event-owned booleans whose only consumers are bounded presentation surfaces. Against commit
-`bdde55a`, the exact current 221-target action delta is:
+The latest phase proves async effect payloads whose only read reaches a source-proven deferred option command. Against
+commit `22bb98e`, the exact current 221-target action delta is:
 
-- Legend Music: `isDragOver` in `components/Playlist.tsx` changes from `review-state` to
-  `use-observable`.
-- Tree Map, Tree Wallet, Memoria src, Memoria app, Excalidraw, Expensify, Formbricks, Outline, Genie Courses, Open
+- Expensify: `duplicatedWorkspaceAvatar` in `WorkspaceDuplicateSelectFeaturesForm.tsx` changes from `review-state` to
+  `use-ref`.
+- Tree Map, Tree Wallet, Memoria src, Memoria app, Legend Music, Excalidraw, Formbricks, Outline, Genie Courses, Open
   WebUI React Native, and Hoalu have zero hook action changes.
 - All 221 current targets have zero Legend practice action changes.
+
+## Source-proven option command proof
+
+The state must never render or transport, and every read must stay inside a memoized command chain. One single-return `useMemo`
+options object may publish the terminal callback to source-resolved components. The proof follows the callback field through
+direct props, rest/spread wrappers, local and imported components, object destructuring, static `Object.assign` composition,
+default `React.memo` exports, React context providers with every import and reader hook accounted for, source-resolved hooks, and deferred
+higher-order callback wrappers. All paths must terminate in an intrinsic or framework event prop, a recursively proven custom
+event component, or an effect-backed deferred registration. Nested callbacks inherit the root only inside that newly proven
+command.
+
+Unknown calls, dynamic properties, extra callback or options publications, eager invocations, mutable bindings, unresolved
+context readers, missing memo dependencies, unsupported wrappers, and cycles abstain. The recommendation uses one ref, preserves effect and
+command statement order, changes the existing setter/read positions to `.current`, and removes only the payload dependency
+that previously broadcast a rerender through the callback and options chain.
 
 ## Multi-surface event boolean proof
 
@@ -189,10 +204,10 @@ callbacks, aliases, local helper chains, and effect-rooted transitions abstain.
 
 ## Remaining labeled opportunities
 
-Three opportunities remain non-enforced:
+Two opportunities remain non-enforced:
 
 - one event-owned effect reset whose custom component callback timing is unresolved;
-- two ref migrations behind async confirmation or form callback contracts.
+- one ref migration behind a form callback contract.
 
 Keep these as review findings until a structural proof covers their full ownership and timing. Component names, file paths,
 and app-specific allowlists are not proof.

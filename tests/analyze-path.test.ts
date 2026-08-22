@@ -691,6 +691,213 @@ test("isolates an event-owned boolean across small presentation leaves and react
   assert.equal(report.findings.find(finding => finding.name === "branchActive")?.action, "review-state");
 });
 
+test("traces a command payload through memoized options and source component wrappers", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-option-command-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "useShortcut.ts"),
+    `
+      import { useEffect } from "react";
+      export function useShortcut(callback: () => void) {
+        useEffect(() => subscribe(callback), [callback]);
+      }
+      export function useOptionShortcut({ options }: { options: { onConfirm: () => void } }) {
+        useShortcut(() => options.onConfirm());
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Button.tsx"),
+    `
+      function ButtonBase({ onPress = () => {} }: { onPress?: () => void }) {
+        return <button onClick={onPress}>Confirm</button>;
+      }
+      const Button = Object.assign(ButtonBase, { Text: () => null });
+      export default Button;
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Footer.tsx"),
+    `
+      import React from "react";
+      import Button from "./Button";
+      import { useShortcut } from "./useShortcut";
+      type Options = { onConfirm: () => void };
+      function Footer({ options }: { options?: Options }) {
+        const { onConfirm } = options ?? {};
+        useShortcut(onConfirm!);
+        return <Button onPress={onConfirm}>Confirm</Button>;
+      }
+      export default React.memo(Footer) as typeof Footer;
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Selection.tsx"),
+    `
+      import Footer from "./Footer";
+      import { useOptionShortcut } from "./useShortcut";
+      type Options = { onConfirm: () => void };
+      export function Selection({ ref, ...props }: { ref?: unknown; options: Options }) {
+        return <BaseSelection {...props} />;
+      }
+      function BaseSelection(props: { options: Options }) {
+        return <SelectionImpl {...props} />;
+      }
+      function SelectionImpl({ options }: { options: Options }) {
+        useOptionShortcut({ options });
+        return <Footer options={options} />;
+      }
+      export function EagerSelection({ options }: { options: Options }) {
+        options.onConfirm();
+        return <button>Unsafe</button>;
+      }
+      function EagerButton({ onConfirm }: { onConfirm: () => void }) {
+        onConfirm();
+        return <button>Unsafe wrapper</button>;
+      }
+      export function EagerPropSelection({ options }: { options: Options }) {
+        return <EagerButton onConfirm={options.onConfirm} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useCallback, useEffect, useMemo, useState } from "react";
+      import { EagerPropSelection, EagerSelection, Selection } from "./Selection";
+      export function SafeScreen() {
+        const [payload, setPayload] = useState<string>();
+        useEffect(() => load((value: string) => setPayload(value)), []);
+        const confirm = useCallback(() => send(payload), [payload]);
+        const onConfirm = useCallback(() => prompt().then(() => confirm()), [confirm]);
+        const options = useMemo(() => ({ onConfirm }), [onConfirm]);
+        return <Selection options={options} />;
+      }
+      export function UnsafeScreen() {
+        const [unsafePayload, setUnsafePayload] = useState<string>();
+        useEffect(() => load((value: string) => setUnsafePayload(value)), []);
+        const confirm = useCallback(() => send(unsafePayload), [unsafePayload]);
+        const onConfirm = useCallback(() => prompt().then(() => confirm()), [confirm]);
+        const options = useMemo(() => ({ onConfirm }), [onConfirm]);
+        return <EagerSelection options={options} />;
+      }
+      export function UnsafePropScreen() {
+        const [unsafePropPayload, setUnsafePropPayload] = useState<string>();
+        useEffect(() => load((value: string) => setUnsafePropPayload(value)), []);
+        const confirm = useCallback(() => send(unsafePropPayload), [unsafePropPayload]);
+        const onConfirm = useCallback(() => prompt().then(() => confirm()), [confirm]);
+        const options = useMemo(() => ({ onConfirm }), [onConfirm]);
+        return <EagerPropSelection options={options} />;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  assert.equal(report.findings.find(finding => finding.name === "payload")?.action, "use-ref");
+  assert.equal(report.findings.find(finding => finding.name === "unsafePayload")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "unsafePropPayload")?.action, "review-state");
+});
+
+test("proves deferred context and higher-order callback paths and rejects eager readers", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-command-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "useLater.ts"),
+    `
+      import { useEffect } from "react";
+      export function useLater(callback: () => void) {
+        useEffect(() => subscribe(callback), [callback]);
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Selections.tsx"),
+    `
+      import { createContext, useCallback, useContext, useMemo } from "react";
+      import { useLater } from "./useLater";
+      type Options = { onConfirm: () => void };
+      const SafeContext = createContext({ onPress: () => {} });
+      function useSafeContext() { return useContext(SafeContext); }
+      function useGuard() {
+        const guard = useCallback((action: () => void) => () => action(), []);
+        return { guard };
+      }
+      function DeferredReader() {
+        const { onPress } = useSafeContext();
+        useLater(onPress);
+        return null;
+      }
+      function SafeButton({ onPress }: { onPress: () => void }) {
+        const value = useMemo(() => ({ onPress }), [onPress]);
+        return <SafeContext.Provider value={value}><button onClick={onPress} /><DeferredReader /></SafeContext.Provider>;
+      }
+      export function SafeSelection({ options }: { options: Options }) {
+        return <SafeButton onPress={options.onConfirm} />;
+      }
+      export function GuardSelection({ options }: { options: Options }) {
+        const { guard } = useGuard();
+        const confirm = useCallback(() => options.onConfirm(), [options]);
+        return <button onClick={guard(confirm)} />;
+      }
+      const EagerContext = createContext({ onPress: () => {} });
+      function useEagerContext() { return useContext(EagerContext); }
+      function EagerReader() {
+        const { onPress } = useEagerContext();
+        onPress();
+        return null;
+      }
+      function EagerButton({ onPress }: { onPress: () => void }) {
+        const value = useMemo(() => ({ onPress }), [onPress]);
+        return <EagerContext.Provider value={value}><EagerReader /></EagerContext.Provider>;
+      }
+      export function EagerSelection({ options }: { options: Options }) {
+        return <EagerButton onPress={options.onConfirm} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useCallback, useEffect, useMemo, useState } from "react";
+      import { EagerSelection, GuardSelection, SafeSelection } from "./Selections";
+      export function SafeScreen() {
+        const [payload, setPayload] = useState<string>();
+        useEffect(() => load((value: string) => setPayload(value)), []);
+        const onConfirm = useCallback(() => send(payload), [payload]);
+        const options = useMemo(() => ({ onConfirm }), [onConfirm]);
+        return <SafeSelection options={options} />;
+      }
+      export function EagerScreen() {
+        const [eagerPayload, setEagerPayload] = useState<string>();
+        useEffect(() => load((value: string) => setEagerPayload(value)), []);
+        const onConfirm = useCallback(() => send(eagerPayload), [eagerPayload]);
+        const options = useMemo(() => ({ onConfirm }), [onConfirm]);
+        return <EagerSelection options={options} />;
+      }
+      export function GuardScreen() {
+        const [guardPayload, setGuardPayload] = useState<string>();
+        useEffect(() => load((value: string) => setGuardPayload(value)), []);
+        const onConfirm = useCallback(() => send(guardPayload), [guardPayload]);
+        const options = useMemo(() => ({ onConfirm }), [onConfirm]);
+        return <GuardSelection options={options} />;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  assert.equal(report.findings.find(finding => finding.name === "payload")?.action, "use-ref");
+  assert.equal(report.findings.find(finding => finding.name === "guardPayload")?.action, "use-ref");
+  assert.equal(report.findings.find(finding => finding.name === "eagerPayload")?.action, "review-state");
+});
+
 test("shares one cached AST across source indexing and both detector families", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
   t.after(() => rm(root, { force: true, recursive: true }));

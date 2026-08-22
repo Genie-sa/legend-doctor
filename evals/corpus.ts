@@ -5713,7 +5713,6 @@ export const goldCases = [
   })),
   {
     action: "use-ref",
-    enforced: false,
     file: "WorkspaceDuplicateSelectFeaturesForm.tsx",
     hook: "useState",
     line: 48,

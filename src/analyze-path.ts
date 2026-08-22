@@ -12,8 +12,11 @@ import {
   type RuntimeFunctionLike,
 } from "./ast.js";
 import {
+  type CallbackContractSourceResolver,
   type ChildComponentSource,
   type ChildContractResolver,
+  propDefersArrayItemCallback,
+  propObjectCallbackIsDeferred,
 } from "./rules/child-contract.js";
 import {
   sourceHookDefersCallback,
@@ -455,6 +458,9 @@ function createChildContractResolver(
   importerFile: string
 ): ChildContractResolver {
   const callbackContracts = new Map<string, boolean>();
+  const arrayItemCallbackContracts = new Map<string, boolean>();
+  const componentCallbackContracts = new Map<string, boolean>();
+  const componentSources = new Map<string, ChildComponentSource | null>();
   const keyedCursorContracts = new Map<string, boolean>();
   const hookSources = new Map<string, SourceHookDeclaration | null>();
   const hookResolver: SourceHookResolver = {
@@ -479,8 +485,75 @@ function createChildContractResolver(
       return source;
     },
   };
+  const resolveComponent = (file: string, name: string): ChildComponentSource | null => {
+    const key = `${file}\0${name}`;
+    if (componentSources.has(key)) return componentSources.get(key) ?? null;
+    const resolved = context.sourceIndex.componentDeclarationFor(file, name);
+    if (!resolved) {
+      componentSources.set(key, null);
+      return null;
+    }
+    const analysisFile = context.project.getFile(resolved.file);
+    const source = analysisFile
+      ? findComponentDeclaration(
+          analysisFile.sourceFile,
+          resolved.file,
+          resolved.localName,
+          context.sourceIndex.deferredCallbackHooksFor(resolved.file)
+        )
+      : null;
+    componentSources.set(key, source);
+    return source;
+  };
+  const callbackSourceResolver: CallbackContractSourceResolver = {
+    contextReaderHooks(file, contextName) {
+      return context.sourceIndex.contextReaderHooksFor(file, contextName);
+    },
+    deferredCallbackHooks(file) {
+      return context.sourceIndex.deferredCallbackHooksFor(file);
+    },
+    frameworkEventComponent(file, name) {
+      return context.sourceIndex.frameworkEventComponentFor(file, name);
+    },
+    hookCallbackIsDeferred(file, name, argumentIndex): boolean {
+      const source = hookResolver.resolveHook(file, name);
+      return source !== null && sourceHookDefersCallback(
+        source,
+        argumentIndex,
+        null,
+        hookResolver
+      );
+    },
+    resolveComponent,
+    resolveHook(file, name): ChildComponentSource | null {
+      const source = hookResolver.resolveHook(file, name);
+      if (!source?.owner.body) return null;
+      return {
+        ...source,
+        body: source.owner.body,
+        deferredCallbackHooks: context.sourceIndex.deferredCallbackHooksFor(source.file),
+      };
+    },
+    sourceFile(file): ts.SourceFile | null {
+      return context.project.getFile(file)?.sourceFile ?? null;
+    },
+  };
   const deferredRegistrations = context.sourceIndex.deferredCallbackRegistrationsFor(importerFile);
   return {
+    componentArrayItemCallbackIsDeferred(componentName, propName, callbackProperty): boolean {
+      const key = `${componentName}\0${propName}\0${callbackProperty}`;
+      const cached = arrayItemCallbackContracts.get(key);
+      if (cached !== undefined) return cached;
+      const source = resolveComponent(importerFile, componentName);
+      const deferred = source !== null && propDefersArrayItemCallback(
+        source,
+        propName,
+        callbackProperty,
+        callbackSourceResolver
+      );
+      arrayItemCallbackContracts.set(key, deferred);
+      return deferred;
+    },
     callbackRegistrationIsDeferred(ownerBinding, method, argumentIndex): boolean {
       return deferredRegistrations.get(ownerBinding)?.get(method)?.has(argumentIndex) ?? false;
     },
@@ -535,19 +608,25 @@ function createChildContractResolver(
       keyedCursorContracts.set(key, safe);
       return safe;
     },
+    componentPropCallbackIsDeferred(componentName, propName, callbackProperty): boolean {
+      const key = `${componentName}\0${propName}\0${callbackProperty}`;
+      const cached = componentCallbackContracts.get(key);
+      if (cached !== undefined) return cached;
+      const source = resolveComponent(importerFile, componentName);
+      const deferred = source !== null && propObjectCallbackIsDeferred(
+        source,
+        propName,
+        callbackProperty,
+        callbackSourceResolver
+      );
+      componentCallbackContracts.set(key, deferred);
+      return deferred;
+    },
     pureProjectionBindings(): ReadonlySet<string> {
       return context.sourceIndex.pureProjectionsFor(importerFile);
     },
     resolveComponent(name: string): ChildComponentSource | null {
-      const resolved = context.sourceIndex.componentDeclarationFor(importerFile, name);
-      if (!resolved) return null;
-      const analysisFile = context.project.getFile(resolved.file);
-      if (!analysisFile) return null;
-      return findComponentDeclaration(
-        analysisFile.sourceFile,
-        resolved.localName,
-        context.sourceIndex.deferredCallbackHooksFor(resolved.file)
-      );
+      return resolveComponent(importerFile, name);
     },
   };
 }
@@ -602,6 +681,7 @@ function findHookDeclaration(
 
 function findComponentDeclaration(
   sourceFile: ts.SourceFile,
+  file: string,
   localName: string,
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
 ): ChildComponentSource | null {
@@ -612,7 +692,7 @@ function findComponentDeclaration(
       statement.name?.text === localName &&
       statement.body
     ) {
-      return { owner: statement, body: statement.body, deferredCallbackHooks };
+      return { owner: statement, body: statement.body, deferredCallbackHooks, file };
     }
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
@@ -622,7 +702,7 @@ function findComponentDeclaration(
       const wrapped = wrapperRenderFunction(initializer, reactWrappers);
       if (wrapped) initializer = wrapped;
       if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
-        return { owner: initializer, body: initializer.body, deferredCallbackHooks };
+        return { owner: initializer, body: initializer.body, deferredCallbackHooks, file };
       }
     }
   }

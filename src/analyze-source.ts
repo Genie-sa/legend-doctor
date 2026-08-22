@@ -34,7 +34,6 @@ import type { AnalysisFile } from "./analysis-project.js";
 import { findAsyncLeafStatuses } from "./rules/async-leaf-status.js";
 import {
   type ChildContractResolver,
-  propDefersArrayItemCallback,
   propIsLeafRenderConsumer,
 } from "./rules/child-contract.js";
 import {
@@ -284,6 +283,37 @@ function analyzeParsedSource(
   const lifecycleRegions = reactCommit.lifecycleRegions;
   const directEffectCalls = new Set(reactCommit.effectCalls);
   const usageByState = new Map(states.map(state => [state, collectStateUsage(state, lifecycleRegions, imports)]));
+  const eventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
+  const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
+  for (const state of states) {
+    const owned = statesByOwner.get(state.owner) ?? [];
+    owned.push(state);
+    statesByOwner.set(state.owner, owned);
+  }
+  for (const [owner, ownedStates] of statesByOwner) {
+    const callbacks = new Set(reactCommit.eventTransitionCallbacks.get(owner) ?? EMPTY_RUNTIME_FUNCTIONS);
+    const needsSourceOptionProof = ownedStates.some(state => {
+      const usage = usageByState.get(state);
+      return usage !== undefined &&
+        usage.localRenderReads === 0 &&
+        usage.effectReads === 0 &&
+        usage.deferredReads > 0 &&
+        usage.transportedOccurrences === 0 &&
+        (usage.eventReads > 0 || usage.effectWrites > 0) &&
+        !hasOnlyEventCommandReads(state, EMPTY_NODES, callbacks);
+    });
+    if (childContracts && needsSourceOptionProof) {
+      for (const callback of sourceProvenOptionEventCallbacks(owner, imports, childContracts)) {
+        callbacks.add(callback);
+        if (callback.body) {
+          visit(callback.body, node => {
+            if (isRuntimeFunctionLike(node)) callbacks.add(node);
+          });
+        }
+      }
+    }
+    eventCallbacksByOwner.set(owner, callbacks);
+  }
   const subtreeByState = new Map<StateCandidate, StateSubtree>();
   const safeCommandStates = new Set<StateCandidate>();
   const selfRefreshingCommandStates = new Set<StateCandidate>();
@@ -532,7 +562,7 @@ function analyzeParsedSource(
           branchUnmountMoves.get(state) ?? null,
           childContracts,
           deferredCallbackHooks,
-          reactCommit.eventTransitionCallbacks.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
+          eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
           memoizedOptionCommandStates.has(state),
           returnedKeyedCursorStates.has(state),
           multiSurfaceBooleanStates.has(state)
@@ -1121,6 +1151,212 @@ function localCallbackBindingName(
     ts.isIdentifier(call.parent.name)
     ? call.parent.name.text
     : null;
+}
+
+function sourceProvenOptionEventCallbacks(
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+  childContracts: ChildContractResolver
+): ReadonlySet<RuntimeFunctionLike> {
+  const callbacks = new Set<RuntimeFunctionLike>();
+  if (!owner.body) return callbacks;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (
+      !ts.isVariableDeclaration(node) ||
+      !ts.isIdentifier(node.name) ||
+      !node.initializer ||
+      bindingDeclarationCount(owner, node.name.text) !== 1
+    ) {
+      return;
+    }
+    const memo = memoizedObjectLiteral(node.initializer, imports);
+    if (!memo || memo.object.properties.some(ts.isSpreadAssignment)) return;
+    const publications = optionObjectPublications(
+      owner,
+      node.name.text
+    );
+    if (publications.length === 0) return;
+    for (const property of memo.object.properties) {
+      if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) continue;
+      const propertyName = staticPropertyName(property.name);
+      const callbackName = ts.isShorthandPropertyAssignment(property)
+        ? property.name
+        : unwrapTransparentExpression(property.initializer);
+      if (!propertyName || !ts.isIdentifier(callbackName)) continue;
+      const callback = localCallbackByBinding(owner, callbackName.text, imports);
+      if (
+        !callback ||
+        !memo.dependencies.elements.some(element =>
+          ts.isIdentifier(element) && element.text === callbackName.text
+        ) ||
+        !callbackPublishedOnlyThroughMemo(
+          owner,
+          callbackName.text,
+          property,
+          memo.call
+        ) ||
+        !publications.every(publication =>
+          childContracts.componentPropCallbackIsDeferred(
+            publication.component,
+            publication.prop,
+            propertyName
+          )
+        )
+      ) {
+        continue;
+      }
+      callbacks.add(callback);
+    }
+  });
+  return callbacks;
+}
+
+interface MemoizedObjectLiteral {
+  call: ts.CallExpression;
+  dependencies: ts.ArrayLiteralExpression;
+  object: ts.ObjectLiteralExpression;
+}
+
+function memoizedObjectLiteral(
+  initializer: ts.Expression,
+  imports: HookImports
+): MemoizedObjectLiteral | null {
+  const call = unwrapTransparentExpression(initializer);
+  if (
+    !ts.isCallExpression(call) ||
+    !isImportedHookCall(call, imports.useMemo, imports.reactNamespaces, "useMemo") ||
+    call.arguments.length !== 2
+  ) {
+    return null;
+  }
+  const factory = call.arguments[0];
+  const dependencies = call.arguments[1];
+  if (
+    !factory ||
+    (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
+    !dependencies ||
+    !ts.isArrayLiteralExpression(dependencies)
+  ) {
+    return null;
+  }
+  let expression: ts.Expression | null = ts.isBlock(factory.body)
+    ? factory.body.statements.length === 1 &&
+        ts.isReturnStatement(factory.body.statements[0]!) &&
+        factory.body.statements[0]!.expression
+      ? factory.body.statements[0]!.expression
+      : null
+    : factory.body;
+  if (!expression) return null;
+  expression = unwrapTransparentExpression(expression);
+  return ts.isObjectLiteralExpression(expression)
+    ? { call, dependencies, object: expression }
+    : null;
+}
+
+interface OptionObjectPublication {
+  component: string;
+  prop: string;
+}
+
+function optionObjectPublications(
+  owner: RuntimeFunctionLike,
+  binding: string
+): readonly OptionObjectPublication[] {
+  const publications: OptionObjectPublication[] = [];
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== binding ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
+    const component = attribute ? jsxTargetName(attribute) : null;
+    if (
+      !attribute ||
+      !component ||
+      !isCustomJsxTarget(component) ||
+      !isDirectJsxAttributeExpression(attribute, node)
+    ) {
+      safe = false;
+      return;
+    }
+    publications.push({ component, prop: attribute.name.getText() });
+  });
+  return safe ? publications : [];
+}
+
+function callbackPublishedOnlyThroughMemo(
+  owner: RuntimeFunctionLike,
+  binding: string,
+  property: ts.PropertyAssignment | ts.ShorthandPropertyAssignment,
+  memoCall: ts.CallExpression
+): boolean {
+  let propertyReferences = 0;
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== binding ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (nodeWithin(node, property)) {
+      propertyReferences += 1;
+      return;
+    }
+    if (isHookDependencyReference(node, new Set(["useMemo"]))) {
+      const call = findAncestorUntil(node, ts.isCallExpression, owner);
+      if (call === memoCall) return;
+    }
+    safe = false;
+  });
+  return safe && propertyReferences === 1;
+}
+
+function localCallbackByBinding(
+  owner: RuntimeFunctionLike,
+  binding: string,
+  imports: HookImports
+): RuntimeFunctionLike | null {
+  if (!owner.body || bindingDeclarationCount(owner, binding) !== 1) return null;
+  let callback: RuntimeFunctionLike | null = null;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (callback) return;
+    if (ts.isFunctionDeclaration(node) && node.name?.text === binding) {
+      callback = node;
+      return;
+    }
+    if (
+      !ts.isVariableDeclaration(node) ||
+      !ts.isIdentifier(node.name) ||
+      node.name.text !== binding ||
+      !node.initializer
+    ) {
+      return;
+    }
+    const initializer = unwrapTransparentExpression(node.initializer);
+    if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+      callback = initializer;
+      return;
+    }
+    if (
+      ts.isCallExpression(initializer) &&
+      isImportedHookCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback") &&
+      initializer.arguments[0] &&
+      (ts.isArrowFunction(initializer.arguments[0]) || ts.isFunctionExpression(initializer.arguments[0]))
+    ) {
+      callback = initializer.arguments[0];
+    }
+  });
+  return callback;
 }
 
 function jsxOpeningForAttribute(
@@ -2870,14 +3106,15 @@ function classifyState(
     !statePublishesReadOnlyGetter(state) &&
     !usage.shadowed &&
     !usage.escaped &&
-    ((usage.eventReads === 0 && usage.effectWrites === 0) || hasOnlyEventCommandReads(state))
+    ((usage.eventReads === 0 && usage.effectWrites === 0) ||
+      hasOnlyEventCommandReads(state, EMPTY_NODES, eventTransitionCallbacks))
   ) {
     return {
       action: "use-ref",
       confidence: "probable",
       message: preservesFunctionalSnapshot
         ? `Replace \`${state.valueName}\` with a ref; inside the source-proven deferred callback, capture the ref's pre-update snapshot, evaluate the counter updater from that snapshot, and keep every later read on the captured value so the command preserves React's current ordering without rerendering.`
-        : `Replace \`${state.valueName}\` with a ref or observable handle; preserve any existing React lifecycle hook timing and statement order${usage.setterUsesPreviousValue ? ", evaluating functional updaters against the current handle value" : ""}, because the value is read only by deferred commands and does not render UI.`,
+        : `Replace \`${state.valueName}\` with a ref; preserve any existing React lifecycle hook timing and statement order, write \`.current\` at the same setter positions${usage.setterUsesPreviousValue ? ", evaluate functional updaters against the current handle value" : ""}, read \`.current\` inside deferred commands, and remove only this value from their dependency arrays.`,
     };
   }
   const effectCommandProjectionSubtree = subtree?.kind === "effect-command-projection" ? subtree : null;
@@ -4193,9 +4430,11 @@ function isSourceProvenMemoizedOptionCommand(
     transportCount += 1;
   });
   if (!safe || transportCount !== 1 || !target || !propName) return false;
-  const child = childContracts.resolveComponent(target);
-  return child !== null &&
-    propDefersArrayItemCallback(child, propName, callbackProp);
+  return childContracts.componentArrayItemCallbackIsDeferred(
+    target,
+    propName,
+    callbackProp
+  );
 }
 
 function staticPropertyName(name: ts.PropertyName): string | null {

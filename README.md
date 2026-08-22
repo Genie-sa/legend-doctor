@@ -23,6 +23,7 @@ node dist/src/cli.js /path/to/app --json --actionable
 | Effect-written presentation state | Preserve the effect; subscribe only in the proven leaf |
 | Effect-owned custom-hook cursor in one stable-keyed list | Preserve effects and cleanup; remove the list broadcast and subscribe per row |
 | Event-owned boolean across small presentation surfaces | Keep handlers; use reactive class/style props and `Show` only at bounded leaves |
+| Async payload read only by a source-proven option command | Preserve the effect; use one ref and remove its callback dependency broadcast |
 | Lazy state in a child callback | One owner-lifetime observable and one nested leaf subscriber |
 | One unresolved JSX consumer | One local subscriber wrapper; no child contract required |
 | Resolved leaf consumer with verified render-only contract | Owner observable plus one call-site subscriber; child API unchanged |
@@ -46,11 +47,11 @@ Measured on pinned real applications:
 | Source targets | 221 |
 | Hooks analyzed | 2,338 |
 | Manual labels | 790 |
-| Known misses | 3 |
+| Known misses | 2 |
 | State groups | 18/18 |
-| Unit tests | 507/507 |
-| Actionable precision | 100% (424/424) |
-| Actionable recall | 99.3% (424/427) |
+| Unit tests | 509/509 |
+| Actionable precision | 100% (425/425) |
+| Actionable recall | 99.5% (425/427) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -691,6 +692,7 @@ Rules are split so agents can work on one proof family at a time:
 | `src/rules/async-leaf-status.ts` | Event-owned async status leaves |
 | `src/rules/command-only-state.ts` | Command-only state, callback publication, and ref safety |
 | `src/rules/source-callback-contract.ts` | Cross-file custom-hook callback timing and ref-storage proofs |
+| `src/rules/child-contract.ts` | Cross-file render leaves and deferred callback fields through component/hook wrappers |
 | `src/rules/hook-keyed-cursor-contract.ts` | Cross-file stable-keyed row cursor consumers |
 | `src/rules/literal-boolean-leaf.ts` | Literal boolean ownership and bounded single- or multi-surface leaves |
 | `src/rules/deferred-reveal.ts` | Deferred reveal and render gates |
