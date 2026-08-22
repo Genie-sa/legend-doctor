@@ -40,13 +40,13 @@ Measured on pinned real applications:
 | Metric | Result |
 | --- | ---: |
 | App roots | 12 |
-| Source targets | 220 |
-| Hooks analyzed | 2,336 |
-| Manual labels | 784 |
+| Source targets | 221 |
+| Hooks analyzed | 2,338 |
+| Manual labels | 787 |
 | Known misses | 19 |
-| Unit tests | 491/491 |
-| Actionable precision | 100% (401/401) |
-| Actionable recall | 95.5% (401/420) |
+| Unit tests | 492/492 |
+| Actionable precision | 100% (406/406) |
+| Actionable recall | 95.5% (406/425) |
 | Legend practice precision | 100% (89/89) |
 
 These are analyzer evals, not runtime benchmarks. The corpus includes Tree Map, Tree Wallet, Memoria, Legend Music,
@@ -237,6 +237,10 @@ small render boundary, the tool keeps the effect, cleanup, dependencies, stateme
 Only the storage becomes an owner-scoped observable, and an always-mounted leaf subscribes around the complete projection
 or gate. Companion writes, effect reads, previous-value updaters, named effect callbacks, callback escape, broad render
 surfaces, and unkeyed repeated output remain review findings.
+
+For compact owners below 12 JSX elements, the same proof emits an action only when the leaf boundary excludes at least
+five elements. This retains the existing material-render-cut requirement without hiding useful deferred or frame-scheduled
+leaves in smaller components.
 
 ### 3. Broad read → lowest observable path
 

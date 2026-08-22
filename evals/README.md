@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,336 hooks across 220 source roots. The corpus currently contains
-784 manual hook labels, including 19 non-enforced opportunities, plus fourteen
+At the pinned commits, the analyzer inventories 2,338 hooks across 221 source roots. The corpus currently contains
+787 manual hook labels, including 19 non-enforced opportunities, plus fourteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, eleven direct
 `useValue` labels, six lowest-path subscription labels, eleven non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -48,6 +48,9 @@ must be lexically inside a direct imported React `useEffect`; named callbacks an
 may flow through pure immutable projections, one safe raw-value transport inside the same bounded gate, an imported
 unshadowed `clsx` call, or a stable-keyed repeated render. Effect reads, previous-value updaters, companion writes,
 callback escape, unkeyed lists, and large or disjoint render surfaces remain review findings.
+Compact owners below twelve JSX elements additionally require the leaf boundary to exclude at least five elements; a
+four-element saving is an enforced hard negative. The Open WebUI archived-search screen is pinned as its own target so
+the cross-app proof is evaluated rather than inferred from an unsampled repository file.
 
 Generality is enforced with structural hard negatives rather than application allowlists. In particular, source-symbol
 resolution is provenance rather than proof of leaf ownership; production migrations are not emitted for tests; state

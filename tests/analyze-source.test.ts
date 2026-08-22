@@ -4354,6 +4354,26 @@ test("isolates effect-written presentation state in a leaf subscriber", () => {
   assert.match(finding?.message ?? "", /leaf subscriber/i);
 });
 
+test("requires a material five-element cut in a compact effect-written owner", () => {
+  const analyze = (siblings: string) => analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Panel() {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => { setVisible(true); }, []);
+      return <Page>${siblings}{visible && <Leaf />}</Page>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "visible");
+
+  assert.equal(
+    analyze("<Header /><Nav /><Summary /><Filters /><Footer />")?.action,
+    "use-observable"
+  );
+  assert.notEqual(
+    analyze("<Header /><Nav /><Footer />")?.action,
+    "use-observable"
+  );
+});
+
 test("accepts an effect-written projection through the imported clsx package", () => {
   const [finding] = analyzeSource(`
     import clsx from "clsx";

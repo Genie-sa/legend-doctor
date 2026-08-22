@@ -1376,6 +1376,12 @@ export const repositories = [
         root: "libs/mobile/shared/features/use-attached-files/src/use-attached-files.ts",
         states: 0,
       },
+      {
+        effects: 1,
+        id: "open-webui-search-archived-chats",
+        root: "libs/mobile/chat/features/search-archived-chats/src/lib/component.tsx",
+        states: 1,
+      },
     ],
     url: "https://github.com/RonasIT/open-webui-react-native.git",
   },
@@ -2216,11 +2222,7 @@ export const goldCases = [
     rationale: "The one-shot idle render gate keeps its exact scheduler and cleanup while an observable leaf subscription avoids invalidating the route owner.",
     target: "memoria-src",
   },
-  ...[
-    ["app/(private)/forest/tree/[id].tsx", 60, "renderPhase"],
-    ["components/onboarding/news-step.tsx", 30, "buttonReady"],
-    ["components/onboarding/news-step.tsx", 31, "svgReady"],
-  ].map(([file, line, name]) => ({
+  ...[["app/(private)/forest/tree/[id].tsx", 60, "renderPhase"]].map(([file, line, name]) => ({
     action: "review-state" as const,
     file: file as string,
     hook: "useState" as const,
@@ -5847,6 +5849,27 @@ export const goldCases = [
     name: name as string,
     rationale:
       "State written only by React effects can retain owner lifetime in an observable while one small presentation subtree subscribes; preserve the original effect, cleanup, and statement order.",
+    target: target as string,
+  })),
+  ...[
+    ["tree-wallet", "components/onboarding/grow-plant/forest-scene.tsx", 97, "islandReady"],
+    ["tree-wallet", "components/onboarding/news-step.tsx", 30, "buttonReady"],
+    ["tree-wallet", "components/onboarding/news-step.tsx", 31, "svgReady"],
+    ["legend-music", "components/dnd/DraggableItem.tsx", 64, "fadeOg"],
+    [
+      "open-webui-search-archived-chats",
+      "component.tsx",
+      37,
+      "isFocused",
+    ],
+  ].map(([target, file, line, name]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale:
+      "A compact owner still has a material leaf cut when the effect-written presentation state can skip at least five independent JSX elements without changing effect timing or owner lifetime.",
     target: target as string,
   })),
 ] as const satisfies readonly GoldHookCase[];

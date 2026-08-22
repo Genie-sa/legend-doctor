@@ -5,24 +5,24 @@
 | Measure | Result |
 | --- | ---: |
 | App roots | 12 |
-| Source targets | 220 |
-| Hooks analyzed | 2,336 |
-| Manual hook labels | 784 |
+| Source targets | 221 |
+| Hooks analyzed | 2,338 |
+| Manual hook labels | 787 |
 | Known misses | 19 |
 | State groups | 14/14 |
 | Legend practices | 89/89 |
-| Actionable precision | 100% (401/401) |
-| Actionable recall | 95.5% (401/420) |
-| Unit tests | 491/491 |
+| Actionable precision | 100% (406/406) |
+| Actionable recall | 95.5% (406/425) |
+| Unit tests | 492/492 |
 
-The latest phase converts six effect-written presentation states from `review-state` to `use-observable`. Against commit
-`250270a`, the exact 220-target delta is:
+The latest phase extends the effect-written presentation proof to compact owners only when the leaf cut excludes at least
+five JSX elements. Against commit `410ceff`, the exact current 221-target delta is:
 
-- Tree Map: `previewUrl` in `create-avatar-style-dialog.tsx` and `peeked` in `impersonation-badge.tsx`.
-- Memoria: `logos` in `ArtPickerScreen.tsx` and `glowColor` in `WatchNextButton.tsx`.
-- Excalidraw: `renderError` in `ImageExportDialog.tsx` and `canRetry` in `ChatMessage.tsx`.
-- The other 217 targets have zero hook action changes.
-- All 220 targets have zero Legend practice action changes.
+- Tree Wallet: `islandReady` in `forest-scene.tsx`, plus `buttonReady` and `svgReady` in `news-step.tsx`.
+- Legend Music: `fadeOg` in `DraggableItem.tsx`.
+- Open WebUI: `isFocused` in the newly pinned archived-search target.
+- The other 218 current targets have zero hook action changes.
+- All 221 current targets have zero Legend practice action changes.
 
 ## Effect-written presentation proof
 
@@ -32,6 +32,8 @@ flow through immutable one-hop aliases only when all downstream reads fit one bo
 transport is limited to one safe prop target inside that same boundary; repeated output needs a stable item-derived key;
 and `clsx` is accepted only from the real package import without owner shadowing. The recommendation preserves the effect,
 cleanup, dependency list, statement order, and owner lifetime, changing only storage and the leaf subscription.
+Owners with twelve or more JSX elements keep the existing 40% subtree ceiling. Smaller owners qualify only when at least
+five JSX elements remain outside the subscriber; four or fewer is an enforced abstention.
 
 ## Listener snapshot proof
 
@@ -81,7 +83,7 @@ and app-specific allowlists are not proof.
 2. Revisit hook recall only when one existing proof can be extended without weakening cleanup, mount identity, callback
    publication, or atomic transitions.
 3. For each detector phase, add the adversarial fixture and audited label first. Then run typecheck, the full unit suite,
-   the full pinned corpus, the self-scan, and an exact 220-target comparison against the accepted commit.
+   the full pinned corpus, the self-scan, and an exact target-by-target comparison against the accepted commit.
 
 The repository pins and evaluation policy live in [evals/README.md](evals/README.md). Rejected prototypes and unresolved
 families live in [remaining-five-percent-audit.md](remaining-five-percent-audit.md).

@@ -3259,7 +3259,7 @@ function analyzeStateSubtree(
       )
     : EMPTY_BINDINGS;
   if (
-    ownerJsx < 12 ||
+    (ownerJsx < 12 && !effectWrittenPresentation) ||
     stateMayHoldCallable(state) ||
     usage.directRenderNodes.length === 0 ||
     usage.localRenderReads !== usage.directRenderNodes.length ||
@@ -3317,7 +3317,7 @@ function analyzeStateSubtree(
   const projection = gateProjection ?? lowestCommonJsxSubtree(projectionNodes, state.owner);
   if (
     !projection ||
-    jsxElementCountIn(projection) / ownerJsx > 0.4 ||
+    !isMaterialStateSubtree(projection, ownerJsx, effectWrittenPresentation) ||
     (usage.transportedOccurrences > 0 &&
       !isSafeMixedProjectionTransport(
         state,
@@ -3338,6 +3338,16 @@ function analyzeStateSubtree(
     projectionNodes,
     state
   );
+}
+
+function isMaterialStateSubtree(
+  subtree: JsxSubtreeNode,
+  ownerJsx: number,
+  effectWrittenPresentation: boolean
+): boolean {
+  const subtreeJsx = jsxElementCountIn(subtree);
+  return (ownerJsx >= 12 && subtreeJsx / ownerJsx <= 0.4) ||
+    (effectWrittenPresentation && ownerJsx < 12 && ownerJsx - subtreeJsx >= 5);
 }
 
 function multipleOneHopRenderProjectionReferences(
