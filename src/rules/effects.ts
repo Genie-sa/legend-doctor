@@ -785,6 +785,8 @@ function callbackIsCommittedRefIntegration(
   if (!owner.body) return false;
   const refs = localCommittedRefBindings(owner, useRefBindings, reactNamespaces);
   if (refs.size === 0) return false;
+  const derivedBindings = new Set<string>();
+  let integratesCommittedRef = false;
 
   if (rejectSnapshotCaptures) {
     const ownerLocals = localBindingNames(owner, callback);
@@ -827,16 +829,70 @@ function callbackIsCommittedRefIntegration(
     });
     return reads;
   };
+  const expressionIsRefDerived = (expression: ts.Expression): boolean => {
+    const value = unwrapTransparentExpression(expression);
+    if (ts.isIdentifier(value)) return derivedBindings.has(value.text);
+    if (ts.isPropertyAccessExpression(value)) {
+      return (value.name.text === "current" && ts.isIdentifier(value.expression) && refs.has(value.expression.text)) ||
+        expressionIsRefDerived(value.expression);
+    }
+    if (ts.isElementAccessExpression(value)) {
+      return expressionIsRefDerived(value.expression) &&
+        (!value.argumentExpression || !containsCallExpression(value.argumentExpression));
+    }
+    if (!ts.isCallExpression(value)) return false;
+    const receiver = ts.isPropertyAccessExpression(value.expression) || ts.isElementAccessExpression(value.expression)
+      ? value.expression.expression
+      : null;
+    return receiver !== null &&
+      expressionIsRefDerived(receiver) &&
+      value.arguments.every(argument => !containsCallExpression(argument));
+  };
   const expressionIsRefIntegration = (expression: ts.Expression): boolean => {
-    if (!ts.isCallExpression(expression) || !readsCommittedRef(expression)) return false;
+    if (
+      !ts.isCallExpression(expression) ||
+      (!readsCommittedRef(expression) && !expressionIsRefDerived(expression))
+    ) {
+      return false;
+    }
     let safe = true;
     visit(expression, node => {
-      if (safe && ts.isCallExpression(node) && !readsCommittedRef(node)) safe = false;
+      if (
+        safe &&
+        ts.isCallExpression(node) &&
+        !readsCommittedRef(node) &&
+        !expressionIsRefDerived(node)
+      ) {
+        safe = false;
+      }
     });
+    if (safe) integratesCommittedRef = true;
+    return safe;
+  };
+  const statementsAreRefIntegration = (statements: readonly ts.Statement[]): boolean => {
+    const inheritedBindings = new Set(derivedBindings);
+    const safe = statements.length > 0 && statements.every(statementIsRefIntegration);
+    derivedBindings.clear();
+    for (const binding of inheritedBindings) derivedBindings.add(binding);
     return safe;
   };
   const statementIsRefIntegration = (statement: ts.Statement): boolean => {
-    if (ts.isBlock(statement)) return statement.statements.every(statementIsRefIntegration);
+    if (ts.isBlock(statement)) return statementsAreRefIntegration(statement.statements);
+    if (ts.isReturnStatement(statement)) return statement.expression === undefined;
+    if (ts.isVariableStatement(statement)) {
+      if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) return false;
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          !ts.isIdentifier(declaration.name) ||
+          !declaration.initializer ||
+          !expressionIsRefDerived(declaration.initializer)
+        ) {
+          return false;
+        }
+        derivedBindings.add(declaration.name.text);
+      }
+      return true;
+    }
     if (ts.isIfStatement(statement)) {
       return !containsCallExpression(statement.expression) &&
         statementIsRefIntegration(statement.thenStatement) &&
@@ -845,9 +901,9 @@ function callbackIsCommittedRefIntegration(
     return ts.isExpressionStatement(statement) && expressionIsRefIntegration(statement.expression);
   };
   if (ts.isBlock(callback.body)) {
-    return callback.body.statements.length > 0 && callback.body.statements.every(statementIsRefIntegration);
+    return statementsAreRefIntegration(callback.body.statements) && integratesCommittedRef;
   }
-  return expressionIsRefIntegration(callback.body);
+  return expressionIsRefIntegration(callback.body) && integratesCommittedRef;
 }
 
 function localCommittedRefBindings(

@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-804 manual hook labels with no known misses, plus eighteen
+809 manual hook labels with no known misses, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -176,6 +176,9 @@ An exact React `useRef` mirror also remains `keep-effect`: it synchronizes a com
 requires one imported, unshadowed React `useRef`, one exact `ref.current = value` assignment, and no cleanup or extra
 work. The effect may run after every commit or list one dependency identical to the assigned value. `[]`, mismatched
 dependencies, calls, mutations, shadowed/local lookalikes, and self-referential ref reads remain review findings.
+Five committed-ref integration labels across Tree Map, Excalidraw, and Expensify keep imperative post-commit work in
+React when a ref receiver passes through block-scoped immutable aliases. Every call must remain on that receiver chain.
+Alias publication, mutable bindings, unrelated nested calls, and callbacks with no actual ref command abstain.
 Deferred render-gate labels separately verify that scheduler effects and cleanup stay in React while only their
 one-shot boolean sink moves to a leaf observable. Projection labels require one bounded call-site render surface and an
 independent write path; reactive mutation lifecycles and custom-hook setter escapes are enforced hard negatives.

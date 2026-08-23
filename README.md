@@ -380,6 +380,19 @@ useUnmount(() => stop());           // after
 
 Strict Mode replay, setup work, and disposer ownership stay candidates unless the lifecycle is equivalent.
 
+### Keep committed-ref work in React
+
+```tsx
+useEffect(() => {
+  if (!listRef.current) return;
+  const items = listRef.current.querySelectorAll("[role=option]");
+  items[selectedIndex]?.scrollIntoView({ block: "nearest" });
+}, [selectedIndex]);
+```
+
+Legend Doctor reports `keep-effect`. The DOM receiver may pass through immutable local aliases, but the command still
+depends on React post-commit timing. Alias escape and unrelated nested calls remain candidates.
+
 ## Legend subscription examples
 
 ### Narrow to the field that renders
@@ -497,12 +510,12 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 804 manually audited hook labels, 18 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 809 manually audited hook labels, 18 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 540/540 |
+| Unit tests | 541/541 |
 | Actionable precision | 435/435 |
 | Actionable recall | 435/435 |
 | Legend practice precision | 106/106 |

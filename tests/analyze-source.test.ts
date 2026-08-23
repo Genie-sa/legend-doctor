@@ -7275,6 +7275,51 @@ test("keeps effects that operate on committed refs", () => {
   );
 });
 
+test("keeps committed-ref integrations through immutable receiver aliases", () => {
+  const effects = analyzeSource(`
+    import { useEffect, useRef } from "react";
+    export function Safe({ index }: { index: number }) {
+      const listRef = useRef<HTMLDivElement>(null);
+      useEffect(() => {
+        if (!listRef.current) return;
+        const items = listRef.current.querySelectorAll("[role=option]");
+        items[index]?.scrollIntoView({ block: "nearest" });
+      }, [index]);
+      return <div ref={listRef} />;
+    }
+    export function Escaped({ index }: { index: number }) {
+      const listRef = useRef<HTMLDivElement>(null);
+      useEffect(() => {
+        if (!listRef.current) return;
+        const items = listRef.current.querySelectorAll("[role=option]");
+        publish(items);
+        items[index]?.scrollIntoView();
+      }, [index]);
+      return <div ref={listRef} />;
+    }
+    export function ImpureIndex({ index }: { index: number }) {
+      const listRef = useRef<HTMLDivElement>(null);
+      useEffect(() => {
+        if (!listRef.current) return;
+        const items = listRef.current.querySelectorAll("[role=option]");
+        items[normalize(index)]?.scrollIntoView();
+      }, [index]);
+      return <div ref={listRef} />;
+    }
+    export function Noop({ index }: { index: number }) {
+      const listRef = useRef<HTMLDivElement>(null);
+      useEffect(() => { if (index < 0) return; }, [index]);
+      return <div ref={listRef} />;
+    }
+  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
+  assert.deepEqual(effects.map(finding => finding.action), [
+    "keep-effect",
+    "review-effect",
+    "review-effect",
+    "review-effect",
+  ]);
+});
+
 test("keeps exact latest-value ref mirrors in React post-commit timing", () => {
   const findings = analyzeSource(`
     import React, { useEffect, useRef as useLatestRef } from "react";
