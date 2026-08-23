@@ -63,7 +63,10 @@ import {
   type EffectDraftProofs,
 } from "./rules/effect-drafts.js";
 import { callbackHasCleanup, classifyEffect } from "./rules/effects.js";
-import { isSourceEventScalarLeafState } from "./rules/event-scalar-leaf.js";
+import {
+  isReactiveHostPropScalarState,
+  isSourceEventScalarLeafState,
+} from "./rules/event-scalar-leaf.js";
 import {
   analyzeKeyedSelections,
   isSelectionStateName,
@@ -500,6 +503,26 @@ function analyzeParsedSource(
       });
     })
   );
+  const reactiveHostPropScalarStates = new Set(
+    states.filter(state => {
+      const usage = usageByState.get(state);
+      if (!usage || !childContracts || isCustomHookOwner(state.owner)) return false;
+      let callbacks = sourceEventCallbacksByOwner.get(state.owner);
+      if (!callbacks) {
+        callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
+        sourceEventCallbacksByOwner.set(state.owner, callbacks);
+      }
+      return isReactiveHostPropScalarState(state, usage, {
+        eventCallbacks: callbacks,
+        hasCompanionWrites: statesWithCompanionWrites.has(state),
+        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+        hasSafeCommands: safeCommandStates.has(state),
+        hostComponents: imports.hostComponents,
+        pureProjectionImports,
+        useCallbackNames: imports.useCallback,
+      });
+    })
+  );
   const adjacentEventBooleanStates = new Set(
     states.filter(state => {
       const usage = usageByState.get(state);
@@ -693,7 +716,8 @@ function analyzeParsedSource(
           adjacentEventBooleanStates.has(state),
           adjacentEffectBooleanStates.has(state),
           multiSurfaceBooleanStates.has(state),
-          sourceEventScalarStates.has(state)
+          sourceEventScalarStates.has(state),
+          reactiveHostPropScalarStates.has(state)
         );
     const commitSensitiveOverride = commitSensitive &&
       baseClassification.action !== "review-state" &&
@@ -1297,6 +1321,8 @@ function sourceProvenDirectEventCallbacks(
     if (
       publications.length > 0 &&
       publications.every(publication =>
+        publication.intrinsic ||
+        childContracts.frameworkEventComponent(publication.component) ||
         childContracts.componentCallbackPropIsDeferred(
           publication.component,
           publication.prop
@@ -1411,6 +1437,7 @@ function memoizedObjectLiteral(
 
 interface ComponentPublication {
   component: string;
+  intrinsic: boolean;
   prop: string;
 }
 
@@ -1435,13 +1462,16 @@ function jsxComponentPublications(
     if (
       !attribute ||
       !component ||
-      !isCustomJsxTarget(component) ||
       !isDirectJsxAttributeExpression(attribute, node)
     ) {
       safe = false;
       return;
     }
-    publications.push({ component, prop: attribute.name.getText() });
+    publications.push({
+      component,
+      intrinsic: !isCustomJsxTarget(component),
+      prop: attribute.name.getText(),
+    });
   });
   return safe ? publications : [];
 }
@@ -3416,7 +3446,8 @@ function classifyState(
   hasAdjacentEventBooleanConsumers: boolean,
   hasAdjacentEffectBooleanConsumers: boolean,
   hasMultiSurfaceBooleanConsumers: boolean,
-  hasSourceEventScalarConsumers: boolean
+  hasSourceEventScalarConsumers: boolean,
+  hasReactiveHostPropScalarConsumer: boolean
 ): ClassifiedState {
   if (nonProductionHarness) {
     return {
@@ -3931,6 +3962,13 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace event-owned numeric state \`${state.valueName}\` with one component-lifetime observable; keep the source-proven event callback and write position unchanged, and subscribe separately in each bounded projection leaf inside the existing render branch so the broad owner and its branch condition do not subscribe.`,
+    };
+  }
+  if (hasReactiveHostPropScalarConsumer) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace event-owned numeric state \`${state.valueName}\` with one component-lifetime observable and make its single host prop reactive; preserve the source-proven event callback, calculation, write position, host children, and mount identity so the host prop updates without rerendering the broad owner.`,
     };
   }
   if (usage.shadowed || usage.escaped || usage.effectWrites > 0) {

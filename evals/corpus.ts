@@ -6242,6 +6242,18 @@ export const goldCases = [
     rationale: "Each new-species property has an independent controlled edit command; property subscribers and one validation leaf keep the source list, warning, and dialog shell outside keystroke renders while merge snapshots the complete draft once.",
     target: "tree-map",
   },
+  ...[
+    "components/tree-certificate/landscape-certificate.tsx",
+    "components/tree-certificate/portrait-certificate.tsx",
+  ].map(file => ({
+    action: "use-observable" as const,
+    file,
+    hook: "useState" as const,
+    line: file.includes("landscape") ? 28 : 27,
+    name: "scale",
+    rationale: "The React Native layout event changes one pure style prop on one stable host surface; a reactive native component can update that prop without rebuilding the 25-element certificate owner.",
+    target: "tree-wallet",
+  })),
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [

@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-834 manual hook labels with no known misses, plus twenty-five
+836 manual hook labels with no known misses, plus twenty-five
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -144,6 +144,11 @@ callback wrapper to an immutable native host created by React Native `requireNat
 the owner lifetime, platform branch, callback, and write position while subscribing separately in the two projection
 leaves. Eager invocation, mutable or lookalike factories, repeated consumers, impure projections, effects, companion
 React writes, broad leaves, and callback escape abstain.
+
+Two Tree Wallet labels verify the single-surface form. A source-proven React Native layout event writes one numeric
+measurement, and one pure prop on one non-repeated native host is its only render consumer. A reactive native component
+updates that prop without rebuilding the 25-element owner. Custom component props, repeated surfaces, effects, impure
+projections, command reads, companion React writes, and owners below twelve JSX elements abstain.
 
 One Legend Music label verifies a false-initialized, event-owned boolean whose render fanout is limited to class/style
 projections and several conditional presentation leaves of at most four JSX elements each. Imported projection wrappers

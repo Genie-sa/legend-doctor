@@ -28,15 +28,78 @@ import {
   sourceHasRuntimeBinding,
 } from "./state-proofs.js";
 
-interface EventScalarLeafOptions {
+interface EventOwnedNumericOptions {
   eventCallbacks: ReadonlySet<RuntimeFunctionLike>;
   hasCompanionWrites: boolean;
   hasReactiveMutationPath: boolean;
   hasSafeCommands: boolean;
+  useCallbackNames: ReadonlySet<string>;
+}
+
+interface EventScalarLeafOptions extends EventOwnedNumericOptions {
   localComponents: ReadonlySet<string>;
   pureProjectionImports: ReadonlySet<string>;
   sourceComponents: ReadonlySet<string>;
-  useCallbackNames: ReadonlySet<string>;
+}
+
+interface ReactiveHostPropScalarOptions extends EventOwnedNumericOptions {
+  hostComponents: ReadonlySet<string>;
+  pureProjectionImports: ReadonlySet<string>;
+}
+
+/**
+ * Proves that an event-owned measurement changes one prop on one host surface.
+ * A reactive DOM or native component can update that prop without rerendering
+ * the component that owns the measurement.
+ */
+export function isReactiveHostPropScalarState(
+  state: StateCandidate,
+  usage: StateUsage,
+  options: ReactiveHostPropScalarOptions
+): boolean {
+  if (!isEventOwnedNumericState(state, usage, options)) return false;
+
+  const projections = oneHopRenderProjectionReferences(
+    state.owner,
+    usage.directRenderNodes,
+    (expression, reference) =>
+      isSafeProjectionExpression(expression, reference, options.pureProjectionImports)
+  );
+  if (!projections || projections.length === 0) return false;
+
+  let surfaceStart: number | null = null;
+  let attributeStart: number | null = null;
+  for (const projection of projections) {
+    if (
+      nearestNestedFunction(projection, state.owner) ||
+      nearestRepeatedRenderCall(projection, state.owner) ||
+      !isSafeJsxProjectionReference(
+        projection,
+        state.owner,
+        options.pureProjectionImports
+      )
+    ) {
+      return false;
+    }
+    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
+    const opening = attribute?.parent.parent;
+    if (
+      !attribute ||
+      !opening ||
+      (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) ||
+      /^(?:children|key|ref|render|on[A-Z])/.test(attribute.name.getText()) ||
+      !isHostOpening(opening, options.hostComponents)
+    ) {
+      return false;
+    }
+    const surface = ts.isJsxOpeningElement(opening) ? opening.parent : opening;
+    surfaceStart ??= surface.getStart();
+    attributeStart ??= attribute.getStart();
+    if (surfaceStart !== surface.getStart() || attributeStart !== attribute.getStart()) {
+      return false;
+    }
+  }
+  return surfaceStart !== null;
 }
 
 /**
@@ -50,42 +113,7 @@ export function isSourceEventScalarLeafState(
   options: EventScalarLeafOptions
 ): boolean {
   const ownerElements = jsxElementCount(state.owner);
-  if (
-    !state.setterName ||
-    !hasNumericInitializer(state) ||
-    ownerElements < 12 ||
-    usage.localRenderReads === 0 ||
-    usage.localRenderReads !== usage.directRenderNodes.length ||
-    usage.effectReads !== 0 ||
-    usage.effectWrites !== 0 ||
-    usage.deferredReads !== 0 ||
-    usage.transportedOccurrences !== 0 ||
-    options.hasCompanionWrites ||
-    options.hasReactiveMutationPath ||
-    !options.hasSafeCommands ||
-    usage.setterCallNodes.length !== 1 ||
-    usage.setterCalls !== 1 ||
-    usage.setterUsesPreviousValue ||
-    usage.shadowed ||
-    !stateValueReferencesAreRenderOnly(state, usage) ||
-    !setterReferencesAreCallsOrCallbackDependencies(state, options.useCallbackNames)
-  ) {
-    return false;
-  }
-
-  const setterCall = usage.setterCallNodes[0]!;
-  const argument = setterCall.arguments[0];
-  const callback = nearestNestedFunction(setterCall, state.owner);
-  if (
-    setterCall.arguments.length !== 1 ||
-    !argument ||
-    !isPureExpression(argument) ||
-    !callback ||
-    !options.eventCallbacks.has(callback) ||
-    !mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName]))
-  ) {
-    return false;
-  }
+  if (!isEventOwnedNumericState(state, usage, options)) return false;
 
   const mathCalls = sourceHasRuntimeBinding(state.owner.getSourceFile(), "Math")
     ? new Set<string>()
@@ -150,6 +178,45 @@ export function isSourceEventScalarLeafState(
     );
 }
 
+function isEventOwnedNumericState(
+  state: StateCandidate,
+  usage: StateUsage,
+  options: EventOwnedNumericOptions
+): boolean {
+  if (
+    !state.setterName ||
+    !hasNumericInitializer(state) ||
+    jsxElementCount(state.owner) < 12 ||
+    usage.localRenderReads === 0 ||
+    usage.localRenderReads !== usage.directRenderNodes.length ||
+    usage.effectReads !== 0 ||
+    usage.effectWrites !== 0 ||
+    usage.deferredReads !== 0 ||
+    usage.transportedOccurrences !== 0 ||
+    options.hasCompanionWrites ||
+    options.hasReactiveMutationPath ||
+    !options.hasSafeCommands ||
+    usage.setterCallNodes.length !== 1 ||
+    usage.setterCalls !== 1 ||
+    usage.setterUsesPreviousValue ||
+    usage.shadowed ||
+    !stateValueReferencesAreRenderOnly(state, usage) ||
+    !setterReferencesAreCallsOrCallbackDependencies(state, options.useCallbackNames)
+  ) {
+    return false;
+  }
+
+  const setterCall = usage.setterCallNodes[0]!;
+  const argument = setterCall.arguments[0];
+  const callback = nearestNestedFunction(setterCall, state.owner);
+  return setterCall.arguments.length === 1 &&
+    !!argument &&
+    isPureExpression(argument) &&
+    !!callback &&
+    options.eventCallbacks.has(callback) &&
+    mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName]));
+}
+
 function hasNumericInitializer(state: StateCandidate): boolean {
   const initializer = state.call.arguments[0];
   if (!initializer) return false;
@@ -211,4 +278,13 @@ function directOwnerReturnExpression(
   return statement?.expression && findAncestor(statement, isRuntimeFunctionLike) === owner
     ? statement.expression
     : null;
+}
+
+function isHostOpening(
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  hostComponents: ReadonlySet<string>
+): boolean {
+  const target = opening.tagName;
+  return ts.isIdentifier(target) &&
+    (/^[a-z]/.test(target.text) || hostComponents.has(target.text));
 }

@@ -766,6 +766,108 @@ test("proves source-resolved event measurements have only bounded scalar leaf pr
   assert.equal(states.get("impureWidth"), "review-state");
 });
 
+test("isolates one event-owned scalar in a reactive host prop", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-reactive-host-prop-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useEffect, useState } from "react";
+      import { View } from "react-native";
+
+      const baseStyle = { flex: 1 };
+      const project = (value: number) => ({ opacity: value });
+
+      export function SafeScreen() {
+        const [scale, setScale] = useState(1);
+        const onLayout = (event: { nativeEvent: { width: number } }) => {
+          setScale(event.nativeEvent.width / 320);
+        };
+        return <View onLayout={onLayout}>
+          <View style={[baseStyle, { transform: [{ scale }] }]}>
+            <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+          </View>
+        </View>;
+      }
+
+      export function WebScreen() {
+        const [scrollLeft, setScrollLeft] = useState(0);
+        const onScroll = (event: { currentTarget: { scrollLeft: number } }) => {
+          setScrollLeft(event.currentTarget.scrollLeft);
+        };
+        return <section onScroll={onScroll}>
+          <div style={{ transform: \`translateX(\${scrollLeft}px)\` }}>
+            <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+          </div>
+        </section>;
+      }
+
+      export function CompanionScreen() {
+        const [companionWidth, setCompanionWidth] = useState(0);
+        const [, setMeasured] = useState(false);
+        const onLayout = (event: { nativeEvent: { width: number } }) => {
+          setCompanionWidth(event.nativeEvent.width);
+          setMeasured(true);
+        };
+        return <View onLayout={onLayout}>
+          <View style={{ width: companionWidth }}><Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/></View>
+        </View>;
+      }
+
+      export function RepeatedScreen({ rows }: { rows: string[] }) {
+        const [repeatedWidth, setRepeatedWidth] = useState(0);
+        const onLayout = (event: { nativeEvent: { width: number } }) => setRepeatedWidth(event.nativeEvent.width);
+        return <View onLayout={onLayout}>
+          {rows.map(row => <View key={row} style={{ width: repeatedWidth }}>{row}</View>)}
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </View>;
+      }
+
+      export function ImpureScreen() {
+        const [impureOpacity, setImpureOpacity] = useState(0);
+        const onLayout = (event: { nativeEvent: { width: number } }) => setImpureOpacity(event.nativeEvent.width);
+        return <View onLayout={onLayout}>
+          <View style={project(impureOpacity)}><Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/></View>
+        </View>;
+      }
+
+      export function EffectScreen({ next }: { next: number }) {
+        const [effectOpacity, setEffectOpacity] = useState(0);
+        useEffect(() => setEffectOpacity(next), [next]);
+        return <View style={{ opacity: effectOpacity }}><Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/></View>;
+      }
+
+      function CustomSurface({ width }: { width: number }) {
+        return <View style={{ width }} />;
+      }
+      export function CustomSurfaceScreen() {
+        const [customWidth, setCustomWidth] = useState(0);
+        const onLayout = (event: { nativeEvent: { width: number } }) => setCustomWidth(event.nativeEvent.width);
+        return <View onLayout={onLayout}>
+          <CustomSurface width={customWidth}/><Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </View>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const states = new Map(
+    report.findings
+      .filter(finding => finding.hook === "useState" && finding.name)
+      .map(finding => [finding.name!, finding])
+  );
+  assert.equal(states.get("scale")?.action, "use-observable");
+  assert.match(states.get("scale")?.message ?? "", /single host prop reactive/);
+  assert.equal(states.get("scrollLeft")?.action, "use-observable");
+  assert.match(states.get("scrollLeft")?.message ?? "", /single host prop reactive/);
+  for (const name of ["companionWidth", "repeatedWidth", "impureOpacity"]) {
+    assert.equal(states.get(name)?.action, "review-state", name);
+  }
+  assert.doesNotMatch(states.get("customWidth")?.message ?? "", /single host prop reactive/);
+  assert.equal(states.get("effectOpacity")?.action, "delete-derived-state");
+});
+
 test("isolates an event-owned boolean across small presentation leaves and reactive props", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-multi-leaf-boolean-"));
   t.after(() => rm(root, { force: true, recursive: true }));

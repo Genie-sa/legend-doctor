@@ -427,6 +427,44 @@ by a source-exported `requireNativeComponent` count only when the factory import
 numeric write must be event-only and isolated; repeated consumers, calls in projections, companion React writes, eager
 invocation, effects, and broad leaves remain candidates.
 
+### Update one host prop without rerendering its owner
+
+```tsx
+// before: every layout event rebuilds the complete certificate
+const [scale, setScale] = useState(1);
+const onLayout = (event: LayoutChangeEvent) => {
+  setScale(event.nativeEvent.layout.width / DESIGN_WIDTH);
+};
+return <View onLayout={onLayout}>
+  <Image source={template} />
+  <View style={[styles.scaler, { transform: [{ scale }] }]}>
+    <CertificateContent />
+  </View>
+</View>;
+
+// after: the native style prop owns the only subscription
+const scale$ = useObservable(1);
+const onLayout = (event: LayoutChangeEvent) => {
+  scale$.set(event.nativeEvent.layout.width / DESIGN_WIDTH);
+};
+return <View onLayout={onLayout}>
+  <Image source={template} />
+  <$View $style={() => [styles.scaler, { transform: [{ scale: scale$.get() }] }]}>
+    <CertificateContent />
+  </$View>
+</View>;
+```
+
+Agent output:
+
+```text
+use-observable — Replace event-owned numeric state `scale` with one component-lifetime observable and make its single host prop reactive; preserve the source-proven event callback, calculation, write position, host children, and mount identity so the host prop updates without rerendering the broad owner.
+```
+
+This requires a source-proven DOM or React Native event, one pure prop on one non-repeated host, and at least twelve JSX
+elements in the owner. Effects, custom component props, impure projections, repeated surfaces, command reads, and
+companion React writes stay under review.
+
 ### Isolate a controlled value and its validation
 
 ```tsx
@@ -895,14 +933,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 834 manually audited hook labels, 25 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 836 manually audited hook labels, 25 state groups,
 and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 561/561 |
-| Actionable precision | 461/461 |
-| Actionable recall | 461/461 |
+| Unit tests | 562/562 |
+| Actionable precision | 463/463 |
+| Actionable recall | 463/463 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain
