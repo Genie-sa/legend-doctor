@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-802 manual hook labels with no known misses, plus eighteen
+804 manual hook labels with no known misses, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -306,6 +306,9 @@ A resolved custom controlled leaf may use a descriptive value-transition callbac
 `onSelectCover`, or `onOpenChange`. This broader callback grammar applies only when one stable call site owns the
 complete value surface and existing command, companion-write, effect, and render-cut proofs pass. State wholly confined
 to that leaf stays React state and moves down; owner commands keep observable ownership above a leaf subscriber.
+When a unique owner return is itself the complete controlled subtree and every value and setter reference stays inside
+it, the tool keeps React state. Wrapping the same subtree in an observable subscriber would not narrow rendering. A
+separate sibling, alternate return, effect, deferred read, or state reference outside that root rejects this proof.
 Call-site-owned state below alternate returns or state-independent conditional mounts also keeps observable ownership at
 the owner, because moving React state down would change reset lifetime. Direct `setValue`-style child APIs count as value
 transitions; arbitrary callbacks, shared validation projections, repeated children, and unresolved normalization remain

@@ -229,6 +229,19 @@ function DetailDialogState({ id, open$ }: Props) {
 
 Opaque calls, repeated children, sibling consumers, and effect reads remain candidates.
 
+### Leave an existing leaf alone
+
+```tsx
+// already the smallest useful React owner
+function Field() {
+  const [value, setValue] = useState("");
+  return <Input value={value} onChange={setValue} />;
+}
+```
+
+Legend Doctor reports `keep-state` here. An observable wrapper would rebuild the same child and add machinery without
+narrowing the render boundary.
+
 ### Isolate an exact array membership control
 
 ```tsx
@@ -484,12 +497,12 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 802 manually audited hook labels, 18 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 804 manually audited hook labels, 18 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 539/539 |
+| Unit tests | 540/540 |
 | Actionable precision | 435/435 |
 | Actionable recall | 435/435 |
 | Legend practice precision | 106/106 |

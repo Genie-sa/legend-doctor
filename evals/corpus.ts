@@ -1780,6 +1780,15 @@ export const goldCases = [
     target: "tree-map",
   },
   {
+    action: "keep-state",
+    file: "components/gift-trees/gift-trees-table.tsx",
+    hook: "useState",
+    line: 63,
+    name: "value",
+    rationale: "EditableCell already owns one controlled Input and no sibling render work; another observable subscriber would add a boundary without narrowing the existing leaf render.",
+    target: "tree-map",
+  },
+  {
     action: "use-unmount",
     file: "components/sheets/security-verification-sheet.tsx",
     hook: "useEffect",
@@ -3740,10 +3749,10 @@ export const goldCases = [
     target: "formbricks-elements-view",
   },
   ...[
-    [28, "open", "review-state"],
+    [28, "open", "keep-state"],
     [29, "value", "delete-unused-state"],
   ].map(([line, name, action]) => ({
-    action: action as "delete-unused-state" | "review-state",
+    action: action as "delete-unused-state" | "keep-state",
     file: "merge-tags-combobox.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -5768,6 +5777,15 @@ export const goldCases = [
     line: 10,
     name: "copied",
     rationale: "The short feedback timer updates several parts of an already-small input control, so no material narrower boundary is proven.",
+    target: "hoalu-app",
+  },
+  {
+    action: "keep-state",
+    file: "components/emoji-picker.tsx",
+    hook: "useState",
+    line: 13,
+    name: "isOpen",
+    rationale: "The visibility value and every close command already belong to the one root Popover subtree, so another subscriber would rebuild the same cohesive render boundary.",
     target: "hoalu-app",
   },
   {

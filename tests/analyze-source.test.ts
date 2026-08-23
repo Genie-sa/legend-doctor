@@ -131,6 +131,28 @@ test("moves call-site-owned custom controlled state into that leaf", () => {
   assert.equal(finding?.action, "move-state-down");
 });
 
+test("keeps controlled state already owned by one cohesive leaf", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function Input(_props: unknown) { return null; }
+    function Preview() { return null; }
+    export function Field() {
+      const [value, setValue] = useState("");
+      return <Input value={value} onChange={next => { persist(next); setValue(next); }} />;
+    }
+    export function Form() {
+      const [value, setValue] = useState("");
+      return <main>
+        <Input value={value} onChange={setValue} />
+        <Preview /><Preview /><Preview /><Preview /><Preview /><Preview />
+        <Preview /><Preview /><Preview /><Preview /><Preview /><Preview />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings[0]?.action, "keep-state");
+  assert.equal(findings[1]?.action, "move-state-down");
+});
+
 test("keeps call-site-owned state above a conditionally mounted controlled leaf", () => {
   for (const alternateReturn of [false, true]) {
     const [finding] = analyzeSource(`
@@ -577,7 +599,7 @@ test("does not isolate inline controlled setters with extra or scheduled work", 
   }
 });
 
-test("does not isolate a controlled child without an independent render-cut witness", () => {
+test("keeps a controlled child without an independent render-cut witness", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
@@ -586,7 +608,7 @@ test("does not isolate a controlled child without an independent render-cut witn
       return <Field value={value} onChangeText={setValue} />;
     }
   `, "fixture.tsx");
-  assert.equal(finding?.action, "review-state");
+  assert.equal(finding?.action, "keep-state");
 });
 
 test("uses independent host siblings as a controlled render-cut witness", () => {
@@ -4104,7 +4126,7 @@ test("does not move controlled state from an owner that is already a small leaf"
         return <Editor value={value} onChange={setValue} />;
       }
     `),
-    ["review-state"]
+    ["keep-state"]
   );
 });
 

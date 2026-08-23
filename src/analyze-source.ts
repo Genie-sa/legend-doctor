@@ -3086,6 +3086,14 @@ function classifyState(
       message: `Replace controlled state \`${state.valueName}\` with an owner-scoped observable and wrap \`${target}\` in a stable leaf subscriber; keep its value callback API unchanged and use non-tracking reads in submit or commit commands, snapshotting once at command entry before deferred work.`,
     };
   }
+  const cohesiveControlledLeaf = cohesiveControlledLeafOwner(state, usage);
+  if (cohesiveControlledLeaf) {
+    return {
+      action: "keep-state",
+      confidence: "certain",
+      message: `Keep controlled state \`${state.valueName}\` in React; its value and setter are already confined to the cohesive \`${cohesiveControlledLeaf}\` leaf owner, so another observable subscriber would not narrow rendering.`,
+    };
+  }
   const controlledCallSiteProjection = !isCustomHookOwner(state.owner) &&
     !stateMayHoldCallable(state) &&
     usage.localRenderReads > 0 &&
@@ -3751,6 +3759,38 @@ function controlledSameCallSiteProjectionCut(
     localComponents,
     sourceComponents
   );
+}
+
+function cohesiveControlledLeafOwner(
+  state: StateCandidate,
+  usage: StateUsage
+): string | null {
+  if (
+    isCustomHookOwner(state.owner) ||
+    stateMayHoldCallable(state) ||
+    usage.localRenderReads !== 0 ||
+    usage.effectReads !== 0 ||
+    usage.effectWrites !== 0 ||
+    usage.deferredReads !== 0 ||
+    usage.transportedOccurrences === 0 ||
+    usage.repeatedTransport ||
+    usage.shadowed ||
+    usage.escaped
+  ) {
+    return null;
+  }
+  const directCallSite = directUniqueReturnCallSite(usage, state.owner);
+  if (!directCallSite) return null;
+  const controlled: ts.Node = ts.isJsxOpeningElement(directCallSite.opening)
+    ? directCallSite.opening.parent
+    : directCallSite.opening;
+  if (
+    jsxElementCount(state.owner) !== jsxElementCountIn(controlled) ||
+    !stateReferencesConfinedTo(state, controlled)
+  ) {
+    return null;
+  }
+  return [...usage.valueTargets][0] ?? "controlled child";
 }
 
 function controlledLeafCallSite(
