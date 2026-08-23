@@ -201,6 +201,43 @@ function PanelGate({ open$ }: { open$: Observable<boolean> }) {
 A gate may call an immutable local JSX factory. Legend Doctor resolves it only when the factory takes no arguments and
 has one direct JSX return. Mutable bindings, wrapper factories, parameters, and multiple returns stay under review.
 
+### Isolate event-computed overlay state
+
+```tsx
+// before, every scroll renders the page owner
+const [scrolled, setScrolled] = useState(false);
+const onScroll = (event: React.UIEvent<HTMLDivElement>) => {
+  const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+  setScrolled(scrollTop + clientHeight >= scrollHeight);
+};
+return <section>
+  <div onScroll={onScroll}><Content /></div>
+  {!scrolled && <Fade />}
+  {!scrolled && <ScrollHint />}
+  <Dashboard />
+</section>;
+
+// after, one stable leaf subscribes for both overlays
+const scrolled$ = useObservable(false);
+const onScroll = (event: React.UIEvent<HTMLDivElement>) => {
+  const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+  scrolled$.set(scrollTop + clientHeight >= scrollHeight);
+};
+return <section>
+  <div onScroll={onScroll}><Content /></div>
+  <ScrollPresentation scrolled$={scrolled$} />
+  <Dashboard />
+</section>;
+
+function ScrollPresentation({ scrolled$ }: { scrolled$: Observable<boolean> }) {
+  const scrolled = useValue(scrolled$);
+  return <>{!scrolled && <Fade />}{!scrolled && <ScrollHint />}</>;
+}
+```
+
+This proof requires an intrinsic event, one call-free boolean expression, and adjacent bounded gates. Calls, custom
+component callbacks, companion React writes, effects, repeated output, and separated surfaces stay under review.
+
 ### Isolate a controlled value and its validation
 
 ```tsx
@@ -536,14 +573,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 811 manually audited hook labels, 18 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 812 manually audited hook labels, 18 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
 | Unit tests | 543/543 |
-| Actionable precision | 437/437 |
-| Actionable recall | 437/437 |
+| Actionable precision | 438/438 |
+| Actionable recall | 438/438 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

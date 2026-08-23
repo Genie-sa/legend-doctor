@@ -2761,6 +2761,15 @@ export const goldCases = [
     target: "tree-map",
   },
   {
+    action: "use-observable",
+    file: "components/tree-actions/tree-distribution-view.tsx",
+    hook: "useState",
+    line: 79,
+    name: "isScrolledToBottom",
+    rationale: "The intrinsic scroll event computes one boolean and the state renders only two adjacent overlay gates; one stable leaf subscriber removes scroll-driven renders of the 57-element owner while preserving the measurement effect, event timing, and both conditional mounts.",
+    target: "tree-map",
+  },
+  {
     action: "keep-effect",
     file: "components/trees-review-grid.tsx",
     hook: "useEffect",

@@ -69,6 +69,7 @@ import {
   isSetOrMapState,
 } from "./rules/keyed-selection.js";
 import {
+  isAdjacentEventBooleanLeafState,
   isLiteralBooleanLeafState,
   isMultiSurfaceLiteralBooleanState,
 } from "./rules/literal-boolean-leaf.js";
@@ -424,6 +425,18 @@ function analyzeParsedSource(
       });
     })
   );
+  const adjacentEventBooleanStates = new Set(
+    states.filter(state => {
+      const usage = usageByState.get(state);
+      return usage !== undefined && isAdjacentEventBooleanLeafState(state, usage, {
+        hasCompanionWrites: statesWithCompanionWrites.has(state),
+        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+        hasSafeCommands: safeCommandStates.has(state),
+        isCustomHookOwner: isCustomHookOwner(state.owner),
+        pureProjectionImports,
+      });
+    })
+  );
   const independentStateWrites = findIndependentStateWrites(states);
   const branchUnmountMoves = findBranchUnmountMoves(
     states,
@@ -582,6 +595,7 @@ function analyzeParsedSource(
           eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
           memoizedOptionCommandStates.has(state),
           returnedKeyedCursorStates.has(state),
+          adjacentEventBooleanStates.has(state),
           multiSurfaceBooleanStates.has(state)
         );
     const commitSensitiveOverride = commitSensitive &&
@@ -2792,6 +2806,7 @@ function classifyState(
   eventTransitionCallbacks: ReadonlySet<RuntimeFunctionLike>,
   hasMemoizedOptionCommand: boolean,
   hasReturnedKeyedCursorConsumer: boolean,
+  hasAdjacentEventBooleanConsumers: boolean,
   hasMultiSurfaceBooleanConsumers: boolean
 ): ClassifiedState {
   if (nonProductionHarness) {
@@ -3325,6 +3340,13 @@ function classifyState(
       message: usage.transportedOccurrences > 0
         ? `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; subscribe to the raw value once, pass that snapshot unchanged, derive every existing projection from the same snapshot, and leave the child API unchanged.`
         : `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; evaluate its existing pure projections inside that wrapper and leave the child API unchanged.`,
+    };
+  }
+  if (hasAdjacentEventBooleanConsumers) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace event-computed boolean \`${state.valueName}\` with one component-lifetime observable and extract its adjacent conditional presentation surfaces into one stable leaf subscriber; keep the event callback, boolean calculation, write position, and each existing conditional mount unchanged, while passing state-independent inputs as ordinary props.`,
     };
   }
   if (hasMultiSurfaceBooleanConsumers) {

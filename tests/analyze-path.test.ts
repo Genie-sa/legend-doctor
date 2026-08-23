@@ -636,7 +636,7 @@ test("isolates an event-owned boolean across small presentation leaves and react
   await writeFile(
     path.join(root, "Screens.tsx"),
     `
-      import { useCallback, useState } from "react";
+      import { useCallback, useEffect, useState } from "react";
       import { cx, noisy } from "./cx";
       export function SafeScreen() {
         const [active, setActive] = useState(false);
@@ -680,6 +680,89 @@ test("isolates an event-owned boolean across small presentation leaves and react
           {branchActive && <Text>Active</Text>}<View/><View/><View/><View/><View/>
         </Surface>;
       }
+      export function ComputedEventScreen() {
+        const [scrolled, setScrolled] = useState(false);
+        const handleScroll = (event: { currentTarget: { scrollTop: number; clientHeight: number; scrollHeight: number } }) => {
+          const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
+          setScrolled(scrollTop + clientHeight >= scrollHeight);
+        };
+        return <Surface>
+          <div onScroll={handleScroll}><Content/></div>
+          {!scrolled && <Fade/>}
+          {!scrolled && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function CustomComputedScreen() {
+        const [customComputed, setCustomComputed] = useState(false);
+        const handleScroll = (event: { currentTarget: { scrollTop: number } }) => setCustomComputed(event.currentTarget.scrollTop > 0);
+        return <Surface>
+          <Scroller onScroll={handleScroll}/>
+          {!customComputed && <Fade/>}
+          {!customComputed && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function InlineComputedScreen() {
+        const [inlineComputed, setInlineComputed] = useState(false);
+        return <Surface>
+          <div onScroll={event => setInlineComputed(event.currentTarget.scrollTop > 0)}/>
+          {!inlineComputed && <Fade/>}
+          {!inlineComputed && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function OpaqueComputedScreen() {
+        const [opaque, setOpaque] = useState(false);
+        const handleScroll = (event: unknown) => setOpaque(calculateOverflow(event));
+        return <Surface>
+          <div onScroll={handleScroll}/>
+          {!opaque && <Fade/>}
+          {!opaque && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function CompanionComputedScreen() {
+        const [companion, setCompanion] = useState(false);
+        const [measurement, setMeasurement] = useState(0);
+        const handleScroll = (event: { currentTarget: { scrollTop: number } }) => {
+          setCompanion(event.currentTarget.scrollTop > 0);
+          setMeasurement(event.currentTarget.scrollTop);
+        };
+        return <Surface>
+          <div onScroll={handleScroll}/>
+          {!companion && <Fade/>}
+          {!companion && <Hint/>}
+          <Text>{measurement}</Text><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function EffectComputedScreen({ height }: { height: number }) {
+        const [effectOwned, setEffectOwned] = useState(false);
+        useEffect(() => setEffectOwned(height > 0), [height]);
+        return <Surface>
+          {!effectOwned && <Fade/>}
+          {!effectOwned && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function RepeatedComputedScreen({ rows }: { rows: Array<{ id: string; hidden: boolean }> }) {
+        const [repeated, setRepeated] = useState(false);
+        const handleScroll = (event: { currentTarget: { scrollTop: number } }) => setRepeated(event.currentTarget.scrollTop > 0);
+        return <section onScroll={handleScroll}>
+          {rows.map(row => <View key={row.id}>{!repeated && <Fade/>}{!repeated && <Hint/>}</View>)}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </section>;
+      }
+      export function SeparatedComputedScreen() {
+        const [separated, setSeparated] = useState(false);
+        const handleScroll = (event: { currentTarget: { scrollTop: number } }) => setSeparated(event.currentTarget.scrollTop > 0);
+        return <section onScroll={handleScroll}>
+          {!separated && <Fade/>}
+          <Content/>
+          {!separated && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </section>;
+      }
     `,
     "utf8"
   );
@@ -689,6 +772,14 @@ test("isolates an event-owned boolean across small presentation leaves and react
   assert.equal(report.findings.find(finding => finding.name === "noisyActive")?.action, "review-state");
   assert.equal(report.findings.find(finding => finding.name === "broadActive")?.action, "review-state");
   assert.equal(report.findings.find(finding => finding.name === "branchActive")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "scrolled")?.action, "use-observable");
+  assert.equal(report.findings.find(finding => finding.name === "customComputed")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "inlineComputed")?.action, "use-observable");
+  assert.equal(report.findings.find(finding => finding.name === "opaque")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "companion")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "effectOwned")?.action, "delete-derived-state");
+  assert.equal(report.findings.find(finding => finding.name === "repeated")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "separated")?.action, "review-state");
 });
 
 test("traces a command payload through memoized options and source component wrappers", async t => {

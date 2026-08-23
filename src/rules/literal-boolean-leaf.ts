@@ -1,18 +1,29 @@
 import ts from "typescript";
 
 import {
+  bindingDeclarationCount,
+  isDeclarationName,
+  isDirectJsxAttributeExpression,
+  isNonValueIdentifier,
+  isPureExpression,
+  unwrapTransparentExpression,
+} from "../analysis-ast.js";
+import {
   findAncestorUntil,
   nearestNestedFunction,
+  nodeWithin,
   type RuntimeFunctionLike,
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import {
+  expressionContainsJsx,
   hasStateInitializer,
   isRenderGateReference,
   isSafeProjectionExpression,
 } from "./deferred-reveal.js";
+import { mutationRegionOnlyCallsStateSetters } from "./effect-drafts.js";
 import {
   isInsideJsxEventCallback,
   isSafeJsxProjectionReference,
@@ -75,6 +86,65 @@ interface MultiSurfaceBooleanOptions {
   pureProjectionImports: ReadonlySet<string>;
 }
 
+export function isAdjacentEventBooleanLeafState(
+  state: StateCandidate,
+  usage: StateUsage,
+  options: MultiSurfaceBooleanOptions
+): boolean {
+  const ownerElements = jsxElementCount(state.owner);
+  if (
+    options.isCustomHookOwner ||
+    !state.setterName ||
+    !hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
+    ownerElements < 12 ||
+    directOwnerReturnCount(state.owner) !== 1 ||
+    usage.localRenderReads === 0 ||
+    usage.localRenderReads !== usage.directRenderNodes.length ||
+    usage.effectReads !== 0 ||
+    usage.effectWrites !== 0 ||
+    usage.deferredReads !== 0 ||
+    usage.transportedOccurrences !== 0 ||
+    options.hasCompanionWrites ||
+    options.hasReactiveMutationPath ||
+    !options.hasSafeCommands ||
+    usage.setterCallNodes.length === 0 ||
+    usage.setterReferences !== usage.setterCalls ||
+    usage.setterUsesPreviousValue ||
+    usage.shadowed ||
+    usage.escaped ||
+    !usage.setterCallNodes.every(call => isEventBooleanSetter(call, state))
+  ) {
+    return false;
+  }
+
+  const surfaces = conditionalPresentationSurfaces(state, usage, options.pureProjectionImports);
+  if (surfaces === null || surfaces.size < 2 || surfaces.size > 6) return false;
+  const surfaceElements = [...surfaces.values()].reduce(
+    (sum, surface) => sum + surface.elements,
+    0
+  );
+  if (surfaceElements / ownerElements > 0.4) return false;
+
+  const expressions = [...surfaces.values()].map(surface => surface.expression);
+  const parent = expressions[0]?.parent;
+  if (
+    !parent ||
+    (!ts.isJsxElement(parent) && !ts.isJsxFragment(parent)) ||
+    expressions.some(expression => expression.parent !== parent)
+  ) {
+    return false;
+  }
+  const children = parent.children.filter(
+    child => !ts.isJsxText(child) || child.text.trim().length > 0
+  );
+  const indexes = expressions
+    .map(expression => children.indexOf(expression))
+    .sort((left, right) => left - right);
+  return children.length > expressions.length &&
+    indexes[0] !== -1 &&
+    indexes.every((index, position) => index === indexes[0]! + position);
+}
+
 export function isMultiSurfaceLiteralBooleanState(
   state: StateCandidate,
   usage: StateUsage,
@@ -105,21 +175,7 @@ export function isMultiSurfaceLiteralBooleanState(
     return false;
   }
 
-  const projections = new Map<number, ts.Node>();
-  for (const renderNode of usage.directRenderNodes) {
-    const declaration = findAncestorUntil(renderNode, ts.isVariableDeclaration, state.owner);
-    const aliases = declaration?.initializer && containsJsx(declaration.initializer)
-      ? null
-      : oneHopRenderProjectionReferences(
-          state.owner,
-          [renderNode],
-          (expression, reference) =>
-            isSafeProjectionExpression(expression, reference, options.pureProjectionImports)
-        );
-    for (const projection of aliases ?? [renderNode]) {
-      projections.set(projection.getStart(), projection);
-    }
-  }
+  const projections = presentationProjections(state, usage, options.pureProjectionImports);
 
   const surfaces = new Map<number, number>();
   let conditionalSurfaces = 0;
@@ -157,6 +213,181 @@ export function isMultiSurfaceLiteralBooleanState(
     surfaces.size <= 6 &&
     conditionalSurfaces > 0 &&
     surfaceElements / ownerElements <= 0.4;
+}
+
+interface ConditionalPresentationSurface {
+  elements: number;
+  expression: ts.JsxExpression;
+}
+
+function conditionalPresentationSurfaces(
+  state: StateCandidate,
+  usage: StateUsage,
+  pureProjectionImports: ReadonlySet<string>
+): ReadonlyMap<number, ConditionalPresentationSurface> | null {
+  const projections = presentationProjections(state, usage, pureProjectionImports);
+
+  const surfaces = new Map<number, ConditionalPresentationSurface>();
+  for (const projection of projections.values()) {
+    const condition = renderGateCondition(projection, state.owner);
+    if (
+      nearestNestedFunction(projection, state.owner) ||
+      nearestRepeatedRenderCall(projection, state.owner) ||
+      !condition ||
+      !isSafeProjectionExpression(condition, projection, pureProjectionImports) ||
+      findAncestorUntil(projection, ts.isJsxAttribute, state.owner)
+    ) {
+      return null;
+    }
+    const expression = findAncestorUntil(projection, ts.isJsxExpression, state.owner);
+    if (!expression?.expression || !isRenderGateReference(projection, state.owner)) return null;
+    let elements = 0;
+    visit(expression.expression, node => {
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) elements += 1;
+    });
+    if (elements === 0 || elements > 4) return null;
+    surfaces.set(expression.getStart(), { elements, expression });
+  }
+  return surfaces;
+}
+
+function presentationProjections(
+  state: StateCandidate,
+  usage: StateUsage,
+  pureProjectionImports: ReadonlySet<string>
+): ReadonlyMap<number, ts.Node> {
+  const projections = new Map<number, ts.Node>();
+  for (const renderNode of usage.directRenderNodes) {
+    const declaration = findAncestorUntil(renderNode, ts.isVariableDeclaration, state.owner);
+    const aliases = declaration?.initializer && containsJsx(declaration.initializer)
+      ? null
+      : oneHopRenderProjectionReferences(
+          state.owner,
+          [renderNode],
+          (expression, reference) =>
+            isSafeProjectionExpression(expression, reference, pureProjectionImports)
+        );
+    for (const projection of aliases ?? [renderNode]) {
+      projections.set(projection.getStart(), projection);
+    }
+  }
+  return projections;
+}
+
+function renderGateCondition(node: ts.Node, boundary: ts.Node): ts.Expression | null {
+  for (
+    let current: ts.Node | undefined = node;
+    current && current !== boundary;
+    current = current.parent
+  ) {
+    if (ts.isConditionalExpression(current) && nodeWithin(node, current.condition)) {
+      return current.condition;
+    }
+    if (
+      ts.isBinaryExpression(current) &&
+      (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+        current.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
+      nodeWithin(node, current.left) &&
+      expressionContainsJsx(current.right)
+    ) {
+      return current.left;
+    }
+  }
+  return null;
+}
+
+const BOOLEAN_BINARY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ts.SyntaxKind.LessThanToken,
+  ts.SyntaxKind.LessThanEqualsToken,
+  ts.SyntaxKind.GreaterThanToken,
+  ts.SyntaxKind.GreaterThanEqualsToken,
+]);
+
+function isEventBooleanSetter(
+  call: ts.CallExpression,
+  state: StateCandidate
+): boolean {
+  const argument = call.arguments[0];
+  if (
+    call.arguments.length !== 1 ||
+    !argument ||
+    (!isLiteralBooleanSetter(call) &&
+      (!isPureExpression(argument) || !isBooleanExpression(argument)))
+  ) {
+    return false;
+  }
+  const callback = nearestNestedFunction(call, state.owner);
+  return !!callback &&
+    (ts.isArrowFunction(callback) ||
+      ts.isFunctionDeclaration(callback) ||
+      ts.isFunctionExpression(callback)) &&
+    callbackIsIntrinsicEventRooted(callback, state.owner) &&
+    mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]));
+}
+
+function callbackIsIntrinsicEventRooted(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  owner: RuntimeFunctionLike
+): boolean {
+  const inlineAttribute = findAncestorUntil(callback, ts.isJsxAttribute, owner);
+  const inlineInitializer = inlineAttribute?.initializer;
+  if (
+    inlineAttribute &&
+    inlineInitializer &&
+    ts.isJsxExpression(inlineInitializer) &&
+    inlineInitializer.expression &&
+    unwrapTransparentExpression(inlineInitializer.expression) === callback &&
+    attributeIsIntrinsicEvent(inlineAttribute)
+  ) {
+    return true;
+  }
+  const name = ts.isFunctionDeclaration(callback)
+    ? callback.name?.text
+    : ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
+      ? callback.parent.name.text
+      : undefined;
+  if (!name || bindingDeclarationCount(owner, name) !== 1) return false;
+
+  let referenced = false;
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    referenced = true;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
+    if (!attribute || !isDirectJsxAttributeExpression(attribute, node)) {
+      safe = false;
+      return;
+    }
+    if (!attributeIsIntrinsicEvent(attribute)) safe = false;
+  });
+  return referenced && safe;
+}
+
+function attributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
+  if (!/^on[A-Z]/.test(attribute.name.getText())) return false;
+  const opening = attribute.parent.parent;
+  const tag = (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening))
+    ? opening.tagName
+    : null;
+  return !!tag && ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
+}
+
+function isBooleanExpression(expression: ts.Expression): boolean {
+  const value = unwrapTransparentExpression(expression);
+  return (ts.isPrefixUnaryExpression(value) && value.operator === ts.SyntaxKind.ExclamationToken) ||
+    (ts.isBinaryExpression(value) && BOOLEAN_BINARY_OPERATORS.has(value.operatorToken.kind));
 }
 
 function directOwnerReturnCount(owner: RuntimeFunctionLike): number {
