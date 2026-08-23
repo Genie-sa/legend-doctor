@@ -409,6 +409,32 @@ function InlineEditor({ editor$ }: { editor$: Observable<{ id: string | null; te
 Legend Doctor permits a cursor-only close because the hidden draft already persists in React. Every non-null cursor
 change must still assign its matching draft atomically; switching rows with stale text stays under review.
 
+### Isolate a persistent dialog without changing its mount behavior
+
+```tsx
+// before, opening and closing render the 50-element page owner
+const [target, setTarget] = useState<Action | null>(null);
+const [open, setOpen] = useState(false);
+const edit = (action: Action) => { setTarget(action); setOpen(true); };
+return <><PageContent onEdit={edit} />{target ? <EditDialog target={target} open={open} setOpen={setOpen} /> : null}</>;
+
+// after, the model opens atomically and the dialog still stays mounted while open=false
+const dialog$ = useObservable({ target: null as Action | null, open: false });
+const edit = (action: Action) => dialog$.assign({ target: action, open: true });
+return <><PageContent onEdit={edit} /><EditDialogState dialog$={dialog$} /></>;
+
+function EditDialogState({ dialog$ }: { dialog$: Observable<{ target: Action | null; open: boolean }> }) {
+  const target = useValue(dialog$.target);
+  const open = useValue(dialog$.open);
+  return target
+    ? <EditDialog target={target} open={open} setOpen={value => dialog$.open.set(value)} />
+    : null;
+}
+```
+
+Legend Doctor requires one source-resolved dialog target inside one bounded payload gate. The stable wrapper replaces the
+complete conditional slot; payload fanout, repeated gates, unresolved targets, and broad branches remain candidates.
+
 ### Isolate async status
 
 ```tsx
@@ -644,14 +670,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 812 manually audited hook labels, 18 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 817 manually audited hook labels, 20 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 543/543 |
-| Actionable precision | 438/438 |
-| Actionable recall | 438/438 |
+| Unit tests | 547/547 |
+| Actionable precision | 444/444 |
+| Actionable recall | 444/444 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

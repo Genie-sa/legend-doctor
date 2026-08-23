@@ -1564,6 +1564,11 @@ function findObservableStateClusters(
       const primary = sortedMembers[0];
       if (!primary) continue;
       const names = sortedMembers.map(state => state.valueName);
+      const hasBoundedDialogGate = dialogMembers?.some(
+        state =>
+          hasStateInitializer(state, ts.SyntaxKind.NullKeyword) &&
+          payloadControlsOwnerJsx(state, knownComponents)
+      ) ?? false;
       const targets = new Set(
         sortedMembers.flatMap(state => [...(usageByState.get(state)?.jsxTargets ?? [])])
       );
@@ -1577,6 +1582,8 @@ function findObservableStateClusters(
           ? `Replace the payload and timed feedback state (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the timer and command timing, batch the paired reset, read the payload command with \`peek\`, subscribe to the payload-gated content at its stable call site, and subscribe to feedback again only in its nested feedback leaf.`
           : textDraftMembers
           ? `Replace the co-written editable draft (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
+          : hasBoundedDialogGate
+          ? `Replace the persistent dialog state (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable model; atomically assign the payload and open flag, keep close transitions as leaf writes, and move the complete payload gate plus ${[...targets].sort().join(", ")} into one always-mounted stable leaf wrapper. Subscribe there with \`useValue\` so the existing payload gate and dialog mount behavior stay unchanged.`
           : `Replace the co-written React state cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; mutate it from commands and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
         primary,
       };
@@ -2337,7 +2344,12 @@ function normalizeObservableDialogClusterMembers(
   if (!targetSets.some(targets => targets.size > 0)) return null;
 
   const ownerGuardedPayload = payloadControlsOwnerJsx(payload, knownComponents);
-  if (ownerGuardedPayload) return null;
+  if (
+    ownerGuardedPayload &&
+    !payloadHasBoundedDialogGate(payload, members, usageByState, knownComponents)
+  ) {
+    return null;
+  }
   return members;
 }
 
@@ -2537,6 +2549,62 @@ function payloadControlsOwnerJsx(
     controls = true;
   });
   return controls;
+}
+
+function payloadHasBoundedDialogGate(
+  payload: StateCandidate,
+  members: readonly StateCandidate[],
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+  knownComponents: ReadonlySet<string>
+): boolean {
+  const payloadUsage = usageByState.get(payload);
+  if (
+    !payloadUsage ||
+    payloadUsage.localRenderReads === 0 ||
+    payloadUsage.localRenderReads !== payloadUsage.directRenderNodes.length
+  ) {
+    return false;
+  }
+
+  const firstRead = payloadUsage.directRenderNodes[0];
+  if (!firstRead) return false;
+  const gate = findAncestorUntil(firstRead, ts.isJsxExpression, payload.owner);
+  const expression = gate?.expression && unwrapTransparentExpression(gate.expression);
+  const trueBranch = expression && ts.isConditionalExpression(expression)
+    ? unwrapTransparentExpression(expression.whenTrue)
+    : null;
+  if (
+    !gate ||
+    !expression ||
+    !ts.isConditionalExpression(expression) ||
+    !isDirectTruthyStateCondition(expression.condition, payload.valueName) ||
+    unwrapTransparentExpression(expression.whenFalse).kind !== ts.SyntaxKind.NullKeyword ||
+    !trueBranch ||
+    (!ts.isJsxElement(trueBranch) &&
+      !ts.isJsxSelfClosingElement(trueBranch) &&
+      !ts.isJsxFragment(trueBranch)) ||
+    nearestRepeatedRenderCall(gate, payload.owner) ||
+    jsxElementCountIn(trueBranch) > 4 ||
+    jsxElementCountIn(trueBranch) / jsxElementCount(payload.owner) > 0.4 ||
+    !payloadUsage.directRenderNodes.every(read => nodeWithin(read, gate))
+  ) {
+    return false;
+  }
+
+  const targetSites = new Set<number>();
+  visit(trueBranch, node => {
+    if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) return;
+    if (knownComponents.has(node.tagName.getText())) targetSites.add(node.getStart());
+  });
+  if (targetSites.size === 0) return false;
+
+  return members.every(member => {
+    const usage = usageByState.get(member);
+    return usage !== undefined &&
+      [...usage.jsxTargets].every(target => knownComponents.has(target)) &&
+      [...usage.valueTransportSites, ...usage.setterTransportSites].every(site => targetSites.has(site)) &&
+      usage.directRenderNodes.every(read => nodeWithin(read, gate));
+  });
 }
 
 function isControlledBooleanTransition(mutation: SetterMutation): boolean {

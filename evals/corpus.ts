@@ -4711,6 +4711,24 @@ export const goldCases = [
     target: "formbricks-when-to-send",
   },
   {
+    action: "use-observable",
+    file: "when-to-send-card.tsx",
+    hook: "useState",
+    line: 42,
+    name: "isEditActionModalOpen",
+    rationale: "The edit visibility flag and persistent action payload open together and can subscribe inside one stable wrapper around the resolved dialog target.",
+    target: "formbricks-when-to-send",
+  },
+  {
+    action: "use-observable",
+    file: "when-to-send-card.tsx",
+    hook: "useState",
+    line: 43,
+    name: "editingActionClass",
+    rationale: "The payload controls one bounded dialog gate; moving the complete gate into an always-mounted leaf preserves the dialog's current open/close mount behavior.",
+    target: "formbricks-when-to-send",
+  },
+  {
     action: "review-effect",
     file: "when-to-send-card.tsx",
     hook: "useEffect",
@@ -6235,6 +6253,13 @@ export const goldStateGroups = [
     members: ["linkTarget", "linkOpen"],
     rationale: "The target/open pair is one dialog lifecycle and should produce one grouped instruction.",
     target: "tree-map",
+  },
+  {
+    file: "when-to-send-card.tsx",
+    line: 42,
+    members: ["isEditActionModalOpen", "editingActionClass"],
+    rationale: "The persistent edit payload and visibility flag form one atomic dialog model behind one bounded payload gate.",
+    target: "formbricks-when-to-send",
   },
   {
     file: "routes/(app)/_private/_map/enhancement-requests/index.tsx",
