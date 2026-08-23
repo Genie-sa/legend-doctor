@@ -1701,12 +1701,17 @@ function normalizeObservableTextDraftClusterMembers(
 
   const cursorMutations = mutations.filter(mutation => mutation.state === cursor);
   const draftMutations = mutations.filter(mutation => mutation.state === draft);
+  const cursorClears = cursorMutations.filter(mutation =>
+    callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)
+  );
+  const cursorOpens = cursorMutations.filter(mutation =>
+    !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)
+  );
   if (
     cursorMutations.length < 2 ||
-    draftMutations.length < 2 ||
-    !cursorMutations.some(mutation => callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)) ||
-    !cursorMutations.some(mutation => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)) ||
-    !draftMutations.some(mutation => callSetsEmptyString(mutation))
+    draftMutations.length < 1 ||
+    cursorClears.length < 1 ||
+    cursorOpens.length < 1
   ) {
     return null;
   }
@@ -1715,14 +1720,32 @@ function normalizeObservableTextDraftClusterMembers(
     left.region === right.region &&
     (callsAreAdjacentDraftWrites(left.call, right.call) ||
       mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow));
-  if (
-    cursorMutations.some(cursorMutation =>
-      !draftMutations.some(draftMutation => coexecutes(cursorMutation, draftMutation))
-    ) ||
-    draftMutations.some(draftMutation =>
-      !cursorMutations.some(cursorMutation => coexecutes(draftMutation, cursorMutation))
-    )
-  ) {
+  if (cursorOpens.some(cursorMutation =>
+    !draftMutations.some(draftMutation => coexecutes(cursorMutation, draftMutation))
+  ) || cursorClears.some(mutation => !mutationIsEventRooted(mutation, cursor))) {
+    return null;
+  }
+  for (const cursorMutation of cursorMutations) {
+    for (const draftMutation of draftMutations) {
+      if (
+        cursorMutation.region === draftMutation.region &&
+        mutationsMayCoexecute(
+          cursorMutation.call,
+          draftMutation.call,
+          cursorMutation.region,
+          stateFlow
+        ) &&
+        !coexecutes(cursorMutation, draftMutation)
+      ) {
+        return null;
+      }
+    }
+  }
+  if (draftMutations.some(draftMutation =>
+    !cursorMutations.some(cursorMutation => coexecutes(draftMutation, cursorMutation)) &&
+    !controlledValueSetterCall(draftMutation.call, draft) &&
+    !mutationIsEventRooted(draftMutation, draft)
+  )) {
     return null;
   }
   return [cursor, draft];
@@ -1758,13 +1781,6 @@ function hasEmptyStringStateInitializer(state: StateCandidate): boolean {
   return ts.isStringLiteral(value) && value.text === "";
 }
 
-function callSetsEmptyString(mutation: SetterMutation): boolean {
-  const argument = mutation.call.arguments[0];
-  if (!argument) return false;
-  const value = unwrapTransparentExpression(argument);
-  return ts.isStringLiteral(value) && value.text === "";
-}
-
 function setterReferencesAreCallsOrControlledValueWrites(state: StateCandidate): boolean {
   if (!state.setterName) return false;
   let controlledWrites = 0;
@@ -1779,37 +1795,65 @@ function setterReferencesAreCallsOrControlledValueWrites(state: StateCandidate):
     ) {
       return;
     }
-    if (ts.isCallExpression(node.parent) && node.parent.expression === node) return;
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
-    if (
-      !attribute ||
-      !/^on[A-Z]/.test(attribute.name.getText()) ||
-      !isDirectJsxAttributeExpression(attribute, node)
-    ) {
-      safe = false;
+    const setterCall = ts.isCallExpression(node.parent) && node.parent.expression === node;
+    const attribute = controlledValueWriteAttribute(node, state);
+    if (setterCall) {
+      if (attribute) controlledWrites += 1;
       return;
     }
-    const opening = jsxOpeningForAttribute(attribute);
-    const hasValue = opening?.attributes.properties.some(property => {
-      if (
-        !ts.isJsxAttribute(property) ||
-        property.name.getText() !== "value" ||
-        !property.initializer ||
-        !ts.isJsxExpression(property.initializer) ||
-        !property.initializer.expression
-      ) {
-        return false;
-      }
-      const value = unwrapTransparentExpression(property.initializer.expression);
-      return ts.isIdentifier(value) && value.text === state.valueName;
-    });
-    if (!hasValue) {
+    if (
+      !attribute ||
+      !isDirectJsxAttributeExpression(attribute, node)
+    ) {
       safe = false;
       return;
     }
     controlledWrites += 1;
   });
   return safe && controlledWrites > 0;
+}
+
+function controlledValueWriteAttribute(
+  node: ts.Identifier,
+  state: StateCandidate
+): ts.JsxAttribute | null {
+  const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
+  if (!attribute || !isControlledInteractionProp(attribute.name.getText())) return null;
+  const opening = jsxOpeningForAttribute(attribute);
+  const hasValue = opening?.attributes.properties.some(property => {
+    if (
+      !ts.isJsxAttribute(property) ||
+      property.name.getText() !== "value" ||
+      !property.initializer ||
+      !ts.isJsxExpression(property.initializer) ||
+      !property.initializer.expression
+    ) {
+      return false;
+    }
+    const value = unwrapTransparentExpression(property.initializer.expression);
+    return ts.isIdentifier(value) && value.text === state.valueName;
+  });
+  return hasValue ? attribute : null;
+}
+
+function controlledValueSetterCall(
+  call: ts.CallExpression,
+  state: StateCandidate
+): boolean {
+  return ts.isIdentifier(call.expression) &&
+    controlledValueWriteAttribute(call.expression, state) !== null;
+}
+
+function mutationIsEventRooted(
+  mutation: SetterMutation,
+  state: StateCandidate
+): boolean {
+  const region = mutation.region;
+  return region !== state.owner &&
+    (ts.isArrowFunction(region) ||
+      ts.isFunctionDeclaration(region) ||
+      ts.isFunctionExpression(region)) &&
+    callbackIsEventRooted(region, state.owner, "", new Set());
 }
 
 function findStatesWithCompanionWrites(

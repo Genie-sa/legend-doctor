@@ -383,6 +383,32 @@ The record key must match the stable row key. Every read and exact clone write m
 Whole-record reads, resets, multi-key updates, entry-controlled row mounts, eager callbacks, and unresolved wrappers remain
 candidates.
 
+### Keep an inline editor inside its keyed row
+
+```tsx
+// before, opening, typing, and closing render the list owner
+const [editingId, setEditingId] = useState<string | null>(null);
+const [editText, setEditText] = useState("");
+
+// after, paired opens stay atomic and typing reaches only the active row
+const editor$ = useObservable({ id: null as string | null, text: "" });
+const beginEdit = (row: Row) => editor$.assign({ id: row.id, text: row.name });
+const closeEdit = () => editor$.id.set(null);
+const saveEdit = () => save(editor$.text.peek());
+
+function EditableRow({ editor$, row }: { editor$: Observable<{ id: string | null; text: string }>; row: Row }) {
+  const editing = useValue(() => editor$.id.get() === row.id);
+  return editing ? <InlineEditor editor$={editor$} /> : <RowView row={row} />;
+}
+
+function InlineEditor({ editor$ }: { editor$: Observable<{ id: string | null; text: string }> }) {
+  return <Input value={useValue(editor$.text)} onChange={value => editor$.text.set(value)} />;
+}
+```
+
+Legend Doctor permits a cursor-only close because the hidden draft already persists in React. Every non-null cursor
+change must still assign its matching draft atomically; switching rows with stale text stays under review.
+
 ### Isolate async status
 
 ```tsx

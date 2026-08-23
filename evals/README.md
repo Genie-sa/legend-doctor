@@ -85,11 +85,12 @@ effect dependencies or method cleanup calls. The command may not escape to JSX o
 the throttle, effects, cleanup, dependencies, and statement order unchanged while moving only the presentation storage
 and `<StatsRows>` subscription.
 
-Four Legend Music labels verify co-written editable drafts. Each cluster contains one nullable cursor and one
-empty-string name; every direct cursor and name mutation is paired in the same straight-line block or switch case, while
-additional name writes must be the matching controlled `value` handler. The recommendation keeps one owner-lifetime
-observable object, uses atomic assignments for paired transitions, and moves subscriptions to row or control leaves.
-Independent cursor writes, effects, functional updaters, non-controlled setter references, and escapes are hard negatives.
+Six Legend Music and Tree Map labels verify co-written editable drafts. Each cluster contains one nullable cursor and one
+empty-string name. Every non-null cursor write is paired with its draft in the same straight-line block or switch case;
+null-only closes may preserve the hidden draft, while additional name writes must be the matching controlled `value`
+handler. The recommendation keeps one owner-lifetime observable object, uses atomic assignments for paired transitions,
+and moves subscriptions to row or control leaves. Non-null cursor-only switches, ambiguous coexecution, effects,
+functional updaters, non-controlled setter references, and escapes are hard negatives.
 
 One Legend Music label verifies an effect-owned numeric cursor returned by a custom hook and broadcast through one keyed
 list. Cross-file source must prove that each state-reading registration stores its callback until an exact cleanup, while

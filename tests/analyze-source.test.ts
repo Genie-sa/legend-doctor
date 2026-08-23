@@ -4470,7 +4470,7 @@ test("rejects incomplete payload-gated feedback models", () => {
 });
 
 test("groups a co-written cursor and editable name into one observable draft", () => {
-  const source = (independentCursorWrite: string) => `
+  const source = (independentCursorWrite: string, extraControl = "") => `
     import { useCallback, useState } from "react";
     interface Item { id: string; name: string }
     function Screen({ items }: { items: Item[] }) {
@@ -4484,14 +4484,14 @@ test("groups a co-written cursor and editable name into one observable draft", (
         if (!draftId) return;
         save(draftId, draftName.trim());
         setDraftId(null);
-        setDraftName("");
       }, [draftId, draftName]);
       ${independentCursorWrite}
       ${"\n".repeat(100)}
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
         <button disabled={draftId !== null} onClick={() => begin(items[0]!)}>Add</button>
+        ${extraControl}
         {items.map(item => item.id === draftId
-          ? <Editor key={item.id} value={draftName} onChange={setDraftName} onBlur={finish} />
+          ? <Editor key={item.id} value={draftName} onChange={value => setDraftName(value)} onBlur={finish} />
           : <Row key={item.id} item={item} onRename={() => begin(item)} />)}
       </main>;
     }
@@ -4504,13 +4504,25 @@ test("groups a co-written cursor and editable name into one observable draft", (
   assert.match(grouped[0]?.message ?? "", /atomic/i);
   assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
 
-  const unsafe = analyzeSource(
-    source("const clearCursorOnly = () => setDraftId(null);"),
+  const closeOnly = analyzeSource(
+    source("const close = () => setDraftId(null);", "<button onClick={close}>Close</button>"),
+    "fixture.tsx"
+  );
+  assert.deepEqual(
+    closeOnly.find(finding => finding.name === "draftId")?.group?.members,
+    ["draftId", "draftName"]
+  );
+
+  const staleDraft = analyzeSource(
+    source(
+      "const switchWithoutDraft = () => setDraftId(items[0]!.id);",
+      "<button onClick={switchWithoutDraft}>Switch</button>"
+    ),
     "fixture.tsx"
   );
   assert.notEqual(
-    unsafe.find(finding => finding.name === "draftId")?.action,
-    "use-observable"
+    staleDraft.find(finding => finding.name === "draftId")?.group?.members.join(","),
+    "draftId,draftName"
   );
 });
 

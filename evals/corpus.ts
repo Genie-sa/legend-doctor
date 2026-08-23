@@ -2464,6 +2464,18 @@ export const goldCases = [
     rationale: "Both optimistic and rollback writes target the same message ID, while each stable-keyed message row renders only its own verdict; keep command timing and subscribe to one dynamic observable entry per row.",
     target: "tree-map",
   },
+  ...[
+    [66, "editingId"],
+    [67, "editText"],
+  ].map(([line, name]) => ({
+    action: "use-observable" as const,
+    file: "components/cockpit/ai-rail.tsx",
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "The stable-keyed message editor opens with one atomic cursor-and-text assignment; controlled text writes stay in the active row, command reads use a snapshot, and null-only close commands preserve the hidden draft.",
+    target: "tree-map",
+  })),
   {
     action: "review-state",
     file: "components/command-palette.tsx",
@@ -6119,6 +6131,13 @@ export const goldCases = [
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [
+  {
+    file: "components/cockpit/ai-rail.tsx",
+    line: 66,
+    members: ["editingId", "editText"],
+    rationale: "The keyed inline editor must migrate as one observable draft so opening assigns the cursor and text atomically while typing and null-only closes update only their leaf fields.",
+    target: "tree-map",
+  },
   {
     file: "components/account-management/reset-password-dialog.tsx",
     line: 18,
