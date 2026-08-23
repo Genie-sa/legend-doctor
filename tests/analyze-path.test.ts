@@ -636,7 +636,7 @@ test("isolates an event-owned boolean across small presentation leaves and react
   await writeFile(
     path.join(root, "Screens.tsx"),
     `
-      import { useCallback, useEffect, useState } from "react";
+      import { useCallback, useEffect, useRef, useState } from "react";
       import { cx, noisy } from "./cx";
       export function SafeScreen() {
         const [active, setActive] = useState(false);
@@ -745,6 +745,61 @@ test("isolates an event-owned boolean across small presentation leaves and react
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
         </Surface>;
       }
+      export function MeasuredEffectScreen() {
+        const contentRef = useRef<HTMLDivElement>(null);
+        const [measuredOverflow, setMeasuredOverflow] = useState(false);
+        useEffect(() => {
+          const content = contentRef.current;
+          if (!content) return;
+          setMeasuredOverflow(content.scrollHeight > content.clientHeight);
+        }, []);
+        return <Surface>
+          <div ref={contentRef}><Content/></div>
+          {measuredOverflow && <Fade/>}
+          {measuredOverflow && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function OpaqueMeasuredEffectScreen() {
+        const contentRef = useRef<HTMLDivElement>(null);
+        const [opaqueMeasured, setOpaqueMeasured] = useState(false);
+        useEffect(() => setOpaqueMeasured(measureOverflow(contentRef.current)), []);
+        return <Surface>
+          <div ref={contentRef}><Content/></div>
+          {opaqueMeasured && <Fade/>}
+          {opaqueMeasured && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function MixedMeasuredEffectScreen() {
+        const contentRef = useRef<HTMLDivElement>(null);
+        const [mixedMeasured, setMixedMeasured] = useState(false);
+        useEffect(() => {
+          const content = contentRef.current;
+          if (content) setMixedMeasured(content.scrollHeight > content.clientHeight);
+        }, []);
+        return <Surface onClick={() => setMixedMeasured(false)}>
+          <div ref={contentRef}><Content/></div>
+          {mixedMeasured && <Fade/>}
+          {mixedMeasured && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
+      export function SeparatedMeasuredEffectScreen() {
+        const contentRef = useRef<HTMLDivElement>(null);
+        const [separatedMeasured, setSeparatedMeasured] = useState(false);
+        useEffect(() => {
+          const content = contentRef.current;
+          if (content) setSeparatedMeasured(content.scrollHeight > content.clientHeight);
+        }, []);
+        return <Surface>
+          <div ref={contentRef}><Content/></div>
+          {separatedMeasured && <Fade/>}
+          <Content/>
+          {separatedMeasured && <Hint/>}
+          <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
+        </Surface>;
+      }
       export function RepeatedComputedScreen({ rows }: { rows: Array<{ id: string; hidden: boolean }> }) {
         const [repeated, setRepeated] = useState(false);
         const handleScroll = (event: { currentTarget: { scrollTop: number } }) => setRepeated(event.currentTarget.scrollTop > 0);
@@ -778,6 +833,10 @@ test("isolates an event-owned boolean across small presentation leaves and react
   assert.equal(report.findings.find(finding => finding.name === "opaque")?.action, "review-state");
   assert.equal(report.findings.find(finding => finding.name === "companion")?.action, "review-state");
   assert.equal(report.findings.find(finding => finding.name === "effectOwned")?.action, "delete-derived-state");
+  assert.equal(report.findings.find(finding => finding.name === "measuredOverflow")?.action, "use-observable");
+  assert.equal(report.findings.find(finding => finding.name === "opaqueMeasured")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "mixedMeasured")?.action, "review-state");
+  assert.equal(report.findings.find(finding => finding.name === "separatedMeasured")?.action, "review-state");
   assert.equal(report.findings.find(finding => finding.name === "repeated")?.action, "review-state");
   assert.equal(report.findings.find(finding => finding.name === "separated")?.action, "review-state");
 });

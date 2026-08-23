@@ -69,6 +69,7 @@ import {
   isSetOrMapState,
 } from "./rules/keyed-selection.js";
 import {
+  isAdjacentEffectBooleanLeafState,
   isAdjacentEventBooleanLeafState,
   isLiteralBooleanLeafState,
   isMultiSurfaceLiteralBooleanState,
@@ -290,6 +291,9 @@ function analyzeParsedSource(
 
   const lifecycleRegions = reactCommit.lifecycleRegions;
   const directEffectCalls = new Set(reactCommit.effectCalls);
+  const directEffectCallbacks = new Set<RuntimeFunctionLike>(
+    effects.flatMap(effect => effect.callback ? [effect.callback] : []),
+  );
   const usageByState = new Map(states.map(state => [state, collectStateUsage(state, lifecycleRegions, imports)]));
   const eventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
   const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
@@ -429,6 +433,22 @@ function analyzeParsedSource(
     states.filter(state => {
       const usage = usageByState.get(state);
       return usage !== undefined && isAdjacentEventBooleanLeafState(state, usage, {
+        hasCompanionWrites: statesWithCompanionWrites.has(state),
+        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+        hasSafeCommands: safeCommandStates.has(state),
+        isCustomHookOwner: isCustomHookOwner(state.owner),
+        pureProjectionImports,
+      });
+    })
+  );
+  const adjacentEffectBooleanStates = new Set(
+    states.filter(state => {
+      const usage = usageByState.get(state);
+      return usage !== undefined && isAdjacentEffectBooleanLeafState(state, usage, {
+        effectWritesAreDirect: usage.setterCallNodes.every(call => {
+          const callback = nearestNestedFunction(call, state.owner);
+          return callback !== null && directEffectCallbacks.has(callback);
+        }),
         hasCompanionWrites: statesWithCompanionWrites.has(state),
         hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
         hasSafeCommands: safeCommandStates.has(state),
@@ -598,6 +618,7 @@ function analyzeParsedSource(
           memoizedOptionCommandStates.has(state),
           returnedKeyedCursorStates.has(state),
           adjacentEventBooleanStates.has(state),
+          adjacentEffectBooleanStates.has(state),
           multiSurfaceBooleanStates.has(state)
         );
     const commitSensitiveOverride = commitSensitive &&
@@ -2810,6 +2831,7 @@ function classifyState(
   hasMemoizedOptionCommand: boolean,
   hasReturnedKeyedCursorConsumer: boolean,
   hasAdjacentEventBooleanConsumers: boolean,
+  hasAdjacentEffectBooleanConsumers: boolean,
   hasMultiSurfaceBooleanConsumers: boolean
 ): ClassifiedState {
   if (nonProductionHarness) {
@@ -3277,6 +3299,13 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace effect-written presentation state \`${state.valueName}\` with an owner-scoped observable, preserve the React effect, cleanup, dependencies, and statement order, and wrap the full ${effectProjectionSubtree.label} render boundary at line ${effectProjectionSubtree.line} in an always-mounted leaf subscriber${selector}; evaluate the existing projection or gate inside that subscriber.`,
+    };
+  }
+  if (hasAdjacentEffectBooleanConsumers) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace effect-written boolean \`${state.valueName}\` with one component-lifetime observable and extract its adjacent conditional presentation surfaces into one stable leaf subscriber; keep the React effect, dependencies, cleanup, boolean calculation, write position, and each existing conditional mount unchanged.`,
     };
   }
   if (usage.shadowed || usage.escaped || usage.effectWrites > 0) {

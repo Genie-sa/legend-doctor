@@ -128,10 +128,11 @@ Every projected reference must stay inside that component opening. The owner kee
 subscriber derives all state-dependent props before forwarding the existing callback. Opaque calls and repeated output
 abstain.
 
-One Tree Map label verifies a false-initialized boolean computed by an intrinsic scroll event and rendered only through
-two adjacent overlay gates. The recommendation keeps the DOM-measurement effect in React, preserves the scroll callback
-and comparison, and moves both conditions into one stable leaf subscriber. Opaque calculations, unresolved custom event
-components, companion state writes, effect-owned writes, repeated output, and non-adjacent gates abstain.
+Two Tree Map labels verify false-initialized booleans rendered only through the same two adjacent overlay gates. One is
+computed by the intrinsic scroll event; the other is written directly by the committed-ref measurement effect. Both move
+into one stable leaf subscriber while the recommendation preserves the effect, dependencies, measurement, callback,
+comparisons, write positions, and conditional mounts. Opaque calculations, unresolved custom event components, mixed
+event/effect ownership, companion state writes, repeated output, and non-adjacent gates abstain.
 
 Command-only ref labels also preserve render-snapshot ordering. A returned or otherwise unproven command that reads and
 writes the same state abstains because a ref exposes writes synchronously across invocations. Any write before a later read

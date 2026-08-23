@@ -2776,6 +2776,15 @@ export const goldCases = [
     target: "tree-map",
   },
   {
+    action: "use-observable",
+    file: "components/tree-actions/tree-distribution-view.tsx",
+    hook: "useState",
+    line: 78,
+    name: "canScroll",
+    rationale: "The mount measurement writes one call-free boolean used only by the same two adjacent overlay gates; keep the committed-ref effect in React and subscribe with the existing scroll presentation leaf instead of rerendering the 57-element owner.",
+    target: "tree-map",
+  },
+  {
     action: "keep-effect",
     file: "components/trees-review-grid.tsx",
     hook: "useEffect",

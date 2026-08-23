@@ -235,8 +235,10 @@ function ScrollPresentation({ scrolled$ }: { scrolled$: Observable<boolean> }) {
 }
 ```
 
-This proof requires an intrinsic event, one call-free boolean expression, and adjacent bounded gates. Calls, custom
-component callbacks, companion React writes, effects, repeated output, and separated surfaces stay under review.
+This proof requires one call-free boolean expression and adjacent bounded gates. The write may come from an intrinsic
+event or directly from a React effect; an effect migration changes only the storage write and leaves the effect,
+dependencies, cleanup, measurement, and statement position intact. Opaque calls, custom component callbacks, mixed
+event/effect ownership, companion React writes, repeated output, and separated surfaces stay under review.
 
 ### Isolate a controlled value and its validation
 

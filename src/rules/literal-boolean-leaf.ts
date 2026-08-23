@@ -91,6 +91,32 @@ export function isAdjacentEventBooleanLeafState(
   usage: StateUsage,
   options: MultiSurfaceBooleanOptions
 ): boolean {
+  return usage.effectWrites === 0 &&
+    usage.setterCallNodes.every(call => isEventBooleanSetter(call, state)) &&
+    isAdjacentBooleanLeafState(state, usage, options);
+}
+
+interface AdjacentEffectBooleanOptions extends MultiSurfaceBooleanOptions {
+  effectWritesAreDirect: boolean;
+}
+
+export function isAdjacentEffectBooleanLeafState(
+  state: StateCandidate,
+  usage: StateUsage,
+  options: AdjacentEffectBooleanOptions
+): boolean {
+  return options.effectWritesAreDirect &&
+    usage.effectWrites > 0 &&
+    usage.effectWrites === usage.setterCalls &&
+    usage.setterCallNodes.every(isPureBooleanSetter) &&
+    isAdjacentBooleanLeafState(state, usage, options);
+}
+
+function isAdjacentBooleanLeafState(
+  state: StateCandidate,
+  usage: StateUsage,
+  options: MultiSurfaceBooleanOptions
+): boolean {
   const ownerElements = jsxElementCount(state.owner);
   if (
     options.isCustomHookOwner ||
@@ -101,7 +127,6 @@ export function isAdjacentEventBooleanLeafState(
     usage.localRenderReads === 0 ||
     usage.localRenderReads !== usage.directRenderNodes.length ||
     usage.effectReads !== 0 ||
-    usage.effectWrites !== 0 ||
     usage.deferredReads !== 0 ||
     usage.transportedOccurrences !== 0 ||
     options.hasCompanionWrites ||
@@ -111,8 +136,7 @@ export function isAdjacentEventBooleanLeafState(
     usage.setterReferences !== usage.setterCalls ||
     usage.setterUsesPreviousValue ||
     usage.shadowed ||
-    usage.escaped ||
-    !usage.setterCallNodes.every(call => isEventBooleanSetter(call, state))
+    usage.escaped
   ) {
     return false;
   }
@@ -327,6 +351,14 @@ function isEventBooleanSetter(
       ts.isFunctionExpression(callback)) &&
     callbackIsIntrinsicEventRooted(callback, state.owner) &&
     mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]));
+}
+
+function isPureBooleanSetter(call: ts.CallExpression): boolean {
+  const argument = call.arguments[0];
+  return call.arguments.length === 1 &&
+    !!argument &&
+    (isLiteralBooleanSetter(call) ||
+      (isPureExpression(argument) && isBooleanExpression(argument)));
 }
 
 function callbackIsIntrinsicEventRooted(
