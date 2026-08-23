@@ -2519,6 +2519,118 @@ test("moves non-boolean controlled state into a stable local wrapper", async () 
   assert.match(finding?.message ?? "", /stable local wrapper/);
 });
 
+test("isolates immediate controlled state from delayed repeated owner work", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-delayed-controlled-leaf-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Input.tsx"),
+    `
+      export function Input({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+        return <input value={value} onChange={event => onChange(event.target.value)} />;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useRef, useState } from "react";
+      import { Input } from "./Input";
+      export function Screen({ rows }: { rows: string[] }) {
+        const [query, setQuery] = useState("");
+        const [settledQuery, setSettledQuery] = useState("");
+        const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+        const onChange = (value: string) => {
+          setQuery(value);
+          if (timer.current) clearTimeout(timer.current);
+          timer.current = setTimeout(() => setSettledQuery(value), 300);
+        };
+        return <main>
+          <Input value={query} onChange={onChange} />
+          <p>{settledQuery}</p>
+          {rows.map(row => <article key={row}>{row}</article>)}
+        </main>;
+      }
+    `
+  );
+
+  const report = await analyzePath(root);
+  const finding = report.findings.find(candidate => candidate.name === "query");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /repeated render work/);
+});
+
+test("keeps delayed controlled state when its immediate update is atomic with owner state", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-delayed-controlled-atomic-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Input.tsx"),
+    `
+      export function Input({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+        return <input value={value} onChange={event => onChange(event.target.value)} />;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { Input } from "./Input";
+      export function Screen({ rows }: { rows: string[] }) {
+        const [query, setQuery] = useState("");
+        const [page, setPage] = useState(1);
+        const onChange = (value: string) => {
+          setQuery(value);
+          setPage(1);
+        };
+        return <main>
+          <Input value={query} onChange={onChange} />
+          <p>{page}</p>
+          {rows.map(row => <article key={row}>{row}</article>)}
+        </main>;
+      }
+    `
+  );
+
+  const report = await analyzePath(root);
+  const finding = report.findings.find(candidate => candidate.name === "query");
+  assert.equal(finding?.action, "review-state");
+});
+
+test("does not count repeated work inside the leaf or a conditional sibling", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-repeated-inside-leaf-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Panel.tsx"),
+    `
+      import type { ReactNode } from "react";
+      export function Panel({ value, children }: { value: string; children: ReactNode }) {
+        return <section data-value={value}>{children}</section>;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { Panel } from "./Panel";
+      export function Screen({ rows, showRows }: { rows: string[]; showRows: boolean }) {
+        const [query, setQuery] = useState("");
+        return <main>
+          <button onClick={() => setQuery("next")} />
+          <Panel value={query}>
+            {rows.map(row => <article key={row}>{row}</article>)}
+          </Panel>
+          {showRows ? rows.map(row => <aside key={row}>{row}</aside>) : null}
+        </main>;
+      }
+    `
+  );
+
+  const report = await analyzePath(root);
+  const finding = report.findings.find(candidate => candidate.name === "query");
+  assert.equal(finding?.action, "review-state");
+});
+
 test("does not create a second observable for state initialized from a hook result", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-hook-initializer-"));
   await writeFile(

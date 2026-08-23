@@ -167,6 +167,41 @@ function SearchBox() {
 }
 ```
 
+### Keep immediate input renders out of repeated results
+
+```tsx
+// before: every keystroke also rebuilds every result row
+const [draft, setDraft] = useState("");
+const [query, setQuery] = useState("");
+const onChange = (value: string) => {
+  setDraft(value);
+  scheduleSearch(value, setQuery);
+};
+return <>
+  <Input value={draft} onChange={onChange} />
+  {items.map(item => <Row key={item.id} item={item} />)}
+</>;
+
+// after: the existing delayed query update still renders results; draft edits render only InputState
+const draft$ = useObservable("");
+const onChange = (value: string) => {
+  draft$.set(value);
+  scheduleSearch(value, setQuery);
+};
+return <>
+  <InputState value$={draft$} onChange={onChange} />
+  {items.map(item => <Row key={item.id} item={item} />)}
+</>;
+
+function InputState({ value$, onChange }: { value$: Observable<string>; onChange: (value: string) => void }) {
+  return <Input value={useValue(value$)} onChange={onChange} />;
+}
+```
+
+This finding preserves the delayed command and requires the repeated JSX to sit outside the proposed subscriber.
+Synchronous companion writes, reads of the immediate state in delayed work, repeated producers, and repeated work inside
+the input subtree remain candidates.
+
 ### Keep ownership above a dialog and subscribe in the leaf
 
 ```tsx
@@ -744,14 +779,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 827 manually audited hook labels, 23 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 828 manually audited hook labels, 23 state groups,
 and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 555/555 |
-| Actionable precision | 454/454 |
-| Actionable recall | 454/454 |
+| Unit tests | 558/558 |
+| Actionable precision | 455/455 |
+| Actionable recall | 455/455 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

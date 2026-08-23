@@ -90,6 +90,7 @@ import {
   hasDirectPrimitiveInitializer,
   hasIndependentRenderCutWitness,
   hasOnlyEventCommandReads,
+  hasRepeatedJsxRenderWorkOutside,
   hasUnstableSubtreeLifetime,
   isDirectPrimitiveExpression,
   isHookDependencyReference,
@@ -3483,6 +3484,8 @@ function classifyState(
       localComponents,
       sourceComponents
     );
+  const hasRepeatedOwnerRenderCut = branchSubtree !== null &&
+    hasRepeatedJsxRenderWorkOutside(state.owner, branchSubtree);
   const hasCompactBooleanTransportCut = hasIndependentTransportRenderCut &&
     !hasCompanionWrites &&
     !hasReactiveMutationPath &&
@@ -3548,7 +3551,15 @@ function classifyState(
   }
   if (
     !isCustomHookOwner(state.owner) &&
-    (jsxElementCount(state.owner) >= 12 || hasCompactBooleanTransportCut) &&
+    (
+      jsxElementCount(state.owner) >= 12 ||
+      hasCompactBooleanTransportCut ||
+      (
+        hasRepeatedOwnerRenderCut &&
+        !usage.repeatedTransport &&
+        usage.setterCallNodes.every(call => nearestRepeatedRenderCall(call, state.owner) === null)
+      )
+    ) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
     usage.effectWrites === 0 &&
@@ -3577,7 +3588,7 @@ function classifyState(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace \`${state.valueName}\` with a component-lifetime observable and extract one stable call-site leaf wrapper around \`${target}\` (never define it inline); subscribe there, pass the same prop snapshot, and adapt every command-only setter call or prop to mutate without subscribing.${hasCompactBooleanTransportCut && jsxElementCount(state.owner) < 12 ? " The independent sibling render cut proves that these updates skip owner work." : ""}`,
+      message: `Replace \`${state.valueName}\` with a component-lifetime observable and extract one stable call-site leaf wrapper around \`${target}\` (never define it inline); subscribe there, pass the same prop snapshot, and adapt every command-only setter call or prop to mutate without subscribing.${hasCompactBooleanTransportCut && jsxElementCount(state.owner) < 12 ? " The independent sibling render cut proves that these updates skip owner work." : hasRepeatedOwnerRenderCut && jsxElementCount(state.owner) < 12 ? " The leaf subscription skips the owner's repeated render work." : ""}`,
     };
   }
   if (

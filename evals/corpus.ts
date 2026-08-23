@@ -5287,6 +5287,15 @@ export const goldCases = [
     rationale: rationale as string,
     target: target as string,
   })),
+  {
+    action: "use-observable",
+    file: "components/tree-actions/transfer-trees/account-selection.tsx",
+    hook: "useState",
+    line: 65,
+    name: "inputValue",
+    rationale: "The immediate controlled input is the only query consumer; the existing timer closes over the event value and publishes separate delayed search state, so a leaf subscription skips rebuilding the repeated account rows without changing debounce timing.",
+    target: "tree-map",
+  },
   ...[
     ["expensify-text-filter", "TextInputFilterContent.tsx", 38, "value", "review-state", "Text input drives validation and the confirm payload across the owner, so isolating its controlled prop would leave required owner computation."],
     ["expensify-text-filter", "TextInputFilterContent.tsx", 39, "isNegated", "review-state", "An inline callback ref performs commit work in this owner, so isolating negation updates would change that ref callback's detach and attach cadence."],

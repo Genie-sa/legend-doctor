@@ -514,6 +514,63 @@ export function jsxElementCount(owner: RuntimeFunctionLike): number {
   return count;
 }
 
+export function hasRepeatedJsxRenderWorkOutside(
+  owner: RuntimeFunctionLike,
+  excludedSubtree: ts.Node
+): boolean {
+  if (!owner.body) return false;
+  let repeated = false;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (
+      repeated ||
+      !ts.isCallExpression(node) ||
+      nodeWithin(node, excludedSubtree) ||
+      !ts.isPropertyAccessExpression(node.expression) ||
+      !["map", "flatMap"].includes(node.expression.name.text) ||
+      node.questionDotToken !== undefined ||
+      node.expression.questionDotToken !== undefined ||
+      isConditionallyEvaluated(node, owner)
+    ) {
+      return;
+    }
+    const callback = node.arguments[0];
+    if (
+      callback &&
+      (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
+      jsxElementCountIn(callback.body) > 0
+    ) {
+      repeated = true;
+    }
+  });
+  return repeated;
+}
+
+function isConditionallyEvaluated(node: ts.Node, boundary: ts.Node): boolean {
+  for (let current = node.parent; current && current !== boundary; current = current.parent) {
+    if (
+      ts.isConditionalExpression(current) ||
+      ts.isIfStatement(current) ||
+      ts.isSwitchStatement(current) ||
+      ts.isCaseClause(current) ||
+      ts.isDefaultClause(current) ||
+      ts.isForStatement(current) ||
+      ts.isForInStatement(current) ||
+      ts.isForOfStatement(current) ||
+      ts.isWhileStatement(current) ||
+      ts.isDoStatement(current) ||
+      ts.isTryStatement(current) ||
+      ts.isCatchClause(current) ||
+      (ts.isBinaryExpression(current) &&
+        (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+          current.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+          current.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function hasUnstableSubtreeLifetime(
   node: JsxSubtreeNode,
   boundary: ts.Node

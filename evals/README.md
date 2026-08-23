@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-827 manual hook labels with no known misses, plus twenty-three
+828 manual hook labels with no known misses, plus twenty-three
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -351,6 +351,10 @@ The observable stays at the owner across state-independent conditional branches;
 consumers, nested input/dialog ownership, multi-hop aliases, and opaque normalization remain hard negatives. A direct
 controlled callsite may also live below state-independent early returns; ownership remains above every branch, while
 stored JSX, state-controlled returns, and value transport to alternate branches remain review findings.
+An immediate controlled value may also isolate from a separate delayed React update when the compact owner performs
+repeated JSX work outside the proposed subscriber. The immediate setter must not run from a repeated producer, the
+delayed command must close over its event argument instead of reading the immediate state, and no synchronous companion
+write may split an atomic transition. Repeated work inside the subscribed subtree does not prove a render cut.
 An exact call-free controlled edit may prove an independent high-frequency path even when a separate reset or close
 command co-writes sibling state. Direct setter transport for coupled range fields, normalization calls, scheduled work,
 and callbacks that issue any second command remain hard negatives so atomic workflows are not split opportunistically.
