@@ -210,6 +210,25 @@ const name$ = useObservable("");
 return <><FormHelp /><NameState name$={name$} /><SaveState name$={name$} /></>;
 ```
 
+### Derive controlled props inside one leaf
+
+```tsx
+// before, opening the dialog renders the page owner
+const [open, setOpen] = useState(false);
+return <><Dashboard /><DetailDialog id={open ? id : null} open={open} onOpenChange={setOpen} /></>;
+
+// after, one subscriber derives every state-dependent dialog prop
+const open$ = useObservable(false);
+return <><Dashboard /><DetailDialogState id={id} open$={open$} /></>;
+
+function DetailDialogState({ id, open$ }: Props) {
+  const open = useValue(open$);
+  return <DetailDialog id={open ? id : null} open={open} onOpenChange={value => open$.set(value)} />;
+}
+```
+
+Opaque calls, repeated children, sibling consumers, and effect reads remain candidates.
+
 ### Isolate an exact array membership control
 
 ```tsx
@@ -465,14 +484,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 801 manually audited hook labels, 18 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 802 manually audited hook labels, 18 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 537/537 |
-| Actionable precision | 433/433 |
-| Actionable recall | 433/434 |
+| Unit tests | 539/539 |
+| Actionable precision | 435/435 |
+| Actionable recall | 435/435 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

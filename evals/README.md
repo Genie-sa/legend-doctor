@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-801 manual hook labels, including 1 non-enforced opportunity, plus eighteen
+802 manual hook labels with no known misses, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -122,6 +122,11 @@ Every callback reference must be a direct JSX publication, every publication mus
 terminate at an intrinsic or framework event. An enforced Expensify validation label remains `review-state` because the
 resolved form provider also invokes validation from a child effect; a ref could replace that effect's render-captured
 snapshot with a newer mutable value. Eager render calls, mixed publications, effects, and unresolved consumers abstain.
+
+One Tree Map label keeps a controlled value and its call-free nullable ID projection in the same stable dialog leaf.
+Every projected reference must stay inside that component opening. The owner keeps the observable lifetime, and the
+subscriber derives all state-dependent props before forwarding the existing callback. Opaque calls and repeated output
+abstain.
 
 Command-only ref labels also preserve render-snapshot ordering. A returned or otherwise unproven command that reads and
 writes the same state abstains because a ref exposes writes synchronously across invocations. Any write before a later read

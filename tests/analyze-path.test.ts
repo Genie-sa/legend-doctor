@@ -1863,6 +1863,59 @@ test("moves reset effects through source wrappers into Base UI event callbacks",
   assert.equal(effects[2]?.action, "review-effect");
 });
 
+test("isolates pure controlled projections owned by one source component call site", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-controlled-callsite-projection-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Details.tsx"),
+    `
+      export function Dashboard() {
+        return <section>Independent content</section>;
+      }
+      export function DetailDialog({ open, resourceId, onOpenChange }: {
+        open: boolean;
+        resourceId: string | null;
+        onOpenChange: (open: boolean) => void;
+      }) {
+        return <dialog open={open} data-resource={resourceId} onClose={() => onOpenChange(false)} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { Dashboard, DetailDialog } from "./Details";
+      declare function normalize(open: boolean): string | null;
+      export function SafeScreen({ id }: { id: string }) {
+        const [open, setOpen] = useState(false);
+        return <main>
+          <Dashboard />
+          <span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span />
+          <button onClick={() => setOpen(true)}>Open</button>
+          <DetailDialog resourceId={open ? id : null} open={open} onOpenChange={setOpen} />
+        </main>;
+      }
+      export function UnsafeScreen() {
+        const [open, setOpen] = useState(false);
+        return <main>
+          <Dashboard />
+          <span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span />
+          <button onClick={() => setOpen(true)}>Open</button>
+          <DetailDialog resourceId={normalize(open)} open={open} onOpenChange={setOpen} />
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const states = report.findings.filter(finding => finding.hook === "useState");
+  assert.equal(states[0]?.action, "use-observable");
+  assert.equal(states[1]?.action, "review-state");
+});
+
 test("wraps a shared primitive locally without changing its API", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-shared-primitive-"));
   await mkdir(path.join(root, "components", "ui"), { recursive: true });

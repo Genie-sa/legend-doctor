@@ -1945,6 +1945,15 @@ export const goldCases = [
     target: "tree-map",
   })),
   {
+    action: "use-observable",
+    file: "components/cockpit/pages/supplier-profile.tsx",
+    hook: "useState",
+    line: 45,
+    name: "editOpen",
+    rationale: "The open value and its pure nullable ID projection feed one stable SupplierDetailDialog call site; one leaf subscription can derive both props while the owner keeps lifetime and the open button stays command-only.",
+    target: "tree-map",
+  },
+  {
     action: "review-state",
     file: "components/LibraryMenuHeaderContent.tsx",
     hook: "useState",

@@ -3086,6 +3086,40 @@ function classifyState(
       message: `Replace controlled state \`${state.valueName}\` with an owner-scoped observable and wrap \`${target}\` in a stable leaf subscriber; keep its value callback API unchanged and use non-tracking reads in submit or commit commands, snapshotting once at command entry before deferred work.`,
     };
   }
+  const controlledCallSiteProjection = !isCustomHookOwner(state.owner) &&
+    !stateMayHoldCallable(state) &&
+    usage.localRenderReads > 0 &&
+    usage.localRenderReads === usage.directRenderNodes.length &&
+    usage.effectReads === 0 &&
+    usage.effectWrites === 0 &&
+    usage.deferredReads === 0 &&
+    usage.transportedOccurrences > 0 &&
+    !usage.repeatedTransport &&
+    !usage.setterUsesPreviousValue &&
+    !usage.shadowed &&
+    !usage.escaped &&
+    (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
+    hasSafeCommands &&
+    hasOnlyEventCommandReads(
+      state,
+      new Set(usage.directRenderNodes),
+      eventTransitionCallbacks
+    )
+      ? controlledSameCallSiteProjectionCut(
+          state,
+          usage,
+          localComponents,
+          sourceComponents
+        )
+      : null;
+  if (controlledCallSiteProjection) {
+    const target = [...usage.valueTargets][0] ?? "the controlled child";
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace controlled state \`${state.valueName}\` with an owner-scoped observable and wrap \`${target}\` in one stable leaf subscriber; derive every state-dependent prop inside that wrapper, keep the callback API unchanged, and preserve the owner's state lifetime.`,
+    };
+  }
   const controlledProjectionCut = !isCustomHookOwner(state.owner) &&
     !stateMayHoldCallable(state) &&
     usage.localRenderReads > 0 &&
@@ -3688,6 +3722,35 @@ function controlledLeafProjectionCut(
     consumerLabel: jsxSubtreeLabel(consumer),
     consumerLine: consumer.getSourceFile().getLineAndCharacterOfPosition(consumer.getStart()).line + 1,
   };
+}
+
+function controlledSameCallSiteProjectionCut(
+  state: StateCandidate,
+  usage: StateUsage,
+  localComponents: ReadonlySet<string>,
+  sourceComponents: ReadonlySet<string>
+): boolean {
+  const callSite = controlledLeafCallSite(state, usage, isValueTransitionProp);
+  if (!callSite) return false;
+  const references = controlledProjectionRenderReferences(state, usage);
+  if (
+    !references ||
+    references.some(reference =>
+      !nodeWithin(reference, callSite.opening) ||
+      nearestRepeatedRenderCall(reference, state.owner) !== null
+    )
+  ) {
+    return false;
+  }
+  const controlled: ts.Node = ts.isJsxOpeningElement(callSite.opening)
+    ? callSite.opening.parent
+    : callSite.opening;
+  return hasIndependentRenderCutWitness(
+    callSite.returned,
+    [controlled],
+    localComponents,
+    sourceComponents
+  );
 }
 
 function controlledLeafCallSite(
