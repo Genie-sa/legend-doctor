@@ -29,6 +29,7 @@ import {
   isSafeProjectionExpression,
 } from "./deferred-reveal.js";
 import { mutationRegionOnlyCallsStateSetters } from "./effect-drafts.js";
+import type { ChildContractResolver } from "./child-contract.js";
 import {
   callbackIsEventRooted,
   expressionDependsOnBinding,
@@ -54,6 +55,7 @@ const MEMO_CALLBACK_HOOKS = new Set(["useCallback", "useMemo"]);
 
 export interface KeyedSelectionAnalysis {
   collectionStates: ReadonlySet<StateCandidate>;
+  recordStates: ReadonlySet<StateCandidate>;
   scalarStates: ReadonlySet<StateCandidate>;
   secondaryLeafStates: ReadonlySet<StateCandidate>;
 }
@@ -63,7 +65,8 @@ export function analyzeKeyedSelections(
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   safeCommandStates: ReadonlySet<StateCandidate>,
   statesWithCompanionWrites: ReadonlySet<StateCandidate>,
-  imports: HookImports
+  imports: HookImports,
+  childContracts: ChildContractResolver | null
 ): KeyedSelectionAnalysis {
   const settersByOwner = new Map<RuntimeFunctionLike, Set<string>>();
   for (const state of states) {
@@ -101,7 +104,13 @@ export function analyzeKeyedSelections(
         isKeyedScalarWithSecondaryLeaf(state, usage);
     })
   );
-  return { collectionStates, scalarStates, secondaryLeafStates };
+  const recordStates = new Set(
+    states.filter(state =>
+      !statesWithCompanionWrites.has(state) &&
+      isKeyedLeafRecordState(state, usageByState.get(state), childContracts)
+    )
+  );
+  return { collectionStates, recordStates, scalarStates, secondaryLeafStates };
 }
 
 function hasIndependentCollectionEventWrite(
@@ -770,6 +779,452 @@ function hasIndependentRepeatedEventWrite(
       /^on[A-Z]/.test(attribute.name.getText()) &&
       mutationRegionOnlyCallsStateSetters(event, new Set([state.setterName!]));
   });
+}
+
+interface KeyedRecordEntry {
+  path: readonly string[];
+  repeated: ts.CallExpression;
+}
+
+function isKeyedLeafRecordState(
+  state: StateCandidate,
+  usage: StateUsage | undefined,
+  childContracts: ChildContractResolver | null
+): boolean {
+  if (
+    !usage ||
+    !state.setterName ||
+    !state.owner.body ||
+    !isEmptyPrimitiveRecordState(state) ||
+    jsxElementCount(state.owner) < 12 ||
+    usage.directRenderNodes.length === 0 ||
+    usage.localRenderReads !== usage.directRenderNodes.length ||
+    usage.effectReads > 0 ||
+    usage.effectWrites > 0 ||
+    usage.deferredReads > 0 ||
+    usage.transportedOccurrences > 0 ||
+    usage.setterCalls === 0 ||
+    usage.setterReferences !== usage.setterCalls ||
+    usage.shadowed ||
+    usage.escaped
+  ) {
+    return false;
+  }
+
+  const rendered = renderedRecordEntry(state, usage.directRenderNodes);
+  if (!rendered) return false;
+  return usage.setterCallNodes.every(call => {
+    const key = exactRecordEntryUpdaterKey(call);
+    const written = key && writtenRecordEntry(state, call, key, childContracts);
+    return !!written &&
+      written.repeated === rendered.repeated &&
+      accessPathsEqual(written.path, rendered.path);
+  });
+}
+
+function isEmptyPrimitiveRecordState(state: StateCandidate): boolean {
+  const initial = state.call.arguments[0];
+  const initialValue = initial && unwrapTransparentExpression(initial);
+  const type = state.call.typeArguments?.[0];
+  if (
+    !initialValue ||
+    !ts.isObjectLiteralExpression(initialValue) ||
+    initialValue.properties.length !== 0 ||
+    !type ||
+    !ts.isTypeReferenceNode(type) ||
+    !ts.isIdentifier(type.typeName) ||
+    type.typeName.text !== "Record" ||
+    type.typeArguments?.length !== 2 ||
+    sourceDeclaresTypeName(state.call.getSourceFile(), "Record") ||
+    !recordKeyTypeIsSupported(type.typeArguments[0]!) ||
+    !primitiveRecordValueType(type.typeArguments[1]!, state.call.getSourceFile(), new Set())
+  ) {
+    return false;
+  }
+  return !stateMayHoldCallable(state);
+}
+
+function sourceDeclaresTypeName(sourceFile: ts.SourceFile, name: string): boolean {
+  let declared = false;
+  visit(sourceFile, node => {
+    if (declared) return;
+    if (
+      ((ts.isTypeAliasDeclaration(node) ||
+        ts.isInterfaceDeclaration(node) ||
+        ts.isClassDeclaration(node) ||
+        ts.isEnumDeclaration(node)) &&
+        node.name?.text === name) ||
+      (ts.isTypeParameterDeclaration(node) && node.name.text === name) ||
+      (ts.isImportSpecifier(node) && node.name.text === name) ||
+      (ts.isImportClause(node) && node.name?.text === name) ||
+      (ts.isNamespaceImport(node) && node.name.text === name)
+    ) {
+      declared = true;
+    }
+  });
+  return declared;
+}
+
+function recordKeyTypeIsSupported(type: ts.TypeNode): boolean {
+  if (ts.isParenthesizedTypeNode(type) || ts.isTypeOperatorNode(type)) {
+    return recordKeyTypeIsSupported(type.type);
+  }
+  if (ts.isUnionTypeNode(type)) return type.types.every(recordKeyTypeIsSupported);
+  if (ts.isLiteralTypeNode(type)) {
+    return ts.isStringLiteralLike(type.literal) || ts.isNumericLiteral(type.literal);
+  }
+  return type.kind === ts.SyntaxKind.StringKeyword || type.kind === ts.SyntaxKind.NumberKeyword;
+}
+
+function primitiveRecordValueType(
+  type: ts.TypeNode,
+  sourceFile: ts.SourceFile,
+  seen: ReadonlySet<string>
+): boolean {
+  if (primitiveScalarType(type)) return true;
+  if (
+    !ts.isTypeReferenceNode(type) ||
+    !ts.isIdentifier(type.typeName) ||
+    type.typeArguments?.length
+  ) {
+    return false;
+  }
+  const name = type.typeName.text;
+  if (seen.has(name)) return false;
+  const aliases: ts.TypeAliasDeclaration[] = [];
+  visit(sourceFile, node => {
+    if (ts.isTypeAliasDeclaration(node) && node.name.text === name) aliases.push(node);
+  });
+  const alias = aliases.length === 1 ? aliases[0]! : null;
+  return !!alias &&
+    !alias.typeParameters?.length &&
+    primitiveRecordValueType(alias.type, sourceFile, new Set(seen).add(name));
+}
+
+function renderedRecordEntry(
+  state: StateCandidate,
+  nodes: readonly ts.Node[]
+): KeyedRecordEntry | null {
+  let result: KeyedRecordEntry | null = null;
+  for (const node of nodes) {
+    if (!ts.isIdentifier(node)) return null;
+    const access = node.parent;
+    if (
+      !ts.isElementAccessExpression(access) ||
+      access.expression !== node ||
+      !access.argumentExpression
+    ) {
+      return null;
+    }
+    const repeated = nearestRepeatedRenderCall(access, state.owner);
+    const callback = repeated?.arguments[0];
+    if (
+      !repeated ||
+      !callback ||
+      (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+      nearestNestedFunction(node, state.owner) !== callback ||
+      !callback.parameters[0] ||
+      !ts.isIdentifier(callback.parameters[0]!.name)
+    ) {
+      return null;
+    }
+    const path = accessPathFromBinding(
+      access.argumentExpression,
+      callback.parameters[0]!.name.text
+    );
+    if (
+      !path ||
+      path.length === 0 ||
+      !hasMatchingKeyedAncestor(access, callback, path) ||
+      isMembershipMountGate(access, callback) ||
+      !isSafeJsxProjectionReference(node, callback, new Set(["cn"]))
+    ) {
+      return null;
+    }
+    if (
+      result &&
+      (result.repeated !== repeated || !accessPathsEqual(result.path, path))
+    ) {
+      return null;
+    }
+    result = { path, repeated };
+  }
+  return result;
+}
+
+function hasMatchingKeyedAncestor(
+  node: ts.Node,
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  path: readonly string[]
+): boolean {
+  for (let current: ts.Node | undefined = node.parent; current && current !== callback; current = current.parent) {
+    const opening = ts.isJsxElement(current)
+      ? current.openingElement
+      : ts.isJsxSelfClosingElement(current)
+        ? current
+        : null;
+    if (!opening) continue;
+    const key = opening.attributes.properties.find(
+      property => ts.isJsxAttribute(property) && property.name.getText() === "key"
+    );
+    const initializer = key && ts.isJsxAttribute(key) ? key.initializer : null;
+    const expression = initializer && ts.isJsxExpression(initializer)
+      ? initializer.expression
+      : null;
+    const item = callback.parameters[0]?.name;
+    if (
+      expression &&
+      item &&
+      ts.isIdentifier(item) &&
+      accessPathsEqual(accessPathFromBinding(expression, item.text), path)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function exactRecordEntryUpdaterKey(call: ts.CallExpression): ts.Expression | null {
+  if (call.arguments.length !== 1) return null;
+  const updater = unwrapTransparentExpression(call.arguments[0]!);
+  if (
+    (!ts.isArrowFunction(updater) && !ts.isFunctionExpression(updater)) ||
+    updater.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    updater.parameters.length !== 1 ||
+    !ts.isIdentifier(updater.parameters[0]!.name)
+  ) {
+    return null;
+  }
+  const previous = updater.parameters[0]!.name.text;
+  if (!ts.isBlock(updater.body)) {
+    const object = unwrapTransparentExpression(updater.body);
+    if (!ts.isObjectLiteralExpression(object) || object.properties.length !== 2) return null;
+    const spread = object.properties[0];
+    const entry = object.properties[1];
+    if (
+      !spread ||
+      !ts.isSpreadAssignment(spread) ||
+      !isIdentifierNamed(unwrapTransparentExpression(spread.expression), previous) ||
+      !entry ||
+      !ts.isPropertyAssignment(entry) ||
+      !ts.isComputedPropertyName(entry.name) ||
+      !isPureExpression(entry.name.expression) ||
+      !isPureExpression(entry.initializer)
+    ) {
+      return null;
+    }
+    return entry.name.expression;
+  }
+
+  if (updater.body.statements.length !== 3) return null;
+  const [cloneStatement, deleteStatement, returnStatement] = updater.body.statements;
+  if (
+    !cloneStatement ||
+    !ts.isVariableStatement(cloneStatement) ||
+    (cloneStatement.declarationList.flags & ts.NodeFlags.Const) === 0 ||
+    cloneStatement.declarationList.declarations.length !== 1 ||
+    !deleteStatement ||
+    !ts.isExpressionStatement(deleteStatement) ||
+    !ts.isDeleteExpression(deleteStatement.expression) ||
+    !returnStatement ||
+    !ts.isReturnStatement(returnStatement) ||
+    !returnStatement.expression
+  ) {
+    return null;
+  }
+  const clone = cloneStatement.declarationList.declarations[0]!;
+  const cloneValue = clone.initializer && unwrapTransparentExpression(clone.initializer);
+  const deleted = unwrapTransparentExpression(deleteStatement.expression.expression);
+  if (
+    !ts.isIdentifier(clone.name) ||
+    !cloneValue ||
+    !ts.isObjectLiteralExpression(cloneValue) ||
+    cloneValue.properties.length !== 1 ||
+    !ts.isSpreadAssignment(cloneValue.properties[0]!) ||
+    !isIdentifierNamed(
+      unwrapTransparentExpression(cloneValue.properties[0]!.expression),
+      previous
+    ) ||
+    !ts.isElementAccessExpression(deleted) ||
+    !isIdentifierNamed(unwrapTransparentExpression(deleted.expression), clone.name.text) ||
+    !deleted.argumentExpression ||
+    !isPureExpression(deleted.argumentExpression) ||
+    !isIdentifierNamed(unwrapTransparentExpression(returnStatement.expression), clone.name.text)
+  ) {
+    return null;
+  }
+  return deleted.argumentExpression;
+}
+
+function writtenRecordEntry(
+  state: StateCandidate,
+  call: ts.CallExpression,
+  key: ts.Expression,
+  childContracts: ChildContractResolver | null
+): KeyedRecordEntry | null {
+  const directRepeated = nearestRepeatedRenderCall(call, state.owner);
+  const directCallback = directRepeated?.arguments[0];
+  if (
+    directRepeated &&
+    directCallback &&
+    (ts.isArrowFunction(directCallback) || ts.isFunctionExpression(directCallback)) &&
+    directCallback.parameters[0] &&
+    ts.isIdentifier(directCallback.parameters[0]!.name)
+  ) {
+    const path = accessPathFromBinding(key, directCallback.parameters[0]!.name.text);
+    if (path && path.length > 0 && jsxEventCallIsDeferred(call, state.owner, childContracts)) {
+      return { path, repeated: directRepeated };
+    }
+  }
+
+  const command = nearestNestedFunction(call, state.owner);
+  if (
+    !command ||
+    (!ts.isArrowFunction(command) &&
+      !ts.isFunctionDeclaration(command) &&
+      !ts.isFunctionExpression(command))
+  ) {
+    return null;
+  }
+  const matches = command.parameters.flatMap((parameter, index) => {
+    if (!ts.isIdentifier(parameter.name)) return [];
+    const suffix = accessPathFromBinding(key, parameter.name.text);
+    return suffix ? [{ index, suffix }] : [];
+  });
+  if (matches.length !== 1) return null;
+  return recordCommandEntry(state, command, matches[0]!.index, matches[0]!.suffix, childContracts);
+}
+
+function recordCommandEntry(
+  state: StateCandidate,
+  command: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  parameterIndex: number,
+  suffix: readonly string[],
+  childContracts: ChildContractResolver | null
+): KeyedRecordEntry | null {
+  const name = localRuntimeFunctionName(command);
+  if (!name || bindingDeclarationCount(state.owner, name) !== 1) return null;
+  let result: KeyedRecordEntry | null = null;
+  let references = 0;
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    references += 1;
+    const invocation = node.parent;
+    if (!ts.isCallExpression(invocation) || invocation.expression !== node) {
+      safe = false;
+      return;
+    }
+    const repeated = nearestRepeatedRenderCall(invocation, state.owner);
+    const callback = repeated?.arguments[0];
+    const argument = invocation.arguments[parameterIndex];
+    if (
+      !repeated ||
+      !callback ||
+      (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+      !callback.parameters[0] ||
+      !ts.isIdentifier(callback.parameters[0]!.name) ||
+      !argument ||
+      ts.isSpreadElement(argument) ||
+      !jsxEventCallIsDeferred(invocation, state.owner, childContracts)
+    ) {
+      safe = false;
+      return;
+    }
+    const prefix = accessPathFromBinding(argument, callback.parameters[0]!.name.text);
+    if (!prefix) {
+      safe = false;
+      return;
+    }
+    const path = [...prefix, ...suffix];
+    if (
+      path.length === 0 ||
+      (result &&
+        (result.repeated !== repeated || !accessPathsEqual(result.path, path)))
+    ) {
+      safe = false;
+      return;
+    }
+    result = { path, repeated };
+  });
+  return safe && references > 0 ? result : null;
+}
+
+function jsxEventCallIsDeferred(
+  call: ts.CallExpression,
+  owner: RuntimeFunctionLike,
+  childContracts: ChildContractResolver | null
+): boolean {
+  const attribute = findAncestorUntil(call, ts.isJsxAttribute, owner);
+  if (
+    !attribute ||
+    !/^on[A-Z]/.test(attribute.name.getText()) ||
+    !attribute.initializer ||
+    !ts.isJsxExpression(attribute.initializer) ||
+    !attribute.initializer.expression ||
+    !nodeWithin(call, attribute.initializer.expression)
+  ) {
+    return false;
+  }
+  const opening = attribute.parent.parent;
+  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) return false;
+  const component = opening.tagName.getText();
+  if (/^[a-z]/.test(component)) return true;
+  return !!childContracts &&
+    (childContracts.frameworkEventComponent(component) ||
+      childContracts.componentCallbackPropIsDeferred(component, attribute.name.getText()));
+}
+
+function localRuntimeFunctionName(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression
+): string | null {
+  if (ts.isFunctionDeclaration(callback)) return callback.name?.text ?? null;
+  return ts.isVariableDeclaration(callback.parent) &&
+    callback.parent.initializer === callback &&
+    ts.isIdentifier(callback.parent.name)
+      ? callback.parent.name.text
+      : null;
+}
+
+function accessPathFromBinding(
+  expression: ts.Expression,
+  binding: string
+): readonly string[] | null {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(value)) return value.text === binding ? [] : null;
+  if (ts.isPropertyAccessExpression(value)) {
+    const parent = accessPathFromBinding(value.expression, binding);
+    return parent ? [...parent, `.${value.name.text}`] : null;
+  }
+  if (ts.isElementAccessExpression(value) && value.argumentExpression) {
+    const parent = accessPathFromBinding(value.expression, binding);
+    const key = unwrapTransparentExpression(value.argumentExpression);
+    if (!parent) return null;
+    if (ts.isStringLiteralLike(key)) return [...parent, `[s:${key.text}]`];
+    if (ts.isNumericLiteral(key)) return [...parent, `[n:${key.text}]`];
+  }
+  return null;
+}
+
+function accessPathsEqual(
+  left: readonly string[] | null,
+  right: readonly string[] | null
+): boolean {
+  return !!left && !!right &&
+    left.length === right.length &&
+    left.every((part, index) => part === right[index]);
+}
+
+function isIdentifierNamed(node: ts.Expression, name: string): boolean {
+  return ts.isIdentifier(node) && node.text === name;
 }
 
 function isKeyedLeafScalarState(

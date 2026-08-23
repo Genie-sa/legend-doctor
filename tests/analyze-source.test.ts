@@ -3536,6 +3536,125 @@ test("does not promote a projection whose every write shares a reactive mutation
   assert.equal(finding?.action, "review-state");
 });
 
+test("isolates an exact keyed record entry in a stable repeated row", () => {
+  const finding = analyzeSource(`
+    import { useState } from "react";
+    type Verdict = "up" | "down";
+    type Row = { id: string };
+    export function Screen({ rows }: { rows: Row[] }) {
+      const { mutateAsync: submitFeedback } = useSubmitFeedback();
+      const [feedback, setFeedback] = useState<Record<string, Verdict>>({});
+      async function vote(row: Row, verdict: Verdict) {
+        setFeedback(previous => ({ ...previous, [row.id]: verdict }));
+        try {
+          await submitFeedback(row.id, verdict);
+        } catch {
+          setFeedback(previous => {
+            const next = { ...previous };
+            delete next[row.id];
+            return next;
+          });
+        }
+      }
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+        {rows.map(row => <div key={row.id}>
+          <button onClick={() => vote(row, "up")} aria-pressed={feedback[row.id] === "up"}>Up</button>
+          <button onClick={() => vote(row, "down")} aria-pressed={feedback[row.id] === "down"}>Down</button>
+        </div>)}
+      </main>;
+    }
+  `, "fixture.tsx").find(candidate => candidate.name === "feedback");
+
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /dynamic entry/);
+  assert.deepEqual(finding?.stateModel, {
+    ownership: "local-observable",
+    subscription: "leaf-use-value",
+  });
+});
+
+test("keeps ambiguous keyed record entries conservative", () => {
+  const variants = [
+    {
+      label: "unstable row key",
+      rowKey: "index",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
+      updater: "previous => ({ ...previous, [row.id]: verdict })",
+      extra: "",
+    },
+    {
+      label: "mismatched row key",
+      rowKey: "row.slug",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
+      updater: "previous => ({ ...previous, [row.id]: verdict })",
+      extra: "",
+    },
+    {
+      label: "entry controls mount",
+      rowKey: "row.id",
+      projection: '{feedback[row.id] && <span>Voted</span>}',
+      updater: "previous => ({ ...previous, [row.id]: verdict })",
+      extra: "",
+    },
+    {
+      label: "multi-entry write",
+      rowKey: "row.id",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
+      updater: 'previous => ({ ...previous, [row.id]: verdict, global: "up" })',
+      extra: "",
+    },
+    {
+      label: "rollback side effect",
+      rowKey: "row.id",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
+      updater: "previous => { const next = { ...previous }; audit(next); delete next[row.id]; return next; }",
+      extra: "",
+    },
+    {
+      label: "whole-record read",
+      rowKey: "row.id",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
+      updater: "previous => ({ ...previous, [row.id]: verdict })",
+      extra: "const count = Object.keys(feedback).length; void count;",
+    },
+    {
+      label: "whole-record reset",
+      rowKey: "row.id",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
+      updater: "previous => ({ ...previous, [row.id]: verdict })",
+      extra: "<button onClick={() => setFeedback({})}>Reset</button>",
+    },
+  ];
+
+  for (const variant of variants) {
+    const finding = analyzeSource(`
+      import { useState } from "react";
+      type Verdict = "up" | "down";
+      type Row = { id: string; slug: string };
+      export function Screen({ rows }: { rows: Row[] }) {
+        const { mutateAsync: submitFeedback } = useSubmitFeedback();
+        const [feedback, setFeedback] = useState<Record<string, Verdict>>({});
+        async function vote(row: Row, verdict: Verdict) {
+          setFeedback(${variant.updater});
+          await submitFeedback(row.id, verdict);
+        }
+        ${variant.extra.startsWith("const") ? variant.extra : ""}
+        return <main>
+          <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+          {rows.map((row, index) => <div key={${variant.rowKey}}>
+            ${variant.projection.startsWith("{")
+              ? variant.projection
+              : `<button onClick={() => vote(row, "up")} ${variant.projection}>Up</button>`}
+          </div>)}
+          ${variant.extra.startsWith("<") ? variant.extra : ""}
+        </main>;
+      }
+    `, "fixture.tsx").find(candidate => candidate.name === "feedback");
+    assert.doesNotMatch(finding?.message ?? "", /dynamic entry/, variant.label);
+  }
+});
+
 test("does not promote a projection when its setter callback escapes through a custom hook", () => {
   const [finding] = analyzeSource(`
     import { useCallback, useState } from "react";

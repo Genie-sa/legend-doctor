@@ -989,6 +989,65 @@ test("proves deferred context and higher-order callback paths and rejects eager 
   assert.equal(report.findings.find(finding => finding.name === "eagerPayload")?.action, "review-state");
 });
 
+test("proves keyed record commands through source-resolved event wrappers", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-keyed-record-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Buttons.tsx"),
+    `
+      export function DeferredButton({ active, onPress }: { active: boolean; onPress: () => void }) {
+        return <button aria-pressed={active} onClick={onPress}>Vote</button>;
+      }
+      export function EagerButton({ active, onPress }: { active: boolean; onPress: () => void }) {
+        onPress();
+        return <button aria-pressed={active}>Vote</button>;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useState } from "react";
+      import { DeferredButton, EagerButton } from "./Buttons";
+      type Verdict = "up" | "down";
+      type Row = { id: string };
+      export function SafeScreen({ rows }: { rows: Row[] }) {
+        const { mutateAsync: submitFeedback } = useSubmitFeedback();
+        const [safeFeedback, setSafeFeedback] = useState<Record<string, Verdict>>({});
+        async function vote(row: Row, verdict: Verdict) {
+          setSafeFeedback(previous => ({ ...previous, [row.id]: verdict }));
+          await submitFeedback(row.id, verdict);
+        }
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+          {rows.map(row => <div key={row.id}>
+          <DeferredButton active={safeFeedback[row.id] === "up"} onPress={() => vote(row, "up")} />
+        </div>)}</main>;
+      }
+      export function EagerScreen({ rows }: { rows: Row[] }) {
+        const { mutateAsync: submitFeedback } = useSubmitFeedback();
+        const [eagerFeedback, setEagerFeedback] = useState<Record<string, Verdict>>({});
+        async function vote(row: Row, verdict: Verdict) {
+          setEagerFeedback(previous => ({ ...previous, [row.id]: verdict }));
+          await submitFeedback(row.id, verdict);
+        }
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+          {rows.map(row => <div key={row.id}>
+          <EagerButton active={eagerFeedback[row.id] === "up"} onPress={() => vote(row, "up")} />
+        </div>)}</main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const safe = report.findings.find(finding => finding.name === "safeFeedback");
+  const eager = report.findings.find(finding => finding.name === "eagerFeedback");
+  assert.equal(safe?.action, "use-observable");
+  assert.match(safe?.message ?? "", /dynamic entry/);
+  assert.doesNotMatch(eager?.message ?? "", /dynamic entry/);
+});
+
 test("shares one cached AST across source indexing and both detector families", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
   t.after(() => rm(root, { force: true, recursive: true }));

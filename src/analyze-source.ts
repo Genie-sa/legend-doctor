@@ -480,7 +480,8 @@ function analyzeParsedSource(
     usageByState,
     safeCommandStates,
     statesWithCompanionWrites,
-    imports
+    imports,
+    childContracts
   );
   const observableClusters = findObservableStateClusters(
     states,
@@ -585,6 +586,7 @@ function analyzeParsedSource(
           asyncLeafStatuses.cohesive.has(state),
           deferredRevealStates.has(state),
           keyedSelections.collectionStates.has(state),
+          keyedSelections.recordStates.has(state),
           keyedSelections.scalarStates.has(state),
           keyedSelections.secondaryLeafStates.has(state),
           observableSubscriptionsByOwner.get(state.owner) ?? 0,
@@ -2796,6 +2798,7 @@ function classifyState(
   isCohesiveAsyncStatus: boolean,
   isDeferredReveal: boolean,
   isKeyedLeafCollection: boolean,
+  isKeyedLeafRecord: boolean,
   isKeyedLeafScalar: boolean,
   isKeyedScalarWithSecondary: boolean,
   ownerObservableSubscriptions: number,
@@ -2842,6 +2845,13 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace keyed collection state \`${state.valueName}\` with a component-lifetime observable collection; extract the repeated row and subscribe there with an equivalent per-row \`useValue\` membership selector, preserve any proven filter inside the row and aggregate leaves, and read commands without subscribing.`,
+    };
+  }
+  if (isKeyedLeafRecord) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace keyed record state \`${state.valueName}\` with a component-lifetime observable record; extract the stable-keyed row, subscribe there to only its dynamic entry with \`useValue(${state.valueName}$[rowKey])\`, and preserve every optimistic and rollback command position while replacing exact clone writes with child \`.set(...)\` and \`.delete()\` operations.`,
     };
   }
   if (isKeyedLeafScalar) {

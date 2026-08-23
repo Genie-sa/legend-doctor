@@ -338,6 +338,49 @@ function TriggerCheckboxGroupState({ selected$, onSelectionChange }: Props) {
 Legend Doctor accepts the exact immutable membership toggle and imported React Hook Form `handleSubmit`. Opaque
 reconcilers, extra updater work, unresolved adapters, and coupled state changes remain candidates.
 
+### Isolate one record entry per row
+
+```tsx
+// before, one vote renders the entire message rail
+const [feedback, setFeedback] = useState<Record<string, Verdict>>({});
+const vote = async (message: Message, verdict: Verdict) => {
+  setFeedback(previous => ({ ...previous, [message.id]: verdict }));
+  try { await submit(message.id, verdict); }
+  catch {
+    setFeedback(previous => {
+      const next = { ...previous };
+      delete next[message.id];
+      return next;
+    });
+  }
+};
+return messages.map(message =>
+  <MessageRow key={message.id} active={feedback[message.id]} onVote={value => vote(message, value)} />
+);
+
+// after, only the voted row subscribes and the async boundary stays unchanged
+const feedback$ = useObservable<Record<string, Verdict>>({});
+const vote = async (message: Message, verdict: Verdict) => {
+  feedback$[message.id].set(verdict);
+  try { await submit(message.id, verdict); }
+  catch { feedback$[message.id].delete(); }
+};
+return messages.map(message =>
+  <MessageRowState key={message.id} feedback$={feedback$} message={message} onVote={vote} />
+);
+
+function MessageRowState({ feedback$, message, onVote }: Props) {
+  return <MessageRow
+    active={useValue(feedback$[message.id])}
+    onVote={verdict => onVote(message, verdict)}
+  />;
+}
+```
+
+The record key must match the stable row key. Every read and exact clone write must target that same primitive entry.
+Whole-record reads, resets, multi-key updates, entry-controlled row mounts, eager callbacks, and unresolved wrappers remain
+candidates.
+
 ### Isolate async status
 
 ```tsx

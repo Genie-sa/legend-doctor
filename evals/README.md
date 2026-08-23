@@ -171,6 +171,11 @@ Observable reactions require synchronous `useValue` reads; timers, promises, sub
 registered helpers remain React effects.
 Keyed collection advice is proven from event-rooted writes, stable row keys, per-row membership, and mount/cardinality
 safety; state variable names are not evidence.
+One Tree Map label verifies a primitive `Record` whose optimistic write and rollback both target the same message key.
+Every rendered lookup must match the stable row key, and every command publication must resolve to a deferred component
+event. The migration preserves the async mutation and toast order while replacing record clones with direct child
+`set`/`delete` operations and one `useValue` subscription per row. Unstable or mismatched keys, mount control,
+whole-record reads or resets, multi-entry writes, eager callbacks, and unresolved wrappers abstain.
 The Genie holdout verifies that an adjacent `legend-doctor keep-react-effect` or existing `react-effect-allow`
 directive is an explicit React-lifecycle ownership decision. The effect remains inventoried as `keep-effect`; detached
 comments and string literals do not apply. Conditional `useMount` and `useUnmount` advice remains visible without
