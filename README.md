@@ -443,6 +443,11 @@ owner-lifetime observable only when every render read stays inside that complete
 event-rooted, and no companion React write shares the transition. Event commands take non-tracking snapshots while the
 dialog wrapper owns the only `useValue` subscription.
 
+The same proof covers a bounded conditional dialog when call-free child props are derived from the payload inside that
+one gate. The stable subscriber replaces the complete conditional slot, so the dialog still mounts only when the
+payload exists. Calls, payload reads outside the slot, repeated output, broad branches, unresolved events, and companion
+React writes remain candidates.
+
 ### Isolate async status
 
 ```tsx
@@ -678,14 +683,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 825 manually audited hook labels, 23 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 826 manually audited hook labels, 23 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 551/551 |
-| Actionable precision | 452/452 |
-| Actionable recall | 452/452 |
+| Unit tests | 552/552 |
+| Actionable precision | 453/453 |
+| Actionable recall | 453/453 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

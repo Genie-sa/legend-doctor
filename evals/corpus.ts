@@ -2471,6 +2471,7 @@ export const goldCases = [
     target: "tree-map",
   })),
   ...[
+    ["components/projects-management/projects-management-page.tsx", 86, "formTarget"],
     ["components/projects-management/projects-management-page.tsx", 88, "addPlanterTarget"],
     ["components/projects-management/projects-management-page.tsx", 89, "addLandTarget"],
   ].map(([file, line, name]) => ({
@@ -2479,7 +2480,7 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "An always-mounted subscriber wrapper can own the complete payload gate and return null or the modal without rerendering the table-bearing owner.",
+    rationale: "An always-mounted subscriber wrapper can own the complete payload gate, derive call-free child props from the subscribed payload, and return null or the modal without rerendering the table-bearing owner.",
     target: "tree-map",
   })),
   {

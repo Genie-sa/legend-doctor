@@ -4466,7 +4466,7 @@ test("groups an undefined-initialized dialog payload without accepting opaque in
   assert.equal(opaque.filter(finding => finding.group).length, 0);
 });
 
-test("isolates one nullable payload inside an always-mounted dialog boundary", () => {
+test("isolates one nullable payload inside a bounded dialog boundary", () => {
   const source = (
     dialog: string,
     extraWrite = "",
@@ -4513,7 +4513,7 @@ test("isolates one nullable payload inside an always-mounted dialog boundary", (
       <h2>Delete {target.name}</h2>
       <button onClick={confirm}>Confirm</button>
     </dialog>}`)),
-    ["review-state", "review-state"]
+    ["use-observable", "review-state"]
   );
 
   assert.deepEqual(
@@ -4538,6 +4538,66 @@ test("isolates one nullable payload inside an always-mounted dialog boundary", (
       <button onClick={confirm}>Confirm</button>
     </dialog>`, "", "Promise.resolve().then(() => remove(target?.id)); setTarget(null);")),
     ["review-state", "review-state"]
+  );
+});
+
+test("isolates call-free payload projections inside one bounded conditional dialog", () => {
+  const source = (
+    dialog: string,
+    extraWrite = "",
+    producer = `<button onClick={() => open()}>Edit</button>`
+  ) => `
+    import { useState } from "react";
+    interface Item { id: string }
+    export function Screen({ item }: { item: Item }) {
+      const [target, setTarget] = useState<Item | "create" | null>(null);
+      const open = () => { setTarget(item); ${extraWrite} };
+      ${"\n".repeat(100)}
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Preview />
+        ${producer}
+        ${dialog}
+      </main>;
+    }
+  `;
+
+  assert.deepEqual(
+    actions(source(`{target && <dialog open onClose={() => setTarget(null)}>
+      <Editor item={target === "create" ? null : target} />
+    </dialog>}`)),
+    ["use-observable"]
+  );
+
+  for (const unsafe of [
+    `{target && <dialog open onClose={() => setTarget(null)}>
+      <Editor item={normalize(target)} />
+    </dialog>}`,
+    `{target && <dialog open onClose={() => setTarget(null)}><Editor item={target} /></dialog>}
+     <Preview item={target} />`,
+    `{items.map(item => target && <dialog key={item.id} open onClose={() => setTarget(null)}>
+      <Editor item={target} />
+    </dialog>)}`,
+    `{target && <dialog open onClose={() => setTarget(null)}>
+      <One /><Two /><Three /><Four /><Five /><Six /><Seven /><Eight /><Nine /><Ten /><Eleven /><Twelve /><Thirteen />
+      <Editor item={target} />
+    </dialog>}`,
+  ]) {
+    assert.deepEqual(actions(source(unsafe)), ["review-state"]);
+  }
+
+  assert.deepEqual(
+    actions(source(`{target && <dialog open onClose={() => setTarget(null)}>
+      <Editor item={target} />
+    </dialog>}`, "setPage(2);")),
+    ["review-state"]
+  );
+
+  assert.deepEqual(
+    actions(source(`{target && <dialog open onClose={() => setTarget(null)}>
+      <Editor item={target} />
+    </dialog>}`, "", `<Unknown onFire={() => open()} />`)),
+    ["review-state"]
   );
 });
 

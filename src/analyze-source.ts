@@ -189,6 +189,7 @@ interface ControlledProjectionCut {
 }
 
 interface DialogPayloadCut {
+  conditional: boolean;
   consumerLabel: string;
   consumerLine: number;
 }
@@ -2334,14 +2335,22 @@ function nullableDialogPayloadCut(
   }
 
   const ownerJsx = jsxElementCount(state.owner);
-  const dialog = lowestCommonJsxSubtree(usage.directRenderNodes, state.owner);
+  const conditionalBoundary = conditionalNullablePayloadBoundary(
+    state,
+    usage,
+    knownComponents
+  );
+  const dialog = conditionalBoundary?.dialog ??
+    lowestCommonJsxSubtree(usage.directRenderNodes, state.owner);
   if (
     !dialog ||
     ts.isJsxFragment(dialog) ||
     ownerJsx < 12 ||
     nearestRepeatedRenderCall(dialog, state.owner) ||
-    hasUnstableSubtreeLifetime(dialog, state.owner) ||
-    !usage.directRenderNodes.every(read => nodeWithin(read, dialog))
+    (!conditionalBoundary && hasUnstableSubtreeLifetime(dialog, state.owner)) ||
+    !usage.directRenderNodes.every(read =>
+      nodeWithin(read, conditionalBoundary?.gate ?? dialog)
+    )
   ) {
     return null;
   }
@@ -2353,16 +2362,17 @@ function nullableDialogPayloadCut(
   const target = opening.tagName.getText();
   if (
     !returned ||
-    !nodeWithin(dialog, returned) ||
+    !nodeWithin(conditionalBoundary?.gate ?? dialog, returned) ||
     (isCustomJsxTarget(target) && !knownComponents.has(target)) ||
-    !opening.attributes.properties.some(attribute =>
-      ts.isJsxAttribute(attribute) &&
-      attribute.name.getText() === "open" &&
-      attribute.initializer !== undefined &&
-      ts.isJsxExpression(attribute.initializer) &&
-      attribute.initializer.expression !== undefined &&
-      isNullablePayloadOpenExpression(attribute.initializer.expression, state.valueName)
-    )
+    (!conditionalBoundary &&
+      !opening.attributes.properties.some(attribute =>
+        ts.isJsxAttribute(attribute) &&
+        attribute.name.getText() === "open" &&
+        attribute.initializer !== undefined &&
+        ts.isJsxExpression(attribute.initializer) &&
+        attribute.initializer.expression !== undefined &&
+        isNullablePayloadOpenExpression(attribute.initializer.expression, state.valueName)
+      ))
   ) {
     return null;
   }
@@ -2384,9 +2394,58 @@ function nullableDialogPayloadCut(
   }
 
   return {
+    conditional: conditionalBoundary !== null,
     consumerLabel: jsxSubtreeLabel(dialog),
-    consumerLine: dialog.getSourceFile().getLineAndCharacterOfPosition(dialog.getStart()).line + 1,
+    consumerLine: dialog.getSourceFile().getLineAndCharacterOfPosition(
+      (conditionalBoundary?.gate ?? dialog).getStart()
+    ).line + 1,
   };
+}
+
+function conditionalNullablePayloadBoundary(
+  state: StateCandidate,
+  usage: StateUsage,
+  knownComponents: ReadonlySet<string>
+): { dialog: ts.JsxElement | ts.JsxSelfClosingElement; gate: ts.JsxExpression } | null {
+  if (usage.directRenderNodes.length < 2) return null;
+
+  for (const read of usage.directRenderNodes) {
+    const gate = findAncestorUntil(read, ts.isJsxExpression, state.owner);
+    const expression = gate?.expression && unwrapTransparentExpression(gate.expression);
+    const dialog = expression
+      ? directDialogPayloadGateBranch(expression, state.valueName)
+      : null;
+    if (
+      !gate ||
+      !expression ||
+      !dialog ||
+      (!ts.isJsxElement(dialog) && !ts.isJsxSelfClosingElement(dialog)) ||
+      !nodeWithin(read, dialogGateCondition(expression)) ||
+      nearestRepeatedRenderCall(gate, state.owner) ||
+      !usage.directRenderNodes.every(node => nodeWithin(node, gate))
+    ) {
+      continue;
+    }
+
+    const opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog;
+    const target = opening.tagName.getText();
+    if (
+      (isCustomJsxTarget(target) && !knownComponents.has(target)) ||
+      usage.directRenderNodes.some(node =>
+        nodeWithin(node, dialog) && !isSafeJsxProjectionReference(node, state.owner)
+      )
+    ) {
+      continue;
+    }
+    return { dialog, gate };
+  }
+  return null;
+}
+
+function dialogGateCondition(expression: ts.Expression): ts.Expression {
+  const value = unwrapTransparentExpression(expression);
+  return ts.isConditionalExpression(value) ? value.condition :
+    ts.isBinaryExpression(value) ? value.left : value;
 }
 
 function isNullablePayloadOpenExpression(
@@ -2447,8 +2506,68 @@ function nodeIsDirectDeferredEvent(
 ): boolean {
   const callback = nearestNestedFunction(node, state.owner);
   return callback !== null &&
-    (eventRoots.has(callback) ||
-      callbackHasDirectJsxEventRoot(callback, state.owner, childContracts));
+    callbackResolvesToDeferredEvent(
+      callback,
+      state.owner,
+      eventRoots,
+      childContracts,
+      new Set()
+    );
+}
+
+function callbackResolvesToDeferredEvent(
+  callback: RuntimeFunctionLike,
+  owner: RuntimeFunctionLike,
+  eventRoots: ReadonlySet<RuntimeFunctionLike>,
+  childContracts: ChildContractResolver | null,
+  seen: ReadonlySet<string>
+): boolean {
+  if (
+    !ts.isArrowFunction(callback) &&
+    !ts.isFunctionDeclaration(callback) &&
+    !ts.isFunctionExpression(callback)
+  ) {
+    return false;
+  }
+  if (
+    eventRoots.has(callback) ||
+    callbackHasDirectJsxEventRoot(callback, owner, childContracts)
+  ) {
+    return true;
+  }
+  const name = localCallbackBindingName(callback);
+  if (!name || seen.has(name) || bindingDeclarationCount(owner, name) !== 1) return false;
+
+  const nextSeen = new Set(seen).add(name);
+  let referenced = false;
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    referenced = true;
+    if (!ts.isCallExpression(node.parent) || node.parent.expression !== node) {
+      safe = false;
+      return;
+    }
+    const caller = nearestNestedFunction(node, owner);
+    safe = caller !== null &&
+      caller !== callback &&
+      callbackResolvesToDeferredEvent(
+        caller,
+        owner,
+        eventRoots,
+        childContracts,
+        nextSeen
+      );
+  });
+  return referenced && safe;
 }
 
 function callbackHasDirectJsxEventRoot(
@@ -3228,7 +3347,9 @@ function classifyState(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace nullable dialog payload \`${state.valueName}\` with a component-lifetime observable and wrap the complete always-mounted ${dialogPayloadCut.consumerLabel} call site at line ${dialogPayloadCut.consumerLine} in one stable leaf subscriber; subscribe there with \`useValue\`, use non-tracking snapshots in event commands, and preserve the existing open expression, callbacks, write positions, and mount identity.`,
+      message: dialogPayloadCut.conditional
+        ? `Replace nullable dialog payload \`${state.valueName}\` with a component-lifetime observable and replace the complete conditional ${dialogPayloadCut.consumerLabel} slot at line ${dialogPayloadCut.consumerLine} with one always-mounted stable leaf subscriber; evaluate the existing payload gate and call-free child projections there, use non-tracking snapshots in event commands, and preserve callbacks, write positions, and the dialog's conditional mount identity.`
+        : `Replace nullable dialog payload \`${state.valueName}\` with a component-lifetime observable and wrap the complete always-mounted ${dialogPayloadCut.consumerLabel} call site at line ${dialogPayloadCut.consumerLine} in one stable leaf subscriber; subscribe there with \`useValue\`, use non-tracking snapshots in event commands, and preserve the existing open expression, callbacks, write positions, and mount identity.`,
     };
   }
   if (isSelfRefreshingCommand) {

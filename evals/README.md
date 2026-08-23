@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-825 manual hook labels with no known misses, plus twenty-three
+826 manual hook labels with no known misses, plus twenty-three
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -109,8 +109,13 @@ a thirteen-element fixture abstains.
 Two Tree Map labels verify the single-state variant: one nullable payload controls one bounded, always-mounted dialog.
 All render reads must stay inside that complete call site, every command path must resolve to a deferred event, and no
 companion React write may share a transition. The owner keeps the observable lifetime, event commands use non-tracking
-snapshots, and only the dialog wrapper subscribes. Payload fanout, conditional dialog mounting, functional updaters,
+snapshots, and only the dialog wrapper subscribes. Payload fanout, functional updaters,
 effects, unresolved events, broad dialogs, and coupled writes abstain.
+
+One Tree Map label extends that single-state proof to a bounded conditional dialog with call-free payload projections
+inside the selected child. The always-mounted subscriber replaces the complete conditional slot, preserving the dialog's
+conditional mount identity. Payload fanout, impure projections, repeated output, broad branches, unresolved events,
+callable payloads, effects, and coupled writes abstain.
 
 One Legend Music label verifies an effect-owned numeric cursor returned by a custom hook and broadcast through one keyed
 list. Cross-file source must prove that each state-reading registration stores its callback until an exact cleanup, while
