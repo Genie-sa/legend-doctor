@@ -2008,6 +2008,16 @@ export const goldCases = [
     target: "tree-map",
   },
   {
+    action: "use-observable",
+    file: "components/LibraryMenuHeaderContent.tsx",
+    hook: "useState",
+    line: 89,
+    name: "showRemoveLibAlert",
+    rationale:
+      "One local zero-argument JSX factory owns the complete confirmation leaf; open and close commands can update an owner-lifetime observable without rerendering the independent library menu and selection counter.",
+    target: "excalidraw",
+  },
+  {
     action: "review-state",
     file: "components/LibraryMenuHeaderContent.tsx",
     hook: "useState",

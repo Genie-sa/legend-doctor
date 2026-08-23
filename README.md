@@ -198,6 +198,9 @@ function PanelGate({ open$ }: { open$: Observable<boolean> }) {
 }
 ```
 
+A gate may call an immutable local JSX factory. Legend Doctor resolves it only when the factory takes no arguments and
+has one direct JSX return. Mutable bindings, wrapper factories, parameters, and multiple returns stay under review.
+
 ### Isolate a controlled value and its validation
 
 ```tsx
@@ -533,14 +536,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 810 manually audited hook labels, 18 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 811 manually audited hook labels, 18 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 542/542 |
-| Actionable precision | 436/436 |
-| Actionable recall | 436/436 |
+| Unit tests | 543/543 |
+| Actionable precision | 437/437 |
+| Actionable recall | 437/437 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

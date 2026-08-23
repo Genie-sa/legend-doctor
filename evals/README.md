@@ -32,12 +32,12 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-810 manual hook labels with no known misses, plus eighteen
+811 manual hook labels with no known misses, plus eighteen
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
-`useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Ten leaf-boundary labels verify
+`useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Eleven leaf-boundary labels verify
 that a transported `useValue` subscription can leave a broad owner without changing observable ownership or child APIs.
 Two replace a complete conditional child slot with an always-mounted subscriber while preserving the selected child's mount behavior. Run
 the eval for the current precision/recall table. If the root README publishes those metrics, update them only
@@ -190,6 +190,9 @@ When the value and every setter already belong to that call-site subtree, the st
 One Memoria label covers the compact boolean case. A separate stable sibling must prove the render cut, and each setter
 call must end its local command. Companion writes, reactive mutation paths, direct setter transport, and work after a
 setter remain `review-state`.
+One Excalidraw label resolves the true branch of a boolean gate through an immutable local zero-argument JSX factory.
+The factory must have one direct JSX return. Mutable bindings, parameters, wrapper-produced functions, and multiple
+returns abstain, while the adjacent payload-coupled dialog remains `review-state`.
 One Formbricks label proves an exact immutable array membership toggle owned by a resolved checkbox-group leaf. Imported
 React Hook Form `handleSubmit` proves the submit callback is event-rooted, so the command can snapshot the observable
 once without subscribing the forty-element owner. Opaque updater calls, extra updater work, unresolved form adapters,

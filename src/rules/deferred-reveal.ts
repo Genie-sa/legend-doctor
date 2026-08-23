@@ -198,7 +198,8 @@ export function isRenderGateReference(node: ts.Node, boundary: ts.Node): boolean
       (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
         current.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
       nodeWithin(node, current.left) &&
-      expressionContainsJsx(current.right)
+      (expressionContainsJsx(current.right) ||
+        localJsxFactoryReturn(current.right, boundary) !== null)
     ) {
       return true;
     }
@@ -235,17 +236,82 @@ function renderGateSubtree(node: ts.Node, boundary: ts.Node): JsxSubtreeNode | n
       nodeWithin(node, current.left) &&
       isSafeProjectionExpression(current.left, node)
     ) {
-      const subtree = directJsxSubtree(current.right);
+      const subtree = directJsxSubtree(current.right, boundary);
       if (subtree) return subtree;
     }
   }
   return null;
 }
 
-function directJsxSubtree(expression: ts.Expression): JsxSubtreeNode | null {
+function directJsxSubtree(
+  expression: ts.Expression,
+  boundary: ts.Node
+): JsxSubtreeNode | null {
+  const current = unwrapTransparentExpression(expression);
+  return literalJsxSubtree(current) ?? localJsxFactoryReturn(current, boundary);
+}
+
+function literalJsxSubtree(expression: ts.Expression): JsxSubtreeNode | null {
   const current = unwrapTransparentExpression(expression);
   return ts.isJsxElement(current) || ts.isJsxFragment(current) || ts.isJsxSelfClosingElement(current)
     ? current
+    : null;
+}
+
+function localJsxFactoryReturn(
+  expression: ts.Expression,
+  boundary: ts.Node
+): JsxSubtreeNode | null {
+  const call = unwrapTransparentExpression(expression);
+  if (
+    !ts.isCallExpression(call) ||
+    call.questionDotToken ||
+    call.arguments.length !== 0 ||
+    !ts.isIdentifier(call.expression)
+  ) {
+    return null;
+  }
+  const factoryName = call.expression.text;
+
+  const declarations: ts.VariableDeclaration[] = [];
+  visitSkippingNestedRuntimeFunctions(boundary, node => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === factoryName
+    ) {
+      declarations.push(node);
+    }
+  });
+  const declaration = declarations[0];
+  if (
+    declarations.length !== 1 ||
+    !declaration?.initializer ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0
+  ) {
+    return null;
+  }
+  const factory = unwrapTransparentExpression(declaration.initializer);
+  if (
+    (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
+    factory.parameters.length !== 0 ||
+    factory.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    (ts.isFunctionExpression(factory) && factory.asteriskToken)
+  ) {
+    return null;
+  }
+  if (!ts.isBlock(factory.body)) {
+    return literalJsxSubtree(factory.body);
+  }
+
+  const returns: ts.ReturnStatement[] = [];
+  visitSkippingNestedFunctions(factory.body, factory, node => {
+    if (ts.isReturnStatement(node)) returns.push(node);
+  });
+  const returned = returns[0]?.expression;
+  return returns.length === 1 && returned
+    ? literalJsxSubtree(returned)
     : null;
 }
 

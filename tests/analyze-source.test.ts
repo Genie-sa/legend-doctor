@@ -1896,6 +1896,41 @@ test("isolates presentation gates whose branches contain ordinary render calls",
   assert.match(finding?.message ?? "", /full state-controlled render expression/);
 });
 
+test("isolates a presentation gate rendered by one local JSX factory", () => {
+  const source = `
+    import { useState } from "react";
+    export function Screen({ t }: { t: (key: string) => string }) {
+      const [open, setOpen] = useState(false);
+      const renderDialog = () => {
+        const title = t("confirm");
+        return <Dialog title={title} onClose={() => setOpen(false)}><p>Body</p></Dialog>;
+      };
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+        <button onClick={() => setOpen(true)}>Open</button>
+        {open && renderDialog()}
+      </main>;
+    }
+  `;
+  const finding = analyzeSource(source, "fixture.tsx").find(candidate => candidate.name === "open");
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /full state-controlled render expression/);
+
+  for (const unsafe of [
+    source.replace("const renderDialog =", "let renderDialog ="),
+    source
+      .replace("const renderDialog = () =>", "const renderDialog = (kind: string) =>")
+      .replace("renderDialog()", 'renderDialog("confirm")'),
+    source
+      .replace("const renderDialog = () => {", "const renderDialog = makeRenderer(() => {")
+      .replace("\n      };\n      return", "\n      });\n      return"),
+    source.replace("const title = t(\"confirm\");", 'if (t("skip")) return <Fallback />; const title = t("confirm");'),
+  ]) {
+    const candidate = analyzeSource(unsafe, "fixture.tsx").find(result => result.name === "open");
+    assert.notEqual(candidate?.action, "use-observable");
+  }
+});
+
 test("isolates a small logical JSX gate without moving its owner lifetime", () => {
   const [finding] = analyzeSource(`
     import { useState } from "react";

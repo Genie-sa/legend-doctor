@@ -4647,10 +4647,13 @@ function stateSubtreeResult(
   state: StateCandidate,
   uniqueRepeatedBranch = false
 ): StateSubtree {
+  const lineNode = kind === "gate" && nearestNestedFunction(node, state.owner)
+    ? renderNodes[0] ?? node
+    : node;
   return {
     kind,
     label: jsxSubtreeLabel(node),
-    line: node.getSourceFile().getLineAndCharacterOfPosition(node.getStart()).line + 1,
+    line: lineNode.getSourceFile().getLineAndCharacterOfPosition(lineNode.getStart()).line + 1,
     node,
     repeated: commonRepeatedRender(renderNodes, state.owner) !== null,
     uniqueRepeatedBranch,
