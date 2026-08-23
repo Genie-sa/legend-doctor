@@ -275,7 +275,7 @@ function analyzeParsedSource(
     ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
   ]);
   const reactCommit = collectReactCommitContext(sourceFile, imports);
-  const localComponents = collectLocalComponents(sourceFile);
+  const localComponents = collectLocalComponents(sourceFile, imports);
   const states: StateCandidate[] = [];
   const unmatchedStateCalls: ts.CallExpression[] = [];
   const effects = reactCommit.effectCalls.map(call => effectCandidate(call, imports));
@@ -1604,9 +1604,7 @@ function findObservableStateClusters(
       const clusterMembers = dialogMembers ?? gatedFeedbackMembers ?? textDraftMembers ?? selectionMembers;
       if (!clusterMembers) continue;
       const hasBoundedDialogGate = dialogMembers?.some(
-        state =>
-          hasDialogPayloadInitializer(state) &&
-          payloadControlsOwnerJsx(state, knownComponents)
+        state => stateHasBoundedDialogGate(state, dialogMembers, usageByState, knownComponents)
       ) ?? false;
       if (
         dialogMembers &&
@@ -2673,6 +2671,11 @@ function normalizeObservableDialogClusterMembers(
   const payloadMutations = mutations.filter(mutation => mutation.state === payload);
   const payloadOpenMutations = payloadMutations.filter(mutation => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword));
   if (payloadOpenMutations.length === 0) return null;
+  const latches = flags.filter(flag =>
+    isMonotonicDialogLatch(flag, usageByState, mutations, payloadOpenMutations, stateFlow)
+  );
+  if (latches.length > 1) return null;
+  const latch = latches[0] ?? null;
 
   const targetSets: ReadonlySet<string>[] = [];
   for (const member of members) {
@@ -2691,7 +2694,8 @@ function normalizeObservableDialogClusterMembers(
     const targets = new Set([...usage.jsxTargets].filter(target => knownComponents.has(target)));
     if (
       targets.size === 0 &&
-      member !== payload
+      member !== payload &&
+      member !== latch
     ) {
       return null;
     }
@@ -2702,6 +2706,7 @@ function normalizeObservableDialogClusterMembers(
   }
 
   for (const flag of flags) {
+    if (flag === latch) continue;
     const flagMutations = mutations.filter(mutation => mutation.state === flag);
     const openMutations = flagMutations.filter(mutation => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword));
     const flagUsage = usageByState.get(flag);
@@ -2729,11 +2734,46 @@ function normalizeObservableDialogClusterMembers(
   const ownerGuardedPayload = payloadControlsOwnerJsx(payload, knownComponents);
   if (
     ownerGuardedPayload &&
-    !payloadHasBoundedDialogGate(payload, members, usageByState, knownComponents)
+    !stateHasBoundedDialogGate(payload, members, usageByState, knownComponents)
+  ) {
+    return null;
+  }
+  if (
+    latch &&
+    !stateHasBoundedDialogGate(latch, members, usageByState, knownComponents)
   ) {
     return null;
   }
   return members;
+}
+
+function isMonotonicDialogLatch(
+  flag: StateCandidate,
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+  mutations: readonly SetterMutation[],
+  payloadOpenMutations: readonly SetterMutation[],
+  stateFlow: StateFlowIndex
+): boolean {
+  const usage = usageByState.get(flag);
+  const flagMutations = mutations.filter(mutation => mutation.state === flag);
+  return usage !== undefined &&
+    usage.localRenderReads > 0 &&
+    usage.transportedOccurrences === 0 &&
+    usage.deferredReads === 0 &&
+    usage.setterReferences === usage.setterCalls &&
+    flagMutations.length > 0 &&
+    flagMutations.every(mutation => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)) &&
+    flagMutations.every(flagMutation =>
+      payloadOpenMutations.some(payloadMutation =>
+        flagMutation.region === payloadMutation.region &&
+        mutationsAreProvenCoexecuting(
+          flagMutation.call,
+          payloadMutation.call,
+          flagMutation.region,
+          stateFlow
+        )
+      )
+    );
 }
 
 function hasDialogPayloadInitializer(state: StateCandidate): boolean {
@@ -2939,27 +2979,27 @@ function payloadControlsOwnerJsx(
   return controls;
 }
 
-function payloadHasBoundedDialogGate(
-  payload: StateCandidate,
+function stateHasBoundedDialogGate(
+  state: StateCandidate,
   members: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   knownComponents: ReadonlySet<string>
 ): boolean {
-  const payloadUsage = usageByState.get(payload);
+  const stateUsage = usageByState.get(state);
   if (
-    !payloadUsage ||
-    payloadUsage.localRenderReads === 0 ||
-    payloadUsage.localRenderReads !== payloadUsage.directRenderNodes.length
+    !stateUsage ||
+    stateUsage.localRenderReads === 0 ||
+    stateUsage.localRenderReads !== stateUsage.directRenderNodes.length
   ) {
     return false;
   }
 
-  const firstRead = payloadUsage.directRenderNodes[0];
+  const firstRead = stateUsage.directRenderNodes[0];
   if (!firstRead) return false;
-  const gate = findAncestorUntil(firstRead, ts.isJsxExpression, payload.owner);
+  const gate = findAncestorUntil(firstRead, ts.isJsxExpression, state.owner);
   const expression = gate?.expression && unwrapTransparentExpression(gate.expression);
   const trueBranch = expression
-    ? directDialogPayloadGateBranch(expression, payload.valueName)
+    ? directDialogPayloadGateBranch(expression, state.valueName)
     : null;
   if (
     !gate ||
@@ -2968,10 +3008,10 @@ function payloadHasBoundedDialogGate(
     (!ts.isJsxElement(trueBranch) &&
       !ts.isJsxSelfClosingElement(trueBranch) &&
       !ts.isJsxFragment(trueBranch)) ||
-    nearestRepeatedRenderCall(gate, payload.owner) ||
+    nearestRepeatedRenderCall(gate, state.owner) ||
     jsxElementCountIn(trueBranch) > 12 ||
-    jsxElementCountIn(trueBranch) / jsxElementCount(payload.owner) > 0.4 ||
-    !payloadUsage.directRenderNodes.every(read => nodeWithin(read, gate))
+    jsxElementCountIn(trueBranch) / jsxElementCount(state.owner) > 0.4 ||
+    !stateUsage.directRenderNodes.every(read => nodeWithin(read, gate))
   ) {
     return false;
   }
@@ -6207,7 +6247,7 @@ function isInsideImportedCallback(node: ts.Node, hookNames: ReadonlySet<string>)
 }
 
 
-function collectLocalComponents(sourceFile: ts.SourceFile): ReadonlySet<string> {
+function collectLocalComponents(sourceFile: ts.SourceFile, imports: HookImports): ReadonlySet<string> {
   const names = new Set<string>();
   visit(sourceFile, node => {
     if (ts.isFunctionDeclaration(node) && node.name && isComponentName(node.name.text)) {
@@ -6219,12 +6259,26 @@ function collectLocalComponents(sourceFile: ts.SourceFile): ReadonlySet<string> 
       ts.isIdentifier(node.name) &&
       isComponentName(node.name.text) &&
       node.initializer &&
-      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+      (
+        ts.isArrowFunction(node.initializer) ||
+        ts.isFunctionExpression(node.initializer) ||
+        isImportedReactLazyCall(node.initializer, imports)
+      )
     ) {
       names.add(node.name.text);
     }
   });
   return names;
+}
+
+function isImportedReactLazyCall(node: ts.Expression, imports: HookImports): boolean {
+  const value = unwrapTransparentExpression(node);
+  if (!ts.isCallExpression(value)) return false;
+  if (ts.isIdentifier(value.expression)) return imports.lazy.has(value.expression.text);
+  return ts.isPropertyAccessExpression(value.expression) &&
+    value.expression.name.text === "lazy" &&
+    ts.isIdentifier(value.expression.expression) &&
+    imports.reactNamespaces.has(value.expression.expression.text);
 }
 
 function collectPureProjectionImports(sourceFile: ts.SourceFile): ReadonlySet<string> {

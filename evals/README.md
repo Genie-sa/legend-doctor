@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-828 manual hook labels with no known misses, plus twenty-three
+832 manual hook labels with no known misses, plus twenty-five
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -98,6 +98,10 @@ Two Formbricks labels verify a persistent dialog payload and visibility flag beh
 payload and true flag must be written together, every transported member must reach a source-resolved component inside
 that slot, and an always-mounted leaf wrapper must preserve the existing payload gate and closed-dialog mount behavior.
 Payload fanout, repeated render gates, unresolved targets, broad branches, effects, escapes, and unpaired opens abstain.
+A persistent lazy-dialog group may include one monotonic false-to-true mount latch. Every latch write must set `true`
+and coexecute with a payload open, while one complete bounded gate contains every payload, visibility, and callback
+transport. A resettable latch, unresolved `React.lazy` provenance, or any second surface abstains. Named and namespace
+React lazy imports are resolved structurally; capitalization alone is never component provenance.
 Two more Formbricks labels verify the always-mounted drawer form when its payload uses the exact no-argument
 `useState<T | undefined>()` initializer. Opaque initializers remain outside the proof.
 

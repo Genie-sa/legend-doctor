@@ -6197,9 +6197,41 @@ export const goldCases = [
       "The ref remains the command guard while one stable native-menu leaf subscribes to the transported boolean; the independent press target and host shell no longer rerender on open or dismiss.",
     target: "memoria-src",
   },
+  ...["selectedFile", "isCropModalOpen", "cropModalReady"].map((name, index) => ({
+    action: "use-observable" as const,
+    file: "components/avatar-update.tsx",
+    hook: "useState" as const,
+    line: [40, 41, 44][index]!,
+    name,
+    rationale: "The avatar crop payload, open flag, and first-open latch form one atomic persistent-dialog model; one stable gated subscriber preserves lazy mounting while avatar chrome stays outside crop transitions.",
+    target: "tree-map",
+  })),
+  {
+    action: "use-observable",
+    file: "components/reports/progress-report-panel.tsx",
+    hook: "useState",
+    line: 25,
+    name: "hasOpenedStudio",
+    rationale: "The first-open latch gates the same lazy studio whose nullable company payload owns visibility; atomic observable opens preserve tracking order, null-only closes preserve the mounted exit surface, and the report list stays outside studio transitions.",
+    target: "tree-map",
+  },
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [
+  {
+    file: "components/avatar-update.tsx",
+    line: 40,
+    members: ["selectedFile", "isCropModalOpen", "cropModalReady"],
+    rationale: "The crop payload, visibility, and monotonic first-open latch must migrate as one observable dialog model so open and close transitions remain atomic and the lazy modal stays mounted after first use.",
+    target: "tree-map",
+  },
+  {
+    file: "components/reports/progress-report-panel.tsx",
+    line: 23,
+    members: ["studioCompany", "hasOpenedStudio"],
+    rationale: "The nullable studio payload and monotonic first-open latch are one persistent lazy-dialog model; opening publishes both atomically while closing clears only the payload so exit rendering remains mounted.",
+    target: "tree-map",
+  },
   {
     file: "components/cockpit/ai-rail.tsx",
     line: 66,

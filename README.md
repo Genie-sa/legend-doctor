@@ -218,6 +218,31 @@ function DeleteDialogState({ target$ }: { target$: Observable<Account | null> })
 }
 ```
 
+### Preserve a lazy dialog after its first open
+
+```tsx
+// before: opening or closing also rerenders the page chrome and list
+const [target, setTarget] = useState<Item | null>(null);
+const [open, setOpen] = useState(false);
+const [ready, setReady] = useState(false);
+const show = (item: Item) => { setTarget(item); setReady(true); setOpen(true); };
+return <><PageChrome />{ready && <LazyDialog item={target} open={open} />}</>;
+
+// after: one atomic model keeps the first-open latch and dialog transitions together
+const dialog$ = useObservable({ target: null as Item | null, open: false, ready: false });
+const show = (item: Item) => dialog$.assign({ target: item, open: true, ready: true });
+return <><PageChrome /><LazyDialogState dialog$={dialog$} /></>;
+
+function LazyDialogState({ dialog$ }: { dialog$: Observable<{ target: Item | null; open: boolean; ready: boolean }> }) {
+  const dialog = useValue(dialog$);
+  const close = () => dialog$.assign({ target: null, open: false });
+  return dialog.ready ? <LazyDialog item={dialog.target} open={dialog.open} onClose={close} /> : null;
+}
+```
+
+The latch must be monotonic, open atomically with the payload, and gate the same bounded lazy-dialog subtree. A latch
+reset, a second gated surface, unresolved lazy provenance, or state outside that subtree keeps the group under review.
+
 ### Preserve a conditional child's mount identity
 
 ```tsx
@@ -779,14 +804,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 828 manually audited hook labels, 23 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 832 manually audited hook labels, 25 state groups,
 and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 558/558 |
-| Actionable precision | 455/455 |
-| Actionable recall | 455/455 |
+| Unit tests | 559/559 |
+| Actionable precision | 459/459 |
+| Actionable recall | 459/459 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

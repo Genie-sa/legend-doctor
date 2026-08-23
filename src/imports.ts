@@ -3,6 +3,7 @@ import ts from "typescript";
 export interface HookImports {
   batch: ReadonlySet<string>;
   hostComponents: ReadonlySet<string>;
+  lazy: ReadonlySet<string>;
   legendNamespaces: ReadonlySet<string>;
   legendReactNamespaces: ReadonlySet<string>;
   legacyUseValue: ReadonlySet<string>;
@@ -36,6 +37,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   const legendReactNamespaces = new Set<string>();
   const legacyUseValue = new Set<string>();
   const hostComponents = new Set<string>();
+  const lazy = new Set<string>();
   const observable = new Set<string>();
   const observableTypes = new Set<string>();
   const startTransition = new Set<string>();
@@ -97,6 +99,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
         hostComponents.add(localName);
       }
       if (moduleName === REACT_MODULE) {
+        if (importedName === "lazy") lazy.add(localName);
         if (importedName === "useState") useState.add(localName);
         if (importedName === "useCallback") useCallback.add(localName);
         if (importedName === "useEffect") useEffect.add(localName);
@@ -131,6 +134,7 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   return {
     batch,
     hostComponents,
+    lazy,
     legendNamespaces,
     legendReactNamespaces,
     legacyUseValue,

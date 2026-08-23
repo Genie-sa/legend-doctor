@@ -4377,6 +4377,35 @@ test("groups a persistent dialog model behind one bounded payload gate", () => {
   assert.equal(fanout.length, 0);
 });
 
+test("groups a persistent dialog payload, visibility, and monotonic mount latch", () => {
+  const source = (resetLatch: string) => `
+    import { lazy, useState } from "react";
+    interface Item { id: string }
+    const ItemDialog = lazy(() => import("./ItemDialog"));
+    export function Screen({ item }: { item: Item }) {
+      const [target, setTarget] = useState<Item | null>(null);
+      const [open, setOpen] = useState(false);
+      const [ready, setReady] = useState(false);
+      const show = () => { setTarget(item); setReady(true); setOpen(true); };
+      const close = () => { setOpen(false); setTarget(null); ${resetLatch} };
+      ${"\n".repeat(100)}
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Preview />
+        {ready ? <ItemDialog target={target} open={open} onClose={close} /> : null}
+      </main>;
+    }
+  `;
+
+  const grouped = analyzeSource(source(""), "fixture.tsx").filter(finding => finding.group);
+  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable", "use-observable"]);
+  assert.deepEqual(grouped[0]?.group?.members, ["target", "open", "ready"]);
+  assert.match(grouped[0]?.message ?? "", /persistent dialog state/);
+
+  const resetting = analyzeSource(source("setReady(false);"), "fixture.tsx");
+  assert.equal(resetting.filter(finding => finding.group).length, 0);
+});
+
 test("groups one bounded logical-and dialog gate without merging payload fanout", () => {
   const source = (extra: string) => `
     import { useState } from "react";
