@@ -76,6 +76,7 @@ import {
   isMultiSurfaceLiteralBooleanState,
 } from "./rules/literal-boolean-leaf.js";
 import { findListenerRefStateClusters } from "./rules/listener-ref-state.js";
+import { isPropertyLocalObjectDraftState } from "./rules/object-draft.js";
 import {
   collectReactCommitContext,
 } from "./rules/react-commit-sensitivity.js";
@@ -432,6 +433,20 @@ function analyzeParsedSource(
     usageByState
   );
   const statesWithCompanionWrites = findStatesWithCompanionWrites(states, stateFlow);
+  const propertyLocalObjectDrafts = new Set(
+    states.filter(state => {
+      const usage = usageByState.get(state);
+      return usage !== undefined && isPropertyLocalObjectDraftState(state, usage, {
+        childContracts,
+        eventCallbacks: eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
+        hasCompanionWrites: statesWithCompanionWrites.has(state),
+        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+        hasSafeCommands: safeCommandStates.has(state),
+        localComponents,
+        sourceComponents,
+      });
+    })
+  );
   const dialogPayloadCuts = new Map<StateCandidate, DialogPayloadCut>();
   for (const state of states) {
     const usage = usageByState.get(state);
@@ -650,6 +665,7 @@ function analyzeParsedSource(
           sourceComponents,
           sourceFile,
           nonProductionHarness,
+          propertyLocalObjectDrafts.has(state),
           subtreeByState.get(state) ?? null,
           dialogPayloadCuts.get(state) ?? null,
           safeCommandStates.has(state),
@@ -3372,6 +3388,7 @@ function classifyState(
   sourceComponents: ReadonlySet<string>,
   sourceFile: ts.SourceFile,
   nonProductionHarness: boolean,
+  isPropertyLocalObjectDraft: boolean,
   subtree: StateSubtree | null,
   dialogPayloadCut: DialogPayloadCut | null,
   hasSafeCommands: boolean,
@@ -3413,6 +3430,13 @@ function classifyState(
       action: "keep-state",
       confidence: "certain",
       message: `Keep \`${state.valueName}\` as React state; it owns a stable component-lifetime value and has no setter.`,
+    };
+  }
+  if (isPropertyLocalObjectDraft) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace object draft \`${state.valueName}\` with one owner-scoped observable; clone its initial object once, write each controlled property directly, subscribe at each existing property leaf and pure aggregate leaf, and clone one non-tracking whole-draft snapshot at the start of submit or commit commands.`,
     };
   }
   const filteredControlCut = controlledFilterLeafCut(state, usage, childContracts);

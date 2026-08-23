@@ -4332,7 +4332,6 @@ export const goldCases = [
   },
   ...[
     ["formbricks-dashboard-menu", "dashboard-dropdown-menu.tsx", 36, "isDropDownOpen", "Menu visibility controls the complete dropdown interaction boundary rather than one asynchronous status leaf."],
-    ["formbricks-edit-attribute", "edit-attribute-modal.tsx", 46, "formData", "The editable object drives multiple fields and the update payload, so it remains a cohesive form draft rather than a single status subscription."],
     ["formbricks-create-segment", "create-segment-modal.tsx", 56, "segment", "The segment draft drives validation, filter editing, and the create payload across the modal; one leaf subscription is incomplete."],
     ["formbricks-feedback-source-menu", "feedback-source-row-dropdown.tsx", 44, "isDropDownOpen", "Dropdown visibility owns the complete menu interaction boundary and is not an async pending leaf."],
   ].map(([target, file, line, name, rationale]) => ({
@@ -4344,6 +4343,15 @@ export const goldCases = [
     rationale: rationale as string,
     target: target as string,
   })),
+  {
+    action: "review-state",
+    file: "edit-attribute-modal.tsx",
+    hook: "useState",
+    line: 46,
+    name: "formData",
+    rationale: "The field split is promising, but the imported Input adapter does not expose a source-proven deferred callback contract through this target; keep the draft under review instead of trusting an onChange prop name.",
+    target: "formbricks-edit-attribute",
+  },
   {
     action: "use-observable",
     file: "dashboard-widget.tsx",
@@ -6223,6 +6231,15 @@ export const goldCases = [
     line: 25,
     name: "hasOpenedStudio",
     rationale: "The first-open latch gates the same lazy studio whose nullable company payload owns visibility; atomic observable opens preserve tracking order, null-only closes preserve the mounted exit surface, and the report list stays outside studio transitions.",
+    target: "tree-map",
+  },
+  {
+    action: "use-observable",
+    file: "components/species-management/species-merge-dialog.tsx",
+    hook: "useState",
+    line: 46,
+    name: "newFields",
+    rationale: "Each new-species property has an independent controlled edit command; property subscribers and one validation leaf keep the source list, warning, and dialog shell outside keystroke renders while merge snapshots the complete draft once.",
     target: "tree-map",
   },
 ] as const satisfies readonly GoldHookCase[];

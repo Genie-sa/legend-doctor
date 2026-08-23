@@ -36,6 +36,74 @@ test("isolates direct controlled child state when a sibling proves an owner rend
   assert.match(finding?.message ?? "", /non-tracking reads in submit or commit commands/);
 });
 
+test("isolates property-local object draft edits without splitting coupled commands", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    interface Draft { title: string; notes: string; }
+    const EMPTY_DRAFT: Draft = { title: "", notes: "" };
+    const BASE_DRAFT: Draft = { title: "", notes: "" };
+    export function Form() {
+      const [draft, setDraft] = useState(EMPTY_DRAFT);
+      const submit = () => save(draft.title, draft.notes);
+      return <form onSubmit={submit}>
+        <Header /><Summary /><Help /><Preview /><History /><Status /><Aside /><Footer /><Actions /><Metrics />
+        <input value={draft.title} onChange={event => setDraft(previous => ({ ...previous, title: event.target.value }))} />
+        <textarea value={draft.notes} onChange={event => setDraft(previous => ({ ...previous, notes: event.target.value }))} />
+        <button disabled={!draft.title}>Save</button>
+      </form>;
+    }
+    export function CoupledForm() {
+      const [draft, setDraft] = useState(EMPTY_DRAFT);
+      const [dirty, setDirty] = useState(false);
+      return <main><Header /><Summary /><Help /><Preview /><History /><Status /><Aside /><Footer /><Actions /><Metrics />
+        <input value={draft.title} onChange={event => {
+          setDraft(previous => ({ ...previous, title: event.target.value }));
+          setDirty(true);
+        }} />
+        <output>{draft.notes}{String(dirty)}</output>
+      </main>;
+    }
+    export function EffectOwnedForm() {
+      const [draft, setDraft] = useState(EMPTY_DRAFT);
+      useEffect(() => report(draft.title), [draft.title]);
+      return <main><Header /><Summary /><Help /><Preview /><History /><Status /><Aside /><Footer /><Actions /><Metrics />
+        <input value={draft.title} onChange={event => setDraft(previous => ({ ...previous, title: event.target.value }))} />
+        <output>{draft.notes}</output>
+      </main>;
+    }
+    export function TransportedForm() {
+      const [draft, setDraft] = useState(EMPTY_DRAFT);
+      return <main><Header /><Summary /><Help /><Preview /><History /><Status /><Aside /><Footer /><Actions /><Metrics />
+        <Editor draft={draft} onChange={setDraft} />
+      </main>;
+    }
+    export function OpaqueCallbackForm() {
+      const [draft, setDraft] = useState(EMPTY_DRAFT);
+      const submit = () => save(draft.title, draft.notes);
+      return <main><Header /><Summary /><Help /><Preview /><History /><Status /><Aside /><Footer /><Actions /><Metrics />
+        <Field value={draft.title} onChange={value => setDraft(previous => ({ ...previous, title: value }))} />
+        <Field value={draft.notes} onChange={value => setDraft(previous => ({ ...previous, notes: value }))} />
+        <button onClick={submit}>Save</button>
+      </main>;
+    }
+    export function ShadowedSeed({ BASE_DRAFT }: { BASE_DRAFT: Draft }) {
+      const [draft, setDraft] = useState(BASE_DRAFT);
+      const submit = () => save(draft.title, draft.notes);
+      return <main><Header /><Summary /><Help /><Preview /><History /><Status /><Aside /><Footer /><Actions /><Metrics />
+        <input value={draft.title} onChange={event => setDraft(previous => ({ ...previous, title: event.target.value }))} />
+        <textarea value={draft.notes} onChange={event => setDraft(previous => ({ ...previous, notes: event.target.value }))} />
+        <button onClick={submit}>Save</button>
+      </main>;
+    }
+  `, "fixture.tsx");
+
+  assert.equal(findings.find(finding => finding.name === "draft")?.action, "use-observable");
+  assert.match(findings.find(finding => finding.name === "draft")?.message ?? "", /property leaf/);
+  for (const finding of findings.filter(finding => finding.name === "draft").slice(1)) {
+    assert.doesNotMatch(finding.message, /object draft/);
+  }
+});
+
 test("isolates an exact controlled array membership toggle", () => {
   const findings = analyzeSource(`
     import { useState } from "react";

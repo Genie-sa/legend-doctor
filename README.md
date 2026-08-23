@@ -167,6 +167,54 @@ function SearchBox() {
 }
 ```
 
+### Split a typed object draft by property
+
+```tsx
+// before: editing one field rerenders the dialog shell, list, warning, and every field
+interface Fields { name: string; scientificName: string; }
+const EMPTY_FIELDS: Fields = { name: "", scientificName: "" };
+const [fields, setFields] = useState(EMPTY_FIELDS);
+const valid = fields.name.trim() && fields.scientificName.trim();
+const submit = () => save(fields);
+return <Dialog>
+  <SourceList />
+  <Field value={fields.name} onChange={value => setFields(old => ({ ...old, name: value }))} />
+  <Field value={fields.scientificName} onChange={value => setFields(old => ({ ...old, scientificName: value }))} />
+  <Warning />
+  <button disabled={!valid} onClick={submit}>Save</button>
+</Dialog>;
+
+// after: each edit publishes one child and rerenders only its field plus validation
+const fields$ = useObservable({ ...EMPTY_FIELDS });
+const submit = () => save({ ...fields$.peek() });
+return <Dialog>
+  <SourceList />
+  <FieldState value$={fields$.name} onChange={value => fields$.name.set(value)} />
+  <FieldState value$={fields$.scientificName} onChange={value => fields$.scientificName.set(value)} />
+  <Warning />
+  <SubmitState fields$={fields$} onSubmit={submit} />
+</Dialog>;
+
+function FieldState({ value$, onChange }: { value$: Observable<string>; onChange: (value: string) => void }) {
+  return <Field value={useValue(value$)} onChange={onChange} />;
+}
+function SubmitState({ fields$, onSubmit }: { fields$: Observable<Fields>; onSubmit: () => void }) {
+  const disabled = useValue(() => !fields$.name.get().trim() || !fields$.scientificName.get().trim());
+  return <button disabled={disabled} onClick={onSubmit}>Save</button>;
+}
+```
+
+Agent output:
+
+```text
+use-observable — Replace object draft `fields` with one owner-scoped observable; clone its initial object once, write each controlled property directly, subscribe at each existing property leaf and pure aggregate leaf, and clone one non-tracking whole-draft snapshot at the start of submit or commit commands.
+```
+
+Legend Doctor requires a local string-only interface, a matching constant initializer, one setter-only controlled command
+per property, source-proven callback timing, pure bounded validation projections, and independent owner content. Effects,
+setter transport, mount gates, resets, multi-property writes, companion React writes, and unresolved controls stay under
+review.
+
 ### Keep immediate input renders out of repeated results
 
 ```tsx
@@ -847,14 +895,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 833 manually audited hook labels, 25 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 834 manually audited hook labels, 25 state groups,
 and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 560/560 |
-| Actionable precision | 460/460 |
-| Actionable recall | 460/460 |
+| Unit tests | 561/561 |
+| Actionable precision | 461/461 |
+| Actionable recall | 461/461 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

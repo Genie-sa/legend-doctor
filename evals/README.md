@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-833 manual hook labels with no known misses, plus twenty-five
+834 manual hook labels with no known misses, plus twenty-five
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -254,6 +254,12 @@ One Formbricks label proves an exact immutable array membership toggle owned by 
 React Hook Form `handleSubmit` proves the submit callback is event-rooted, so the command can snapshot the observable
 once without subscribing the forty-element owner. Opaque updater calls, extra updater work, unresolved form adapters,
 additional consumers, and companion writes abstain.
+One Tree Map label covers a property-local string draft initialized from a module constant typed by a local interface.
+Every required property must have one setter-only controlled command whose callback is source-proven deferred, and all
+render reads must terminate in bounded property or pure aggregate leaves with independent owner content outside them.
+The migration clones the initial object, writes observable children directly, and clones one nontracking draft snapshot
+at command entry. Effects, transport, resets, multi-property writes, mount gates, unresolved controls, and companion
+React writes abstain.
 One adjacent Formbricks command-only label uses the same imported adapter proof to replace a non-rendered webhook secret
 with a ref. Reads precede writes in the shared async command; shadowed form factories and post-write snapshots abstain.
 Effect-synchronized draft labels preserve the original React effect, guard, dependencies, and timing while moving only
