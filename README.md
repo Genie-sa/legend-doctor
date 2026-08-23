@@ -202,6 +202,49 @@ This finding preserves the delayed command and requires the repeated JSX to sit 
 Synchronous companion writes, reads of the immediate state in delayed work, repeated producers, and repeated work inside
 the input subtree remain candidates.
 
+### Move search into its repeated producer
+
+```tsx
+// before: typing rebuilds every owner-side collection projection
+const [query, setQuery] = useState("");
+const matches = users.filter(user => user.name?.toLowerCase().includes(query));
+const current = users.find(user => user.current);
+const others = users.filter(user => !user.current);
+const shown = current ? [...others.slice(0, 8), current] : others.slice(0, 8);
+const avatars = shown.map(user => {
+  if (!user.current) return <Avatar key={user.id} user={user} />;
+  return <Avatar key={user.id}><Island>
+    <QuickSearch onChange={setQuery} />
+    {matches.map(match => <User key={match.id} user={match} />)}
+  </Island></Avatar>;
+});
+return mobile ? <MobileUsers users={users} /> : <Desktop><Toolbar />{avatars}</Desktop>;
+
+// after: the filter still runs once, inside the producer subscriber
+const query$ = useObservable("");
+return mobile
+  ? <MobileUsers users={users} />
+  : <Desktop><Toolbar /><AvatarListState query$={query$} shown={shown} users={users} /></Desktop>;
+
+function AvatarListState({ users, shown, query$ }: Props) {
+  const query = useValue(query$);
+  const matches = users.filter(user => user.name?.toLowerCase().includes(query));
+  return <>{shown.map(user => {
+    if (!user.current) return <Avatar key={user.id} user={user} />;
+    return <Avatar key={user.id}><Island>
+      <QuickSearch onChange={value => query$.set(value)} />
+      {matches.map(match => <User key={match.id} user={match} />)}
+    </Island></Avatar>;
+  })}</>;
+}
+```
+
+Legend Doctor resolves `QuickSearch` to a deferred input callback and requires the exact filter and its repeated producer
+to move together from one directly returned JSX slot. The filter still executes once. Query edits skip at least two
+unconditional owner-side collection passes, and at least five JSX elements remain outside the subscriber. Opaque
+predicates, mutated sources, inline, prop-only, or escaped producers, eager adapters, or another query consumer stay
+under review.
+
 ### Keep ownership above a dialog and subscribe in the leaf
 
 ```tsx
@@ -804,14 +847,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 832 manually audited hook labels, 25 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 833 manually audited hook labels, 25 state groups,
 and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 559/559 |
-| Actionable precision | 459/459 |
-| Actionable recall | 459/459 |
+| Unit tests | 560/560 |
+| Actionable precision | 460/460 |
+| Actionable recall | 460/460 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

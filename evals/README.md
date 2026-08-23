@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-832 manual hook labels with no known misses, plus twenty-five
+833 manual hook labels with no known misses, plus twenty-five
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -86,6 +86,13 @@ React `useMemo` factory, the resulting binding is invoked only from direct React
 effect dependencies or method cleanup calls. The command may not escape to JSX or any other callback surface. This keeps
 the throttle, effects, cleanup, dependencies, and statement order unchanged while moving only the presentation storage
 and `<StatsRows>` subscription.
+
+One Excalidraw label verifies a source-resolved controlled search whose sole value read is an exact
+`item.field?.toLowerCase().includes(query)` predicate. The setter and every filtered-result read must share one immutable
+repeated producer whose binding occupies one direct returned JSX slot. The migration moves that producer and filter into
+one subscriber, so the filter still executes once while at least two unconditional owner-side collection passes and five
+JSX elements remain outside it. Opaque predicates, source mutation, inline, prop-only, or escaped producers, eager
+callback adapters, extra query consumers, and owners without that material render cut abstain.
 
 Six Legend Music and Tree Map labels verify co-written editable drafts. Each cluster contains one nullable cursor and one
 empty-string name. Every non-null cursor write is paired with its draft in the same straight-line block or switch case;

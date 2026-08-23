@@ -2679,6 +2679,16 @@ export const goldCases = [
       "Throttled dimensions need owner-lifetime observable storage because Collapsible unmounts its rows while closed; subscribe only in the scene-dimension rows while preserving the owner effect and throttle cleanup.",
     target: "excalidraw",
   },
+  {
+    action: "use-observable",
+    file: "components/UserList.tsx",
+    hook: "useState",
+    line: 148,
+    name: "searchTerm",
+    rationale:
+      "The source-resolved search input and exact filter share one directly returned repeated producer, so one subscriber can keep the filter single-run while typing skips the owner's collection preprocessing without changing state lifetime.",
+    target: "excalidraw",
+  },
   ...[
     ["components/ColorPicker/ColorInput.tsx", 37],
     ["components/LibraryMenuItems.tsx", 83],

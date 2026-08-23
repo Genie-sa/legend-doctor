@@ -159,6 +159,12 @@ interface ClassifiedState {
   message: string;
 }
 
+interface ControlledFilterLeafCut {
+  line: number;
+  producer: string;
+  target: string;
+}
+
 export interface ClassifiedEffect {
   action: EffectAction;
   confidence: "certain" | "probable";
@@ -3409,6 +3415,14 @@ function classifyState(
       message: `Keep \`${state.valueName}\` as React state; it owns a stable component-lifetime value and has no setter.`,
     };
   }
+  const filteredControlCut = controlledFilterLeafCut(state, usage, childContracts);
+  if (filteredControlCut) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace filtered control state \`${state.valueName}\` with an owner-scoped observable and extract the \`${filteredControlCut.producer}\` render slot at line ${filteredControlCut.line} into one stable subscriber; move the exact filter and its repeated producer into that subscriber, pass their inputs as plain snapshots, preserve existing keys and conditional mounts, and keep the source-resolved \`${filteredControlCut.target}\` callback API unchanged.`,
+    };
+  }
   if (dialogPayloadCut) {
     return {
       action: "use-observable",
@@ -4127,6 +4141,420 @@ function classifyState(
         ? legendCandidateMessage(state, usage, sourceComponents)
         : `Review React state \`${state.valueName}\`; local evidence does not prove a render-boundary improvement.`,
   };
+}
+
+function controlledFilterLeafCut(
+  state: StateCandidate,
+  usage: StateUsage,
+  childContracts: ChildContractResolver | null
+): ControlledFilterLeafCut | null {
+  if (
+    !state.setterName ||
+    !childContracts ||
+    !ts.isStringLiteralLike(unwrapTransparentExpression(state.call.arguments[0] ?? state.call)) ||
+    usage.setterReferences !== 1 ||
+    usage.setterCalls !== 0 ||
+    usage.setterTransportSites.size !== 1 ||
+    usage.setterTargets.size !== 1 ||
+    usage.valueTransportSites.size !== 0 ||
+    usage.effectReads !== 0 ||
+    usage.effectWrites !== 0 ||
+    usage.deferredReads !== 0 ||
+    usage.shadowed
+  ) {
+    return null;
+  }
+
+  const setterTransport = directSetterTransport(state);
+  if (
+    !setterTransport ||
+    !childContracts.componentCallbackPropIsDeferred(
+      setterTransport.target,
+      setterTransport.attribute.name.getText()
+    )
+  ) {
+    return null;
+  }
+
+  const reads = stateValueReferences(state);
+  const filter = reads.length === 1 ? exactStringFilter(reads[0]!, state.owner) : null;
+  if (!filter || !collectionBindingIsReadOnly(filter.sourceName, state.owner)) return null;
+
+  const resultReferences = bindingReferences(state.owner, filter.resultName.text, filter.resultName);
+  if (
+    resultReferences.length === 0 ||
+    resultReferences.some(reference => !isReadOnlyFilteredResultReference(reference, state.owner))
+  ) {
+    return null;
+  }
+  const repeated = commonContainingRepeatedRender(
+    [setterTransport.reference, ...resultReferences],
+    state.owner
+  );
+  const producer = repeated ? repeatedRenderBinding(repeated, state.owner) : null;
+  const producerReferences = producer
+    ? bindingReferences(state.owner, producer.text, producer)
+    : [];
+  const slot = producerReferences.length === 1
+    ? directReturnedJsxSlot(producerReferences[0]!, state.owner)
+    : null;
+  const ownerElements = jsxElementCount(state.owner);
+  const producerElements = repeated ? jsxElementCountIn(repeated) : ownerElements;
+  if (
+    !repeated ||
+    !producer ||
+    !slot ||
+    ownerElements < 12 ||
+    ownerElements - producerElements < 5 ||
+    renderCollectionWorkOutside(state.owner, repeated, filter.call) < 2
+  ) {
+    return null;
+  }
+  return {
+    line: slot.getSourceFile().getLineAndCharacterOfPosition(slot.getStart()).line + 1,
+    producer: producer.text,
+    target: setterTransport.target,
+  };
+}
+
+function directSetterTransport(state: StateCandidate): {
+  attribute: ts.JsxAttribute;
+  reference: ts.Identifier;
+  target: string;
+} | null {
+  if (!state.setterName || !state.owner.body) return null;
+  const matches: Array<{
+    attribute: ts.JsxAttribute;
+    reference: ts.Identifier;
+    target: string;
+  }> = [];
+  visit(state.owner.body, node => {
+    if (
+      !ts.isIdentifier(node) ||
+      node.text !== state.setterName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
+    const target = attribute ? jsxTargetName(attribute) : null;
+    if (attribute && target && isDirectJsxAttributeExpression(attribute, node)) {
+      matches.push({ attribute, reference: node, target });
+    }
+  });
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+function stateValueReferences(state: StateCandidate): ts.Identifier[] {
+  const references: ts.Identifier[] = [];
+  visit(state.owner.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === state.valueName &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node) &&
+      node.parent !== state.call.parent
+    ) {
+      references.push(node);
+    }
+  });
+  return references;
+}
+
+function exactStringFilter(
+  stateRead: ts.Identifier,
+  owner: RuntimeFunctionLike
+): { call: ts.CallExpression; resultName: ts.Identifier; sourceName: ts.Identifier } | null {
+  const includesCall = stateRead.parent;
+  if (
+    !ts.isCallExpression(includesCall) ||
+    includesCall.arguments.length !== 1 ||
+    includesCall.arguments[0] !== stateRead ||
+    !ts.isPropertyAccessExpression(includesCall.expression) ||
+    includesCall.expression.name.text !== "includes"
+  ) {
+    return null;
+  }
+  const lowerCall = unwrapTransparentExpression(includesCall.expression.expression);
+  if (
+    !ts.isCallExpression(lowerCall) ||
+    lowerCall.arguments.length !== 0 ||
+    !ts.isPropertyAccessExpression(lowerCall.expression) ||
+    lowerCall.expression.name.text !== "toLowerCase"
+  ) {
+    return null;
+  }
+  const callback = findAncestorUntil(includesCall, isRuntimeFunctionLike, owner);
+  const parameter = callback?.parameters[0]?.name;
+  if (
+    !callback ||
+    !ts.isArrowFunction(callback) ||
+    ts.isBlock(callback.body) ||
+    !parameter ||
+    !ts.isIdentifier(parameter) ||
+    !staticPropertyChainStartsAt(lowerCall.expression.expression, parameter) ||
+    !isPureExpression(callback.body, call => call === includesCall || call === lowerCall)
+  ) {
+    return null;
+  }
+  const filterCall = callback.parent;
+  const source = ts.isCallExpression(filterCall) &&
+    ts.isPropertyAccessExpression(filterCall.expression)
+    ? unwrapTransparentExpression(filterCall.expression.expression)
+    : null;
+  if (
+    !ts.isCallExpression(filterCall) ||
+    filterCall.arguments.length !== 1 ||
+    filterCall.arguments[0] !== callback ||
+    !ts.isPropertyAccessExpression(filterCall.expression) ||
+    filterCall.expression.name.text !== "filter" ||
+    !source ||
+    !ts.isIdentifier(source) ||
+    bindingDeclarationCount(owner, source.text) !== 1
+  ) {
+    return null;
+  }
+  const result = filterCall.parent;
+  return ts.isVariableDeclaration(result) &&
+    result.initializer === filterCall &&
+    ts.isIdentifier(result.name) &&
+    ts.isVariableDeclarationList(result.parent) &&
+    (result.parent.flags & ts.NodeFlags.Const) !== 0 &&
+    bindingDeclarationCount(owner, result.name.text) === 1
+    ? { call: filterCall, resultName: result.name, sourceName: source }
+    : null;
+}
+
+const READ_ONLY_COLLECTION_METHODS = new Set([
+  "at",
+  "concat",
+  "entries",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "flat",
+  "flatMap",
+  "forEach",
+  "includes",
+  "indexOf",
+  "join",
+  "keys",
+  "lastIndexOf",
+  "map",
+  "reduce",
+  "reduceRight",
+  "slice",
+  "some",
+  "toReversed",
+  "toSorted",
+  "toSpliced",
+  "values",
+]);
+
+const RENDER_COLLECTION_WORK_METHODS = new Set([
+  "concat",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "flat",
+  "flatMap",
+  "forEach",
+  "map",
+  "reduce",
+  "reduceRight",
+  "slice",
+  "some",
+  "toReversed",
+  "toSorted",
+  "toSpliced",
+]);
+
+function collectionBindingIsReadOnly(
+  declaration: ts.Identifier,
+  owner: RuntimeFunctionLike
+): boolean {
+  return bindingReferences(owner, declaration.text, declaration).every(reference => {
+    const access = reference.parent;
+    if (!ts.isPropertyAccessExpression(access) || access.expression !== reference) {
+      return false;
+    }
+    if (access.name.text === "length" || access.name.text === "size") return true;
+    return READ_ONLY_COLLECTION_METHODS.has(access.name.text) &&
+      ts.isCallExpression(access.parent) &&
+      access.parent.expression === access;
+  });
+}
+
+function staticPropertyChainStartsAt(
+  expression: ts.Expression,
+  root: ts.Identifier
+): boolean {
+  let current = unwrapTransparentExpression(expression);
+  while (ts.isPropertyAccessExpression(current)) {
+    current = unwrapTransparentExpression(current.expression);
+  }
+  return ts.isIdentifier(current) && current.text === root.text;
+}
+
+function commonContainingRepeatedRender(
+  nodes: readonly ts.Node[],
+  owner: RuntimeFunctionLike
+): ts.CallExpression | null {
+  const first = nodes[0];
+  if (!first) return null;
+  for (let current: ts.Node | undefined = first; current && current !== owner; current = current.parent) {
+    if (
+      ts.isCallExpression(current) &&
+      ts.isPropertyAccessExpression(current.expression) &&
+      ["map", "flatMap"].includes(current.expression.name.text) &&
+      nodes.every(node => nodeWithin(node, current))
+    ) {
+      return current;
+    }
+  }
+  return null;
+}
+
+function repeatedRenderBinding(
+  repeated: ts.CallExpression,
+  owner: RuntimeFunctionLike
+): ts.Identifier | null {
+  const declaration = repeated.parent;
+  return ts.isVariableDeclaration(declaration) &&
+    declaration.initializer === repeated &&
+    ts.isIdentifier(declaration.name) &&
+    ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+    bindingDeclarationCount(owner, declaration.name.text) === 1
+    ? declaration.name
+    : null;
+}
+
+function directReturnedJsxSlot(
+  reference: ts.Identifier,
+  owner: RuntimeFunctionLike
+): ts.Identifier | null {
+  const expression = findAncestorUntil(reference, ts.isJsxExpression, owner);
+  const returned = uniqueReturnedExpression(owner);
+  return expression?.expression &&
+    (ts.isJsxElement(expression.parent) || ts.isJsxFragment(expression.parent)) &&
+    unwrapTransparentExpression(expression.expression) === reference &&
+    returned &&
+    nodeWithin(expression, returned) &&
+    nearestNestedFunction(reference, owner) === null
+    ? reference
+    : null;
+}
+
+function renderCollectionWorkOutside(
+  owner: RuntimeFunctionLike,
+  repeated: ts.CallExpression,
+  movedFilter: ts.CallExpression
+): number {
+  const body = owner.body;
+  if (!body || !ts.isBlock(body)) return 0;
+  let count = 0;
+  visitSkippingNestedRuntimeFunctions(body, node => {
+    const declaration = ts.isCallExpression(node)
+      ? findAncestorUntil(node, ts.isVariableDeclaration, owner)
+      : null;
+    const statement = declaration?.parent.parent;
+    if (
+      !ts.isCallExpression(node) ||
+      node === movedFilter ||
+      node.questionDotToken !== undefined ||
+      nodeWithin(node, repeated) ||
+      node.getStart() >= repeated.getStart() ||
+      !declaration ||
+      !statement ||
+      !ts.isVariableStatement(statement) ||
+      statement.parent !== body ||
+      isConditionallyEvaluatedWithin(node, declaration)
+    ) {
+      return;
+    }
+    const callee = node.expression;
+    const receiver = ts.isPropertyAccessExpression(callee)
+      ? unwrapTransparentExpression(callee.expression)
+      : null;
+    if (
+      ts.isPropertyAccessExpression(callee) &&
+      callee.questionDotToken === undefined &&
+      (RENDER_COLLECTION_WORK_METHODS.has(callee.name.text) ||
+        (callee.name.text === "from" &&
+          !!receiver &&
+          ts.isIdentifier(receiver) &&
+          receiver.text === "Array"))
+    ) {
+      count += 1;
+    }
+  });
+  return count;
+}
+
+function isConditionallyEvaluatedWithin(node: ts.Node, boundary: ts.Node): boolean {
+  for (let current = node.parent; current && current !== boundary; current = current.parent) {
+    if (
+      ts.isConditionalExpression(current) ||
+      (ts.isBinaryExpression(current) &&
+        [
+          ts.SyntaxKind.AmpersandAmpersandToken,
+          ts.SyntaxKind.BarBarToken,
+          ts.SyntaxKind.QuestionQuestionToken,
+        ].includes(current.operatorToken.kind)) ||
+      (ts.isCallExpression(current) && current.questionDotToken !== undefined) ||
+      (ts.isPropertyAccessExpression(current) && current.questionDotToken !== undefined)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function bindingReferences(
+  owner: RuntimeFunctionLike,
+  name: string,
+  declaration: ts.Identifier
+): ts.Identifier[] {
+  const references: ts.Identifier[] = [];
+  visit(owner.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node !== declaration &&
+      node.text === name &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      references.push(node);
+    }
+  });
+  return references;
+}
+
+function isReadOnlyFilteredResultReference(
+  reference: ts.Identifier,
+  owner: RuntimeFunctionLike
+): boolean {
+  const access = reference.parent;
+  if (
+    !ts.isPropertyAccessExpression(access) ||
+    access.expression !== reference
+  ) {
+    return false;
+  }
+  if (access.name.text === "length") return !!findAncestorUntil(access, isJsxNode, owner);
+  if (access.name.text !== "map" || !ts.isCallExpression(access.parent)) return false;
+  const callback = access.parent.arguments[0];
+  return !!callback &&
+    (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
+    !!findAncestorUntil(access, isJsxNode, owner);
 }
 
 function repeatedSubscriptionSuffix(subtree: StateSubtree): string {

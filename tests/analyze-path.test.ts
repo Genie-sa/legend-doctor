@@ -2559,6 +2559,177 @@ test("isolates immediate controlled state from delayed repeated owner work", asy
   assert.match(finding?.message ?? "", /repeated render work/);
 });
 
+test("isolates a source-resolved search filter in one repeated producer slot", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-filtered-controlled-leaf-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "QuickSearch.tsx"),
+    `
+      export function QuickSearch({ onChange }: { onChange: (value: string) => void }) {
+        return <input onChange={event => onChange(event.target.value.trim().toLowerCase())} />;
+      }
+      export function EagerQuickSearch({ onChange }: { onChange: (value: string) => void }) {
+        onChange("");
+        return <input />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { EagerQuickSearch, QuickSearch } from "./QuickSearch";
+      type User = { current: boolean; id: string; name?: string };
+      type UserCollection = {
+        filter: (predicate: (user: User) => boolean) => User[];
+        find: (predicate: (user: User) => boolean) => User | undefined;
+      };
+      const matches = (user: User, query: string) => user.name?.toLowerCase().includes(query);
+
+      export function SafeScreen({ users, mobile }: { users: User[]; mobile: boolean }) {
+        const [query, setQuery] = useState("");
+        const filtered = users.filter(user => user.name?.toLowerCase().includes(query));
+        const currentUser = users.find(user => user.current);
+        const otherUsers = users.filter(user => !user.current);
+        const visibleUsers = otherUsers.slice(0, 8);
+        const shownUsers = currentUser ? [...visibleUsers, currentUser] : visibleUsers;
+        const avatars = shownUsers.map(user => {
+          const avatar = <Avatar user={user} />;
+          if (!user.current) return avatar;
+          return <Popover key={user.id}><Trigger>{avatar}</Trigger><Content>
+            <QuickSearch onChange={setQuery} />
+            <List>{filtered.length ? filtered.map(item => <Row key={item.id} item={item} />) : null}</List>
+          </Content></Popover>;
+        });
+        return mobile
+          ? <Mobile><MobileHeader />{users.map(user => <Avatar key={user.id} user={user} />)}</Mobile>
+          : <Desktop><Header /><Toolbar /><Status /><Controls /><Summary /><Aside />{avatars}</Desktop>;
+      }
+
+      export function OpaquePredicate({ users }: { users: User[] }) {
+        const [query, setQuery] = useState("");
+        const filtered = users.filter(user => matches(user, query));
+        const first = users.find(user => user.current);
+        const others = users.filter(user => !user.current);
+        const rows = users.map(user => <Content key={user.id}><QuickSearch onChange={setQuery} />
+          {filtered.map(item => <Row key={item.id} item={item} />)}</Content>);
+        return <main><Header /><Toolbar /><Status /><Controls /><Summary /><Aside /><Footer /><Debug /><Help />
+          {first ? others.length : 0}{rows}
+        </main>;
+      }
+
+      export function EscapedResults({ users }: { users: User[] }) {
+        const [query, setQuery] = useState("");
+        const filtered = users.filter(user => user.name?.toLowerCase().includes(query));
+        const first = users.find(user => user.current);
+        const others = users.filter(user => !user.current);
+        const rows = users.map(user => <Content key={user.id}><QuickSearch onChange={setQuery} />
+          {filtered.map(item => <Row key={item.id} item={item} />)}</Content>);
+        return <main><Header /><Toolbar /><Status /><Controls /><Summary /><Aside /><Footer /><Debug /><Help />
+          <Output count={filtered.length} />
+          {first ? others.length : 0}{rows}
+        </main>;
+      }
+
+      export function EagerAdapter({ users }: { users: User[] }) {
+        const [query, setQuery] = useState("");
+        const filtered = users.filter(user => user.name?.toLowerCase().includes(query));
+        const first = users.find(user => user.current);
+        const others = users.filter(user => !user.current);
+        const rows = users.map(user => <Content key={user.id}><EagerQuickSearch onChange={setQuery} />
+          {filtered.map(item => <Row key={item.id} item={item} />)}</Content>);
+        return <main><Header /><Toolbar /><Status /><Controls /><Summary /><Aside /><Footer /><Debug /><Help />
+          {first ? others.length : 0}{rows}
+        </main>;
+      }
+
+      export function InlineProducer({ users }: { users: User[] }) {
+        const [query, setQuery] = useState("");
+        const filtered = users.filter(user => user.name?.toLowerCase().includes(query));
+        return <main><Header /><Toolbar /><Status /><Controls /><Summary /><Aside />
+          {users.map(user => <Content><QuickSearch onChange={setQuery} />
+            {filtered.map(item => <Row key={item.id} item={item} />)}</Content>)}
+        </main>;
+      }
+
+      export function MutatedSource({ users }: { users: User[] }) {
+        const [query, setQuery] = useState("");
+        users.push({ current: false, id: "temporary" });
+        const filtered = users.filter(user => user.name?.toLowerCase().includes(query));
+        const first = users.find(user => user.current);
+        const others = users.filter(user => !user.current);
+        const rows = users.map(user => <Content key={user.id}><QuickSearch onChange={setQuery} />
+          {filtered.map(item => <Row key={item.id} item={item} />)}</Content>);
+        return <main><Header /><Toolbar /><Status /><Controls /><Summary /><Aside /><Footer /><Debug /><Help />
+          {first ? others.length : 0}{rows}
+        </main>;
+      }
+
+      export function ConditionalOwnerWork({ users, enabled }: { users: User[]; enabled: boolean }) {
+        const [query, setQuery] = useState("");
+        const filtered = users.filter(user => user.name?.toLowerCase().includes(query));
+        const first = enabled ? users.find(user => user.current) : undefined;
+        const others = enabled ? users.filter(user => !user.current) : [];
+        const rows = users.map(user => <Content key={user.id}><QuickSearch onChange={setQuery} />
+          {filtered.map(item => <Row key={item.id} item={item} />)}</Content>);
+        return <main><Header /><Toolbar /><Status /><Controls /><Summary /><Aside /><Footer /><Debug /><Help />
+          {first ? others.length : 0}{rows}
+        </main>;
+      }
+
+      export function PropProducer({ users }: { users: User[] }) {
+        const [query, setQuery] = useState("");
+        const filtered = users.filter(user => user.name?.toLowerCase().includes(query));
+        const first = users.find(user => user.current);
+        const others = users.filter(user => !user.current);
+        const rows = users.map(user => <Content key={user.id}><QuickSearch onChange={setQuery} />
+          {filtered.map(item => <Row key={item.id} item={item} />)}</Content>);
+        return <main><Header /><Toolbar /><Status /><Controls /><Summary /><Aside /><Footer /><Debug /><Help />
+          {first ? others.length : 0}<List items={rows} />
+        </main>;
+      }
+
+      export function CustomCollection({ users }: { users: UserCollection }) {
+        const [query, setQuery] = useState("");
+        const filtered = users.filter(user => user.name?.toLowerCase().includes(query));
+        const currentUser = users.find(user => user.current);
+        const otherUsers = users.filter(user => !user.current);
+        const visibleUsers = otherUsers.slice(0, 8);
+        const shownUsers = currentUser ? [...visibleUsers, currentUser] : visibleUsers;
+        const avatars = shownUsers.map(user => {
+          const avatar = <Avatar user={user} />;
+          if (!user.current) return avatar;
+          return <Popover key={user.id}><Trigger>{avatar}</Trigger><Content>
+            <QuickSearch onChange={setQuery} />
+            <List>{filtered.map(item => <Row key={item.id} item={item} />)}</List>
+          </Content></Popover>;
+        });
+        return <Desktop><Header /><Toolbar /><Status /><Controls /><Summary /><Aside />{avatars}</Desktop>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  assert.deepEqual(
+    report.findings
+      .filter(finding => finding.name === "query")
+      .map(finding => finding.action),
+    [
+      "use-observable",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "review-state",
+      "use-observable",
+    ]
+  );
+});
+
 test("keeps delayed controlled state when its immediate update is atomic with owner state", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-delayed-controlled-atomic-"));
   t.after(() => rm(root, { force: true, recursive: true }));
