@@ -4466,6 +4466,81 @@ test("groups an undefined-initialized dialog payload without accepting opaque in
   assert.equal(opaque.filter(finding => finding.group).length, 0);
 });
 
+test("isolates one nullable payload inside an always-mounted dialog boundary", () => {
+  const source = (
+    dialog: string,
+    extraWrite = "",
+    confirmBody = "if (!target) return; remove(target.id); setTarget(null);"
+  ) => `
+    import { useState } from "react";
+    interface Item { id: string; name: string }
+    function Eager(_props: { onFire: () => void }) { return null; }
+    function renderName(_item: Item | null) { return null; }
+    export function Screen({ item }: { item: Item }) {
+      const [target, setTarget] = useState<Item | null>(null);
+      const [page, setPage] = useState(1);
+      const confirm = () => {
+        ${confirmBody}
+      };
+      ${"\n".repeat(100)}
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={() => { setTarget(item); ${extraWrite} }}>Delete</button>
+        ${dialog}
+      </main>;
+    }
+  `;
+
+  assert.deepEqual(
+    actions(source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
+      <h2>{renderName(target)}</h2>
+      <button onClick={confirm} disabled={!target}>Confirm</button>
+    </dialog>`)),
+    ["use-observable", "review-state"]
+  );
+
+  assert.deepEqual(
+    actions(source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
+      <h2>{renderName(target)}</h2>
+      <button onClick={confirm}>Confirm</button>
+    </dialog><Preview item={target} />`)),
+    ["review-state", "review-state"]
+  );
+
+  assert.deepEqual(
+    actions(source(`{target && <dialog open>
+      <h2>Delete {target.name}</h2>
+      <button onClick={confirm}>Confirm</button>
+    </dialog>}`)),
+    ["review-state", "review-state"]
+  );
+
+  assert.deepEqual(
+    actions(source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
+      <h2>{renderName(target)}</h2>
+      <button onClick={confirm}>Confirm</button>
+    </dialog>`, "setPage(2);")),
+    ["review-state", "delete-unused-state"]
+  );
+
+  assert.deepEqual(
+    actions(source(`<Eager onFire={() => setTarget(item)} /><dialog open={target !== null} onClose={() => setTarget(null)}>
+      <h2>{renderName(target)}</h2>
+      <button onClick={confirm}>Confirm</button>
+    </dialog>`)),
+    ["review-state", "review-state"]
+  );
+
+  assert.deepEqual(
+    actions(source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
+      <h2>{renderName(target)}</h2>
+      <button onClick={confirm}>Confirm</button>
+    </dialog>`, "", "Promise.resolve().then(() => remove(target?.id)); setTarget(null);")),
+    ["review-state", "review-state"]
+  );
+});
+
 test("groups a payload-gated timed feedback flag without widening its subscriber", () => {
   const findings = analyzeSource(`
     import { useState } from "react";

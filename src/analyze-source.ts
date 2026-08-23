@@ -188,6 +188,11 @@ interface ControlledProjectionCut {
   consumerLine: number;
 }
 
+interface DialogPayloadCut {
+  consumerLabel: string;
+  consumerLine: number;
+}
+
 interface BranchUnmountMove {
   target: string;
 }
@@ -294,6 +299,7 @@ function analyzeParsedSource(
   const directEffectCallbacks = new Set<RuntimeFunctionLike>(
     effects.flatMap(effect => effect.callback ? [effect.callback] : []),
   );
+  const knownComponents = new Set([...localComponents, ...sourceComponents]);
   const usageByState = new Map(states.map(state => [state, collectStateUsage(state, lifecycleRegions, imports)]));
   const eventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
   const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
@@ -417,6 +423,25 @@ function analyzeParsedSource(
     usageByState
   );
   const statesWithCompanionWrites = findStatesWithCompanionWrites(states, stateFlow);
+  const dialogPayloadCuts = new Map<StateCandidate, DialogPayloadCut>();
+  for (const state of states) {
+    const usage = usageByState.get(state);
+    if (
+      !usage ||
+      statesWithCompanionWrites.has(state) ||
+      !safeCommandStates.has(state)
+    ) {
+      continue;
+    }
+    const cut = nullableDialogPayloadCut(
+      state,
+      usage,
+      knownComponents,
+      childContracts,
+      imports
+    );
+    if (cut) dialogPayloadCuts.set(state, cut);
+  }
   const multiSurfaceBooleanStates = new Set(
     states.filter(state => {
       const usage = usageByState.get(state);
@@ -506,7 +531,7 @@ function analyzeParsedSource(
   const observableClusters = findObservableStateClusters(
     states,
     usageByState,
-    new Set([...localComponents, ...sourceComponents]),
+    knownComponents,
     sourceFile,
     stateFlow
   );
@@ -595,6 +620,7 @@ function analyzeParsedSource(
           sourceFile,
           nonProductionHarness,
           subtreeByState.get(state) ?? null,
+          dialogPayloadCuts.get(state) ?? null,
           safeCommandStates.has(state),
           selfRefreshingCommandStates.has(state),
           observableSelectionOwners.has(state.owner),
@@ -2272,6 +2298,218 @@ interface SetterMutation {
   state: StateCandidate;
 }
 
+function nullableDialogPayloadCut(
+  state: StateCandidate,
+  usage: StateUsage,
+  knownComponents: ReadonlySet<string>,
+  childContracts: ChildContractResolver | null,
+  imports: HookImports
+): DialogPayloadCut | null {
+  if (
+    !state.setterName ||
+    isCustomHookOwner(state.owner) ||
+    !hasStateInitializer(state, ts.SyntaxKind.NullKeyword) ||
+    stateMayHoldCallable(state) ||
+    usage.localRenderReads === 0 ||
+    usage.localRenderReads !== usage.directRenderNodes.length ||
+    usage.effectReads !== 0 ||
+    usage.effectWrites !== 0 ||
+    usage.transportedOccurrences !== 0 ||
+    usage.setterCallNodes.length < 2 ||
+    usage.setterReferences !== usage.setterCalls ||
+    usage.setterUsesPreviousValue ||
+    usage.shadowed ||
+    usage.escaped ||
+    !usage.setterCallNodes.some(call => setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword)) ||
+    !usage.setterCallNodes.some(call => !setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword)) ||
+    usage.setterCallNodes.some(call => {
+      const argument = call.arguments[0];
+      return call.arguments.length !== 1 ||
+        !argument ||
+        ts.isArrowFunction(argument) ||
+        ts.isFunctionExpression(argument);
+    })
+  ) {
+    return null;
+  }
+
+  const ownerJsx = jsxElementCount(state.owner);
+  const dialog = lowestCommonJsxSubtree(usage.directRenderNodes, state.owner);
+  if (
+    !dialog ||
+    ts.isJsxFragment(dialog) ||
+    ownerJsx < 12 ||
+    nearestRepeatedRenderCall(dialog, state.owner) ||
+    hasUnstableSubtreeLifetime(dialog, state.owner) ||
+    !usage.directRenderNodes.every(read => nodeWithin(read, dialog))
+  ) {
+    return null;
+  }
+  const dialogJsx = jsxElementCountIn(dialog);
+  if (dialogJsx > 12 || dialogJsx / ownerJsx > 0.4) return null;
+
+  const returned = uniqueReturnedExpression(state.owner);
+  const opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog;
+  const target = opening.tagName.getText();
+  if (
+    !returned ||
+    !nodeWithin(dialog, returned) ||
+    (isCustomJsxTarget(target) && !knownComponents.has(target)) ||
+    !opening.attributes.properties.some(attribute =>
+      ts.isJsxAttribute(attribute) &&
+      attribute.name.getText() === "open" &&
+      attribute.initializer !== undefined &&
+      ts.isJsxExpression(attribute.initializer) &&
+      attribute.initializer.expression !== undefined &&
+      isNullablePayloadOpenExpression(attribute.initializer.expression, state.valueName)
+    )
+  ) {
+    return null;
+  }
+
+  const provenEventRoots = new Set<RuntimeFunctionLike>();
+  if (childContracts) {
+    for (const callback of sourceProvenDirectEventCallbacks(state.owner, imports, childContracts)) {
+      provenEventRoots.add(callback);
+    }
+  }
+  if (
+    !stateReadsOutsideRenderAreEventRooted(state, usage, provenEventRoots, childContracts) ||
+    !usage.setterCallNodes.every(call =>
+      setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword) ||
+      nodeIsDirectDeferredEvent(call, state, provenEventRoots, childContracts)
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    consumerLabel: jsxSubtreeLabel(dialog),
+    consumerLine: dialog.getSourceFile().getLineAndCharacterOfPosition(dialog.getStart()).line + 1,
+  };
+}
+
+function isNullablePayloadOpenExpression(
+  expression: ts.Expression,
+  stateName: string
+): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (isDirectTruthyStateCondition(value, stateName)) return true;
+  if (
+    !ts.isBinaryExpression(value) ||
+    (value.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsToken &&
+      value.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsEqualsToken)
+  ) {
+    return false;
+  }
+  const left = unwrapTransparentExpression(value.left);
+  const right = unwrapTransparentExpression(value.right);
+  return (ts.isIdentifier(left) && left.text === stateName && right.kind === ts.SyntaxKind.NullKeyword) ||
+    (left.kind === ts.SyntaxKind.NullKeyword && ts.isIdentifier(right) && right.text === stateName);
+}
+
+function setterCallSetsLiteral(
+  call: ts.CallExpression,
+  kind: ts.SyntaxKind
+): boolean {
+  return call.arguments.length === 1 && call.arguments[0]?.kind === kind;
+}
+
+function stateReadsOutsideRenderAreEventRooted(
+  state: StateCandidate,
+  usage: StateUsage,
+  eventRoots: ReadonlySet<RuntimeFunctionLike>,
+  childContracts: ChildContractResolver | null
+): boolean {
+  const renderReads = new Set(usage.directRenderNodes);
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== state.valueName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node) ||
+      renderReads.has(node)
+    ) {
+      return;
+    }
+    safe = nodeIsDirectDeferredEvent(node, state, eventRoots, childContracts);
+  });
+  return safe;
+}
+
+function nodeIsDirectDeferredEvent(
+  node: ts.Node,
+  state: StateCandidate,
+  eventRoots: ReadonlySet<RuntimeFunctionLike>,
+  childContracts: ChildContractResolver | null
+): boolean {
+  const callback = nearestNestedFunction(node, state.owner);
+  return callback !== null &&
+    (eventRoots.has(callback) ||
+      callbackHasDirectJsxEventRoot(callback, state.owner, childContracts));
+}
+
+function callbackHasDirectJsxEventRoot(
+  callback: RuntimeFunctionLike,
+  owner: RuntimeFunctionLike,
+  childContracts: ChildContractResolver | null
+): boolean {
+  if (
+    !ts.isArrowFunction(callback) &&
+    !ts.isFunctionDeclaration(callback) &&
+    !ts.isFunctionExpression(callback)
+  ) {
+    return false;
+  }
+  const directAttribute = findAncestorUntil(callback, ts.isJsxAttribute, owner);
+  if (
+    directAttribute &&
+    directAttribute.initializer &&
+    ts.isJsxExpression(directAttribute.initializer) &&
+    directAttribute.initializer.expression &&
+    unwrapTransparentExpression(directAttribute.initializer.expression) === callback &&
+    jsxEventAttributeIsDeferred(directAttribute, childContracts)
+  ) {
+    return true;
+  }
+
+  const name = localCallbackBindingName(callback);
+  if (!name || bindingDeclarationCount(owner, name) !== 1) return false;
+  let referenced = false;
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== name ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    referenced = true;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
+    safe = attribute !== null &&
+      isDirectJsxAttributeExpression(attribute, node) &&
+      jsxEventAttributeIsDeferred(attribute, childContracts);
+  });
+  return referenced && safe;
+}
+
+function jsxEventAttributeIsDeferred(
+  attribute: ts.JsxAttribute,
+  childContracts: ChildContractResolver | null
+): boolean {
+  const prop = attribute.name.getText();
+  const target = jsxTargetName(attribute);
+  if (!target || !/^on[A-Z]/.test(prop)) return false;
+  return !isCustomJsxTarget(target) ||
+    childContracts?.frameworkEventComponent(target) === true ||
+    childContracts?.componentCallbackPropIsDeferred(target, prop) === true;
+}
+
 function normalizeObservableDialogClusterMembers(
   members: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
@@ -2945,6 +3183,7 @@ function classifyState(
   sourceFile: ts.SourceFile,
   nonProductionHarness: boolean,
   subtree: StateSubtree | null,
+  dialogPayloadCut: DialogPayloadCut | null,
   hasSafeCommands: boolean,
   isSelfRefreshingCommand: boolean,
   belongsToObservableSelection: boolean,
@@ -2983,6 +3222,13 @@ function classifyState(
       action: "keep-state",
       confidence: "certain",
       message: `Keep \`${state.valueName}\` as React state; it owns a stable component-lifetime value and has no setter.`,
+    };
+  }
+  if (dialogPayloadCut) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace nullable dialog payload \`${state.valueName}\` with a component-lifetime observable and wrap the complete always-mounted ${dialogPayloadCut.consumerLabel} call site at line ${dialogPayloadCut.consumerLine} in one stable leaf subscriber; subscribe there with \`useValue\`, use non-tracking snapshots in event commands, and preserve the existing open expression, callbacks, write positions, and mount identity.`,
     };
   }
   if (isSelfRefreshingCommand) {

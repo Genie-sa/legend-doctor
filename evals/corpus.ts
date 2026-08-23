@@ -2199,6 +2199,19 @@ export const goldCases = [
     rationale: "One resolved domain child owns every render read, and no companion React write keeps the owner render alive.",
     target: "tree-map",
   })),
+  ...[
+    ["components/avatar-management/avatar-style-unlocks-section.tsx", 58, "pendingRevoke"],
+    ["components/reports/saved-reports-panel.tsx", 60, "deleteTarget"],
+  ].map(([file, line, name]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale:
+      "One nullable payload controls a bounded always-mounted dialog. Keep the observable at the owner, snapshot commands without tracking, and subscribe only in a stable wrapper around the complete dialog call site.",
+    target: "tree-map",
+  })),
   {
     action: "keep-state",
     file: "components/listings-management/listing-photo-upload.test.tsx",

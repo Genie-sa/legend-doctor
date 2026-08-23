@@ -438,6 +438,11 @@ complete conditional slot. The same model applies to an always-mounted drawer wh
 repeated gates, unresolved targets, and broad branches remain candidates. Dialog chrome may stay inside the leaf when
 the complete branch has at most twelve JSX elements and is no more than 40% of its owner.
 
+A single nullable payload can also own an always-mounted dialog's `open` expression. Legend Doctor recommends one
+owner-lifetime observable only when every render read stays inside that complete dialog call site, every command is
+event-rooted, and no companion React write shares the transition. Event commands take non-tracking snapshots while the
+dialog wrapper owns the only `useValue` subscription.
+
 ### Isolate async status
 
 ```tsx
@@ -673,14 +678,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 823 manually audited hook labels, 23 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 825 manually audited hook labels, 23 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 550/550 |
-| Actionable precision | 450/450 |
-| Actionable recall | 450/450 |
+| Unit tests | 551/551 |
+| Actionable precision | 452/452 |
+| Actionable recall | 452/452 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain
