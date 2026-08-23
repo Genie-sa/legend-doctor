@@ -1661,6 +1661,89 @@ test("abstains when the resolved child forwards the prop to another component", 
   assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
 });
 
+test("isolates a compact transported leaf only with an independent sibling render cut", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-compact-leaf-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "NativeMenu.tsx"),
+    `
+      import { NativeRoot } from "native-menu";
+      export function NativeMenu({ expanded, onDismiss }: { expanded: boolean; onDismiss: () => void }) {
+        return <NativeRoot expanded={expanded} onDismiss={onDismiss} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { NativeMenu } from "./NativeMenu";
+      export function CompactMenu() {
+        const [expanded, setExpanded] = useState(false);
+        const open = () => setExpanded(true);
+        const dismiss = () => setExpanded(false);
+        return <main>
+          <Toolbar />
+          <button onClick={open}>Open</button>
+          <Host><NativeMenu expanded={expanded} onDismiss={dismiss} /></Host>
+        </main>;
+      }
+      export function CohesiveMenu() {
+        const [cohesiveOpen, setCohesiveOpen] = useState(false);
+        return <NativeMenu
+          expanded={cohesiveOpen}
+          onDismiss={() => setCohesiveOpen(false)}
+        />;
+      }
+      export function CoupledMenu() {
+        const [coupledOpen, setCoupledOpen] = useState(false);
+        const [mode, setMode] = useState("idle");
+        const open = () => { setCoupledOpen(true); setMode("active"); };
+        const dismiss = () => { setCoupledOpen(false); setMode("idle"); };
+        return <main>
+          <Toolbar />
+          <button onClick={open}>Open</button>
+          <Host data-mode={mode}><NativeMenu expanded={coupledOpen} onDismiss={dismiss} /></Host>
+        </main>;
+      }
+      export function OrderedMenu() {
+        const [orderedOpen, setOrderedOpen] = useState(false);
+        const open = () => setOrderedOpen(true);
+        const dismiss = () => { setOrderedOpen(false); navigateAway(); };
+        return <main>
+          <Toolbar />
+          <button onClick={open}>Open</button>
+          <Host><NativeMenu expanded={orderedOpen} onDismiss={dismiss} /></Host>
+        </main>;
+      }
+      export function ForwardedSetterMenu() {
+        const [forwardedOpen, setForwardedOpen] = useState(false);
+        const open = () => setForwardedOpen(true);
+        return <main>
+          <Toolbar />
+          <button onClick={open}>Open</button>
+          <Host><NativeMenu expanded={forwardedOpen} onDismiss={setForwardedOpen} /></Host>
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const compact = report.findings.find(finding => finding.name === "expanded");
+  const cohesive = report.findings.find(finding => finding.name === "cohesiveOpen");
+  const coupled = report.findings.find(finding => finding.name === "coupledOpen");
+  const ordered = report.findings.find(finding => finding.name === "orderedOpen");
+  const forwarded = report.findings.find(finding => finding.name === "forwardedOpen");
+  assert.equal(compact?.action, "use-observable");
+  assert.match(compact?.message ?? "", /independent sibling render cut/);
+  assert.notEqual(cohesive?.action, "use-observable");
+  assert.notEqual(coupled?.action, "use-observable");
+  assert.notEqual(ordered?.action, "use-observable");
+  assert.notEqual(forwarded?.action, "use-observable");
+});
+
 test("abstains when the resolved child reads the prop inside effects or callbacks", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-effect-"));
   await writeFile(

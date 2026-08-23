@@ -2899,16 +2899,26 @@ function classifyState(
       ? branchCallSite.opening.parent
       : branchCallSite.opening
     : null;
-  const descendantControlledCut = branchCallSite !== null &&
+  const hasIndependentTransportRenderCut = branchCallSite !== null &&
     branchSubtree !== null &&
-    hasIndependentVisibilitySetterTransport &&
-    setterOwnedByValueCallSite(usage, state.owner) &&
     hasIndependentRenderCutWitness(
       branchCallSite.returned,
       [branchSubtree],
       localComponents,
       sourceComponents
     );
+  const hasCompactBooleanTransportCut = hasIndependentTransportRenderCut &&
+    !hasCompanionWrites &&
+    !hasReactiveMutationPath &&
+    usage.setterTargets.size === 0 &&
+    usage.setterCallNodes.every(call => setterCallEndsCommand(call, state.owner)) &&
+    (hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
+      hasStateInitializer(state, ts.SyntaxKind.TrueKeyword));
+  const descendantControlledCut = branchCallSite !== null &&
+    branchSubtree !== null &&
+    hasIndependentVisibilitySetterTransport &&
+    setterOwnedByValueCallSite(usage, state.owner) &&
+    hasIndependentTransportRenderCut;
   const callbackLeaf = findLazyCallbackLeaf(
     state,
     usage,
@@ -2962,7 +2972,7 @@ function classifyState(
   }
   if (
     !isCustomHookOwner(state.owner) &&
-    jsxElementCount(state.owner) >= 12 &&
+    (jsxElementCount(state.owner) >= 12 || hasCompactBooleanTransportCut) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
     usage.effectWrites === 0 &&
@@ -2991,7 +3001,7 @@ function classifyState(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace \`${state.valueName}\` with a component-lifetime observable and extract one stable call-site leaf wrapper around \`${target}\` (never define it inline); subscribe there, pass the same prop snapshot, and adapt every command-only setter call or prop to mutate without subscribing.`,
+      message: `Replace \`${state.valueName}\` with a component-lifetime observable and extract one stable call-site leaf wrapper around \`${target}\` (never define it inline); subscribe there, pass the same prop snapshot, and adapt every command-only setter call or prop to mutate without subscribing.${hasCompactBooleanTransportCut && jsxElementCount(state.owner) < 12 ? " The independent sibling render cut proves that these updates skip owner work." : ""}`,
     };
   }
   if (
@@ -4218,6 +4228,22 @@ function directUniqueReturnCallSite(
 } | null {
   const callSite = directBranchReturnCallSite(usage, owner);
   return callSite && uniqueReturnedExpression(owner) ? callSite : null;
+}
+
+function setterCallEndsCommand(
+  call: ts.CallExpression,
+  owner: RuntimeFunctionLike
+): boolean {
+  const command = nearestMutationFunction(call, owner);
+  if (!command.body) return false;
+  if (!ts.isBlock(command.body)) {
+    return unwrapTransparentExpression(command.body) === call;
+  }
+  const statement = call.parent;
+  return ts.isExpressionStatement(statement) &&
+    statement.expression === call &&
+    statement.parent === command.body &&
+    command.body.statements.at(-1) === statement;
 }
 
 function uniqueReturnedExpression(owner: RuntimeFunctionLike): ts.Expression | null {

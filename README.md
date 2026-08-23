@@ -1,10 +1,10 @@
 # Legend Doctor
 
-Legend Doctor gives coding agents a safe edit queue for React and Legend State. It finds proven ways to remove owner
+Legend Doctor is a read-only analyzer for coding agents. It finds proven ways to remove owner
 renders, post-commit updates, broad subscriptions, duplicate state, and fragmented observable writes.
 
-It does not edit code. The agent reads the evidence, makes one semantic change, runs the application's checks, and scans
-again. Findings that lack timing or ownership proof stay as candidates.
+The agent reads the evidence, makes one semantic change, runs the application's checks, and scans again. Findings that
+lack timing or ownership proof stay as candidates.
 
 ## Agent prompt
 
@@ -228,6 +228,29 @@ function DetailDialogState({ id, open$ }: Props) {
 ```
 
 Opaque calls, repeated children, sibling consumers, and effect reads remain candidates.
+
+### Isolate a compact transported boolean
+
+```tsx
+// before, opening the native menu also renders the toolbar and press target
+const [expanded, setExpanded] = useState(false);
+const open = () => setExpanded(true);
+const dismiss = () => setExpanded(false);
+return <><Toolbar /><PressTarget onPress={open} /><NativeMenu expanded={expanded} onDismiss={dismiss} /></>;
+
+// after, the owner keeps the lifetime and the menu owns the subscription
+const expanded$ = useObservable(false);
+const open = () => expanded$.set(true);
+const dismiss = () => expanded$.set(false);
+return <><Toolbar /><PressTarget onPress={open} /><NativeMenuState expanded$={expanded$} onDismiss={dismiss} /></>;
+
+function NativeMenuState({ expanded$, onDismiss }: Props) {
+  return <NativeMenu expanded={useValue(expanded$)} onDismiss={onDismiss} />;
+}
+```
+
+The compact-owner proof requires an independent rendered sibling and terminal local boolean writes. Setter forwarding,
+companion state writes, reactive mutations, or work after a setter keep the finding under review.
 
 ### Leave an existing leaf alone
 
@@ -510,14 +533,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 809 manually audited hook labels, 18 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 810 manually audited hook labels, 18 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 541/541 |
-| Actionable precision | 435/435 |
-| Actionable recall | 435/435 |
+| Unit tests | 542/542 |
+| Actionable precision | 436/436 |
+| Actionable recall | 436/436 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

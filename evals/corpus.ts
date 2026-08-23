@@ -6072,6 +6072,16 @@ export const goldCases = [
       "A compact owner still has a material leaf cut when the effect-written presentation state can skip at least five independent JSX elements without changing effect timing or owner lifetime.",
     target: target as string,
   })),
+  {
+    action: "use-observable",
+    file: "ui/menu/android-dropdown.tsx",
+    hook: "useState",
+    line: 52,
+    name: "expanded",
+    rationale:
+      "The ref remains the command guard while one stable native-menu leaf subscribes to the transported boolean; the independent press target and host shell no longer rerender on open or dismiss.",
+    target: "memoria-src",
+  },
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [
