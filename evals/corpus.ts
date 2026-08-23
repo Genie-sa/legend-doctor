@@ -2175,6 +2175,16 @@ export const goldCases = [
     target: "legend-music",
   })),
   {
+    action: "use-observable",
+    file: "components/MediaLibrary/Sidebar.tsx",
+    hook: "useState",
+    line: 71,
+    name: "outerWidth",
+    rationale:
+      "NativeSidebar source proves that onLayout is deferred to its native layout event; the numeric measurement is written alone and rendered only through two bounded, non-repeated width projections inside the native branch, so separate leaf subscribers avoid rebuilding the full sidebar while preserving the platform branch and callback timing.",
+    target: "legend-music",
+  },
+  {
     action: "review-state",
     file: "components/account-management/account-form-dialog.tsx",
     hook: "useState",

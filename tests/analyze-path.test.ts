@@ -621,6 +621,151 @@ test("proves an effect-owned custom-hook cursor has only stable keyed row consum
   assert.equal(report.findings.find(finding => finding.name === "setterCursor")?.action, "review-state");
 });
 
+test("proves source-resolved event measurements have only bounded scalar leaf projections", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-event-measurement-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "NativeHost.tsx"),
+    `
+      import { requireNativeComponent } from "react-native";
+      export const NativeHost = requireNativeComponent<{
+        onNativeLayout?: (event: { nativeEvent: { width: number } }) => void;
+        children?: React.ReactNode;
+      }>("NativeHost");
+      export let MutableNativeHost = requireNativeComponent<{
+        onNativeLayout?: (event: { nativeEvent: { width: number } }) => void;
+        children?: React.ReactNode;
+      }>("MutableNativeHost");
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "MeasuredShell.tsx"),
+    `
+      import { MutableNativeHost, NativeHost } from "./NativeHost";
+      export function MeasuredShell({ onLayout, children }: {
+        onLayout: (layout: { width: number }) => void;
+        children: React.ReactNode;
+      }) {
+        return <NativeHost onNativeLayout={onLayout ? event => onLayout(event.nativeEvent) : undefined}>{children}</NativeHost>;
+      }
+      export function EagerShell({ onLayout, children }: {
+        onLayout: (layout: { width: number }) => void;
+        children: React.ReactNode;
+      }) {
+        onLayout({ width: 40 });
+        return <section>{children}</section>;
+      }
+      export function MutableShell({ onLayout, children }: {
+        onLayout: (layout: { width: number }) => void;
+        children: React.ReactNode;
+      }) {
+        return <MutableNativeHost onNativeLayout={event => onLayout(event.nativeEvent)}>{children}</MutableNativeHost>;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useCallback, useEffect, useState } from "react";
+      import { EagerShell, MeasuredShell, MutableShell } from "./MeasuredShell";
+
+      const project = (value: number) => value + 1;
+
+      export function SafeScreen({ native }: { native: boolean }) {
+        const [outerWidth, setOuterWidth] = useState(0);
+        const width = Math.max(outerWidth - 8, 0);
+        const onLayout = useCallback(
+          (layout: { width: number }) => setOuterWidth(layout.width),
+          [setOuterWidth],
+        );
+        if (native) {
+          return <MeasuredShell onLayout={onLayout}>
+            <input style={{ width: width + 2 }}/>
+            <div style={{ width }}><span/><span/></div>
+            <aside/><footer/><header/><main/><nav/><output/><section/><strong/><em/>
+          </MeasuredShell>;
+        }
+        return <main><span/><span/><span/></main>;
+      }
+
+      export function EagerScreen() {
+        const [eagerWidth, setEagerWidth] = useState(0);
+        const onLayout = useCallback((layout: { width: number }) => setEagerWidth(layout.width), []);
+        return <EagerShell onLayout={onLayout}>
+          <input style={{ width: eagerWidth }}/><div style={{ width: eagerWidth }}/>
+          <aside/><footer/><header/><main/><nav/><output/><section/><strong/><em/><small/>
+        </EagerShell>;
+      }
+
+      export function CompanionScreen() {
+        const [companionWidth, setCompanionWidth] = useState(0);
+        const [, setMeasured] = useState(false);
+        const onLayout = useCallback((layout: { width: number }) => {
+          setCompanionWidth(layout.width);
+          setMeasured(true);
+        }, []);
+        return <MeasuredShell onLayout={onLayout}>
+          <input style={{ width: companionWidth }}/><div style={{ width: companionWidth }}/>
+          <aside/><footer/><header/><main/><nav/><output/><section/><strong/><em/><small/>
+        </MeasuredShell>;
+      }
+
+      export function MutableHostScreen() {
+        const [mutableWidth, setMutableWidth] = useState(0);
+        const onLayout = useCallback((layout: { width: number }) => setMutableWidth(layout.width), []);
+        return <MutableShell onLayout={onLayout}>
+          <input style={{ width: mutableWidth }}/><div style={{ width: mutableWidth }}/>
+          <aside/><footer/><header/><main/><nav/><output/><section/><strong/><em/><small/>
+        </MutableShell>;
+      }
+
+      export function RepeatedScreen({ items }: { items: string[] }) {
+        const [repeatedWidth, setRepeatedWidth] = useState(0);
+        const onLayout = useCallback((layout: { width: number }) => setRepeatedWidth(layout.width), []);
+        return <MeasuredShell onLayout={onLayout}>
+          {items.map(item => <div key={item} style={{ width: repeatedWidth }}>{item}</div>)}
+          <aside/><footer/><header/><main/><nav/><output/><section/><strong/><em/><small/><span/>
+        </MeasuredShell>;
+      }
+
+      export function EffectScreen({ measured }: { measured: number }) {
+        const [effectWidth, setEffectWidth] = useState(0);
+        useEffect(() => setEffectWidth(measured), [measured]);
+        return <main>
+          <input style={{ width: effectWidth }}/><div style={{ width: effectWidth }}/>
+          <aside/><footer/><header/><nav/><output/><section/><strong/><em/><small/><span/>
+        </main>;
+      }
+
+      export function ImpureScreen() {
+        const [impureWidth, setImpureWidth] = useState(0);
+        const onLayout = useCallback((layout: { width: number }) => setImpureWidth(layout.width), []);
+        return <MeasuredShell onLayout={onLayout}>
+          <input style={{ width: project(impureWidth) }}/><div style={{ width: impureWidth }}/>
+          <aside/><footer/><header/><main/><nav/><output/><section/><strong/><em/><small/>
+        </MeasuredShell>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const states = new Map(
+    report.findings
+      .filter(finding => finding.hook === "useState" && finding.name)
+      .map(finding => [finding.name!, finding.action])
+  );
+  assert.equal(states.get("outerWidth"), "use-observable");
+  assert.equal(states.get("eagerWidth"), "review-state");
+  assert.equal(states.get("companionWidth"), "review-state");
+  assert.equal(states.get("mutableWidth"), "review-state");
+  assert.equal(states.get("repeatedWidth"), "review-state");
+  assert.equal(states.get("effectWidth"), "delete-derived-state");
+  assert.equal(states.get("impureWidth"), "review-state");
+});
+
 test("isolates an event-owned boolean across small presentation leaves and reactive props", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-multi-leaf-boolean-"));
   t.after(() => rm(root, { force: true, recursive: true }));

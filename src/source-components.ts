@@ -47,6 +47,7 @@ interface ModuleRecord {
   contextReaderHooks: ReadonlyMap<string, string>;
   deferredCallbackOwners: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<number>>>;
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
+  frameworkEventComponents: ReadonlySet<string>;
   hookDeclarations: ReadonlyMap<string, ComponentFunction>;
   imports: ReadonlyMap<string, ImportBinding>;
   legendValueHooks: ReadonlyMap<string, string>;
@@ -91,6 +92,7 @@ type SourceSymbolKind =
   | "context-reader-hook"
   | "deferred-callback-owner"
   | "deferred-callback-hook"
+  | "framework-event-component"
   | "hook"
   | "legend-value-hook"
   | "legend-value-writer"
@@ -130,6 +132,7 @@ export function buildSourceIndexFromFiles(
   const contextReaderHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const deferredCallbackOwnersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const deferredCallbackHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const frameworkEventComponentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const hooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const legendValueHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const legendValueWritersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
@@ -183,6 +186,8 @@ export function buildSourceIndexFromFiles(
             ? record.deferredCallbackOwners.has(localName)
             : kind === "deferred-callback-hook"
               ? record.deferredCallbackHooks.has(localName)
+              : kind === "framework-event-component"
+                ? record.frameworkEventComponents.has(localName)
               : kind === "hook"
                 ? record.hookDeclarations.has(localName)
                 : kind === "legend-value-hook"
@@ -269,6 +274,8 @@ export function buildSourceIndexFromFiles(
         ? deferredCallbackOwnersByImporter
         : kind === "deferred-callback-hook"
           ? deferredCallbackHooksByImporter
+          : kind === "framework-event-component"
+            ? frameworkEventComponentsByImporter
           : kind === "hook"
             ? hooksByImporter
         : kind === "legend-value-hook"
@@ -495,7 +502,8 @@ export function buildSourceIndexFromFiles(
       return binding?.moduleSpecifier === "react-native" ||
         binding?.moduleSpecifier === "react-native-web" ||
         binding?.moduleSpecifier === "@base-ui/react" ||
-        binding?.moduleSpecifier.startsWith("@base-ui/react/") === true;
+        binding?.moduleSpecifier.startsWith("@base-ui/react/") === true ||
+        resolvedFor(file, "framework-event-component").has(rootName);
     },
     hookDeclarationFor: (file, name) => {
       const normalized = normalizeFile(file);
@@ -665,6 +673,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const contextReaderHooks = new Map<string, string>();
   const deferredCallbackOwners = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
   const deferredCallbackHooks = new Map<string, ReadonlySet<number>>();
+  const frameworkEventComponents = new Set<string>();
   const hookDeclarations = new Map<string, ComponentFunction>();
   const imports = new Map<string, ImportBinding>();
   const legendValueHooks = new Map<string, string>();
@@ -686,6 +695,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const reactContextReaders = new Set<string>();
   const reactContexts = new Set<string>();
   const reactNamespaces = new Set<string>();
+  const nativeComponentFactories = new Set<string>();
   const useValueHooks = new Set<string>();
   const deferredMethodsByClass = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
 
@@ -720,6 +730,18 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
         }
       }
       continue;
+    }
+    if (
+      (statement.moduleSpecifier.text === "react-native" ||
+        statement.moduleSpecifier.text === "react-native-web") &&
+      bindings &&
+      ts.isNamedImports(bindings)
+    ) {
+      for (const element of bindings.elements) {
+        if ((element.propertyName?.text ?? element.name.text) === "requireNativeComponent") {
+          nativeComponentFactories.add(element.name.text);
+        }
+      }
     }
     if (statement.moduleSpecifier.text === "@legendapp/state/react") {
       if (bindings && ts.isNamedImports(bindings)) {
@@ -864,6 +886,14 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           ts.isCallExpression(initializer) &&
           ts.isIdentifier(initializer.expression)
         ) {
+          if (
+            nativeComponentFactories.has(initializer.expression.text) &&
+            ts.isVariableDeclarationList(declaration.parent) &&
+            (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+          ) {
+            frameworkEventComponents.add(declaration.name.text);
+            if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
+          }
           observableFactoryCalls.set(declaration.name.text, initializer.expression.text);
           const members = observableMemberFactories.get(initializer.expression.text);
           if (
@@ -1008,6 +1038,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     contextReaderHooks,
     deferredCallbackOwners,
     deferredCallbackHooks,
+    frameworkEventComponents,
     hookDeclarations,
     imports,
     legendValueHooks,

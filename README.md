@@ -240,6 +240,41 @@ event or directly from a React effect; an effect migration changes only the stor
 dependencies, cleanup, measurement, and statement position intact. Opaque calls, custom component callbacks, mixed
 event/effect ownership, companion React writes, repeated output, and separated surfaces stay under review.
 
+### Isolate a source-resolved layout measurement
+
+```tsx
+// before, each native layout event renders the full sidebar
+const [outerWidth, setOuterWidth] = useState(0);
+const width = Math.max(outerWidth - inset, 0);
+const onLayout = useCallback(layout => setOuterWidth(layout.width), [setOuterWidth]);
+return <NativeSidebar onLayout={onLayout}>
+  <Search width={width + 8} />
+  <Header style={{ width }} />
+  <PlaylistRows />
+</NativeSidebar>;
+
+// after, the owner keeps lifetime while only the two width leaves subscribe
+const outerWidth$ = useObservable(0);
+const onLayout = useCallback(layout => outerWidth$.set(layout.width), [outerWidth$]);
+return <NativeSidebar onLayout={onLayout}>
+  <SearchWidth outerWidth$={outerWidth$} inset={inset} />
+  <HeaderWidth outerWidth$={outerWidth$} inset={inset} />
+  <PlaylistRows />
+</NativeSidebar>;
+
+function SearchWidth({ outerWidth$, inset }: Props) {
+  return <Search width={Math.max(useValue(outerWidth$) - inset, 0) + 8} />;
+}
+function HeaderWidth({ outerWidth$, inset }: Props) {
+  return <Header style={{ width: Math.max(useValue(outerWidth$) - inset, 0) }} />;
+}
+```
+
+Legend Doctor follows the callback through imported components and optional event wrappers. React Native hosts created
+by a source-exported `requireNativeComponent` count only when the factory import and immutable binding are proven. The
+numeric write must be event-only and isolated; repeated consumers, calls in projections, companion React writes, eager
+invocation, effects, and broad leaves remain candidates.
+
 ### Isolate a controlled value and its validation
 
 ```tsx
@@ -683,14 +718,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 826 manually audited hook labels, 23 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 827 manually audited hook labels, 23 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 552/552 |
-| Actionable precision | 453/453 |
-| Actionable recall | 453/453 |
+| Unit tests | 553/553 |
+| Actionable precision | 454/454 |
+| Actionable recall | 454/454 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-826 manual hook labels with no known misses, plus twenty-three
+827 manual hook labels with no known misses, plus twenty-three
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -124,6 +124,13 @@ one list, supplies a stable item-derived key, and uses the cursor only as list `
 effects, cleanup, ownership, and write order; changes command reads to non-tracking snapshots; removes the cursor-only
 dependencies and list broadcast; and subscribes only in the keyed row. Synchronous registrations, index keys, mount
 control, multiple consumers, callback escape, and non-production consumers abstain.
+
+One Legend Music label verifies an event-owned numeric layout measurement projected into two bounded leaves inside one
+platform branch. Cross-file resolution follows the local callback through the imported component and its optional
+callback wrapper to an immutable native host created by React Native `requireNativeComponent`. The recommendation keeps
+the owner lifetime, platform branch, callback, and write position while subscribing separately in the two projection
+leaves. Eager invocation, mutable or lookalike factories, repeated consumers, impure projections, effects, companion
+React writes, broad leaves, and callback escape abstain.
 
 One Legend Music label verifies a false-initialized, event-owned boolean whose render fanout is limited to class/style
 projections and several conditional presentation leaves of at most four JSX elements each. Imported projection wrappers

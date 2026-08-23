@@ -63,6 +63,7 @@ import {
   type EffectDraftProofs,
 } from "./rules/effect-drafts.js";
 import { callbackHasCleanup, classifyEffect } from "./rules/effects.js";
+import { isSourceEventScalarLeafState } from "./rules/event-scalar-leaf.js";
 import {
   analyzeKeyedSelections,
   isSelectionStateName,
@@ -455,6 +456,28 @@ function analyzeParsedSource(
       });
     })
   );
+  const sourceEventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
+  const sourceEventScalarStates = new Set(
+    states.filter(state => {
+      const usage = usageByState.get(state);
+      if (!usage || !childContracts || isCustomHookOwner(state.owner)) return false;
+      let callbacks = sourceEventCallbacksByOwner.get(state.owner);
+      if (!callbacks) {
+        callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
+        sourceEventCallbacksByOwner.set(state.owner, callbacks);
+      }
+      return isSourceEventScalarLeafState(state, usage, {
+        eventCallbacks: callbacks,
+        hasCompanionWrites: statesWithCompanionWrites.has(state),
+        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+        hasSafeCommands: safeCommandStates.has(state),
+        localComponents,
+        pureProjectionImports,
+        sourceComponents,
+        useCallbackNames: imports.useCallback,
+      });
+    })
+  );
   const adjacentEventBooleanStates = new Set(
     states.filter(state => {
       const usage = usageByState.get(state);
@@ -646,7 +669,8 @@ function analyzeParsedSource(
           returnedKeyedCursorStates.has(state),
           adjacentEventBooleanStates.has(state),
           adjacentEffectBooleanStates.has(state),
-          multiSurfaceBooleanStates.has(state)
+          multiSurfaceBooleanStates.has(state),
+          sourceEventScalarStates.has(state)
         );
     const commitSensitiveOverride = commitSensitive &&
       baseClassification.action !== "review-state" &&
@@ -3327,7 +3351,8 @@ function classifyState(
   hasReturnedKeyedCursorConsumer: boolean,
   hasAdjacentEventBooleanConsumers: boolean,
   hasAdjacentEffectBooleanConsumers: boolean,
-  hasMultiSurfaceBooleanConsumers: boolean
+  hasMultiSurfaceBooleanConsumers: boolean,
+  hasSourceEventScalarConsumers: boolean
 ): ClassifiedState {
   if (nonProductionHarness) {
     return {
@@ -3810,6 +3835,13 @@ function classifyState(
       action: "use-observable",
       confidence: "probable",
       message: `Replace effect-written boolean \`${state.valueName}\` with one component-lifetime observable and extract its adjacent conditional presentation surfaces into one stable leaf subscriber; keep the React effect, dependencies, cleanup, boolean calculation, write position, and each existing conditional mount unchanged.`,
+    };
+  }
+  if (hasSourceEventScalarConsumers) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace event-owned numeric state \`${state.valueName}\` with one component-lifetime observable; keep the source-proven event callback and write position unchanged, and subscribe separately in each bounded projection leaf inside the existing render branch so the broad owner and its branch condition do not subscribe.`,
     };
   }
   if (usage.shadowed || usage.escaped || usage.effectWrites > 0) {

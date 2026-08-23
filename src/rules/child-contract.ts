@@ -1322,7 +1322,7 @@ function callbackIsDeferredByJsx(
   if (
     !attribute ||
     !/^on[A-Z]/.test(attribute.name.getText()) ||
-    !jsxAttributeDirectlyCarries(attribute, expression)
+    !jsxAttributeCarriesCallbackIdentity(attribute, expression, source.owner)
   ) {
     return false;
   }
