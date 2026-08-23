@@ -30,6 +30,7 @@ export interface ChildComponentSource {
     | ts.ArrowFunction
     | ts.FunctionDeclaration
     | ts.FunctionExpression;
+  readonly reactWrapped?: boolean;
 }
 
 export interface CallbackContractSourceResolver {
@@ -124,6 +125,107 @@ export function propIsLeafRenderConsumer(
     safe = false;
   });
   return safe && renderReads > 0;
+}
+
+/**
+ * Proves that one directly bound child prop has a primitive declared type and
+ * is consumed by the child. Primitive values make a parent-driven render and
+ * a child-owned subscription observably equivalent; object identity and React
+ * wrapper comparators remain outside this contract.
+ */
+export function propIsPrimitiveValueConsumer(
+  source: ChildComponentSource,
+  propName: string
+): boolean {
+  if (source.reactWrapped) return false;
+  const bound = boundPropIdentifier(source.owner, propName);
+  const type = declaredPropType(source, propName);
+  if (!bound || !type || !primitiveValueType(type)) return false;
+  if (bindingDeclarationCount(source.owner, bound.text) !== 1) return false;
+
+  let reads = 0;
+  visit(source.owner.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node !== bound &&
+      node.text === bound.text &&
+      !isNonValueIdentifier(node) &&
+      !isBindingName(node)
+    ) {
+      reads += 1;
+    }
+  });
+  return reads > 0;
+}
+
+function declaredPropType(
+  source: ChildComponentSource,
+  propName: string
+): ts.TypeNode | null {
+  const parameter = source.owner.parameters[0];
+  if (!parameter?.type || source.owner.parameters.length !== 1) return null;
+  let propsType = parameter.type;
+  while (ts.isParenthesizedTypeNode(propsType)) propsType = propsType.type;
+
+  let members: ts.NodeArray<ts.TypeElement> | null = null;
+  if (ts.isTypeLiteralNode(propsType)) {
+    members = propsType.members;
+  } else if (ts.isTypeReferenceNode(propsType) && ts.isIdentifier(propsType.typeName)) {
+    const typeName = propsType.typeName.text;
+    const declarations: Array<ts.InterfaceDeclaration | ts.TypeAliasDeclaration> = [];
+    for (const statement of source.owner.getSourceFile().statements) {
+      if (
+        (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
+        statement.name.text === typeName
+      ) {
+        declarations.push(statement);
+      }
+    }
+    if (declarations.length !== 1) return null;
+    const declaration = declarations[0]!;
+    if (ts.isInterfaceDeclaration(declaration)) {
+      if (declaration.heritageClauses?.length) return null;
+      members = declaration.members;
+    } else {
+      let alias = declaration.type;
+      while (ts.isParenthesizedTypeNode(alias)) alias = alias.type;
+      if (!ts.isTypeLiteralNode(alias)) return null;
+      members = alias.members;
+    }
+  }
+  if (!members) return null;
+
+  const properties = members.filter(
+    (member): member is ts.PropertySignature =>
+      ts.isPropertySignature(member) && staticPropertyName(member.name) === propName
+  );
+  return properties.length === 1 ? properties[0]!.type ?? null : null;
+}
+
+function staticPropertyName(name: ts.PropertyName): string | null {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+  return null;
+}
+
+function primitiveValueType(type: ts.TypeNode): boolean {
+  if (ts.isParenthesizedTypeNode(type)) return primitiveValueType(type.type);
+  if (ts.isUnionTypeNode(type)) {
+    return type.types.length > 0 && type.types.every(primitiveValueType);
+  }
+  if (ts.isLiteralTypeNode(type)) {
+    return ts.isStringLiteral(type.literal) ||
+      ts.isNumericLiteral(type.literal) ||
+      type.literal.kind === ts.SyntaxKind.TrueKeyword ||
+      type.literal.kind === ts.SyntaxKind.FalseKeyword ||
+      type.literal.kind === ts.SyntaxKind.NullKeyword;
+  }
+  return type.kind === ts.SyntaxKind.BooleanKeyword ||
+    type.kind === ts.SyntaxKind.StringKeyword ||
+    type.kind === ts.SyntaxKind.NumberKeyword ||
+    type.kind === ts.SyntaxKind.BigIntKeyword ||
+    type.kind === ts.SyntaxKind.UndefinedKeyword;
 }
 
 /**

@@ -39,8 +39,10 @@ labels. Three boolean-toggle labels require the direct `.toggle()` operation. On
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
 `useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Eleven leaf-boundary labels verify
 that a transported `useValue` subscription can leave a broad owner without changing observable ownership or child APIs.
-Two replace a complete conditional child slot with an always-mounted subscriber while preserving the selected child's mount behavior. Run
-the eval for the current precision/recall table. If the root README publishes those metrics, update them only
+Two replace a complete conditional child slot with an always-mounted subscriber while preserving the selected child's mount behavior.
+One cross-file transport label moves a primitive `useValue` subscription from a provider into its existing source-resolved
+child. The proof rejects React wrappers, conditional or repeated call sites, non-primitive props, and any second value read.
+Run the eval for the current precision/recall table. If the root README publishes those metrics, update them only
 from a fresh full eval so the numbers stay synchronized as known misses are added.
 
 Two Legend Music labels verify that a measured scalar can cross a bounded chain of immutable pure projections and

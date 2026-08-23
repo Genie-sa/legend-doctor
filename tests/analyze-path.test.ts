@@ -1532,6 +1532,123 @@ test("uses cross-file observable provenance for direct useValue findings", async
   }
 });
 
+test("moves a transported useValue subscription into one source-proven child", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-subscription-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "state.ts"),
+    `
+      import { observable } from "@legendapp/state";
+      export const paletteOpen$ = observable(false);
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "palette.tsx"),
+    `
+      export function Palette({ open }: { open: boolean }) {
+        return <dialog open={open}>Commands</dialog>;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "screen.tsx"),
+    `
+      import { useValue } from "@legendapp/state/react";
+      import { Palette } from "./palette";
+      import { paletteOpen$ } from "./state";
+      export function Screen({ children }: { children: React.ReactNode }) {
+        const open = useValue(paletteOpen$);
+        useGlobalShortcuts();
+        return <>{children}<Palette open={open} /></>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const [finding] = report.practices.filter(
+    candidate => candidate.action === "move-use-value-into-child"
+  );
+  assert.equal(finding?.location.file, "screen.tsx");
+  assert.equal(finding?.location.line, 6);
+  assert.match(finding?.message ?? "", /pass `paletteOpen\$` to `Palette`/);
+  assert.match(finding?.message ?? "", /subscribe inside the child/);
+});
+
+test("keeps transported useValue subscriptions without one stable primitive child contract", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-subscription-negative-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "state.ts"),
+    `
+      import { observable } from "@legendapp/state";
+      export const open$ = observable(false);
+      export const panel$ = observable({ open: false });
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "palette.tsx"),
+    `
+      import { memo } from "react";
+      export function Palette({ open }: { open: boolean }) { return <dialog open={open} />; }
+      export const MemoPalette = memo(function MemoPalette({ open }: { open: boolean }) {
+        return <dialog open={open} />;
+      });
+      export function ObjectPalette({ panel }: { panel: { open: boolean } }) {
+        return <dialog open={panel.open} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "screen.tsx"),
+    `
+      import { useValue } from "@legendapp/state/react";
+      import { MemoPalette, ObjectPalette, Palette } from "./palette";
+      import { open$, panel$ } from "./state";
+      export function Conditional({ enabled }: { enabled: boolean }) {
+        const open = useValue(open$);
+        return enabled ? <Palette open={open} /> : null;
+      }
+      export function Keyed({ id }: { id: string }) {
+        const open = useValue(open$);
+        return <Palette key={id} open={open} />;
+      }
+      export function Repeated({ rows }: { rows: string[] }) {
+        const open = useValue(open$);
+        return <>{rows.map(row => <Palette key={row} open={open} />)}</>;
+      }
+      export function Shared() {
+        const open = useValue(open$);
+        return <><span>{String(open)}</span><Palette open={open} /></>;
+      }
+      export function DirectRead() {
+        const open = useValue(open$);
+        open$.get();
+        return <Palette open={open} />;
+      }
+      export function Memoized() {
+        const open = useValue(open$);
+        return <MemoPalette open={open} />;
+      }
+      export function NonPrimitive() {
+        const panel = useValue(panel$);
+        return <ObjectPalette panel={panel} />;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  assert.deepEqual(
+    report.practices.filter(candidate => candidate.action === "move-use-value-into-child"),
+    []
+  );
+});
+
 test("uses peek only for a source-proven effect callback prop", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-effect-callback-read-"));
   t.after(() => rm(root, { force: true, recursive: true }));

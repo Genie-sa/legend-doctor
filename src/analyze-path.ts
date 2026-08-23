@@ -730,7 +730,13 @@ function findComponentDeclaration(
       statement.name?.text === localName &&
       statement.body
     ) {
-      return { owner: statement, body: statement.body, deferredCallbackHooks, file };
+      return {
+        owner: statement,
+        body: statement.body,
+        deferredCallbackHooks,
+        file,
+        reactWrapped: false,
+      };
     }
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
@@ -740,7 +746,13 @@ function findComponentDeclaration(
       const wrapped = wrapperRenderFunction(initializer, reactWrappers);
       if (wrapped) initializer = wrapped;
       if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
-        return { owner: initializer, body: initializer.body, deferredCallbackHooks, file };
+        return {
+          owner: initializer,
+          body: initializer.body,
+          deferredCallbackHooks,
+          file,
+          reactWrapped: wrapped !== null,
+        };
       }
     }
   }

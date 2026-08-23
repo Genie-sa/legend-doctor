@@ -114,6 +114,7 @@ JSON is the agent interface. Each finding names the edit, proof, location, and r
 | `narrow-use-value-subscription` | Updates to unread sibling observable fields |
 | `split-use-value-leaves` | One broad subscription invalidating independent leaves |
 | `move-use-value-down` | Observable updates rendering a broad parent |
+| `move-use-value-into-child` | A parent render used only to transport one observable value |
 | `pass-observable-to-use-value` | Redundant selector execution |
 | `replace-legacy-use-value` | Legacy `useSelector` or `use$` call |
 | `use-peek-for-snapshot` | Tracking read in a proven non-tracking command |
@@ -631,6 +632,31 @@ return <><Editor /><Dialog open={open} /></>;
 return <><Editor /><DialogState open$={dialog$.open} /></>; // after
 ```
 
+### Use an existing child as the subscription boundary
+
+```tsx
+// before: every toggle reruns WorkspaceProvider and Palette
+function WorkspaceProvider() {
+  const open = useValue(paletteOpen$);
+  useWorkspaceHotkeys();
+  return <Palette open={open} />;
+}
+
+// after: only Palette subscribes and rerenders
+function WorkspaceProvider() {
+  useWorkspaceHotkeys();
+  return <Palette open$={paletteOpen$} />;
+}
+
+function Palette({ open$ }: { open$: Observable<boolean> }) {
+  const open = useValue(open$);
+  return <Dialog open={open} />;
+}
+```
+
+This cross-file finding requires one direct primitive prop, one source-resolved plain child, and one stable call site.
+Conditional, keyed, repeated, memoized, shared, transformed, object-valued, or unresolved transports are left unchanged.
+
 ### Remove selector work and legacy APIs
 
 ```tsx
@@ -719,14 +745,14 @@ These rules follow the official
 ## Verified accuracy
 
 The pinned corpus covers 2,356 hooks across 225 targets. It contains 827 manually audited hook labels, 23 state groups,
-and 106 Legend practice labels.
+and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 553/553 |
+| Unit tests | 555/555 |
 | Actionable precision | 454/454 |
 | Actionable recall | 454/454 |
-| Legend practice precision | 106/106 |
+| Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain
 code into a forced edit.

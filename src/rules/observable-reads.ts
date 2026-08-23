@@ -20,7 +20,10 @@ import {
 } from "../ast.js";
 import { isImportedHookCall, type HookImports } from "../imports.js";
 import type { LegendPracticeFinding } from "../types.js";
-import type { ChildContractResolver } from "./child-contract.js";
+import {
+  propIsPrimitiveValueConsumer,
+  type ChildContractResolver,
+} from "./child-contract.js";
 import {
   bindingContainsName,
   callbackIsEventRooted,
@@ -74,7 +77,14 @@ export function findObservableReadPractices(
       }
     }
     if (ts.isVariableDeclaration(node)) {
-      const finding = moveUseValueDownFinding(
+      const finding = moveUseValueIntoChildFinding(
+        node,
+        imports,
+        observableBindings,
+        childContracts,
+        sourceFile,
+        fileName
+      ) ?? moveUseValueDownFinding(
         node,
         imports,
         observableBindings,
@@ -92,6 +102,144 @@ export function findObservableReadPractices(
     }
   });
   return findings;
+}
+
+function moveUseValueIntoChildFinding(
+  declaration: ts.VariableDeclaration,
+  imports: HookImports,
+  observableBindings: ReadonlySet<string>,
+  childContracts: ChildContractResolver | null,
+  sourceFile: ts.SourceFile,
+  fileName: string
+): LegendPracticeFinding | null {
+  const call = declaration.initializer;
+  if (
+    !childContracts ||
+    !call ||
+    !ts.isCallExpression(call) ||
+    call.arguments.length !== 1 ||
+    !isUseValueCall(call, imports) ||
+    !ts.isIdentifier(declaration.name)
+  ) {
+    return null;
+  }
+  const observable = provenObservablePath(call.arguments[0]!, observableBindings);
+  const owner = findAncestor(declaration, isRuntimeFunctionLike);
+  const localName = declaration.name.text;
+  if (
+    !observable ||
+    !owner?.body ||
+    bindingDeclarationCount(owner, localName) !== 1 ||
+    hasAncestorUseValueSubscription(owner, call, imports, observableBindings) ||
+    hasOtherGetReadOfPath(owner, observable, observableBindings)
+  ) {
+    return null;
+  }
+
+  let reference: ts.Identifier | null = null;
+  let unsafe = false;
+  visit(owner.body, node => {
+    if (
+      unsafe ||
+      !ts.isIdentifier(node) ||
+      node.text !== localName ||
+      node === declaration.name ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (isDeclarationName(node) || reference !== null) {
+      unsafe = true;
+      return;
+    }
+    reference = node;
+  });
+  if (unsafe || !reference) return null;
+
+  const transport = directJsxPropTransport(reference);
+  if (!transport || !isInsideOwnerReturn(transport.subtree, owner)) return null;
+  if (hasUnstableSubtreeLifetime(transport.subtree, owner)) return null;
+  const child = childContracts.resolveComponent(transport.component);
+  if (!child || !propIsPrimitiveValueConsumer(child, transport.prop)) return null;
+
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(
+    declaration.getStart(sourceFile)
+  );
+  const observablePath = observable.getText(sourceFile);
+  return {
+    action: "move-use-value-into-child",
+    confidence: "certain",
+    disposition: "change",
+    evidence: [
+      `the ${localName} binding is referenced once, as the direct \`${transport.prop}\` prop of source-resolved \`${transport.component}\``,
+      "the child is not React-wrapped, declares that prop as a primitive value, and consumes it",
+      "the child call site is unkeyed, unrepeated, unconditional, and owned by the component's only render return",
+    ],
+    location: { column: character + 1, file: fileName, line: line + 1 },
+    message: `Move \`useValue(${observablePath})\` out of this owner: pass \`${observablePath}\` to \`${transport.component}\` as an observable prop and subscribe inside the child, using the resulting primitive for \`${transport.prop}\`. Updates will rerender the existing child without rerunning this owner.`,
+    practice: "reactivity",
+  };
+}
+
+function hasOtherGetReadOfPath(
+  owner: RuntimeFunctionLike,
+  observable: ts.Expression,
+  observableBindings: ReadonlySet<string>
+): boolean {
+  if (!owner.body) return true;
+  const currentPath = staticPropertyPath(observable);
+  if (!currentPath) return true;
+  let overlap = false;
+  visit(owner.body, node => {
+    if (overlap || !ts.isCallExpression(node)) return;
+    const receiver = directGetReceiver(node);
+    const other = receiver && provenObservablePath(receiver, observableBindings);
+    const otherPath = other && staticPropertyPath(other);
+    if (!otherPath) return;
+    const shared = Math.min(currentPath.length, otherPath.length);
+    overlap = currentPath.slice(0, shared).every((part, index) => part === otherPath[index]);
+  });
+  return overlap;
+}
+
+interface DirectJsxPropTransport {
+  component: string;
+  prop: string;
+  subtree: ts.JsxElement | ts.JsxSelfClosingElement;
+}
+
+function directJsxPropTransport(reference: ts.Identifier): DirectJsxPropTransport | null {
+  let expression: ts.Expression = reference;
+  while (
+    (ts.isParenthesizedExpression(expression.parent) ||
+      ts.isAsExpression(expression.parent) ||
+      ts.isTypeAssertionExpression(expression.parent) ||
+      ts.isSatisfiesExpression(expression.parent) ||
+      ts.isNonNullExpression(expression.parent)) &&
+    expression.parent.expression === expression
+  ) {
+    expression = expression.parent;
+  }
+  const container = expression.parent;
+  if (
+    !ts.isJsxExpression(container) ||
+    container.expression !== expression ||
+    !ts.isJsxAttribute(container.parent)
+  ) {
+    return null;
+  }
+  const attribute = container.parent;
+  const opening = attribute.parent.parent;
+  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) return null;
+  const prop = attribute.name.getText();
+  if (prop === "children" || prop === "key" || prop === "ref" || /^on[A-Z]/.test(prop)) {
+    return null;
+  }
+  return {
+    component: opening.tagName.getText(),
+    prop,
+    subtree: ts.isJsxOpeningElement(opening) ? opening.parent : opening,
+  };
 }
 
 function moveUseValueDownFinding(
