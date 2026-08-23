@@ -1566,7 +1566,7 @@ function findObservableStateClusters(
       const names = sortedMembers.map(state => state.valueName);
       const hasBoundedDialogGate = dialogMembers?.some(
         state =>
-          hasStateInitializer(state, ts.SyntaxKind.NullKeyword) &&
+          hasDialogPayloadInitializer(state) &&
           payloadControlsOwnerJsx(state, knownComponents)
       ) ?? false;
       const targets = new Set(
@@ -1584,7 +1584,7 @@ function findObservableStateClusters(
           ? `Replace the co-written editable draft (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
           : hasBoundedDialogGate
           ? `Replace the persistent dialog state (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable model; atomically assign the payload and open flag, keep close transitions as leaf writes, and move the complete payload gate plus ${[...targets].sort().join(", ")} into one always-mounted stable leaf wrapper. Subscribe there with \`useValue\` so the existing payload gate and dialog mount behavior stay unchanged.`
-          : `Replace the co-written React state cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; mutate it from commands and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
+          : `Replace the co-written React state cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; preserve paired payload/open transitions with atomic \`assign\` calls, keep independent close updates as leaf writes, and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
         primary,
       };
       for (const member of sortedMembers) result.set(member, cluster);
@@ -2279,7 +2279,7 @@ function normalizeObservableDialogClusterMembers(
   stateFlow: StateFlowIndex
 ): readonly StateCandidate[] | null {
   if (members.length < 2) return null;
-  const payloads = members.filter(state => hasStateInitializer(state, ts.SyntaxKind.NullKeyword));
+  const payloads = members.filter(hasDialogPayloadInitializer);
   const flags = members.filter(state => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
   if (payloads.length !== 1 || flags.length < 1 || payloads.length + flags.length !== members.length) {
     return null;
@@ -2351,6 +2351,11 @@ function normalizeObservableDialogClusterMembers(
     return null;
   }
   return members;
+}
+
+function hasDialogPayloadInitializer(state: StateCandidate): boolean {
+  return state.call.arguments.length === 0 ||
+    hasStateInitializer(state, ts.SyntaxKind.NullKeyword);
 }
 
 function normalizeGatedFeedbackClusterMembers(

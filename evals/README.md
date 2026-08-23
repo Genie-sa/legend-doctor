@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-817 manual hook labels with no known misses, plus twenty
+819 manual hook labels with no known misses, plus twenty-one
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -96,6 +96,8 @@ Two Formbricks labels verify a persistent dialog payload and visibility flag beh
 payload and true flag must be written together, every transported member must reach a source-resolved component inside
 that slot, and an always-mounted leaf wrapper must preserve the existing payload gate and closed-dialog mount behavior.
 Payload fanout, repeated render gates, unresolved targets, broad branches, effects, escapes, and unpaired opens abstain.
+Two more Formbricks labels verify the always-mounted drawer form when its payload uses the exact no-argument
+`useState<T | undefined>()` initializer. Opaque initializers remain outside the proof.
 
 One Legend Music label verifies an effect-owned numeric cursor returned by a custom hook and broadcast through one keyed
 list. Cross-file source must prove that each state-reading registration stores its callback until an exact cleanup, while

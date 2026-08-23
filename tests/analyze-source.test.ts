@@ -4377,6 +4377,32 @@ test("groups a persistent dialog model behind one bounded payload gate", () => {
   assert.equal(fanout.length, 0);
 });
 
+test("groups an undefined-initialized dialog payload without accepting opaque initializers", () => {
+  const source = (initializer: string) => `
+    import { useState } from "react";
+    interface Item { id: string }
+    function ItemDrawer(_props: unknown) { return null; }
+    export function Screen({ item }: { item: Item }) {
+      const [target, setTarget] = useState<Item | undefined>(${initializer});
+      const [open, setOpen] = useState(false);
+      const show = () => { setTarget(item); setOpen(true); };
+      ${"\n".repeat(100)}
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Preview />
+        <ItemDrawer target={target} open={open} onOpenChange={setOpen} onShow={show} />
+      </main>;
+    }
+  `;
+
+  const grouped = analyzeSource(source(""), "fixture.tsx").filter(finding => finding.group);
+  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  assert.deepEqual(grouped[0]?.group?.members, ["target", "open"]);
+
+  const opaque = analyzeSource(source("loadInitialTarget()"), "fixture.tsx");
+  assert.equal(opaque.filter(finding => finding.group).length, 0);
+});
+
 test("groups a payload-gated timed feedback flag without widening its subscriber", () => {
   const findings = analyzeSource(`
     import { useState } from "react";

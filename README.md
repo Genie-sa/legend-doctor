@@ -433,7 +433,9 @@ function EditDialogState({ dialog$ }: { dialog$: Observable<{ target: Action | n
 ```
 
 Legend Doctor requires one source-resolved dialog target inside one bounded payload gate. The stable wrapper replaces the
-complete conditional slot; payload fanout, repeated gates, unresolved targets, and broad branches remain candidates.
+complete conditional slot. The same model applies to an always-mounted drawer whose payload starts as
+`useState<T | undefined>()`. Payload fanout, opaque initializers, repeated gates, unresolved targets, and broad branches
+remain candidates.
 
 ### Isolate async status
 
@@ -670,14 +672,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 817 manually audited hook labels, 20 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 819 manually audited hook labels, 21 state groups,
 and 106 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 547/547 |
-| Actionable precision | 444/444 |
-| Actionable recall | 444/444 |
+| Unit tests | 548/548 |
+| Actionable precision | 446/446 |
+| Actionable recall | 446/446 |
 | Legend practice precision | 106/106 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

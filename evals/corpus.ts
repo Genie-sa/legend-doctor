@@ -4142,6 +4142,8 @@ export const goldCases = [
   },
   ...[
     [106, "records", "review-state", true],
+    [113, "drawerRecordId", "use-observable", true],
+    [114, "isDrawerOpen", "use-observable", true],
     [120, "selectedIds", "use-observable", true],
     [122, "isDeleting", "use-observable", true],
   ].map(([line, name, action, enforced]) => ({
@@ -4151,7 +4153,9 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 120
+    rationale: line === 113 || line === 114
+      ? "The undefined-initialized record cursor and visibility flag open together, stay mounted in one resolved drawer target, and must migrate as one observable model."
+      : line === 120
       ? "Independent row toggles make this a real keyed selection model; row membership and toolbar summaries can subscribe separately while refresh commands reset it atomically."
       : line === 106
         ? "Records are the rendered list data and are replaced by refresh and pagination workflows, not a row-local selection model."
@@ -6260,6 +6264,13 @@ export const goldStateGroups = [
     members: ["isEditActionModalOpen", "editingActionClass"],
     rationale: "The persistent edit payload and visibility flag form one atomic dialog model behind one bounded payload gate.",
     target: "formbricks-when-to-send",
+  },
+  {
+    file: "feedback-records-table.tsx",
+    line: 113,
+    members: ["drawerRecordId", "isDrawerOpen"],
+    rationale: "The undefined-initialized record cursor and visibility flag form one always-mounted drawer model.",
+    target: "formbricks-feedback-records",
   },
   {
     file: "routes/(app)/_private/_map/enhancement-requests/index.tsx",
