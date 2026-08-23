@@ -2221,6 +2221,18 @@ export const goldCases = [
     target: "tree-map",
   })),
   ...[
+    [87, "landownerToDelete"],
+    [88, "deleteDialogOpen"],
+  ].map(([line, name]) => ({
+    action: "use-observable" as const,
+    file: "components/operations/landowners-table.tsx",
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: "The delete payload and visibility flag share one bounded dialog gate; the completion callback can preserve its post-close payload clear as a leaf write.",
+    target: "tree-map",
+  })),
+  ...[
     ["components/account-management/accounts-section.tsx", 185, "linkTarget"],
     ["components/account-management/accounts-section.tsx", 186, "linkOpen"],
     ["routes/(app)/_private/_map/enhancement-requests/index.tsx", 42, "selectedRequest"],
@@ -6307,6 +6319,13 @@ export const goldStateGroups = [
     line: 45,
     members: ["alertModalOpen", "selectedDeliveryForAlert"],
     rationale: "The alert payload and open flag form one modal model whose completion callback clears the payload after close.",
+    target: "tree-map",
+  },
+  {
+    file: "components/operations/landowners-table.tsx",
+    line: 87,
+    members: ["landownerToDelete", "deleteDialogOpen"],
+    rationale: "The delete payload and open flag form one bounded dialog model while close completion retains its separate payload-clear timing.",
     target: "tree-map",
   },
   {

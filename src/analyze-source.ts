@@ -1551,8 +1551,14 @@ function findObservableStateClusters(
         : null;
       const clusterMembers = dialogMembers ?? gatedFeedbackMembers ?? textDraftMembers ?? selectionMembers;
       if (!clusterMembers) continue;
+      const hasBoundedDialogGate = dialogMembers?.some(
+        state =>
+          hasDialogPayloadInitializer(state) &&
+          payloadControlsOwnerJsx(state, knownComponents)
+      ) ?? false;
       if (
         dialogMembers &&
+        !hasBoundedDialogGate &&
         clusterMembers.some(member => {
           const usage = usageByState.get(member);
           return usage !== undefined && usage.localRenderReads > 0 && usage.jsxTargets.size === 0;
@@ -1564,11 +1570,6 @@ function findObservableStateClusters(
       const primary = sortedMembers[0];
       if (!primary) continue;
       const names = sortedMembers.map(state => state.valueName);
-      const hasBoundedDialogGate = dialogMembers?.some(
-        state =>
-          hasDialogPayloadInitializer(state) &&
-          payloadControlsOwnerJsx(state, knownComponents)
-      ) ?? false;
       const targets = new Set(
         sortedMembers.flatMap(state => [...(usageByState.get(state)?.jsxTargets ?? [])])
       );
@@ -2586,7 +2587,7 @@ function payloadHasBoundedDialogGate(
       !ts.isJsxSelfClosingElement(trueBranch) &&
       !ts.isJsxFragment(trueBranch)) ||
     nearestRepeatedRenderCall(gate, payload.owner) ||
-    jsxElementCountIn(trueBranch) > 4 ||
+    jsxElementCountIn(trueBranch) > 12 ||
     jsxElementCountIn(trueBranch) / jsxElementCount(payload.owner) > 0.4 ||
     !payloadUsage.directRenderNodes.every(read => nodeWithin(read, gate))
   ) {

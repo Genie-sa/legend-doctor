@@ -4404,6 +4404,42 @@ test("groups one bounded logical-and dialog gate without merging payload fanout"
   assert.equal(fanout.filter(finding => finding.group).length, 0);
 });
 
+test("groups a bounded multi-element dialog gate without wrapping a broad branch", () => {
+  const source = (children: string) => `
+    import { useState } from "react";
+    interface Item { id: string }
+    function ItemDialog(_props: unknown) { return null; }
+    export function Screen({ item }: { item: Item }) {
+      const [target, setTarget] = useState<Item | null>(null);
+      const [open, setOpen] = useState(false);
+      const show = () => { setTarget(item); setOpen(true); };
+      ${"\n".repeat(100)}
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Preview />
+        {target && <ItemDialog target={target} open={open} onOpenChange={setOpen} onShow={show}>
+          ${children}
+        </ItemDialog>}
+      </main>;
+    }
+  `;
+
+  const bounded = analyzeSource(
+    source("<One /><Two /><Three /><Four /><Five /><Six /><Seven />"),
+    "fixture.tsx"
+  );
+  assert.deepEqual(
+    bounded.filter(finding => finding.group).map(finding => finding.action),
+    ["use-observable", "use-observable"]
+  );
+
+  const broad = analyzeSource(
+    source("<One /><Two /><Three /><Four /><Five /><Six /><Seven /><Eight /><Nine /><Ten /><Eleven /><Twelve /><Thirteen />"),
+    "fixture.tsx"
+  );
+  assert.equal(broad.filter(finding => finding.group).length, 0);
+});
+
 test("groups an undefined-initialized dialog payload without accepting opaque initializers", () => {
   const source = (initializer: string) => `
     import { useState } from "react";
