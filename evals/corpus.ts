@@ -6254,6 +6254,24 @@ export const goldCases = [
     rationale: "The React Native layout event changes one pure style prop on one stable host surface; a reactive native component can update that prop without rebuilding the 25-element certificate owner.",
     target: "tree-wallet",
   })),
+  {
+    action: "use-observable",
+    file: "components/personal-details/email-link-row.tsx",
+    hook: "useState",
+    line: 34,
+    name: "isFocused",
+    rationale: "The React Native focus events change one pure style prop on the unlinked branch's stable root View; an owner-lifetime observable and reactive native prop preserve the linked alternate return while avoiding the thirteen-element owner render.",
+    target: "tree-wallet",
+  },
+  {
+    action: "use-observable",
+    file: "components/PlaybackArea.tsx",
+    hook: "useState",
+    line: 35,
+    name: "isHovered",
+    rationale: "The React Native hover events change one data prop on the stable root View; a reactive native component can update that prop without rebuilding the twelve-element playback owner.",
+    target: "legend-music",
+  },
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [

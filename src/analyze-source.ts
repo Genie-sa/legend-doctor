@@ -3968,7 +3968,7 @@ function classifyState(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace event-owned numeric state \`${state.valueName}\` with one component-lifetime observable and make its single host prop reactive; preserve the source-proven event callback, calculation, write position, host children, and mount identity so the host prop updates without rerendering the broad owner.`,
+      message: `Replace event-owned scalar state \`${state.valueName}\` with one component-lifetime observable and make its single host prop reactive; preserve the source-proven event callback, calculation, write position, host children, and mount identity so the host prop updates without rerendering the broad owner.`,
     };
   }
   if (usage.shadowed || usage.escaped || usage.effectWrites > 0) {

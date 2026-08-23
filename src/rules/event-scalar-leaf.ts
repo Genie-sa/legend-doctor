@@ -28,7 +28,7 @@ import {
   sourceHasRuntimeBinding,
 } from "./state-proofs.js";
 
-interface EventOwnedNumericOptions {
+interface EventOwnedScalarOptions {
   eventCallbacks: ReadonlySet<RuntimeFunctionLike>;
   hasCompanionWrites: boolean;
   hasReactiveMutationPath: boolean;
@@ -36,19 +36,19 @@ interface EventOwnedNumericOptions {
   useCallbackNames: ReadonlySet<string>;
 }
 
-interface EventScalarLeafOptions extends EventOwnedNumericOptions {
+interface EventScalarLeafOptions extends EventOwnedScalarOptions {
   localComponents: ReadonlySet<string>;
   pureProjectionImports: ReadonlySet<string>;
   sourceComponents: ReadonlySet<string>;
 }
 
-interface ReactiveHostPropScalarOptions extends EventOwnedNumericOptions {
+interface ReactiveHostPropScalarOptions extends EventOwnedScalarOptions {
   hostComponents: ReadonlySet<string>;
   pureProjectionImports: ReadonlySet<string>;
 }
 
 /**
- * Proves that an event-owned measurement changes one prop on one host surface.
+ * Proves that an event-owned scalar changes one prop on one host surface.
  * A reactive DOM or native component can update that prop without rerendering
  * the component that owns the measurement.
  */
@@ -57,7 +57,12 @@ export function isReactiveHostPropScalarState(
   usage: StateUsage,
   options: ReactiveHostPropScalarOptions
 ): boolean {
-  if (!isEventOwnedNumericState(state, usage, options)) return false;
+  if (
+    !isEventOwnedNumericState(state, usage, options) &&
+    !isEventOwnedLiteralBooleanState(state, usage, options)
+  ) {
+    return false;
+  }
 
   const projections = oneHopRenderProjectionReferences(
     state.owner,
@@ -181,27 +186,13 @@ export function isSourceEventScalarLeafState(
 function isEventOwnedNumericState(
   state: StateCandidate,
   usage: StateUsage,
-  options: EventOwnedNumericOptions
+  options: EventOwnedScalarOptions
 ): boolean {
   if (
-    !state.setterName ||
     !hasNumericInitializer(state) ||
-    jsxElementCount(state.owner) < 12 ||
-    usage.localRenderReads === 0 ||
-    usage.localRenderReads !== usage.directRenderNodes.length ||
-    usage.effectReads !== 0 ||
-    usage.effectWrites !== 0 ||
-    usage.deferredReads !== 0 ||
-    usage.transportedOccurrences !== 0 ||
-    options.hasCompanionWrites ||
-    options.hasReactiveMutationPath ||
-    !options.hasSafeCommands ||
     usage.setterCallNodes.length !== 1 ||
     usage.setterCalls !== 1 ||
-    usage.setterUsesPreviousValue ||
-    usage.shadowed ||
-    !stateValueReferencesAreRenderOnly(state, usage) ||
-    !setterReferencesAreCallsOrCallbackDependencies(state, options.useCallbackNames)
+    !isEventOwnedScalarBase(state, usage, options)
   ) {
     return false;
   }
@@ -209,12 +200,57 @@ function isEventOwnedNumericState(
   const setterCall = usage.setterCallNodes[0]!;
   const argument = setterCall.arguments[0];
   const callback = nearestNestedFunction(setterCall, state.owner);
+  const setterName = state.setterName!;
   return setterCall.arguments.length === 1 &&
     !!argument &&
     isPureExpression(argument) &&
     !!callback &&
     options.eventCallbacks.has(callback) &&
-    mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName]));
+    mutationRegionOnlyCallsStateSetters(callback, new Set([setterName]));
+}
+
+function isEventOwnedLiteralBooleanState(
+  state: StateCandidate,
+  usage: StateUsage,
+  options: EventOwnedScalarOptions
+): boolean {
+  return state.call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword &&
+    usage.setterCallNodes.length > 0 &&
+    usage.setterCalls === usage.setterCallNodes.length &&
+    isEventOwnedScalarBase(state, usage, options) &&
+    usage.setterCallNodes.every(call => {
+      const argument = call.arguments[0];
+      const callback = nearestNestedFunction(call, state.owner);
+      return call.arguments.length === 1 &&
+        !!argument &&
+        (argument.kind === ts.SyntaxKind.TrueKeyword ||
+          argument.kind === ts.SyntaxKind.FalseKeyword) &&
+        !!callback &&
+        options.eventCallbacks.has(callback) &&
+        mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]));
+    });
+}
+
+function isEventOwnedScalarBase(
+  state: StateCandidate,
+  usage: StateUsage,
+  options: EventOwnedScalarOptions
+): boolean {
+  return !!state.setterName &&
+    jsxElementCount(state.owner) >= 12 &&
+    usage.localRenderReads > 0 &&
+    usage.localRenderReads === usage.directRenderNodes.length &&
+    usage.effectReads === 0 &&
+    usage.effectWrites === 0 &&
+    usage.deferredReads === 0 &&
+    usage.transportedOccurrences === 0 &&
+    !options.hasCompanionWrites &&
+    !options.hasReactiveMutationPath &&
+    options.hasSafeCommands &&
+    !usage.setterUsesPreviousValue &&
+    !usage.shadowed &&
+    stateValueReferencesAreRenderOnly(state, usage) &&
+    setterReferencesAreCallsOrCallbackDependencies(state, options.useCallbackNames);
 }
 
 function hasNumericInitializer(state: StateCandidate): boolean {

@@ -458,12 +458,30 @@ return <View onLayout={onLayout}>
 Agent output:
 
 ```text
-use-observable — Replace event-owned numeric state `scale` with one component-lifetime observable and make its single host prop reactive; preserve the source-proven event callback, calculation, write position, host children, and mount identity so the host prop updates without rerendering the broad owner.
+use-observable — Replace event-owned scalar state `scale` with one component-lifetime observable and make its single host prop reactive; preserve the source-proven event callback, calculation, write position, host children, and mount identity so the host prop updates without rerendering the broad owner.
 ```
 
-This requires a source-proven DOM or React Native event, one pure prop on one non-repeated host, and at least twelve JSX
-elements in the owner. Effects, custom component props, impure projections, repeated surfaces, command reads, and
-companion React writes stay under review.
+The same proof catches interaction props:
+
+```tsx
+// before: focus rerenders the complete row
+const [focused, setFocused] = useState(false);
+return <View style={styles.container(focused)}>
+  <TextInput onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
+  <RowContent />
+</View>;
+
+// after: only the root host style reacts
+const focused$ = useObservable(false);
+return <$View $style={() => styles.container(focused$.get())}>
+  <TextInput onFocus={() => focused$.set(true)} onBlur={() => focused$.set(false)} />
+  <RowContent />
+</$View>;
+```
+
+This requires source-proven DOM or React Native events, one pure prop on one non-repeated host, and at least twelve JSX
+elements in the owner. Boolean state must start as `false` and use only literal writes. Effects, custom component props,
+impure projections, repeated surfaces, command reads, functional updaters, and companion React writes stay under review.
 
 ### Isolate a controlled value and its validation
 
@@ -933,14 +951,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 836 manually audited hook labels, 25 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 838 manually audited hook labels, 25 state groups,
 and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
 | Unit tests | 562/562 |
-| Actionable precision | 463/463 |
-| Actionable recall | 463/463 |
+| Actionable precision | 465/465 |
+| Actionable recall | 465/465 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

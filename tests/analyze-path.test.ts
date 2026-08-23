@@ -802,6 +802,69 @@ test("isolates one event-owned scalar in a reactive host prop", async t => {
         </section>;
       }
 
+      export function BooleanScreen() {
+        const [hovered, setHovered] = useState(false);
+        const enter = () => setHovered(true);
+        const leave = () => setHovered(false);
+        return <View
+          onMouseEnter={enter}
+          onMouseLeave={leave}
+          data-hovered={hovered ? "true" : undefined}
+        >
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </View>;
+      }
+
+      export function BooleanBranchScreen({ linked }: { linked: boolean }) {
+        const [focused, setFocused] = useState(false);
+        const focus = () => setFocused(true);
+        const blur = () => setFocused(false);
+        if (linked) return <View><Linked/><Label/></View>;
+        return <View style={styles.container(focused)}>
+          <View onFocus={focus} onBlur={blur}/>
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </View>;
+      }
+
+      export function BooleanCompanionScreen() {
+        const [hoveredWithCompanion, setHoveredWithCompanion] = useState(false);
+        const [, setEntered] = useState(false);
+        const enter = () => { setHoveredWithCompanion(true); setEntered(true); };
+        const leave = () => setHoveredWithCompanion(false);
+        return <View
+          onMouseEnter={enter}
+          onMouseLeave={leave}
+          data-hovered={hoveredWithCompanion ? "true" : undefined}
+        >
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </View>;
+      }
+
+      export function BooleanMultiPropScreen() {
+        const [active, setActive] = useState(false);
+        const enter = () => setActive(true);
+        const leave = () => setActive(false);
+        return <View
+          onMouseEnter={enter}
+          onMouseLeave={leave}
+          data-active={active ? "true" : undefined}
+          aria-selected={active}
+        >
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </View>;
+      }
+
+      export function BooleanUpdaterScreen() {
+        const [toggled, setToggled] = useState(false);
+        const toggle = () => setToggled(value => !value);
+        return <View
+          onPress={toggle}
+          data-active={toggled ? "true" : undefined}
+        >
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </View>;
+      }
+
       export function CompanionScreen() {
         const [companionWidth, setCompanionWidth] = useState(0);
         const [, setMeasured] = useState(false);
@@ -861,7 +924,14 @@ test("isolates one event-owned scalar in a reactive host prop", async t => {
   assert.match(states.get("scale")?.message ?? "", /single host prop reactive/);
   assert.equal(states.get("scrollLeft")?.action, "use-observable");
   assert.match(states.get("scrollLeft")?.message ?? "", /single host prop reactive/);
+  assert.equal(states.get("hovered")?.action, "use-observable");
+  assert.match(states.get("hovered")?.message ?? "", /single host prop reactive/);
+  assert.equal(states.get("focused")?.action, "use-observable");
+  assert.match(states.get("focused")?.message ?? "", /single host prop reactive/);
   for (const name of ["companionWidth", "repeatedWidth", "impureOpacity"]) {
+    assert.equal(states.get(name)?.action, "review-state", name);
+  }
+  for (const name of ["hoveredWithCompanion", "active", "toggled"]) {
     assert.equal(states.get(name)?.action, "review-state", name);
   }
   assert.doesNotMatch(states.get("customWidth")?.message ?? "", /single host prop reactive/);
