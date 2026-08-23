@@ -2575,15 +2575,12 @@ function payloadHasBoundedDialogGate(
   if (!firstRead) return false;
   const gate = findAncestorUntil(firstRead, ts.isJsxExpression, payload.owner);
   const expression = gate?.expression && unwrapTransparentExpression(gate.expression);
-  const trueBranch = expression && ts.isConditionalExpression(expression)
-    ? unwrapTransparentExpression(expression.whenTrue)
+  const trueBranch = expression
+    ? directDialogPayloadGateBranch(expression, payload.valueName)
     : null;
   if (
     !gate ||
     !expression ||
-    !ts.isConditionalExpression(expression) ||
-    !isDirectTruthyStateCondition(expression.condition, payload.valueName) ||
-    unwrapTransparentExpression(expression.whenFalse).kind !== ts.SyntaxKind.NullKeyword ||
     !trueBranch ||
     (!ts.isJsxElement(trueBranch) &&
       !ts.isJsxSelfClosingElement(trueBranch) &&
@@ -2610,6 +2607,28 @@ function payloadHasBoundedDialogGate(
       [...usage.valueTransportSites, ...usage.setterTransportSites].every(site => targetSites.has(site)) &&
       usage.directRenderNodes.every(read => nodeWithin(read, gate));
   });
+}
+
+function directDialogPayloadGateBranch(
+  expression: ts.Expression,
+  payloadName: string
+): ts.Expression | null {
+  const value = unwrapTransparentExpression(expression);
+  if (
+    ts.isConditionalExpression(value) &&
+    isDirectTruthyStateCondition(value.condition, payloadName) &&
+    unwrapTransparentExpression(value.whenFalse).kind === ts.SyntaxKind.NullKeyword
+  ) {
+    return unwrapTransparentExpression(value.whenTrue);
+  }
+  if (
+    ts.isBinaryExpression(value) &&
+    value.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
+    isDirectTruthyStateCondition(value.left, payloadName)
+  ) {
+    return unwrapTransparentExpression(value.right);
+  }
+  return null;
 }
 
 function isControlledBooleanTransition(mutation: SetterMutation): boolean {

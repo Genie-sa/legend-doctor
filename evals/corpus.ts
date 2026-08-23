@@ -2283,7 +2283,9 @@ export const goldCases = [
   },
   ...[
     ["components/operations/deliveries-table.tsx", 43, "signatureModalOpen"],
+    ["components/operations/deliveries-table.tsx", 44, "selectedDeliveryId"],
     ["components/operations/deliveries-table.tsx", 45, "alertModalOpen"],
+    ["components/operations/deliveries-table.tsx", 46, "selectedDeliveryForAlert"],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
     file: file as string,
@@ -6296,8 +6298,15 @@ export const goldStateGroups = [
   {
     file: "components/operations/deliveries-table.tsx",
     line: 43,
-    members: null,
-    rationale: "The payload still controls parent JSX mounting, so contract relocation is not proven.",
+    members: ["signatureModalOpen", "selectedDeliveryId"],
+    rationale: "The signature payload and open flag form one persistent modal model behind a bounded logical-and gate.",
+    target: "tree-map",
+  },
+  {
+    file: "components/operations/deliveries-table.tsx",
+    line: 45,
+    members: ["alertModalOpen", "selectedDeliveryForAlert"],
+    rationale: "The alert payload and open flag form one modal model whose completion callback clears the payload after close.",
     target: "tree-map",
   },
   {

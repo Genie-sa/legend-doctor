@@ -4377,6 +4377,33 @@ test("groups a persistent dialog model behind one bounded payload gate", () => {
   assert.equal(fanout.length, 0);
 });
 
+test("groups one bounded logical-and dialog gate without merging payload fanout", () => {
+  const source = (extra: string) => `
+    import { useState } from "react";
+    interface Item { id: string }
+    function ItemDialog(_props: unknown) { return null; }
+    export function Screen({ item }: { item: Item }) {
+      const [open, setOpen] = useState(false);
+      const [target, setTarget] = useState<Item | null>(null);
+      const show = () => { setTarget(item); setOpen(true); };
+      ${"\n".repeat(100)}
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Preview />
+        {target && <ItemDialog target={target} open={open} onOpenChange={setOpen} onShow={show} />}
+        ${extra}
+      </main>;
+    }
+  `;
+
+  const grouped = analyzeSource(source(""), "fixture.tsx").filter(finding => finding.group);
+  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  assert.deepEqual(grouped[0]?.group?.members, ["open", "target"]);
+
+  const fanout = analyzeSource(source("{target && <Preview item={target} />}"), "fixture.tsx");
+  assert.equal(fanout.filter(finding => finding.group).length, 0);
+});
+
 test("groups an undefined-initialized dialog payload without accepting opaque initializers", () => {
   const source = (initializer: string) => `
     import { useState } from "react";
