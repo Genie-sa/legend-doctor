@@ -734,7 +734,7 @@ function callbackPathExpressionIsDeferred(
   if (
     attribute?.initializer &&
     nodeWithin(value, attribute.initializer) &&
-    jsxAttributeDirectlyCarries(attribute, value)
+    jsxAttributeCarriesCallbackIdentity(attribute, value)
   ) {
     if (
       path.length === 0 &&
@@ -1736,7 +1736,7 @@ function callbackInvocationIsDeferred(
     if (
       attribute &&
       /^on[A-Z]/.test(attribute.name.getText()) &&
-      jsxAttributeCarriesCallbackIdentity(attribute, node, owner)
+      jsxAttributeCarriesCallbackIdentity(attribute, node)
     ) {
       if (jsxOwnerIsDeferredEventTarget(attribute, source)) return;
       const target = jsxOwnerTarget(attribute);
@@ -1804,18 +1804,13 @@ function callbackInvocationIsDeferred(
 
 function jsxAttributeCarriesCallbackIdentity(
   attribute: ts.JsxAttribute,
-  callback: ts.Expression,
-  owner: ChildComponentSource["owner"]
+  callback: ts.Expression
 ): boolean {
   let value = climbTransparentExpression(callback);
   if (
     ts.isConditionalExpression(value.parent) &&
     (value.parent.whenTrue === value || value.parent.whenFalse === value)
   ) {
-    const other = value.parent.whenTrue === value
-      ? value.parent.whenFalse
-      : value.parent.whenTrue;
-    if (!isNullishExpression(other, owner)) return false;
     value = value.parent;
   }
   return jsxAttributeDirectlyCarries(attribute, value);
@@ -1834,7 +1829,7 @@ function callbackIsDeferredByJsx(
   if (
     !attribute ||
     !/^on[A-Z]/.test(attribute.name.getText()) ||
-    !jsxAttributeCarriesCallbackIdentity(attribute, expression, source.owner)
+    !jsxAttributeCarriesCallbackIdentity(attribute, expression)
   ) {
     return false;
   }

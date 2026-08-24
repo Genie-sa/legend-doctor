@@ -807,6 +807,9 @@ default. Transparent rest-prop wrappers preserve that proof only when every use 
 the outer invocation resolves the branch prop. Dynamic values, mutated or escaped spreads, mutable targets, and selected
 custom components remain candidates.
 
+A callback reference selected by a JSX conditional remains deferred when the complete conditional is the event prop.
+Calling that callback in the condition or either branch remains a candidate.
+
 ### Subscribe once per keyed row
 
 ```tsx
@@ -1080,14 +1083,14 @@ These rules follow the official
 ## Verified accuracy
 
 The pinned corpus covers 2,392 hooks across 236 targets. It contains 856 manually audited hook labels, 26 state groups,
-and 109 Legend practice labels. Eighteen safe async-leaf opportunities remain explicit non-enforced labels because
+and 109 Legend practice labels. Seventeen safe async-leaf opportunities remain explicit non-enforced labels because
 their complete custom callback chains are not yet source-proven.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 572/572 |
-| Actionable precision | 452/452 |
-| Actionable recall | 452/470 |
+| Unit tests | 573/573 |
+| Actionable precision | 453/453 |
+| Actionable recall | 453/470 |
 | Legend practice precision | 109/109 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

@@ -3873,6 +3873,109 @@ test("proves every async command path through source wrappers and inline event a
   );
 });
 
+test("traces a conditionally selected event callback through prop spreads", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-conditional-event-callback-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Pressable.tsx"),
+    `
+      import { Pressable } from "react-native";
+      export function AppPressable({ onLongPress, ...props }: {
+        disabled: boolean;
+        onLongPress?: () => void;
+        onPress: () => void;
+      }) {
+        return <Pressable onLongPress={onLongPress} {...props} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "IconButton.tsx"),
+    `
+      import { AppPressable } from "./Pressable";
+      export function IconButton({ loading, ...rest }: {
+        loading: boolean;
+        onPress: () => void;
+      }) {
+        return <AppPressable disabled={loading} {...rest} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "ControlBar.tsx"),
+    `
+      import { IconButton } from "./IconButton";
+      type Props = {
+        fallback: () => void;
+        loading: boolean;
+        primary: () => void;
+        primaryEnabled: boolean;
+      };
+      export function ControlBar({ fallback, loading, primary, primaryEnabled }: Props) {
+        return <IconButton loading={loading} onPress={primaryEnabled ? primary : fallback} />;
+      }
+      export function EagerControlBar({ fallback, loading, primary, primaryEnabled }: Props) {
+        return <IconButton loading={loading} onPress={primaryEnabled ? primary() : fallback} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useState } from "react";
+      import { ControlBar, EagerControlBar } from "./ControlBar";
+      export function SafeScreen() {
+        const [preparing, setPreparing] = useState(false);
+        const prepare = async () => {
+          setPreparing(true);
+          try { await connect(); } finally { setPreparing(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <ControlBar
+            fallback={() => submit()}
+            loading={preparing}
+            primary={prepare}
+            primaryEnabled={featureEnabled}
+          />
+        </main>;
+      }
+      export function EagerScreen() {
+        const [eagerPreparing, setEagerPreparing] = useState(false);
+        const prepare = async () => {
+          setEagerPreparing(true);
+          try { await connect(); } finally { setEagerPreparing(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <EagerControlBar
+            fallback={() => submit()}
+            loading={eagerPreparing}
+            primary={prepare}
+            primaryEnabled={featureEnabled}
+          />
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
+  assert.equal(
+    findings.get("preparing")?.action,
+    "use-observable",
+    findings.get("preparing")?.message
+  );
+  assert.equal(
+    findings.get("eagerPreparing")?.action,
+    "review-state",
+    findings.get("eagerPreparing")?.message
+  );
+});
+
 test("traces an async command through a child action array", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-action-array-command-"));
   t.after(() => rm(root, { force: true, recursive: true }));

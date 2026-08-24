@@ -1452,6 +1452,7 @@ export const repositories = [
   },
   {
     commit: "7a277e6eac790db034204688bb9130d457545caa",
+    contextRoot: ".",
     name: "open-webui-react-native",
     targets: [
       {
@@ -4847,12 +4848,11 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "component.tsx",
     hook: "useState",
     line: 82,
     name: "isMicrophonePreparing",
-    rationale: "The voice-mode command reaches React Native Pressable through ChatInputBottomRow, IconButton, and AppPressable, while only that stable action leaf consumes the pending flag; analysis must prove the full spread-forwarding chain before enforcing the migration.",
+    rationale: "The voice-mode command crosses ChatInputBottomRow's conditional event selection, IconButton, and two transparent rest-prop objects before reaching React Native Pressable; only the stable action leaf consumes the pending flag.",
     target: "open-webui-form-chat-input",
   },
   {
