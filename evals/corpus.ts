@@ -1151,12 +1151,18 @@ export const repositories = [
         root: "apps/web/modules/ee/analysis/dashboards/components/dashboard-date-filter.tsx",
         states: 3,
       },
+      {
+        effects: 0,
+        id: "formbricks-delete-workspace",
+        root: "apps/web/modules/workspaces/settings/general/components/delete-workspace-render.tsx",
+        states: 3,
+      },
     ],
     url: "https://github.com/formbricks/formbricks.git",
   },
   {
     commit: "bae9790355385b2b2987123eeb3978c6c06e6ed6",
-    contextRoot: "app",
+    contextRoot: ".",
     name: "outline",
     targets: [
       {
@@ -1230,6 +1236,12 @@ export const repositories = [
         id: "outline-share-settings",
         root: "app/components/Sharing/components/ShareSettingsPopover.tsx",
         states: 1,
+      },
+      {
+        effects: 0,
+        id: "outline-editor-image",
+        root: "shared/editor/components/Image.tsx",
+        states: 5,
       },
       {
         effects: 1,
@@ -1394,6 +1406,30 @@ export const repositories = [
         states: 3,
       },
       {
+        effects: 1,
+        id: "outline-collection-public-access",
+        root: "app/components/Sharing/Collection/PublicAccess.tsx",
+        states: 3,
+      },
+      {
+        effects: 1,
+        id: "outline-document-public-access",
+        root: "app/components/Sharing/Document/PublicAccess.tsx",
+        states: 3,
+      },
+      {
+        effects: 0,
+        id: "outline-document-delete",
+        root: "app/scenes/DocumentDelete.tsx",
+        states: 2,
+      },
+      {
+        effects: 1,
+        id: "outline-passkeys-settings",
+        root: "plugins/passkeys/client/Settings.tsx",
+        states: 3,
+      },
+      {
         effects: 0,
         id: "outline-auto-refresh",
         root: "app/hooks/useAutoRefresh.ts",
@@ -1423,6 +1459,12 @@ export const repositories = [
         id: "open-webui-search-archived-chats",
         root: "libs/mobile/chat/features/search-archived-chats/src/lib/component.tsx",
         states: 1,
+      },
+      {
+        effects: 0,
+        id: "open-webui-form-chat-input",
+        root: "libs/mobile/chat/features/form-chat-input/src/lib/component.tsx",
+        states: 3,
       },
     ],
     url: "https://github.com/RonasIT/open-webui-react-native.git",
@@ -2430,6 +2472,7 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
+    enforced: false,
     file: "app/(private)/forest/tree/share.tsx",
     hook: "useState",
     line: 62,
@@ -2476,6 +2519,7 @@ export const goldCases = [
     ["components/tree-actions-menu.tsx", 88, "suppressTooltip"],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
+    ...(file === "components/map-ui/polygon-toolbar.tsx" ? { enforced: false as const } : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -3450,6 +3494,7 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "webhook-settings-tab.tsx",
     hook: "useState",
     line: 56,
@@ -3489,6 +3534,7 @@ export const goldCases = [
     [45, "isMergingTags"],
   ].map(([line, name]) => ({
     action: "use-observable" as const,
+    ...(line === 45 ? { enforced: false as const } : {}),
     file: "single-tag.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -4076,6 +4122,7 @@ export const goldCases = [
     [29, "selectedPath", "review-state"],
   ].map(([line, name, action]) => ({
     action: action as "review-state" | "use-observable",
+    ...(line === 27 ? { enforced: false as const } : {}),
     file: "DocumentCopy.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -4331,6 +4378,14 @@ export const goldCases = [
     ["formbricks-organization-actions", "organization-actions.tsx", 73, "loading"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
+    ...(
+      target === "formbricks-chart-menu" ||
+      target === "formbricks-create-segment" ||
+      target === "formbricks-organization-actions" ||
+      (target === "formbricks-dashboard-menu" && name === "isDuplicating")
+        ? { enforced: false as const }
+        : {}
+    ),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -4358,6 +4413,9 @@ export const goldCases = [
     ["formbricks-dashboard-detail", "dashboard-detail-client.tsx", 194, "editingChartId"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
+    ...(target === "formbricks-dashboard-detail" && name === "isSaving"
+      ? { enforced: false as const }
+      : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -4470,6 +4528,7 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "EditProfileDetailsForm.tsx",
     hook: "useState",
     line: 59,
@@ -4479,6 +4538,7 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "AddIntegrationModal.tsx",
     hook: "useState",
     line: 78,
@@ -4506,6 +4566,7 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
+    enforced: false,
     file: "AddIntegrationModal.tsx",
     hook: "useState",
     line: 68,
@@ -4533,6 +4594,7 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "AddChannelMappingModal.tsx",
     hook: "useState",
     line: 63,
@@ -4563,6 +4625,7 @@ export const goldCases = [
     [45, "isDeletingSegment"],
   ].map(([line, name]) => ({
     action: "use-observable" as const,
+    ...(line === 44 ? { enforced: false as const } : {}),
     file: "segment-settings.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -4594,6 +4657,7 @@ export const goldCases = [
     ],
   ].map(([line, name, action, rationale]) => ({
     action: action as "review-state" | "use-observable",
+    ...(line === 56 ? { enforced: false as const } : {}),
     file: "add-webhook-modal.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -4630,6 +4694,7 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "pricing-table.tsx",
     hook: "useState",
     line: 326,
@@ -4666,6 +4731,7 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "ImportSpreadsheet.tsx",
     hook: "useState",
     line: 56,
@@ -4710,6 +4776,75 @@ export const goldCases = [
     target: "outline-share-settings",
   },
   {
+    action: "review-state",
+    file: "Image.tsx",
+    hook: "useState",
+    line: 92,
+    name: "isDownloading",
+    rationale: "The pending button is stored in a filtered JSX action array and replayed through a keyed map; keep it under review until analysis proves that exact stored element can become the sole subscriber without changing list identity.",
+    target: "outline-editor-image",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "delete-workspace-render.tsx",
+    hook: "useState",
+    line: 35,
+    name: "isDeleting",
+    rationale: "The delete command reaches an intrinsic button through DeleteDialog and a default-intrinsic polymorphic Button, while only the stable dialog leaf consumes the pending flag; analysis must prove that complete callback chain before enforcing the migration.",
+    target: "formbricks-delete-workspace",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "PublicAccess.tsx",
+    hook: "useState",
+    line: 49,
+    name: "creating",
+    rationale: "The collection-share command runs from Radix Switch's deferred checked-change event and only the stable switch leaf consumes the pending flag; keep this opportunity non-enforced until package event provenance is structural.",
+    target: "outline-collection-public-access",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "PublicAccess.tsx",
+    hook: "useState",
+    line: 59,
+    name: "creating",
+    rationale: "The document-share command runs from Radix Switch's deferred checked-change event and only the stable switch leaf consumes the pending flag; keep this opportunity non-enforced until package event provenance is structural.",
+    target: "outline-document-public-access",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "DocumentDelete.tsx",
+    hook: "useState",
+    line: 25,
+    name: "isArchiving",
+    rationale: "The archive command reaches an intrinsic button through the local Button and ActionButton wrappers, and the archive button is the sole pending consumer; analysis must prove the full wrapper chain before enforcing the migration.",
+    target: "outline-document-delete",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "Settings.tsx",
+    hook: "useState",
+    line: 40,
+    name: "isRegistering",
+    rationale: "The registration command reaches an intrinsic button through the local Button and ActionButton wrappers, while only the add-passkey action consumes its pending state; analysis must prove the full wrapper chain before enforcing the migration.",
+    target: "outline-passkeys-settings",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "component.tsx",
+    hook: "useState",
+    line: 82,
+    name: "isMicrophonePreparing",
+    rationale: "The voice-mode command reaches React Native Pressable through ChatInputBottomRow, IconButton, and AppPressable, while only that stable action leaf consumes the pending flag; analysis must prove the full spread-forwarding chain before enforcing the migration.",
+    target: "open-webui-form-chat-input",
+  },
+  {
     action: "use-observable",
     file: "survey-dropdown-menu.tsx",
     hook: "useState",
@@ -4723,6 +4858,7 @@ export const goldCases = [
     [69, "isTripSupportLoading"],
   ].map(([line, name]) => ({
     action: "use-observable" as const,
+    enforced: false as const,
     file: "TripDetailsPage.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -5320,6 +5456,7 @@ export const goldCases = [
     ["outline-invite", "Invite.tsx", 36, "isSaving", "Button"],
   ].map(([target, file, line, name, leaf]) => ({
     action: "use-observable" as const,
+    ...(target !== "outline-invite" ? { enforced: false as const } : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -5396,6 +5533,12 @@ export const goldCases = [
     ["formbricks-taxonomy-tree", "taxonomy-tree.tsx", 232, "value", "The rename input and save-validity leaf subscribe to the editable value while the cancel action stays independent and save snapshots once."],
   ].map(([target, file, line, name, rationale]) => ({
     action: "use-observable" as const,
+    ...(
+      target === "expensify-biometrics-test" ||
+      target === "formbricks-edit-membership-role"
+        ? { enforced: false as const }
+        : {}
+    ),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -6000,6 +6143,7 @@ export const goldCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "components/receipt/receipt-scanner.tsx",
     hook: "useState",
     line: 90,
@@ -6583,6 +6727,13 @@ export const goldStateGroups = [
 ] as const satisfies readonly GoldStateGroupCase[];
 
 export const goldPracticeCases = [
+  ...([79, 80] as const).map(line => ({
+    action: "replace-legacy-use-value" as const,
+    file: "component.tsx",
+    line,
+    rationale: "Legend State documents useValue as the supported replacement for the legacy useSelector hook, with the observable argument unchanged.",
+    target: "open-webui-form-chat-input",
+  })),
   {
     action: "narrow-observable-write",
     file: "use-attached-files.ts",

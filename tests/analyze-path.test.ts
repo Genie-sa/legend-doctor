@@ -3478,7 +3478,7 @@ test("keeps observable ownership stable when its one leaf subscription mounts co
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-contract-conditional-"));
   await writeFile(
     path.join(root, "StatusLeaf.tsx"),
-    'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{busy ? "Busy" : "Ready"}</span>; }'
+    'export function StatusLeaf({ busy, onRun }: { busy: boolean; onRun: () => void }) { return <button onClick={onRun}>{busy ? "Busy" : "Ready"}</button>; }'
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3678,4 +3678,50 @@ test("does not put nullable callable state into a leaf observable", async () => 
   );
   const finding = (await analyzePath(root)).findings.find(candidate => candidate.name === "callback");
   assert.notEqual(finding?.action, "use-observable");
+});
+
+test("requires source-proven deferred callbacks for one async status leaf", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-async-event-contract-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Controls.tsx"),
+    `
+      export function DeferredControl({ loading, onRun }: { loading: boolean; onRun: () => void }) {
+        return <button disabled={loading} onClick={onRun}>Run</button>;
+      }
+      export function EagerControl({ loading, onRun }: { loading: boolean; onRun: () => void }) {
+        onRun();
+        return <span>{String(loading)}</span>;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { DeferredControl, EagerControl } from "./Controls";
+      import { OpaqueControl } from "opaque-controls";
+
+      export function DeferredScreen() {
+        const [deferred, setDeferred] = useState(false);
+        const run = async () => { setDeferred(true); try { await save(); } finally { setDeferred(false); } };
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status /><DeferredControl loading={deferred} onRun={run} /></main>;
+      }
+      export function EagerScreen() {
+        const [eager, setEager] = useState(false);
+        const run = async () => { setEager(true); try { await save(); } finally { setEager(false); } };
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status /><EagerControl loading={eager} onRun={run} /></main>;
+      }
+      export function OpaqueScreen() {
+        const [opaque, setOpaque] = useState(false);
+        const run = async () => { setOpaque(true); try { await save(); } finally { setOpaque(false); } };
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status /><OpaqueControl loading={opaque} onRun={run} /></main>;
+      }
+    `
+  );
+
+  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
+  assert.equal(findings.get("deferred")?.action, "use-observable", findings.get("deferred")?.message);
+  assert.equal(findings.get("eager")?.action, "review-state", findings.get("eager")?.message);
+  assert.equal(findings.get("opaque")?.action, "review-state", findings.get("opaque")?.message);
 });

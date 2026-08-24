@@ -61,7 +61,8 @@ Applied changes can expose a smaller subscription boundary, so the second scan i
 Text output is a short edit queue:
 
 ```text
-DocumentCopy.tsx:27:33 [use-observable] Replace async pending flag `copying` with a component-lifetime observable and wrap the stable pending-control call site in a leaf subscriber; preserve the event command's async completion boundary exactly.
+DocumentCopy.tsx:26:33 [use-observable] Replace controlled state `publish` with an owner-scoped observable and wrap `Switch` in a stable leaf subscriber; keep its value callback API unchanged and use non-tracking reads in submit or commit commands, snapshotting once at command entry before deferred work.
+DocumentCopy.tsx:27:33 [review-state] Review `copying`; its async pending interval and leaf boundary are proven, but source does not prove that every command runs from a deferred event. Do not publish these writes through an observable until the callback contract resolves.
 DocumentCopy.tsx:29:38 [review-state] Legend-first restructuring candidate: replace `selectedPath` with observable ownership and move its subscription into the smallest rendered subtree; updates currently invalidate this owner with 12 JSX elements.
 Scanned 1 files: 4 useState, 0 useEffect, 4 shown.
 Re-run legend-doctor after applying change findings; applied changes can reveal new ones.
@@ -76,13 +77,14 @@ JSON is the agent interface. Each finding names the edit, proof, location, and r
   "disposition": "change",
   "evidence": [
     "owner: DocumentCopy, lines 22-118, JSX elements 12",
-    "reads: render 2, effects 0, deferred 0, transported 0",
-    "writes: setter calls 2, effect writes 0"
+    "reads: render 0, effects 0, deferred 1, transported 2",
+    "writes: setter calls 0, effect writes 0",
+    "transport targets: Switch"
   ],
   "hook": "useState",
-  "location": { "file": "DocumentCopy.tsx", "line": 27, "column": 33 },
-  "message": "Replace async pending flag `copying` with a component-lifetime observable...",
-  "name": "copying",
+  "location": { "file": "DocumentCopy.tsx", "line": 26, "column": 33 },
+  "message": "Replace controlled state `publish` with an owner-scoped observable...",
+  "name": "publish",
   "stateModel": {
     "ownership": "local-observable",
     "subscription": "leaf-use-value"
@@ -755,8 +757,11 @@ const copy = async () => {
 return <><Editor /><ButtonState copying$={copying$} onClick={copy} /></>;
 ```
 
-Pure props, labels, and icons may share one stable status leaf. Repeated controls, mount gates, impure projections, and
-conditional first awaits remain candidates.
+Pure props, labels, and icons may share one stable status leaf. Every async status change requires source-proven deferred
+callback timing, including the one-leaf form. Intrinsic events qualify directly. A custom `onX` prop qualifies only when
+multi-file analysis follows every command path to an intrinsic or framework event or another proven deferred
+registration. Eager invocation and unresolved wrappers remain candidates. Repeated controls, mount gates, impure
+projections, and conditional first awaits also remain candidates.
 
 The same pending interval may feed two or three stable leaves without rendering their owner:
 
@@ -1064,15 +1069,16 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,365 hooks across 228 targets. It contains 847 manually audited hook labels, 26 state groups,
-and 107 Legend practice labels, with no known labeled misses.
+The pinned corpus covers 2,390 hooks across 235 targets. It contains 854 manually audited hook labels, 26 state groups,
+and 109 Legend practice labels. Thirty-two safe async-leaf opportunities remain explicit non-enforced labels because
+their complete custom callback chains are not yet source-proven.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 569/569 |
-| Actionable precision | 463/463 |
-| Actionable recall | 463/463 |
-| Legend practice precision | 107/107 |
+| Unit tests | 570/570 |
+| Actionable precision | 437/437 |
+| Actionable recall | 437/469 |
+| Legend practice precision | 109/109 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain
 code into a forced edit.

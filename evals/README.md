@@ -14,9 +14,9 @@ Pinned repositories:
 - `excalidraw/excalidraw`
 - `Expensify/App`: focused address, controlled-form, async-status, Promise-chain, navigation-effect, animation-lifecycle, list-render, validation, task, workspace, payment-form, HR-sync, video-control, signer-document, Chronos, domain, report-access, and callback-resource targets
 - `formbricks/formbricks`: focused controlled-form, draft, chart-form, element-editor, webhook, billing, segment, tag, integration, async-status, and survey-URL targets
-- `outline/outline`: focused API-key, controlled-form, document-copy, export-form, icon-picker, split-history, and collection-routing targets
+- `outline/outline`: focused API-key, controlled-form, document-copy, sharing, document-action, passkey, export-form, icon-picker, split-history, and collection-routing targets
 - `Genie-sa/genie-courses`: private full-repository effect-policy and Legend-transaction holdout
-- `RonasIT/open-webui-react-native`: focused observable-array append and attachment-reset holdout
+- `RonasIT/open-webui-react-native`: focused observable-array append, attachment-reset, and form-chat-input targets
 
 Repository source is not copied into this project. Corpus entries pin a commit and source location, then a local eval
 runner scans checked-out repositories. A recommendation is added to the golden corpus only after manual review.
@@ -31,11 +31,11 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,365 hooks across 228 source roots. The corpus currently contains
-847 manual hook labels with no known misses, plus twenty-six
+At the pinned commits, the analyzer inventories 2,390 hooks across 235 source roots. The corpus currently contains
+854 manual hook labels, including 32 explicit non-enforced opportunities, plus twenty-six
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
-labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
+labels. Three boolean-toggle labels require the direct `.toggle()` operation. Three real labels verify the documented
 `useSelector`/`use$` to `useValue` migration. Five split-leaf labels verify that divergent static reads of one broad
 `useValue(parent$)` subscription become per-leaf subscriptions across three app roots. Eleven leaf-boundary labels verify
 that a transported `useValue` subscription can leave a broad owner without changing observable ownership or child APIs.
@@ -290,12 +290,13 @@ upstream command after the local write; unrelated calls, reversed ordering, and 
 Async pending labels require a literal-false flag whose pending transition in an event command reaches awaited work
 before any owner-state write or early exit and renders through one proven runtime status leaf. The same leaf may consume
 the flag through loading props, pure label or icon selection, or one call-free JSX prop projection with state-independent
-inputs. When the call site is inferred only from direct projections, its first await must be structurally unavoidable; a
-conditional await can otherwise collapse the true-to-false transition into one synchronous command. A single projection
-must stay in one non-repeated call site and may not control that site's mount. Two or three transported status call sites
-may qualify when every call site is non-repeated, all share one owner return, and source analysis proves that the command
-starts only from a deferred event. Small cohesive workflows, eager child callbacks, effect-triggered commands with
-companion React writes, and repeated status rows abstain. A broad owner
+inputs. Every command path must resolve to an intrinsic or framework event or another proven deferred registration,
+including the one-leaf form. When the call site is inferred only from direct projections, its first await must be
+structurally unavoidable; a conditional await can otherwise collapse the true-to-false transition into one synchronous
+command. A single projection must stay in one non-repeated call site and may not control that site's mount. Two or three
+transported status call sites may qualify when every call site is non-repeated and all share one owner return. Small
+cohesive workflows, eager child callbacks, effect-triggered commands with companion React writes, and repeated status
+rows abstain. A broad owner
 qualifies directly; a compact owner must have independently rendered content outside the status leaf, while a cohesive
 one-control owner remains React state.
 Non-mutating validation,
@@ -315,6 +316,10 @@ A source-resolved callback may cross one polymorphic component target when an im
 lowercase intrinsic tag from a destructured boolean prop and the concrete JSX invocation fixes that prop with a boolean
 literal or literal default. This is callsite proof, not a `Button` or `asChild` convention. Dynamic expressions, any JSX
 spread at the invocation, reassigned prop bindings, mutable targets, and selected custom components abstain.
+
+Thirty-two non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet
+prove. They include local wrapper stacks, prop spreads, React Native Pressable chains, and Radix checked-change events.
+These labels count against recall and form the next multi-file callback-contract work queue.
 
 Two Formbricks labels delete invariant nullable markers whose only writes repeat their `null` initializer and whose only
 reads are inert equality guards around those idempotent writes. The earlier choice lookup remains evaluated at its

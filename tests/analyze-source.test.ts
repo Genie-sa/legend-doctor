@@ -2784,14 +2784,14 @@ test("keeps async status label projections inside the same subscribed leaf", () 
         try { await persist(); } finally { setSaving(false); }
       }
       return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
-        <Button disabled={saving} onClick={save}>
+        <button disabled={saving} onClick={save}>
           {saving ? translate("Saving") : translate("Save")}
-        </Button>
+        </button>
       </main>;
     }
   `, "fixture.tsx");
   assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /stable `Button` call site/);
+  assert.match(finding?.message ?? "", /stable pending-control call site/);
 });
 
 test("isolates a direct async status projection in one stable call site", () => {
@@ -2806,7 +2806,7 @@ test("isolates a direct async status projection in one stable call site", () => 
         try { await encode(); setFiles([]); } finally { setEncoding(false); }
       }
       return <main><Header /><Toolbar /><Summary /><Files /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
-        {files.length > 0 && <Button disabled={encoding || queueFull} onClick={scan}>Scan</Button>}
+        {files.length > 0 && <button disabled={encoding || queueFull} onClick={scan}>Scan</button>}
       </main>;
     }
   `, "fixture.tsx").find(candidate => candidate.name === "encoding");
@@ -2826,9 +2826,9 @@ test("keeps a pure conditional status label inside the direct async leaf", () =>
         try { await duplicate(destination); } finally { setCopying(false); }
       }
       return <main><Header /><Toolbar /><Summary /><Options /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
-        <Button disabled={!destination || copying} onClick={copy}>
+        <button disabled={!destination || copying} onClick={copy}>
           {copying ? \`\${translate("Copying")}...\` : translate("Copy")}
-        </Button>
+        </button>
       </main>;
     }
     export function MountGate() {
@@ -3346,7 +3346,7 @@ test("keeps async status ownership above a state-independent conditional leaf", 
         try { await persist(); } finally { setSaving(false); }
       }
       return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
-        {existing ? <ExternalButton loading={saving} onClick={save} /> : <CreateButton />}
+        {existing ? <button disabled={saving} onClick={save}>Save</button> : <CreateButton />}
       </main>;
     }
   `, "fixture.tsx");
@@ -3481,7 +3481,7 @@ test("keeps exact async status in React when the owner is already the status lea
         setSaving(true);
         try { await persist(); } finally { setSaving(false); }
       }
-      return <Button loading={saving} onClick={save}>Save</Button>;
+      return <button disabled={saving} onClick={save}>Save</button>;
     }
   `, "fixture.tsx");
   assert.equal(finding?.action, "keep-state");

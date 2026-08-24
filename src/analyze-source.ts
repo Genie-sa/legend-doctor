@@ -724,6 +724,7 @@ function analyzeParsedSource(
           reactiveMutationAffectedStates.has(state),
           asyncLeafStatuses.isolated.has(state),
           asyncLeafStatuses.cohesive.has(state),
+          asyncLeafStatuses.unproven.has(state),
           deferredRevealStates.has(state),
           keyedSelections.collectionStates.has(state),
           keyedSelections.recordStates.has(state),
@@ -3707,6 +3708,7 @@ function classifyState(
   hasReactiveMutationPath: boolean,
   isAsyncLeafStatus: boolean,
   isCohesiveAsyncStatus: boolean,
+  isUnprovenAsyncStatus: boolean,
   isDeferredReveal: boolean,
   isKeyedLeafCollection: boolean,
   isKeyedLeafRecord: boolean,
@@ -3944,6 +3946,13 @@ function classifyState(
       action: "keep-state",
       confidence: "certain",
       message: `Keep async pending flag \`${state.valueName}\` as React state; its exact status consumer is already the cohesive owner boundary, so an observable cannot narrow rendering.`,
+    };
+  }
+  if (isUnprovenAsyncStatus) {
+    return {
+      action: "review-state",
+      confidence: "probable",
+      message: `Review \`${state.valueName}\`; its async pending interval and leaf boundary are proven, but source does not prove that every command runs from a deferred event. Do not publish these writes through an observable until the callback contract resolves.`,
     };
   }
   if (

@@ -22,7 +22,6 @@ import {
   isSafeProjectionExpression,
 } from "./deferred-reveal.js";
 import {
-  callbackIsEventRooted,
   hasIndependentRenderCutWitness,
   isHookDependencyReference,
   isSafeJsxProjectionReference,
@@ -35,6 +34,7 @@ import {
 export interface AsyncLeafStatusAnalysis {
   cohesive: ReadonlySet<StateCandidate>;
   isolated: ReadonlySet<StateCandidate>;
+  unproven: ReadonlySet<StateCandidate>;
 }
 
 const EMPTY_EVENT_CALLBACKS: ReadonlySet<RuntimeFunctionLike> = new Set();
@@ -90,6 +90,7 @@ export function findAsyncLeafStatuses(
 ): AsyncLeafStatusAnalysis {
   const cohesive = new Set<StateCandidate>();
   const isolated = new Set<StateCandidate>();
+  const unproven = new Set<StateCandidate>();
   for (const state of states) {
     const usage = usageByState.get(state);
     if (
@@ -128,7 +129,6 @@ export function findAsyncLeafStatuses(
         sourceComponents
       );
     const eventCallbacks = eventCallbacksByOwner.get(state.owner) ?? EMPTY_EVENT_CALLBACKS;
-    const requiresSourceEvent = leaves.boundaries.length > 1;
 
     const ownerSetters = new Set(
       states
@@ -146,25 +146,28 @@ export function findAsyncLeafStatuses(
       region === state.owner ||
       (!ts.isArrowFunction(region) &&
         !ts.isFunctionDeclaration(region) &&
-        !ts.isFunctionExpression(region)) ||
-      !asyncCallbackIsEventRooted(region, state.owner, eventCallbacks, requiresSourceEvent) ||
-      usage.setterCallNodes.some(call => {
-        const candidate = asyncCommandRegion(call, state.owner);
-        if (candidate === region) return false;
-        return (
-          (!ts.isArrowFunction(candidate) &&
-            !ts.isFunctionDeclaration(candidate) &&
-            !ts.isFunctionExpression(candidate)) ||
-          call.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword ||
-          !asyncCallbackIsEventRooted(
-            candidate,
-            state.owner,
-            eventCallbacks,
-            requiresSourceEvent
-          )
-        );
-      })
+        !ts.isFunctionExpression(region))
     ) {
+      continue;
+    }
+    const alternateResetRegions: Array<
+      ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression
+    > = [];
+    const hasInvalidResetRegion = usage.setterCallNodes.some(call => {
+      const candidate = asyncCommandRegion(call, state.owner);
+      if (candidate === region) return false;
+      if (
+        (!ts.isArrowFunction(candidate) &&
+          !ts.isFunctionDeclaration(candidate) &&
+          !ts.isFunctionExpression(candidate)) ||
+        call.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword
+      ) {
+        return true;
+      }
+      alternateResetRegions.push(candidate);
+      return false;
+    });
+    if (hasInvalidResetRegion) {
       continue;
     }
 
@@ -189,29 +192,30 @@ export function findAsyncLeafStatuses(
         call.getStart() > pendingStart.getStart()
       )
     ) {
-      if (hasRenderCut) isolated.add(state);
-      else if (leaves.boundaries.length === 1) cohesive.add(state);
+      if (!hasRenderCut) {
+        if (leaves.boundaries.length === 1) cohesive.add(state);
+        continue;
+      }
+      const eventRooted = asyncCallbackIsEventRooted(region, state.owner, eventCallbacks) &&
+        alternateResetRegions.every(candidate =>
+          asyncCallbackIsEventRooted(candidate, state.owner, eventCallbacks)
+        );
+      if (!eventRooted) {
+        unproven.add(state);
+        continue;
+      }
+      isolated.add(state);
     }
   }
-  return { cohesive, isolated };
+  return { cohesive, isolated, unproven };
 }
 
 function asyncCallbackIsEventRooted(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   owner: RuntimeFunctionLike,
   eventCallbacks: ReadonlySet<RuntimeFunctionLike>,
-  requiresSourceEvent: boolean,
   seen: ReadonlySet<string> = new Set()
 ): boolean {
-  if (!requiresSourceEvent) {
-    return callbackIsEventRooted(
-      callback,
-      owner,
-      "",
-      new Set(),
-      candidate => eventCallbacks.has(candidate)
-    );
-  }
   if (eventCallbacks.has(callback)) return true;
   const name = ts.isFunctionDeclaration(callback)
     ? callback.name?.text
@@ -251,7 +255,7 @@ function asyncCallbackIsEventRooted(
         (ts.isArrowFunction(caller) ||
           ts.isFunctionDeclaration(caller) ||
           ts.isFunctionExpression(caller)) &&
-        asyncCallbackIsEventRooted(caller, owner, eventCallbacks, true, nextSeen)
+        asyncCallbackIsEventRooted(caller, owner, eventCallbacks, nextSeen)
       ) {
         return;
       }
