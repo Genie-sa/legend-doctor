@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-838 manual hook labels with no known misses, plus twenty-five
+839 manual hook labels with no known misses, plus twenty-five
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -86,6 +86,12 @@ React `useMemo` factory, the resulting binding is invoked only from direct React
 effect dependencies or method cleanup calls. The command may not escape to JSX or any other callback surface. This keeps
 the throttle, effects, cleanup, dependencies, and statement order unchanged while moving only the presentation storage
 and `<StatsRows>` subscription.
+
+One Tree Map label verifies an effect-owned numeric presentation clock split across a bounded keyed list and one progress
+leaf. The effect, cleanup, dependencies, reset, helper calculations, and write order stay unchanged. Projection flow may
+cross three immutable const aliases and a local pure helper closed only over evaluation-inert module constants. Opaque
+helpers, effect reads, functional updaters, companion React writes, unkeyed rows, broad leaves, transports, and owners
+below twelve JSX elements abstain.
 
 One Excalidraw label verifies a source-resolved controlled search whose sole value read is an exact
 `item.field?.toLowerCase().includes(query)` predicate. The setter and every filtered-result read must share one immutable

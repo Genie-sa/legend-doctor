@@ -938,6 +938,121 @@ test("isolates one event-owned scalar in a reactive host prop", async t => {
   assert.equal(states.get("effectOpacity")?.action, "delete-derived-state");
 });
 
+test("isolates effect-owned scalar ticks across bounded stable leaves", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-effect-scalar-leaves-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useEffect, useState } from "react";
+      const rows = [{ id: "one", start: 0 }, { id: "two", start: 10 }];
+      const noisyProjection = (value: number) => { console.log(value); return value; };
+
+      export function SafeTicker() {
+        const [elapsed, setElapsed] = useState(0);
+        useEffect(() => {
+          setElapsed(0);
+          const timer = setInterval(() => setElapsed(Date.now()), 200);
+          return () => clearInterval(timer);
+        }, []);
+        const active = Math.floor(elapsed / 10);
+        return <main>
+          <ol>{rows.map(row => <li key={row.id} data-active={row.start === active}>{row.id}</li>)}</ol>
+          <progress value={elapsed / 100}/>
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </main>;
+      }
+
+      export function UnstableRows() {
+        const [unkeyedElapsed, setUnkeyedElapsed] = useState(0);
+        useEffect(() => {
+          const timer = setInterval(() => setUnkeyedElapsed(Date.now()), 200);
+          return () => clearInterval(timer);
+        }, []);
+        const active = Math.floor(unkeyedElapsed / 10);
+        return <main>
+          <ol>{rows.map(row => <li data-active={row.start === active}>{row.id}</li>)}</ol>
+          <progress value={unkeyedElapsed / 100}/>
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </main>;
+      }
+
+      export function CompanionTicker() {
+        const [companionElapsed, setCompanionElapsed] = useState(0);
+        const [ticked, setTicked] = useState(false);
+        useEffect(() => {
+          const timer = setInterval(() => { setCompanionElapsed(1); setTicked(true); }, 200);
+          return () => clearInterval(timer);
+        }, []);
+        return <main data-ticked={ticked}><progress value={companionElapsed}/><Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/></main>;
+      }
+
+      export function EffectReadTicker() {
+        const [effectReadElapsed, setEffectReadElapsed] = useState(0);
+        useEffect(() => {
+          if (effectReadElapsed > 0) console.log(effectReadElapsed);
+          const timer = setInterval(() => setEffectReadElapsed(Date.now()), 200);
+          return () => clearInterval(timer);
+        }, [effectReadElapsed]);
+        return <main><progress value={effectReadElapsed}/><Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/></main>;
+      }
+
+      export function FunctionalTicker() {
+        const [functionalElapsed, setFunctionalElapsed] = useState(0);
+        useEffect(() => {
+          const timer = setInterval(() => setFunctionalElapsed(value => value + 1), 200);
+          return () => clearInterval(timer);
+        }, []);
+        return <main><progress value={functionalElapsed}/><Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/></main>;
+      }
+
+      export function BroadTicker() {
+        const [broadElapsed, setBroadElapsed] = useState(0);
+        useEffect(() => {
+          const timer = setInterval(() => setBroadElapsed(Date.now()), 200);
+          return () => clearInterval(timer);
+        }, []);
+        return <main>
+          {broadElapsed > 0 && <section><One/><Two/><Three/><Four/><Five/><Six/><Seven/><Eight/><Nine/><Ten/></section>}
+          <Header/><Footer/>
+        </main>;
+      }
+
+      export function OpaqueProjectionTicker() {
+        const [opaqueElapsed, setOpaqueElapsed] = useState(0);
+        useEffect(() => {
+          const timer = setInterval(() => setOpaqueElapsed(Date.now()), 200);
+          return () => clearInterval(timer);
+        }, []);
+        return <main>
+          <progress value={noisyProjection(opaqueElapsed)}/>
+          <output>{opaqueElapsed}</output>
+          <Header/><Summary/><Chart/><List/><Footer/><Aside/><Toolbar/><Legend/><Caption/><Logo/><Badge/><Actions/>
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const states = new Map(
+    report.findings
+      .filter(finding => finding.hook === "useState" && finding.name)
+      .map(finding => [finding.name!, finding.action])
+  );
+  assert.equal(states.get("elapsed"), "use-observable");
+  for (const name of [
+    "unkeyedElapsed",
+    "companionElapsed",
+    "effectReadElapsed",
+    "functionalElapsed",
+    "broadElapsed",
+    "opaqueElapsed",
+  ]) {
+    assert.equal(states.get(name), "review-state", name);
+  }
+});
+
 test("isolates an event-owned boolean across small presentation leaves and reactive props", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-multi-leaf-boolean-"));
   t.after(() => rm(root, { force: true, recursive: true }));

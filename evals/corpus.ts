@@ -6272,6 +6272,15 @@ export const goldCases = [
     rationale: "The React Native hover events change one data prop on the stable root View; a reactive native component can update that prop without rebuilding the twelve-element playback owner.",
     target: "legend-music",
   },
+  {
+    action: "use-observable",
+    file: "components/companies/report-generation-screen.tsx",
+    hook: "useState",
+    line: 80,
+    name: "elapsed",
+    rationale: "The preserved interval writes only presentation time; stable keyed stage rows and the progress leaf can subscribe without rebuilding the generation shell five times per second.",
+    target: "tree-map",
+  },
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [

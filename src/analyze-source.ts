@@ -53,6 +53,7 @@ import {
   findDeferredRevealStates,
   hasStateInitializer,
   isRenderGateReference,
+  isSafeProjectionExpression,
   jsxSubtreeAncestors,
   type JsxSubtreeNode,
 } from "./rules/deferred-reveal.js";
@@ -111,6 +112,7 @@ import {
   oneHopRenderProjectionReferences,
   repeatedRenderHasStableItemKey,
   setterCallUsesPreviousValue,
+  sourceHasRuntimeBinding,
   stateMayHoldCallable,
   uniqueVariableDeclaration,
 } from "./rules/state-proofs.js";
@@ -3941,6 +3943,14 @@ function classifyState(
       message: `Replace presentation state \`${state.valueName}\` with an owner-scoped observable, preserve the memoized command, React effect and cleanup, dependencies, and statement order, and wrap the full ${effectCommandProjectionSubtree.label} render boundary at line ${effectCommandProjectionSubtree.line} in an always-mounted leaf subscriber.`,
     };
   }
+  const splitEffectProjectionSubtree = subtree?.kind === "effect-split-projection" ? subtree : null;
+  if (splitEffectProjectionSubtree && !hasCompanionWrites) {
+    return {
+      action: "use-observable",
+      confidence: "probable",
+      message: `Replace effect-written scalar \`${state.valueName}\` with an owner-scoped observable; preserve the React effect, cleanup, dependencies, calculations, and write order, then subscribe only in its ${splitEffectProjectionSubtree.leafCount ?? 2} bounded presentation leaves. Keep keyed repeated rows keyed and calculate each existing projection once inside its containing subscriber.`,
+    };
+  }
   const effectProjectionSubtree = subtree?.kind === "effect-projection" ? subtree : null;
   if (effectProjectionSubtree && !hasCompanionWrites) {
     const selector = repeatedSubscriptionSuffix(effectProjectionSubtree);
@@ -5517,7 +5527,8 @@ function combineDiscardConfidence(
 }
 
 interface StateSubtree {
-  kind: "direct" | "effect-command-projection" | "effect-projection" | "gate" | "projection";
+  kind: "direct" | "effect-command-projection" | "effect-projection" | "effect-split-projection" | "gate" | "projection";
+  leafCount?: number;
   label: string;
   line: number;
   node: JsxSubtreeNode;
@@ -5548,6 +5559,14 @@ function analyzeStateSubtree(
         [...pureProjectionImports].filter(name => !ownerDeclaresBinding(state.owner, name))
       )
     : EMPTY_BINDINGS;
+  const splitEffectProjection = effectWrittenPresentation
+    ? effectSplitProjectionSubtree(
+        state,
+        usage,
+        ownerJsx,
+        pureProjectionImports
+      )
+    : null;
   if (
     (ownerJsx < 8 && !effectWrittenPresentation) ||
     stateMayHoldCallable(state) ||
@@ -5559,7 +5578,7 @@ function analyzeStateSubtree(
     (usage.effectWrites > 0 && !effectWrittenPresentation) ||
     (usage.deferredReads > 0 && !hasOnlyEventCommandReads(state)) ||
     usage.shadowed ||
-    usage.escaped
+    (usage.escaped && !splitEffectProjection)
   ) {
     return null;
   }
@@ -5570,6 +5589,7 @@ function analyzeStateSubtree(
     : boundedRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
       oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
       usage.directRenderNodes;
+  if (splitEffectProjection) return splitEffectProjection;
   const renderReadsInNestedCallbacks = projectionNodes.some(
     node => nearestNestedFunction(node, state.owner) !== null
   );
@@ -5700,6 +5720,292 @@ function sharesJsxChildRenderCallback(
   const container = expression.parent;
   return ts.isJsxExpression(container) &&
     (ts.isJsxElement(container.parent) || ts.isJsxFragment(container.parent));
+}
+
+/**
+ * Keeps an effect-owned numeric source at owner lifetime while proving that
+ * all of its render flow terminates in a small set of stable presentation
+ * leaves. Local helper calls qualify only when their implementation is pure
+ * and closes over inert module constants.
+ */
+function effectSplitProjectionSubtree(
+  state: StateCandidate,
+  usage: StateUsage,
+  ownerJsx: number,
+  pureProjectionImports: ReadonlySet<string>
+): StateSubtree | null {
+  if (
+    ownerJsx < 12 ||
+    !hasDirectNumericInitializer(state) ||
+    usage.transportedOccurrences !== 0 ||
+    usage.setterUsesPreviousValue
+  ) {
+    return null;
+  }
+
+  const allowedCalls = new Set([
+    ...pureProjectionImports,
+    ...localPureProjectionBindings(state.owner.getSourceFile()),
+  ]);
+  const renderRoots = effectSplitRenderRoots(state, usage, allowedCalls);
+  if (!renderRoots) return null;
+  const terminals = terminalRenderProjectionReferences(
+    state.owner,
+    renderRoots,
+    allowedCalls
+  );
+  if (!terminals || terminals.length < 2) return null;
+
+  const leaves: JsxSubtreeNode[] = [];
+  for (const terminal of terminals) {
+    const repeated = nearestRepeatedRenderCall(terminal, state.owner);
+    if (repeated) {
+      const callback = repeated.arguments[0];
+      const leaf = nearestJsxElement(repeated, state.owner);
+      if (
+        !callback ||
+        (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+        !repeatedRenderHasStableItemKey(callback) ||
+        !leaf ||
+        jsxElementCountIn(leaf) > 9 ||
+        !nodeWithin(terminal, leaf)
+      ) {
+        return null;
+      }
+      leaves.push(leaf);
+      continue;
+    }
+    if (!isSafeJsxProjectionReference(terminal, state.owner, allowedCalls)) return null;
+    const leaf = nearestJsxElement(terminal, state.owner);
+    if (!leaf) return null;
+    leaves.push(leaf);
+  }
+
+  const uniqueLeaves = [...new Map(leaves.map(leaf => [leaf.getStart(), leaf])).values()];
+  if (uniqueLeaves.length < 2 || uniqueLeaves.length > 6) return null;
+  const leafElements = uniqueLeaves.reduce((total, leaf) => total + jsxElementCountIn(leaf), 0);
+  if (leafElements / ownerJsx > 0.4) return null;
+
+  const common = lowestCommonJsxSubtree(uniqueLeaves, state.owner);
+  if (!common) return null;
+  const result = stateSubtreeResult(
+    "effect-split-projection",
+    common,
+    terminals,
+    state
+  );
+  result.leafCount = uniqueLeaves.length;
+  return result;
+}
+
+function effectSplitRenderRoots(
+  state: StateCandidate,
+  usage: StateUsage,
+  allowedCalls: ReadonlySet<string>
+): readonly ts.Identifier[] | null {
+  if (!state.owner.body) return null;
+  const direct = new Set(usage.directRenderNodes);
+  const roots: ts.Identifier[] = [];
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== state.valueName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (direct.has(node)) {
+      roots.push(node);
+      return;
+    }
+    const call = findAncestorUntil(node, ts.isCallExpression, state.owner);
+    if (
+      call &&
+      ts.isIdentifier(call.expression) &&
+      allowedCalls.has(call.expression.text) &&
+      call.arguments.some(argument => nodeWithin(node, argument)) &&
+      nearestNestedFunction(node, state.owner) === null
+    ) {
+      roots.push(node);
+      return;
+    }
+    safe = false;
+  });
+  return safe && roots.length > 0 ? roots : null;
+}
+
+function hasDirectNumericInitializer(state: StateCandidate): boolean {
+  const initializer = state.call.arguments[0];
+  if (!initializer) return false;
+  const value = unwrapTransparentExpression(initializer);
+  return ts.isNumericLiteral(value) ||
+    ts.isPrefixUnaryExpression(value) &&
+      (value.operator === ts.SyntaxKind.PlusToken || value.operator === ts.SyntaxKind.MinusToken) &&
+      ts.isNumericLiteral(unwrapTransparentExpression(value.operand));
+}
+
+function terminalRenderProjectionReferences(
+  owner: RuntimeFunctionLike,
+  roots: readonly ts.Node[],
+  allowedCalls: ReadonlySet<string>
+): readonly ts.Identifier[] | null {
+  if (!owner.body || roots.some(root => !ts.isIdentifier(root))) return null;
+  const pending = roots.map(root => ({ depth: 0, reference: root as ts.Identifier }));
+  const terminals: ts.Identifier[] = [];
+  const visited = new Set<number>();
+
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (visited.has(current.reference.getStart())) continue;
+    visited.add(current.reference.getStart());
+    const declaration = findAncestorUntil(current.reference, ts.isVariableDeclaration, owner);
+    if (!declaration || !declaration.initializer || !nodeWithin(current.reference, declaration.initializer)) {
+      terminals.push(current.reference);
+      continue;
+    }
+    if (
+      current.depth >= 3 ||
+      !ts.isIdentifier(declaration.name) ||
+      !ts.isVariableDeclarationList(declaration.parent) ||
+      (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+      bindingDeclarationCount(owner, declaration.name.text) !== 1 ||
+      !isSafeProjectionExpression(
+        declaration.initializer,
+        current.reference,
+        allowedCalls,
+        projectionMathCalls(owner)
+      )
+    ) {
+      return null;
+    }
+    const references: ts.Identifier[] = [];
+    visit(owner.body, node => {
+      if (
+        ts.isIdentifier(node) &&
+        node.text === declaration.name.getText() &&
+        node !== declaration.name &&
+        !isDeclarationName(node) &&
+        !isNonValueIdentifier(node)
+      ) {
+        references.push(node);
+      }
+    });
+    if (references.length === 0) return null;
+    pending.push(...references.map(reference => ({ depth: current.depth + 1, reference })));
+  }
+  return terminals.length > 0 ? terminals : null;
+}
+
+function projectionMathCalls(owner: RuntimeFunctionLike): ReadonlySet<string> {
+  if (sourceHasRuntimeBinding(owner.getSourceFile(), "Math")) return EMPTY_BINDINGS;
+  return new Set([
+    "Math.abs",
+    "Math.ceil",
+    "Math.exp",
+    "Math.floor",
+    "Math.max",
+    "Math.min",
+    "Math.round",
+    "Math.trunc",
+  ]);
+}
+
+function localPureProjectionBindings(sourceFile: ts.SourceFile): ReadonlySet<string> {
+  const bindings = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
+      continue;
+    }
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        !ts.isIdentifier(declaration.name) ||
+        !declaration.initializer ||
+        (!ts.isArrowFunction(declaration.initializer) && !ts.isFunctionExpression(declaration.initializer)) ||
+        !localProjectionFunctionIsPure(declaration.initializer, sourceFile)
+      ) {
+        continue;
+      }
+      bindings.add(declaration.name.text);
+    }
+  }
+  return bindings;
+}
+
+function localProjectionFunctionIsPure(
+  fn: ts.ArrowFunction | ts.FunctionExpression,
+  sourceFile: ts.SourceFile
+): boolean {
+  if (
+    fn.asteriskToken ||
+    fn.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    fn.parameters.length === 0 ||
+    fn.parameters.some(parameter => !ts.isIdentifier(parameter.name) || parameter.initializer)
+  ) {
+    return false;
+  }
+  const expression = ts.isBlock(fn.body)
+    ? fn.body.statements.length === 1 &&
+      ts.isReturnStatement(fn.body.statements[0]!) &&
+      fn.body.statements[0]!.expression
+    : fn.body;
+  if (!expression) return false;
+  if (!isSafeProjectionExpression(expression, expression, EMPTY_BINDINGS, projectionMathCalls(fn))) {
+    return false;
+  }
+
+  let safe = true;
+  visit(fn.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node) ||
+      identifierIsProjectionParameter(node, fn) ||
+      node.text === "Math"
+    ) {
+      return;
+    }
+    safe = moduleConstIsEvaluationInert(sourceFile, node.text);
+  });
+  return safe;
+}
+
+function identifierIsProjectionParameter(
+  node: ts.Identifier,
+  boundary: ts.ArrowFunction | ts.FunctionExpression
+): boolean {
+  for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
+    if (isRuntimeFunctionLike(current)) {
+      const names = new Set<string>();
+      for (const parameter of current.parameters) collectBindingNames(parameter.name, names);
+      if (names.has(node.text)) return true;
+    }
+    if (current === boundary) return false;
+  }
+  return false;
+}
+
+function moduleConstIsEvaluationInert(sourceFile: ts.SourceFile, name: string): boolean {
+  const matches: ts.VariableDeclaration[] = [];
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) matches.push(declaration);
+    }
+  }
+  return matches.length === 1 && !!matches[0]!.initializer && isEvaluationInert(matches[0]!.initializer);
+}
+
+function nearestJsxElement(node: ts.Node, boundary: ts.Node): JsxSubtreeNode | null {
+  return findAncestorUntil(
+    node,
+    (candidate): candidate is JsxSubtreeNode =>
+      ts.isJsxElement(candidate) || ts.isJsxSelfClosingElement(candidate) || ts.isJsxFragment(candidate),
+    boundary
+  );
 }
 
 function isMaterialStateSubtree(

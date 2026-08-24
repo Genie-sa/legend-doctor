@@ -757,6 +757,41 @@ const rename = writeName;
 
 ## Effect examples
 
+### Stop a presentation clock from rendering its owner
+
+```tsx
+// before: the interval rebuilds the complete generation screen five times per second
+const [elapsed, setElapsed] = useState(0);
+useEffect(() => {
+  const timer = setInterval(() => setElapsed(Date.now() - startedAt), 200);
+  return () => clearInterval(timer);
+}, []);
+const activeStage = stageFromElapsed(elapsed);
+return <><GenerationChrome />
+  <ol>{stages.map(stage => <Stage key={stage.id} active={stage.index === activeStage} />)}</ol>
+  <Progress value={progressFromElapsed(elapsed)} />
+</>;
+
+// after: keep the effect; subscribe once around the keyed list and once around progress
+const elapsed$ = useObservable(0);
+useEffect(() => {
+  const timer = setInterval(() => elapsed$.set(Date.now() - startedAt), 200);
+  return () => clearInterval(timer);
+}, []);
+return <><GenerationChrome /><StagesState elapsed$={elapsed$} /><ProgressState elapsed$={elapsed$} /></>;
+```
+
+Agent output:
+
+```text
+use-observable — Replace effect-written scalar `elapsed` with an owner-scoped observable; preserve the React effect, cleanup, dependencies, calculations, and write order, then subscribe only in its two bounded presentation leaves.
+```
+
+The proof accepts numeric state written only by one React effect, up to three immutable projection hops, structurally
+pure local helpers closed over inert module constants, and stable keyed repeated output. Effect reads, functional
+updaters, opaque helpers, companion React writes, unstable keys, broad leaves, and owners below twelve JSX elements stay
+candidates.
+
 ### Move an event-owned reset into the event
 
 ```tsx
@@ -951,14 +986,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 838 manually audited hook labels, 25 state groups,
+The pinned corpus covers 2,356 hooks across 225 targets. It contains 839 manually audited hook labels, 25 state groups,
 and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 562/562 |
-| Actionable precision | 465/465 |
-| Actionable recall | 465/465 |
+| Unit tests | 563/563 |
+| Actionable precision | 466/466 |
+| Actionable recall | 466/466 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain
