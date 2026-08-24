@@ -744,6 +744,36 @@ return <><Editor /><ButtonState copying$={copying$} onClick={copy} /></>;
 Pure props, labels, and icons may share one stable status leaf. Repeated controls, mount gates, impure projections, and
 conditional first awaits remain candidates.
 
+The same pending interval may feed two or three stable leaves without rendering their owner:
+
+```tsx
+// before, both transitions render the settings popover
+const [uploading, setUploading] = useState(false);
+return <Popover>
+  <Settings />
+  {hasLogo
+    ? <LogoButton disabled={uploading}>Replace</LogoButton>
+    : <LogoButton disabled={uploading}>Upload</LogoButton>}
+</Popover>;
+
+// after, each existing branch keeps its mount identity and subscribes at the button
+const uploading$ = useObservable(false);
+return <Popover>
+  <Settings />
+  {hasLogo
+    ? <LogoButtonState uploading$={uploading$}>Replace</LogoButtonState>
+    : <LogoButtonState uploading$={uploading$}>Upload</LogoButtonState>}
+</Popover>;
+
+function LogoButtonState({ uploading$, children }: Props) {
+  return <LogoButton disabled={useValue(uploading$)}>{children}</LogoButton>;
+}
+```
+
+Multi-leaf advice requires one complete async event interval, two or three non-repeated call sites in one owner return,
+and source-proven deferred callback timing. Small cohesive workflows, eager child callbacks, effect-triggered commands,
+companion React writes, and repeated rows remain candidates.
+
 ### Subscribe once per keyed row
 
 ```tsx
@@ -1016,14 +1046,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,361 hooks across 226 targets. It contains 841 manually audited hook labels, 26 state groups,
-and 107 Legend practice labels.
+The pinned corpus covers 2,363 hooks across 227 targets. It contains 843 manually audited hook labels, 26 state groups,
+and 107 Legend practice labels. One audited polymorphic callback path remains an explicit known miss.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 566/566 |
-| Actionable precision | 457/457 |
-| Actionable recall | 457/457 |
+| Unit tests | 567/567 |
+| Actionable precision | 458/458 |
+| Actionable recall | 458/459 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

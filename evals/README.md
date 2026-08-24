@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,361 hooks across 226 source roots. The corpus currently contains
-841 manual hook labels with no known misses, plus twenty-six
+At the pinned commits, the analyzer inventories 2,363 hooks across 227 source roots. The corpus currently contains
+843 manual hook labels with one explicit known miss, plus twenty-six
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -291,15 +291,18 @@ Async pending labels require a literal-false flag whose pending transition in an
 before any owner-state write or early exit and renders through one proven runtime status leaf. The same leaf may consume
 the flag through loading props, pure label or icon selection, or one call-free JSX prop projection with state-independent
 inputs. When the call site is inferred only from direct projections, its first await must be structurally unavoidable; a
-conditional await can otherwise collapse the true-to-false transition into one synchronous command. The projection must
-stay in one non-repeated call site and may not control that site's mount. A broad owner
+conditional await can otherwise collapse the true-to-false transition into one synchronous command. A single projection
+must stay in one non-repeated call site and may not control that site's mount. Two or three transported status call sites
+may qualify when every call site is non-repeated, all share one owner return, and source analysis proves that the command
+starts only from a deferred event. Small cohesive workflows, eager child callbacks, effect-triggered commands with
+companion React writes, and repeated status rows abstain. A broad owner
 qualifies directly; a compact owner must have independently rendered content outside the status leaf, while a cohesive
 one-control owner remains React state.
 Non-mutating validation,
 routing guards, and bounded synchronous command preparation may precede that boundary. Observable ownership stays above
 state-independent conditional branches, while a local subscriber wraps the exact existing call site. The command, await
 boundary, error handling, and
-later close/reset writes stay unchanged; mutation-owned status, fanout, scheduled callbacks, and nonliteral writes
+later close/reset writes stay unchanged; mutation-owned status, unbounded fanout, scheduled callbacks, and nonliteral writes
 remain review findings. Exact async status in a cohesive control emits `keep-state` because no smaller subscription exists.
 An exact delayed pending transition also emits `keep-state` in a cohesive control when its timer callback contains only
 the `true` write and the same async command clears that timer immediately before the `false` write in `finally`.

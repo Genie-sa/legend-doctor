@@ -293,7 +293,7 @@ test("replaces an exact React mirror of a one-hop Legend value hook", async t =>
   await writeFile(
     path.join(root, "Screen.tsx"),
     `
-      import { useState } from "react";
+      import { useEffect, useState } from "react";
       import { setName as writeName, setOther as writeOther, useName as useSavedName } from "./state";
       export function Screen() {
         const saved = useSavedName();
@@ -2082,7 +2082,7 @@ test("places an observable subscription at one resolved child call site", async 
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-contract-"));
   await writeFile(
     path.join(root, "StatusLeaf.tsx"),
-    'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{busy ? "Busy" : "Ready"}</span>; }'
+    'export function StatusLeaf({ busy, onRun }: { busy: boolean; onRun: () => void }) { return <button onClick={onRun}>{busy ? "Busy" : "Ready"}</button>; }'
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2222,6 +2222,119 @@ test("groups a literal popup payload with its visibility at one resolved child",
   assert.deepEqual(
     report.findings.find(finding => finding.name === "popupOpen")?.group?.members,
     ["popupOpen", "popupLevel"]
+  );
+});
+
+test("isolates source-proven async status across bounded leaf call sites", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-async-fanout-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "SelectControl.tsx"),
+    `
+      export function SelectControl({ loading, load }: {
+        loading: boolean;
+        load: (id: string) => Promise<void>;
+      }) {
+        return <select disabled={loading} onChange={event => void load(event.currentTarget.value)} />;
+      }
+
+      export function EagerControl({ loading, load }: {
+        loading: boolean;
+        load: (id: string) => Promise<void>;
+      }) {
+        load("now");
+        return <select disabled={loading} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { EagerControl, SelectControl } from "./SelectControl";
+      function StatusButton({ loading }: { loading: boolean }) {
+        return <button disabled={loading}>Save</button>;
+      }
+
+      export function Screen({ edit }: { edit: boolean }) {
+        const [loading, setLoading] = useState(false);
+        const load = async (id: string) => {
+          setLoading(true);
+          await fetchData(id);
+          setLoading(false);
+        };
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer />
+          <SelectControl loading={loading} load={load} />
+          {edit ? <StatusButton loading={loading} /> : <StatusButton loading={loading} />}
+        </main>;
+      }
+
+      export function SmallWorkflow() {
+        const [smallLoading, setSmallLoading] = useState(false);
+        const load = async (id: string) => {
+          setSmallLoading(true);
+          await fetchData(id);
+          setSmallLoading(false);
+        };
+        return <form><SelectControl loading={smallLoading} load={load} /><StatusButton loading={smallLoading} /></form>;
+      }
+
+      export function UnresolvedTiming() {
+        const [eagerLoading, setEagerLoading] = useState(false);
+        const load = async (id: string) => {
+          setEagerLoading(true);
+          await fetchData(id);
+          setEagerLoading(false);
+        };
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer />
+          <EagerControl loading={eagerLoading} load={load} /><StatusButton loading={eagerLoading} />
+        </main>;
+      }
+
+      export function MixedLifecycle() {
+        const [mixedLoading, setMixedLoading] = useState(false);
+        const [, setReady] = useState(false);
+        const load = async (id: string) => {
+          setMixedLoading(true);
+          await fetchData(id);
+          setMixedLoading(false);
+        };
+        useEffect(() => {
+          void load("initial");
+          setReady(true);
+        }, []);
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer />
+          <SelectControl loading={mixedLoading} load={load} /><StatusButton loading={mixedLoading} />
+        </main>;
+      }
+
+      export function RepeatedStatus({ rows }: { rows: string[] }) {
+        const [repeatedLoading, setRepeatedLoading] = useState(false);
+        const load = async (id: string) => {
+          setRepeatedLoading(true);
+          await fetchData(id);
+          setRepeatedLoading(false);
+        };
+        return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer />
+          <SelectControl loading={repeatedLoading} load={load} />
+          {rows.map(row => <StatusButton key={row} loading={repeatedLoading} />)}
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const actions = new Map(report.findings.map(finding => [finding.name, finding.action]));
+  assert.equal(actions.get("loading"), "use-observable");
+  assert.equal(actions.get("smallLoading"), "review-state");
+  assert.equal(actions.get("eagerLoading"), "review-state");
+  assert.equal(actions.get("mixedLoading"), "review-state");
+  assert.equal(actions.get("repeatedLoading"), "review-state");
+  assert.match(
+    report.findings.find(finding => finding.name === "loading")?.message ?? "",
+    /three stable status call sites/
   );
 });
 

@@ -100,6 +100,7 @@ import {
   isDirectPrimitiveExpression,
   isHookDependencyReference,
   isInsideJsxEventCallback,
+  isJsxEventHandlerReference,
   isJsxNode,
   isUniquelySelectedRepeatedProjection,
   isSafeJsxProjectionReference,
@@ -107,6 +108,7 @@ import {
   isUnshadowedMathCall,
   jsxElementCount,
   jsxElementCountIn,
+  localFunctionBinding,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
   oneHopRenderProjectionReferences,
@@ -330,26 +332,42 @@ function analyzeParsedSource(
         callbacks.add(callback);
       }
     }
-    const needsSourceCallbackProof = ownedStates.some(state => {
+    const needsDeferredCallbackProof = ownedStates.some(state => {
       const usage = usageByState.get(state);
       return usage !== undefined &&
-        usage.localRenderReads === 0 &&
-        usage.effectReads === 0 &&
-        usage.deferredReads > 0 &&
-        usage.transportedOccurrences === 0 &&
-        (usage.eventReads > 0 || usage.effectWrites > 0) &&
-        !hasOnlyEventCommandReads(state, EMPTY_NODES, callbacks);
+        (
+          (
+            usage.localRenderReads === 0 &&
+            usage.effectReads === 0 &&
+            usage.deferredReads > 0 &&
+            usage.transportedOccurrences === 0 &&
+            (usage.eventReads > 0 || usage.effectWrites > 0) &&
+            !hasOnlyEventCommandReads(state, EMPTY_NODES, callbacks)
+          ) ||
+          (
+            hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) &&
+            usage.effectReads === 0 &&
+            usage.effectWrites === 0 &&
+            usage.setterCallNodes.length >= 2 &&
+            (usage.localRenderReads > 0 || usage.valueTransportSites.size >= 1)
+          )
+        );
     });
-    if (childContracts && needsSourceCallbackProof) {
+    if (needsDeferredCallbackProof) {
+      for (const callback of directReactHookFormEventCallbacks(owner)) {
+        callbacks.add(callback);
+      }
       for (const callback of sourceProvenDirectEventCallbacks(owner, imports, childContracts)) {
         callbacks.add(callback);
       }
-      for (const callback of sourceProvenOptionEventCallbacks(owner, imports, childContracts)) {
-        callbacks.add(callback);
-        if (callback.body) {
-          visit(callback.body, node => {
-            if (isRuntimeFunctionLike(node)) callbacks.add(node);
-          });
+      if (childContracts) {
+        for (const callback of sourceProvenOptionEventCallbacks(owner, imports, childContracts)) {
+          callbacks.add(callback);
+          if (callback.body) {
+            visit(callback.body, node => {
+              if (isRuntimeFunctionLike(node)) callbacks.add(node);
+            });
+          }
         }
       }
     }
@@ -567,7 +585,8 @@ function analyzeParsedSource(
     safeCommandStates,
     reactiveMutationAffectedStates,
     localComponents,
-    sourceComponents
+    sourceComponents,
+    eventCallbacksByOwner
   );
   const siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();
   for (const state of states) {
@@ -1314,23 +1333,51 @@ function localCallbackBindingName(
 function sourceProvenDirectEventCallbacks(
   owner: RuntimeFunctionLike,
   imports: HookImports,
-  childContracts: ChildContractResolver
+  childContracts: ChildContractResolver | null
 ): ReadonlySet<RuntimeFunctionLike> {
   const callbacks = new Set<RuntimeFunctionLike>();
   if (!owner.body) return callbacks;
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return;
-    const callback = localCallbackByBinding(owner, node.name.text, imports);
+  visit(owner.body, node => {
+    const directlyOwned = findAncestor(node, isRuntimeFunctionLike) === owner;
+    if (
+      node !== owner &&
+      (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
+      directlyOwned
+    ) {
+      const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
+      if (
+        attribute?.initializer &&
+        ts.isJsxExpression(attribute.initializer) &&
+        attribute.initializer.expression &&
+        unwrapTransparentExpression(attribute.initializer.expression) === node &&
+        jsxEventAttributeIsDeferred(attribute, childContracts)
+      ) {
+        callbacks.add(node);
+      }
+    }
+    if (!directlyOwned) return;
+    const binding = ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
+      ? node.name.text
+      : ts.isFunctionDeclaration(node) && node.name
+        ? node.name.text
+        : null;
+    if (!binding) return;
+    const callback = localCallbackByBinding(owner, binding, imports);
     if (!callback) return;
-    const publications = jsxComponentPublications(owner, node.name.text);
+    const publications = jsxComponentPublications(owner, binding);
     if (
       publications.length > 0 &&
       publications.every(publication =>
-        publication.intrinsic ||
-        childContracts.frameworkEventComponent(publication.component) ||
-        childContracts.componentCallbackPropIsDeferred(
-          publication.component,
-          publication.prop
+        (
+          /^on[A-Z]/.test(publication.prop) &&
+          (publication.intrinsic ||
+            childContracts?.frameworkEventComponent(publication.component) === true)
+        ) ||
+        (
+          childContracts?.componentCallbackPropIsDeferred(
+            publication.component,
+            publication.prop
+          ) === true
         )
       )
     ) {
@@ -1467,7 +1514,7 @@ function jsxComponentPublications(
     if (
       !attribute ||
       !component ||
-      !isDirectJsxAttributeExpression(attribute, node)
+      !isJsxEventHandlerReference(attribute, node)
     ) {
       safe = false;
       return;
@@ -1518,13 +1565,11 @@ function localCallbackByBinding(
   imports: HookImports
 ): RuntimeFunctionLike | null {
   if (!owner.body || bindingDeclarationCount(owner, binding) !== 1) return null;
+  const direct = localFunctionBinding(owner, binding);
+  if (direct) return direct;
   let callback: RuntimeFunctionLike | null = null;
   visitSkippingNestedRuntimeFunctions(owner.body, node => {
     if (callback) return;
-    if (ts.isFunctionDeclaration(node) && node.name?.text === binding) {
-      callback = node;
-      return;
-    }
     if (
       !ts.isVariableDeclaration(node) ||
       !ts.isIdentifier(node.name) ||
@@ -3877,13 +3922,16 @@ function classifyState(
   }
   if (isAsyncLeafStatus) {
     const target = [...usage.valueTargets][0];
-    const boundary = target
-      ? `the stable \`${target}\` call site`
-      : "the stable pending-control call site";
+    const callSiteCount = usage.valueTransportSites.size;
+    const boundary = callSiteCount > 1
+      ? `${callSiteCount === 2 ? "two" : "three"} stable status call sites`
+      : target
+        ? `the stable \`${target}\` call site`
+        : "the stable pending-control call site";
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap ${boundary} in a leaf subscriber; preserve the event command's async completion boundary exactly, changing only the true/false writes so pending transitions do not invalidate independent owner content.`,
+      message: `Replace async pending flag \`${state.valueName}\` with a component-lifetime observable and wrap ${boundary} in ${callSiteCount > 1 ? "separate leaf subscribers" : "a leaf subscriber"}; preserve the event command's async completion boundary exactly, changing only the true/false writes so pending transitions do not invalidate independent owner content.`,
     };
   }
   if (isCohesiveAsyncStatus) {

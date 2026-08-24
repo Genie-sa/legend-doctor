@@ -430,7 +430,7 @@ export function callbackIsEventRooted(
   return referenced && safe;
 }
 
-function isJsxEventHandlerReference(
+export function isJsxEventHandlerReference(
   attribute: ts.JsxAttribute,
   reference: ts.Identifier
 ): boolean {

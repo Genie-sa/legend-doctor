@@ -3449,7 +3449,7 @@ test("does not isolate async status from a scheduled callback or nonliteral writ
   }
 });
 
-test("does not isolate async status without one broad stable leaf", () => {
+test("isolates broad async status fanout but keeps a cohesive form in React", () => {
   const findings = analyzeSource(`
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
@@ -3466,9 +3466,10 @@ test("does not isolate async status without one broad stable leaf", () => {
       </main>;
     }
   `, "fixture.tsx");
-  for (const finding of findings.filter(candidate => candidate.name === "saving")) {
-    assert.notEqual(finding.action, "use-observable");
-  }
+  const saving = findings.filter(candidate => candidate.name === "saving");
+  assert.notEqual(saving[0]?.action, "use-observable");
+  assert.equal(saving[1]?.action, "use-observable");
+  assert.match(saving[1]?.message ?? "", /two stable status call sites/);
 });
 
 test("keeps exact async status in React when the owner is already the status leaf", () => {

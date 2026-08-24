@@ -3,6 +3,7 @@ import ts from "typescript";
 import {
   bindingDeclarationCount,
   isDeclarationName,
+  isDirectJsxAttributeExpression,
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
@@ -36,6 +37,8 @@ export interface AsyncLeafStatusAnalysis {
   isolated: ReadonlySet<StateCandidate>;
 }
 
+const EMPTY_EVENT_CALLBACKS: ReadonlySet<RuntimeFunctionLike> = new Set();
+
 export function directReactHookFormEventCallbacks(
   owner: RuntimeFunctionLike
 ): ReadonlySet<RuntimeFunctionLike> {
@@ -47,23 +50,30 @@ export function directReactHookFormEventCallbacks(
       !/^on[A-Z]/.test(node.name.getText()) ||
       !node.initializer ||
       !ts.isJsxExpression(node.initializer) ||
-      !node.initializer.expression
+      !node.initializer.expression ||
+      !jsxAttributeIsIntrinsicEvent(node)
     ) {
       return;
     }
     const handler = unwrapTransparentExpression(node.initializer.expression);
-    if (!ts.isCallExpression(handler) || !isReactHookFormSubmitAdapter(handler, owner)) return;
-    for (const argument of handler.arguments) {
-      const candidate = unwrapTransparentExpression(argument);
-      if (
-        ts.isArrowFunction(candidate) ||
-        ts.isFunctionExpression(candidate)
-      ) {
-        callbacks.add(candidate);
-      } else if (ts.isIdentifier(candidate)) {
-        const callback = localFunctionBinding(owner, candidate.text);
-        if (callback) callbacks.add(callback);
+    const collectAdapter = (adapter: ts.CallExpression): void => {
+      if (!isReactHookFormSubmitAdapter(adapter, owner)) return;
+      for (const argument of adapter.arguments) {
+        const candidate = unwrapTransparentExpression(argument);
+        if (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) {
+          callbacks.add(candidate);
+        } else if (ts.isIdentifier(candidate)) {
+          const callback = localFunctionBinding(owner, candidate.text);
+          if (callback) callbacks.add(callback);
+        }
       }
+    };
+    if (ts.isCallExpression(handler)) {
+      collectAdapter(handler);
+    } else if (ts.isArrowFunction(handler) || ts.isFunctionExpression(handler)) {
+      visitSkippingNestedRuntimeFunctions(handler.body, candidate => {
+        if (ts.isCallExpression(candidate)) collectAdapter(candidate);
+      });
     }
   });
   return callbacks;
@@ -75,7 +85,8 @@ export function findAsyncLeafStatuses(
   safeCommandStates: ReadonlySet<StateCandidate>,
   reactiveMutationAffectedStates: ReadonlySet<StateCandidate>,
   localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>
+  sourceComponents: ReadonlySet<string>,
+  eventCallbacksByOwner: ReadonlyMap<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>
 ): AsyncLeafStatusAnalysis {
   const cohesive = new Set<StateCandidate>();
   const isolated = new Set<StateCandidate>();
@@ -91,7 +102,6 @@ export function findAsyncLeafStatuses(
       usage.effectReads !== 0 ||
       usage.effectWrites !== 0 ||
       usage.deferredReads !== 0 ||
-      !hasResolvableAsyncLeafReferences(usage) ||
       usage.repeatedValueTransport ||
       usage.setterCallNodes.length < 2 ||
       usage.setterReferences !== usage.setterCalls ||
@@ -106,17 +116,19 @@ export function findAsyncLeafStatuses(
     ) {
       continue;
     }
-    const leaf = asyncLeafCallSite(usage, state.owner);
-    if (!leaf) {
+    const leaves = asyncLeafCallSites(usage, state.owner);
+    if (!leaves) {
       continue;
     }
     const hasRenderCut = jsxElementCount(state.owner) >= 12 ||
       hasIndependentRenderCutWitness(
-        leaf.returned,
-        [leaf.boundary],
+        leaves.returned,
+        leaves.boundaries,
         localComponents,
         sourceComponents
       );
+    const eventCallbacks = eventCallbacksByOwner.get(state.owner) ?? EMPTY_EVENT_CALLBACKS;
+    const requiresSourceEvent = leaves.boundaries.length > 1;
 
     const ownerSetters = new Set(
       states
@@ -135,7 +147,7 @@ export function findAsyncLeafStatuses(
       (!ts.isArrowFunction(region) &&
         !ts.isFunctionDeclaration(region) &&
         !ts.isFunctionExpression(region)) ||
-      !asyncCallbackIsEventRooted(region, state.owner) ||
+      !asyncCallbackIsEventRooted(region, state.owner, eventCallbacks, requiresSourceEvent) ||
       usage.setterCallNodes.some(call => {
         const candidate = asyncCommandRegion(call, state.owner);
         if (candidate === region) return false;
@@ -144,7 +156,12 @@ export function findAsyncLeafStatuses(
             !ts.isFunctionDeclaration(candidate) &&
             !ts.isFunctionExpression(candidate)) ||
           call.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword ||
-          !asyncCallbackIsEventRooted(candidate, state.owner)
+          !asyncCallbackIsEventRooted(
+            candidate,
+            state.owner,
+            eventCallbacks,
+            requiresSourceEvent
+          )
         );
       })
     ) {
@@ -158,7 +175,7 @@ export function findAsyncLeafStatuses(
         usage.setterCallNodes,
         ownerSetters,
         state.owner,
-        leaf.requiresUnconditionalAwait
+        leaves.requiresUnconditionalAwait
       ) &&
       !hasEarlierOwnerStateWrite(
         region,
@@ -172,48 +189,38 @@ export function findAsyncLeafStatuses(
         call.getStart() > pendingStart.getStart()
       )
     ) {
-      (hasRenderCut ? isolated : cohesive).add(state);
+      if (hasRenderCut) isolated.add(state);
+      else if (leaves.boundaries.length === 1) cohesive.add(state);
     }
   }
   return { cohesive, isolated };
 }
 
-function hasResolvableAsyncLeafReferences(usage: StateUsage): boolean {
-  return (
-    usage.transportedOccurrences > 0 &&
-    usage.valueTransportSites.size === 1 &&
-    usage.valueTargets.size === 1
-  ) || (
-    usage.transportedOccurrences === 0 &&
-    usage.valueTransportSites.size === 0 &&
-    usage.valueTargets.size === 0
-  );
-}
-
 function asyncCallbackIsEventRooted(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
+  eventCallbacks: ReadonlySet<RuntimeFunctionLike>,
+  requiresSourceEvent: boolean,
+  seen: ReadonlySet<string> = new Set()
 ): boolean {
-  return callbackIsEventRooted(
-    callback,
-    owner,
-    "",
-    new Set(),
-    callbackIsDirectEventAdapter
-  );
-}
-
-function callbackIsDirectEventAdapter(
-  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  owner: RuntimeFunctionLike
-): boolean {
+  if (!requiresSourceEvent) {
+    return callbackIsEventRooted(
+      callback,
+      owner,
+      "",
+      new Set(),
+      candidate => eventCallbacks.has(candidate)
+    );
+  }
+  if (eventCallbacks.has(callback)) return true;
   const name = ts.isFunctionDeclaration(callback)
     ? callback.name?.text
     : ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
       ? callback.parent.name.text
       : undefined;
-  if (!name || !owner.body || bindingDeclarationCount(owner, name) !== 1) return false;
+  if (!name || seen.has(name) || bindingDeclarationCount(owner, name) !== 1) return false;
 
+  const nextSeen = new Set(seen).add(name);
   let referenced = false;
   let safe = true;
   visit(owner.body, node => {
@@ -222,53 +229,45 @@ function callbackIsDirectEventAdapter(
       !ts.isIdentifier(node) ||
       node.text !== name ||
       isDeclarationName(node) ||
-      isNonValueIdentifier(node) ||
-      isHookDependencyReference(node, new Set(["useCallback"]))
+      isNonValueIdentifier(node)
     ) {
       return;
     }
+    if (isHookDependencyReference(node, new Set(["useCallback"]))) return;
     referenced = true;
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
-    const expression = attribute?.initializer && ts.isJsxExpression(attribute.initializer)
-      ? attribute.initializer.expression
-      : null;
-    if (!attribute || !/^on[A-Z]/.test(attribute.name.getText()) || !expression) {
-      safe = false;
+    if (
+      attribute &&
+      isDirectJsxAttributeExpression(attribute, node) &&
+      jsxAttributeIsIntrinsicEvent(attribute)
+    ) {
       return;
     }
-    const eventHandler = unwrapTransparentExpression(expression);
-    const adapter = directEventAdapterCall(node, eventHandler);
-    if (adapter && isReactHookFormSubmitAdapter(adapter, owner)) {
-      return;
+    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+      const caller = findAncestorUntil(node, isRuntimeFunctionLike, owner);
+      if (
+        caller &&
+        caller !== callback &&
+        (ts.isArrowFunction(caller) ||
+          ts.isFunctionDeclaration(caller) ||
+          ts.isFunctionExpression(caller)) &&
+        asyncCallbackIsEventRooted(caller, owner, eventCallbacks, true, nextSeen)
+      ) {
+        return;
+      }
     }
     safe = false;
   });
   return referenced && safe;
 }
 
-function directEventAdapterCall(
-  reference: ts.Identifier,
-  eventHandler: ts.Expression
-): ts.CallExpression | null {
-  let adapter: ts.CallExpression | null = null;
-  for (
-    let current: ts.Node | undefined = reference.parent;
-    current && current !== eventHandler;
-    current = current.parent
-  ) {
-    if (isRuntimeFunctionLike(current)) return null;
-    if (
-      !adapter &&
-      ts.isCallExpression(current) &&
-      current.arguments.some(argument => nodeWithin(reference, argument))
-    ) {
-      adapter = current;
-    }
-  }
-  return adapter ?? (ts.isCallExpression(eventHandler) &&
-    eventHandler.arguments.some(argument => nodeWithin(reference, argument))
-    ? eventHandler
-    : null);
+function jsxAttributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
+  if (!/^on[A-Z]/.test(attribute.name.getText())) return false;
+  const opening = attribute.parent.parent;
+  const tag = ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
+    ? opening.tagName
+    : null;
+  return !!tag && ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
 }
 
 function isReactHookFormSubmitAdapter(
@@ -620,6 +619,64 @@ function containsEarlyExit(root: ts.Node, before: number): boolean {
   };
   scan(root);
   return found;
+}
+
+interface AsyncLeafCallSites {
+  boundaries: readonly ts.Node[];
+  requiresUnconditionalAwait: boolean;
+  returned: ts.Expression;
+}
+
+function asyncLeafCallSites(
+  usage: StateUsage,
+  owner: RuntimeFunctionLike
+): AsyncLeafCallSites | null {
+  if (usage.valueTransportSites.size <= 1) {
+    const leaf = asyncLeafCallSite(usage, owner);
+    return leaf
+      ? {
+          boundaries: [leaf.boundary],
+          requiresUnconditionalAwait: leaf.requiresUnconditionalAwait,
+          returned: leaf.returned,
+        }
+      : null;
+  }
+  if (
+    !owner.body ||
+    usage.localRenderReads !== 0 ||
+    usage.transportedOccurrences !== usage.valueTransportSites.size ||
+    usage.valueTransportSites.size > 3
+  ) {
+    return null;
+  }
+
+  const sites = usage.valueTransportSites;
+  const openings: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
+  visit(owner.body, node => {
+    if (
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      sites.has(node.getStart())
+    ) {
+      openings.push(node);
+    }
+  });
+  if (
+    openings.length !== sites.size ||
+    openings.some(opening =>
+      nearestRepeatedRenderCall(opening, owner) ||
+      !nestedFunctionsAreJsxChildren(opening, owner)
+    )
+  ) {
+    return null;
+  }
+
+  const boundaries = openings.map(jsxCallSite);
+  const returned = returnedExpressions(owner).filter(expression =>
+    boundaries.every(boundary => nodeWithin(boundary, expression))
+  );
+  return returned.length === 1
+    ? { boundaries, requiresUnconditionalAwait: false, returned: returned[0]! }
+    : null;
 }
 
 function asyncLeafCallSite(

@@ -1221,6 +1221,12 @@ export const repositories = [
       },
       {
         effects: 1,
+        id: "outline-share-settings",
+        root: "app/components/Sharing/components/ShareSettingsPopover.tsx",
+        states: 1,
+      },
+      {
+        effects: 1,
         id: "outline-authentication-settings",
         root: "app/scenes/Settings/Authentication.tsx",
         states: 2,
@@ -4642,6 +4648,25 @@ export const goldCases = [
     name: null,
     rationale: "This setup-only effect writes fixed imported configuration flags and captures no owner-local value; useMount is appropriate when suppressing development replay is intentional.",
     target: "expensify-import-multi-level-tags",
+  },
+  {
+    action: "use-observable",
+    file: "survey-dropdown-menu.tsx",
+    hook: "useState",
+    line: 80,
+    name: "loading",
+    enforced: false,
+    rationale: "The source-resolved delete dialog invokes one awaited delete command, while separate dialog subscribers keep the forty-two-element menu owner outside both literal pending transitions.",
+    target: "formbricks-survey-dropdown",
+  },
+  {
+    action: "use-observable",
+    file: "ShareSettingsPopover.tsx",
+    hook: "useState",
+    line: 59,
+    name: "isUploading",
+    rationale: "The file-input event owns the complete upload interval, and the two state-independent logo branches can subscribe separately without rerendering the forty-three-element sharing popover.",
+    target: "outline-share-settings",
   },
   {
     action: "use-observable",
