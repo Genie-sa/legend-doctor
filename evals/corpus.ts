@@ -2519,7 +2519,6 @@ export const goldCases = [
     ["components/tree-actions-menu.tsx", 88, "suppressTooltip"],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
-    ...(file === "components/map-ui/polygon-toolbar.tsx" ? { enforced: false as const } : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -4786,7 +4785,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "delete-workspace-render.tsx",
     hook: "useState",
     line: 35,

@@ -3725,3 +3725,77 @@ test("requires source-proven deferred callbacks for one async status leaf", asyn
   assert.equal(findings.get("eager")?.action, "review-state", findings.get("eager")?.message);
   assert.equal(findings.get("opaque")?.action, "review-state", findings.get("opaque")?.message);
 });
+
+test("proves every async command path through source wrappers and intrinsic events", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-async-wrapper-stack-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Button.tsx"),
+    `
+      function EagerSlot({ onClick }: { onClick: () => void }) {
+        onClick();
+        return <span />;
+      }
+      export function Button({ asChild = false, ...props }: {
+        asChild?: boolean;
+        disabled: boolean;
+        onClick: () => void;
+      }) {
+        const Component = asChild ? EagerSlot : "button";
+        return <Component {...props} />;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "DeleteDialog.tsx"),
+    `
+      import { Button } from "./Button";
+      export function DeleteDialog({ deleting, onDelete }: {
+        deleting: boolean;
+        onDelete: () => void;
+      }) {
+        return <aside><Button disabled={deleting} onClick={onDelete} /></aside>;
+      }
+    `
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { DeleteDialog } from "./DeleteDialog";
+      export function Screen() {
+        const [deleting, setDeleting] = useState(false);
+        const remove = async () => {
+          setDeleting(true);
+          try { await destroy(); } finally { setDeleting(false); }
+        };
+        return <main>
+          <Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status />
+          <DeleteDialog deleting={deleting} onDelete={remove} />
+          <form onSubmit={async event => { event.preventDefault(); await remove(); }} />
+        </main>;
+      }
+
+      export function EagerCaller() {
+        const [eagerDeleting, setEagerDeleting] = useState(false);
+        const remove = async () => {
+          setEagerDeleting(true);
+          try { await destroy(); } finally { setEagerDeleting(false); }
+        };
+        remove();
+        return <main>
+          <Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status />
+          <DeleteDialog deleting={eagerDeleting} onDelete={remove} />
+        </main>;
+      }
+    `
+  );
+
+  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
+  assert.equal(findings.get("deleting")?.action, "use-observable", findings.get("deleting")?.message);
+  assert.equal(
+    findings.get("eagerDeleting")?.action,
+    "review-state",
+    findings.get("eagerDeleting")?.message
+  );
+});

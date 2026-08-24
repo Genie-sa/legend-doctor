@@ -21,6 +21,7 @@ import {
   hasStateInitializer,
   isSafeProjectionExpression,
 } from "./deferred-reveal.js";
+import type { ChildContractResolver } from "./child-contract.js";
 import {
   hasIndependentRenderCutWitness,
   isHookDependencyReference,
@@ -86,6 +87,7 @@ export function findAsyncLeafStatuses(
   reactiveMutationAffectedStates: ReadonlySet<StateCandidate>,
   localComponents: ReadonlySet<string>,
   sourceComponents: ReadonlySet<string>,
+  childContracts: ChildContractResolver | null,
   eventCallbacksByOwner: ReadonlyMap<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>
 ): AsyncLeafStatusAnalysis {
   const cohesive = new Set<StateCandidate>();
@@ -196,9 +198,14 @@ export function findAsyncLeafStatuses(
         if (leaves.boundaries.length === 1) cohesive.add(state);
         continue;
       }
-      const eventRooted = asyncCallbackIsEventRooted(region, state.owner, eventCallbacks) &&
+      const eventRooted = asyncCallbackIsEventRooted(
+        region,
+        state.owner,
+        eventCallbacks,
+        childContracts
+      ) &&
         alternateResetRegions.every(candidate =>
-          asyncCallbackIsEventRooted(candidate, state.owner, eventCallbacks)
+          asyncCallbackIsEventRooted(candidate, state.owner, eventCallbacks, childContracts)
         );
       if (!eventRooted) {
         unproven.add(state);
@@ -214,6 +221,7 @@ function asyncCallbackIsEventRooted(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   owner: RuntimeFunctionLike,
   eventCallbacks: ReadonlySet<RuntimeFunctionLike>,
+  childContracts: ChildContractResolver | null,
   seen: ReadonlySet<string> = new Set()
 ): boolean {
   if (eventCallbacks.has(callback)) return true;
@@ -243,7 +251,7 @@ function asyncCallbackIsEventRooted(
     if (
       attribute &&
       isDirectJsxAttributeExpression(attribute, node) &&
-      jsxAttributeIsIntrinsicEvent(attribute)
+      jsxAttributeIsDeferredEvent(attribute, childContracts)
     ) {
       return;
     }
@@ -255,7 +263,7 @@ function asyncCallbackIsEventRooted(
         (ts.isArrowFunction(caller) ||
           ts.isFunctionDeclaration(caller) ||
           ts.isFunctionExpression(caller)) &&
-        asyncCallbackIsEventRooted(caller, owner, eventCallbacks, nextSeen)
+        asyncCallbackIsEventRooted(caller, owner, eventCallbacks, childContracts, nextSeen)
       ) {
         return;
       }
@@ -263,6 +271,24 @@ function asyncCallbackIsEventRooted(
     safe = false;
   });
   return referenced && safe;
+}
+
+function jsxAttributeIsDeferredEvent(
+  attribute: ts.JsxAttribute,
+  childContracts: ChildContractResolver | null
+): boolean {
+  if (jsxAttributeIsIntrinsicEvent(attribute)) return true;
+  if (!/^on[A-Z]/.test(attribute.name.getText()) || !childContracts) return false;
+  const opening = attribute.parent.parent;
+  const tag = ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
+    ? opening.tagName
+    : null;
+  const target = tag && (ts.isIdentifier(tag) || ts.isPropertyAccessExpression(tag))
+    ? tag.getText()
+    : null;
+  return target !== null &&
+    (childContracts.frameworkEventComponent(target) ||
+      childContracts.componentCallbackPropIsDeferred(target, attribute.name.getText()));
 }
 
 function jsxAttributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {

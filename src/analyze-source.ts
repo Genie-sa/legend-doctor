@@ -586,6 +586,7 @@ function analyzeParsedSource(
     reactiveMutationAffectedStates,
     localComponents,
     sourceComponents,
+    childContracts,
     eventCallbacksByOwner
   );
   const siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();

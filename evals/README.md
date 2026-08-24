@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,390 hooks across 235 source roots. The corpus currently contains
-854 manual hook labels, including 32 explicit non-enforced opportunities, plus twenty-six
+854 manual hook labels, including 30 explicit non-enforced opportunities, plus twenty-six
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. Three real labels verify the documented
@@ -317,9 +317,10 @@ lowercase intrinsic tag from a destructured boolean prop and the concrete JSX in
 literal or literal default. This is callsite proof, not a `Button` or `asChild` convention. Dynamic expressions, any JSX
 spread at the invocation, reassigned prop bindings, mutable targets, and selected custom components abstain.
 
-Thirty-two non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet
-prove. They include local wrapper stacks, prop spreads, React Native Pressable chains, and Radix checked-change events.
-These labels count against recall and form the next multi-file callback-contract work queue.
+Thirty non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet prove.
+The analyzer now composes source-resolved JSX callback publications with recursively proven local event callers. The
+remaining labels include unresolved local wrapper stacks, prop spreads, React Native Pressable chains, and Radix
+checked-change events. They count against recall and form the next multi-file callback-contract work queue.
 
 Two Formbricks labels delete invariant nullable markers whose only writes repeat their `null` initializer and whose only
 reads are inert equality guards around those idempotent writes. The earlier choice lookup remains evaluated at its

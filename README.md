@@ -760,7 +760,8 @@ return <><Editor /><ButtonState copying$={copying$} onClick={copy} /></>;
 Pure props, labels, and icons may share one stable status leaf. Every async status change requires source-proven deferred
 callback timing, including the one-leaf form. Intrinsic events qualify directly. A custom `onX` prop qualifies only when
 multi-file analysis follows every command path to an intrinsic or framework event or another proven deferred
-registration. Eager invocation and unresolved wrappers remain candidates. Repeated controls, mount gates, impure
+registration. If the command is both published as a prop and called by another local callback, each path must resolve
+independently. Eager invocation and unresolved wrappers remain candidates. Repeated controls, mount gates, impure
 projections, and conditional first awaits also remain candidates.
 
 The same pending interval may feed two or three stable leaves without rendering their owner:
@@ -1070,14 +1071,14 @@ These rules follow the official
 ## Verified accuracy
 
 The pinned corpus covers 2,390 hooks across 235 targets. It contains 854 manually audited hook labels, 26 state groups,
-and 109 Legend practice labels. Thirty-two safe async-leaf opportunities remain explicit non-enforced labels because
+and 109 Legend practice labels. Thirty safe async-leaf opportunities remain explicit non-enforced labels because
 their complete custom callback chains are not yet source-proven.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 570/570 |
-| Actionable precision | 437/437 |
-| Actionable recall | 437/469 |
+| Unit tests | 571/571 |
+| Actionable precision | 439/439 |
+| Actionable recall | 439/469 |
 | Legend practice precision | 109/109 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain
