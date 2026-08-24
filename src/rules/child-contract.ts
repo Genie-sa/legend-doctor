@@ -28,6 +28,7 @@ export interface ChildComponentSource {
   readonly deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
   readonly file: string;
   readonly invocation?: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
+  readonly invocationOwner?: ChildComponentSource;
   readonly owner:
     | ts.ArrowFunction
     | ts.FunctionDeclaration
@@ -328,7 +329,7 @@ export function propDefersArrayItemCallback(
     if (
       child === null ||
       !sourceInputCallbackIsDeferred(
-        atJsxInvocation(child, attribute),
+        atJsxInvocation(child, attribute, source),
         0,
         [prop],
         resolver,
@@ -683,7 +684,7 @@ function callbackPathExpressionIsDeferred(
     }
     const child = target ? resolver.resolveComponent(source.file, target) : null;
     return child !== null && sourceInputCallbackIsDeferred(
-      atJsxInvocation(child, attribute),
+      atJsxInvocation(child, attribute, source),
       0,
       [attribute.name.getText(), ...path],
       resolver,
@@ -710,7 +711,7 @@ function callbackPathExpressionIsDeferred(
     }
     const child = target ? resolver.resolveComponent(source.file, target) : null;
     return child !== null && sourceInputCallbackIsDeferred(
-      atJsxInvocation(child, spread),
+      atJsxInvocation(child, spread, source),
       0,
       path,
       resolver,
@@ -1090,10 +1091,13 @@ function jsxOwnerIsIntrinsic(
 
 function atJsxInvocation(
   source: ChildComponentSource,
-  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute
+  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
+  invocationOwner?: ChildComponentSource
 ): ChildComponentSource {
   const invocation = jsxOwnerOpening(attribute);
-  return invocation ? { ...source, invocation } : source;
+  return invocation
+    ? { ...source, invocation, ...(invocationOwner ? { invocationOwner } : {}) }
+    : source;
 }
 
 function jsxOwnerIsDeferredEventTarget(
@@ -1161,22 +1165,87 @@ function booleanPropAtInvocation(
   });
   if (written) return null;
 
-  const attributes = source.invocation!.attributes.properties;
-  if (attributes.some(ts.isJsxSpreadAttribute)) return null;
-  const explicit = attributes.filter(
-    (attribute): attribute is ts.JsxAttribute =>
-      ts.isJsxAttribute(attribute) && attribute.name.getText() === propName
-  );
-  if (explicit.length > 1) return null;
-  if (explicit.length === 1) {
-    const initializer = explicit[0]!.initializer;
-    if (!initializer) return true;
-    if (!ts.isJsxExpression(initializer) || !initializer.expression) return null;
-    return booleanLiteral(unwrapTransparentExpression(initializer.expression));
-  }
+  const value = booleanPropValueAtInvocation(source, propName);
+  if (value !== "absent") return value;
   return element.initializer
     ? booleanLiteral(unwrapTransparentExpression(element.initializer))
     : null;
+}
+
+function booleanPropValueAtInvocation(
+  source: ChildComponentSource,
+  propName: string
+): boolean | "absent" | null {
+  if (!source.invocation) return null;
+  let value: boolean | "absent" = "absent";
+  for (const attribute of source.invocation.attributes.properties) {
+    if (ts.isJsxAttribute(attribute)) {
+      if (attribute.name.getText() !== propName) continue;
+      if (!attribute.initializer) {
+        value = true;
+        continue;
+      }
+      if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression) {
+        return null;
+      }
+      const explicit = booleanLiteral(
+        unwrapTransparentExpression(attribute.initializer.expression)
+      );
+      if (explicit === null) return null;
+      value = explicit;
+      continue;
+    }
+    const spread = booleanPropFromSpread(
+      source.invocationOwner,
+      attribute.expression,
+      propName
+    );
+    if (spread === null) return null;
+    if (spread !== "absent") value = spread;
+  }
+  return value;
+}
+
+function booleanPropFromSpread(
+  owner: ChildComponentSource | undefined,
+  expression: ts.Expression,
+  propName: string
+): boolean | "absent" | null {
+  const value = unwrapTransparentExpression(expression);
+  if (!owner || !ts.isIdentifier(value)) return null;
+  const parameter = owner.owner.parameters[0];
+  if (!parameter || !ts.isObjectBindingPattern(parameter.name)) return null;
+  const rest = parameter.name.elements.filter(element =>
+    element.dotDotDotToken &&
+    ts.isIdentifier(element.name) &&
+    element.name.text === value.text
+  );
+  if (rest.length !== 1 || bindingDeclarationCount(owner.owner, value.text) !== 1) {
+    return null;
+  }
+
+  let safe = true;
+  visit(owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== value.text ||
+      isBindingName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const carried = climbTransparentExpression(node);
+    if (!ts.isJsxSpreadAttribute(carried.parent) || carried.parent.expression !== carried) {
+      safe = false;
+    }
+  });
+  if (!safe) return null;
+
+  const excluded = parameter.name.elements.some(element =>
+    !element.dotDotDotToken && bindingElementPropertyName(element) === propName
+  );
+  return excluded ? "absent" : booleanPropValueAtInvocation(owner, propName);
 }
 
 function booleanLiteral(expression: ts.Expression): boolean | null {
@@ -1503,7 +1572,7 @@ function callbackInvocationIsDeferred(
       if (
         child &&
         sourceInputCallbackIsDeferred(
-          atJsxInvocation(child, attribute),
+          atJsxInvocation(child, attribute, source),
           0,
           [attribute.name.getText()],
           resolver!,
@@ -1597,7 +1666,7 @@ function callbackIsDeferredByJsx(
   if (target && resolver.frameworkEventComponent(source.file, target)) return true;
   const child = target ? resolver.resolveComponent(source.file, target) : null;
   return child !== null && sourceInputCallbackIsDeferred(
-    atJsxInvocation(child, attribute),
+    atJsxInvocation(child, attribute, source),
     0,
     [attribute.name.getText()],
     resolver,
@@ -1667,7 +1736,7 @@ function callResultIsDeferredEvent(
   if (target && resolver.frameworkEventComponent(source.file, target)) return true;
   const child = target ? resolver.resolveComponent(source.file, target) : null;
   return child !== null && sourceInputCallbackIsDeferred(
-    atJsxInvocation(child, attribute),
+    atJsxInvocation(child, attribute, source),
     0,
     [attribute.name.getText()],
     resolver,

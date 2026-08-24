@@ -4690,12 +4690,11 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "pricing-table.tsx",
     hook: "useState",
     line: 326,
     name: "isRetryingStripeSetup",
-    rationale: "Retry status brackets one awaited command and renders only in the warning alert button, avoiding a rerender of the very large pricing owner.",
+    rationale: "Retry status brackets one awaited command reached through source-resolved alert and button wrappers; only the warning button subscribes, avoiding a rerender of the very large pricing owner.",
     target: "formbricks-pricing-table",
   },
   {

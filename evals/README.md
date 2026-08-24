@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,392 hooks across 236 source roots. The corpus currently contains
-856 manual hook labels, including 20 explicit non-enforced opportunities, plus twenty-six
+856 manual hook labels, including 19 explicit non-enforced opportunities, plus twenty-six
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. Three real labels verify the documented
@@ -314,13 +314,16 @@ work in the same callback already invalidates the owner before the Promise settl
 
 A source-resolved callback may cross one polymorphic component target when an immutable local conditional selects a
 lowercase intrinsic tag from a destructured boolean prop and the concrete JSX invocation fixes that prop with a boolean
-literal or literal default. This is callsite proof, not a `Button` or `asChild` convention. Dynamic expressions, any JSX
-spread at the invocation, reassigned prop bindings, mutable targets, and selected custom components abstain.
+literal or literal default. This is callsite proof, not a `Button` or `asChild` convention. The proof may cross a chain of
+rest-prop JSX spreads when each rest binding is immutable, has no non-JSX use, and its outer invocation resolves the same
+boolean prop. Dynamic expressions, opaque or mutated spreads, reassigned prop bindings, mutable targets, and selected
+custom components abstain.
 
-Twenty non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet prove.
+Nineteen non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet prove.
 The analyzer composes source-resolved JSX callback publications with recursively proven local event callers. It also
 proves inline adapters at their concrete JSX invocation, so a fixed or default intrinsic branch can qualify without
-making the wrapper safe at every callsite. The remaining labels include unresolved local wrapper stacks, prop spreads,
+making the wrapper safe at every callsite. One Formbricks pricing label now follows an inline retry command through an
+alert wrapper's rest props into a default intrinsic button; the `asChild` adversarial branch remains review. The remaining labels include unresolved local wrapper stacks, opaque prop spreads,
 React Native Pressable chains, and Radix checked-change events. They count against recall and form the next multi-file
 callback-contract work queue.
 

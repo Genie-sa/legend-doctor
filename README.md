@@ -762,8 +762,9 @@ callback timing, including the one-leaf form. Intrinsic events qualify directly.
 multi-file analysis follows every command path to an intrinsic or framework event or another proven deferred
 registration. If the command is both published as a prop and called by another local callback, each path must resolve
 independently. An inline adapter qualifies only when its exact JSX invocation proves a deferred callback, including a
-fixed or default intrinsic branch in a polymorphic wrapper. Eager selections, dynamic branches, invocation spreads, and
-unresolved wrappers remain candidates. Repeated controls, mount gates, impure
+fixed or default intrinsic branch in a polymorphic wrapper. That callsite proof may cross transparent component rest
+spreads when the rest binding is immutable, used only for JSX forwarding, and the outer invocation fixes or omits the
+branch prop. Eager selections, dynamic branches, opaque spreads, and unresolved wrappers remain candidates. Repeated controls, mount gates, impure
 projections, and conditional first awaits also remain candidates.
 
 The same pending interval may feed two or three stable leaves without rendering their owner:
@@ -798,7 +799,9 @@ synchronous companion writes before awaited work, and repeated rows remain candi
 
 Deferred callback proof also follows a polymorphic wrapper when an immutable local conditional selects a lowercase
 intrinsic tag from one destructured boolean prop and the concrete callsite fixes that prop with a literal or literal
-default. Dynamic values, JSX spreads, reassigned props, mutable targets, and selected custom components remain candidates.
+default. Transparent rest-prop wrappers preserve that proof only when every use forwards the same object through JSX and
+the outer invocation resolves the branch prop. Dynamic values, mutated or escaped spreads, mutable targets, and selected
+custom components remain candidates.
 
 ### Subscribe once per keyed row
 
@@ -1073,14 +1076,14 @@ These rules follow the official
 ## Verified accuracy
 
 The pinned corpus covers 2,392 hooks across 236 targets. It contains 856 manually audited hook labels, 26 state groups,
-and 109 Legend practice labels. Twenty safe async-leaf opportunities remain explicit non-enforced labels because
+and 109 Legend practice labels. Nineteen safe async-leaf opportunities remain explicit non-enforced labels because
 their complete custom callback chains are not yet source-proven.
 
 | Check | Result |
 | --- | ---: |
 | Unit tests | 571/571 |
-| Actionable precision | 450/450 |
-| Actionable recall | 450/470 |
+| Actionable precision | 451/451 |
+| Actionable recall | 451/470 |
 | Legend practice precision | 109/109 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

@@ -3744,6 +3744,14 @@ test("proves every async command path through source wrappers and inline event a
         const Component = asChild ? EagerSlot : "button";
         return <Component {...props} />;
       }
+      export function AlertButton({ children, ...props }: {
+        asChild?: boolean;
+        children: React.ReactNode;
+        disabled: boolean;
+        onClick: () => void;
+      }) {
+        return <div><Button {...props}>{children}</Button></div>;
+      }
     `
   );
   await writeFile(
@@ -3762,7 +3770,7 @@ test("proves every async command path through source wrappers and inline event a
     path.join(root, "Screen.tsx"),
     `
       import { useState } from "react";
-      import { Button } from "./Button";
+      import { AlertButton, Button } from "./Button";
       import { DeleteDialog } from "./DeleteDialog";
       export function Screen() {
         const [deleting, setDeleting] = useState(false);
@@ -3813,12 +3821,41 @@ test("proves every async command path through source wrappers and inline event a
           <Button asChild disabled={eagerSaving} onClick={() => { void save(); }} />
         </main>;
       }
+
+      export function RestForwardedInlineAdapter() {
+        const [alertSaving, setAlertSaving] = useState(false);
+        const save = async () => {
+          setAlertSaving(true);
+          try { await persist(); } finally { setAlertSaving(false); }
+        };
+        return <main>
+          <Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status />
+          <AlertButton disabled={alertSaving} onClick={() => { void save(); }}>Save</AlertButton>
+        </main>;
+      }
+
+      export function EagerRestForwardedInlineAdapter() {
+        const [eagerAlertSaving, setEagerAlertSaving] = useState(false);
+        const save = async () => {
+          setEagerAlertSaving(true);
+          try { await persist(); } finally { setEagerAlertSaving(false); }
+        };
+        return <main>
+          <Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status />
+          <AlertButton asChild disabled={eagerAlertSaving} onClick={() => { void save(); }}>Save</AlertButton>
+        </main>;
+      }
     `
   );
 
   const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
   assert.equal(findings.get("deleting")?.action, "use-observable", findings.get("deleting")?.message);
   assert.equal(findings.get("saving")?.action, "use-observable", findings.get("saving")?.message);
+  assert.equal(
+    findings.get("alertSaving")?.action,
+    "use-observable",
+    findings.get("alertSaving")?.message
+  );
   assert.equal(
     findings.get("eagerDeleting")?.action,
     "review-state",
@@ -3828,5 +3865,10 @@ test("proves every async command path through source wrappers and inline event a
     findings.get("eagerSaving")?.action,
     "review-state",
     findings.get("eagerSaving")?.message
+  );
+  assert.equal(
+    findings.get("eagerAlertSaving")?.action,
+    "review-state",
+    findings.get("eagerAlertSaving")?.message
   );
 });
