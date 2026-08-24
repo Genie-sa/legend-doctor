@@ -72,6 +72,11 @@ export interface ChildContractResolver {
     callbackProperty: string
   ): boolean;
   componentCallbackPropIsDeferred(componentName: string, propName: string): boolean;
+  componentCallbackPropIsDeferredAtInvocation(
+    componentName: string,
+    propName: string,
+    invocation: ts.JsxOpeningElement | ts.JsxSelfClosingElement
+  ): boolean;
   componentCallbackPropRunsOnlyInReactEffect(componentName: string, propName: string): boolean;
   frameworkEventComponent(componentName: string): boolean;
   pureProjectionBindings(): ReadonlySet<string>;

@@ -472,6 +472,7 @@ function createChildContractResolver(
   const callbackContracts = new Map<string, boolean>();
   const arrayItemCallbackContracts = new Map<string, boolean>();
   const componentCallbackContracts = new Map<string, boolean>();
+  const componentInvocationCallbackContracts = new Map<string, boolean>();
   const componentEffectCallbackContracts = new Map<string, boolean>();
   const componentSources = new Map<string, ChildComponentSource | null>();
   const keyedCursorContracts = new Map<string, boolean>();
@@ -581,6 +582,19 @@ function createChildContractResolver(
         callbackSourceResolver
       );
       componentCallbackContracts.set(key, deferred);
+      return deferred;
+    },
+    componentCallbackPropIsDeferredAtInvocation(componentName, propName, invocation): boolean {
+      const key = `${componentName}\0${propName}\0${invocation.pos}`;
+      const cached = componentInvocationCallbackContracts.get(key);
+      if (cached !== undefined) return cached;
+      const source = resolveComponent(importerFile, componentName);
+      const deferred = source !== null && propCallbackIsDeferred(
+        { ...source, invocation },
+        propName,
+        callbackSourceResolver
+      );
+      componentInvocationCallbackContracts.set(key, deferred);
       return deferred;
     },
     componentCallbackPropRunsOnlyInReactEffect(componentName, propName): boolean {

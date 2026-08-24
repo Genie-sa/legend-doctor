@@ -3726,7 +3726,7 @@ test("requires source-proven deferred callbacks for one async status leaf", asyn
   assert.equal(findings.get("opaque")?.action, "review-state", findings.get("opaque")?.message);
 });
 
-test("proves every async command path through source wrappers and intrinsic events", async t => {
+test("proves every async command path through source wrappers and inline event adapters", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-async-wrapper-stack-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
@@ -3762,6 +3762,7 @@ test("proves every async command path through source wrappers and intrinsic even
     path.join(root, "Screen.tsx"),
     `
       import { useState } from "react";
+      import { Button } from "./Button";
       import { DeleteDialog } from "./DeleteDialog";
       export function Screen() {
         const [deleting, setDeleting] = useState(false);
@@ -3788,14 +3789,44 @@ test("proves every async command path through source wrappers and intrinsic even
           <DeleteDialog deleting={eagerDeleting} onDelete={remove} />
         </main>;
       }
+
+      export function InlineAdapter() {
+        const [saving, setSaving] = useState(false);
+        const save = async () => {
+          setSaving(true);
+          try { await persist(); } finally { setSaving(false); }
+        };
+        return <main>
+          <Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status />
+          <Button disabled={saving} onClick={() => { void save(); }} />
+        </main>;
+      }
+
+      export function EagerInlineAdapter() {
+        const [eagerSaving, setEagerSaving] = useState(false);
+        const save = async () => {
+          setEagerSaving(true);
+          try { await persist(); } finally { setEagerSaving(false); }
+        };
+        return <main>
+          <Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status />
+          <Button asChild disabled={eagerSaving} onClick={() => { void save(); }} />
+        </main>;
+      }
     `
   );
 
   const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
   assert.equal(findings.get("deleting")?.action, "use-observable", findings.get("deleting")?.message);
+  assert.equal(findings.get("saving")?.action, "use-observable", findings.get("saving")?.message);
   assert.equal(
     findings.get("eagerDeleting")?.action,
     "review-state",
     findings.get("eagerDeleting")?.message
+  );
+  assert.equal(
+    findings.get("eagerSaving")?.action,
+    "review-state",
+    findings.get("eagerSaving")?.message
   );
 });

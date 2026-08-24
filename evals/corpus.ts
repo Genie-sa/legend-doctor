@@ -1157,6 +1157,12 @@ export const repositories = [
         root: "apps/web/modules/workspaces/settings/general/components/delete-workspace-render.tsx",
         states: 3,
       },
+      {
+        effects: 0,
+        id: "formbricks-archive-feedback-directory",
+        root: "apps/web/modules/ee/feedback-directory/components/feedback-directory-settings/archive-feedback-directory.tsx",
+        states: 2,
+      },
     ],
     url: "https://github.com/formbricks/formbricks.git",
   },
@@ -3493,7 +3499,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "webhook-settings-tab.tsx",
     hook: "useState",
     line: 56,
@@ -4379,8 +4384,6 @@ export const goldCases = [
     action: "use-observable" as const,
     ...(
       target === "formbricks-chart-menu" ||
-      target === "formbricks-create-segment" ||
-      target === "formbricks-organization-actions" ||
       (target === "formbricks-dashboard-menu" && name === "isDuplicating")
         ? { enforced: false as const }
         : {}
@@ -4527,7 +4530,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "EditProfileDetailsForm.tsx",
     hook: "useState",
     line: 59,
@@ -4537,7 +4539,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "AddIntegrationModal.tsx",
     hook: "useState",
     line: 78,
@@ -4565,7 +4566,6 @@ export const goldCases = [
   })),
   {
     action: "use-observable",
-    enforced: false,
     file: "AddIntegrationModal.tsx",
     hook: "useState",
     line: 68,
@@ -4593,7 +4593,6 @@ export const goldCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "AddChannelMappingModal.tsx",
     hook: "useState",
     line: 63,
@@ -4624,7 +4623,6 @@ export const goldCases = [
     [45, "isDeletingSegment"],
   ].map(([line, name]) => ({
     action: "use-observable" as const,
-    ...(line === 44 ? { enforced: false as const } : {}),
     file: "segment-settings.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -4656,7 +4654,6 @@ export const goldCases = [
     ],
   ].map(([line, name, action, rationale]) => ({
     action: action as "review-state" | "use-observable",
-    ...(line === 56 ? { enforced: false as const } : {}),
     file: "add-webhook-modal.tsx",
     hook: "useState" as const,
     line: line as number,
@@ -4791,6 +4788,24 @@ export const goldCases = [
     name: "isDeleting",
     rationale: "The delete command reaches an intrinsic button through DeleteDialog and a default-intrinsic polymorphic Button, while only the stable dialog leaf consumes the pending flag; analysis must prove that complete callback chain before enforcing the migration.",
     target: "formbricks-delete-workspace",
+  },
+  {
+    action: "review-state",
+    file: "archive-feedback-directory.tsx",
+    hook: "useState",
+    line: 34,
+    name: "isArchiveDialogOpen",
+    rationale: "The visibility flag controls the dialog's conditional mount and closes in the async archive transaction; keep it under review until one grouped model proves mount identity and atomic completion.",
+    target: "formbricks-archive-feedback-directory",
+  },
+  {
+    action: "use-observable",
+    file: "archive-feedback-directory.tsx",
+    hook: "useState",
+    line: 35,
+    name: "isArchiving",
+    rationale: "The source-proven archive button starts the pending interval before awaited work, and two stable button leaves can subscribe while the trigger and dialog body remain outside them.",
+    target: "formbricks-archive-feedback-directory",
   },
   {
     action: "use-observable",
@@ -5454,7 +5469,9 @@ export const goldCases = [
     ["outline-invite", "Invite.tsx", 36, "isSaving", "Button"],
   ].map(([target, file, line, name, leaf]) => ({
     action: "use-observable" as const,
-    ...(target !== "outline-invite" ? { enforced: false as const } : {}),
+    ...(target === "formbricks-custom-filter" || target === "formbricks-selected-row-settings"
+      ? { enforced: false as const }
+      : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,

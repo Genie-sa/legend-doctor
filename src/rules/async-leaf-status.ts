@@ -225,6 +225,16 @@ function asyncCallbackIsEventRooted(
   seen: ReadonlySet<string> = new Set()
 ): boolean {
   if (eventCallbacks.has(callback)) return true;
+  const inlineAttribute = findAncestorUntil(callback, ts.isJsxAttribute, owner);
+  if (
+    inlineAttribute?.initializer &&
+    ts.isJsxExpression(inlineAttribute.initializer) &&
+    inlineAttribute.initializer.expression &&
+    unwrapTransparentExpression(inlineAttribute.initializer.expression) === callback &&
+    jsxAttributeIsDeferredEvent(inlineAttribute, childContracts)
+  ) {
+    return true;
+  }
   const name = ts.isFunctionDeclaration(callback)
     ? callback.name?.text
     : ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
@@ -288,7 +298,11 @@ function jsxAttributeIsDeferredEvent(
     : null;
   return target !== null &&
     (childContracts.frameworkEventComponent(target) ||
-      childContracts.componentCallbackPropIsDeferred(target, attribute.name.getText()));
+      childContracts.componentCallbackPropIsDeferredAtInvocation(
+        target,
+        attribute.name.getText(),
+        opening
+      ));
 }
 
 function jsxAttributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
