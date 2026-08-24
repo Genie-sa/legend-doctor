@@ -19,6 +19,7 @@ import {
 import {
   isHookDependencyReference,
   isSynchronousRenderCallback,
+  uniqueVariableDeclaration,
 } from "./state-proofs.js";
 import { collectHookImports, isImportedHookCall, type HookImports } from "../imports.js";
 
@@ -26,6 +27,7 @@ export interface ChildComponentSource {
   readonly body: ts.ConciseBody;
   readonly deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
   readonly file: string;
+  readonly invocation?: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
   readonly owner:
     | ts.ArrowFunction
     | ts.FunctionDeclaration
@@ -311,13 +313,23 @@ export function propDefersArrayItemCallback(
       safe = false;
       return;
     }
-    if (jsxOwnerIsIntrinsic(attribute) || resolver.frameworkEventComponent(source.file, target)) {
+    if (
+      jsxOwnerIsDeferredEventTarget(attribute, source) ||
+      resolver.frameworkEventComponent(source.file, target)
+    ) {
       return;
     }
     const child = resolver.resolveComponent(source.file, target);
     if (
       child === null ||
-      !sourceInputCallbackIsDeferred(child, 0, [prop], resolver, new Set(), 0)
+      !sourceInputCallbackIsDeferred(
+        atJsxInvocation(child, attribute),
+        0,
+        [prop],
+        resolver,
+        new Set(),
+        0
+      )
     ) {
       safe = false;
     }
@@ -524,7 +536,10 @@ function trackedCallbackPathIsDeferred(
   ) {
     return false;
   }
-  const key = `${source.file}\0${source.owner.pos}\0${tracked.name}\0${tracked.path.join(".")}`;
+  const invocationKey = source.invocation
+    ? `${source.invocation.getSourceFile().fileName}:${source.invocation.pos}`
+    : "";
+  const key = `${source.file}\0${source.owner.pos}\0${invocationKey}\0${tracked.name}\0${tracked.path.join(".")}`;
   if (visited.has(key)) return false;
   const nextVisited = new Set(visited).add(key);
   let references = 0;
@@ -648,7 +663,7 @@ function callbackPathExpressionIsDeferred(
     if (
       path.length === 0 &&
       /^on[A-Z]/.test(attribute.name.getText()) &&
-      jsxOwnerIsIntrinsic(attribute)
+      jsxOwnerIsDeferredEventTarget(attribute, source)
     ) {
       return true;
     }
@@ -663,7 +678,7 @@ function callbackPathExpressionIsDeferred(
     }
     const child = target ? resolver.resolveComponent(source.file, target) : null;
     return child !== null && sourceInputCallbackIsDeferred(
-      child,
+      atJsxInvocation(child, attribute),
       0,
       [attribute.name.getText(), ...path],
       resolver,
@@ -683,13 +698,14 @@ function callbackPathExpressionIsDeferred(
       target &&
       path.length === 1 &&
       /^on[A-Z]/.test(path[0] ?? "") &&
-      resolver.frameworkEventComponent(source.file, target)
+      (jsxOwnerIsDeferredEventTarget(spread, source) ||
+        resolver.frameworkEventComponent(source.file, target))
     ) {
       return true;
     }
     const child = target ? resolver.resolveComponent(source.file, target) : null;
     return child !== null && sourceInputCallbackIsDeferred(
-      child,
+      atJsxInvocation(child, spread),
       0,
       path,
       resolver,
@@ -1044,20 +1060,163 @@ function jsxAttributeDirectlyCarries(
 }
 
 function jsxOwnerTarget(attribute: ts.JsxAttribute | ts.JsxSpreadAttribute): string | null {
+  const opening = jsxOwnerOpening(attribute);
+  return opening ? jsxTagName(opening.tagName) : null;
+}
+
+function jsxOwnerOpening(
+  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute
+): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
   const attributes = attribute.parent;
   const opening = ts.isJsxAttributes(attributes) ? attributes.parent : null;
   return opening && (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening))
-    ? jsxTagName(opening.tagName)
+    ? opening
     : null;
 }
 
-function jsxOwnerIsIntrinsic(attribute: ts.JsxAttribute): boolean {
-  const attributes = attribute.parent;
-  const opening = ts.isJsxAttributes(attributes) ? attributes.parent : null;
+function jsxOwnerIsIntrinsic(
+  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute
+): boolean {
+  const opening = jsxOwnerOpening(attribute);
   return opening !== null &&
-    (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
     ts.isIdentifier(opening.tagName) &&
     /^[a-z]/.test(opening.tagName.text);
+}
+
+function atJsxInvocation(
+  source: ChildComponentSource,
+  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute
+): ChildComponentSource {
+  const invocation = jsxOwnerOpening(attribute);
+  return invocation ? { ...source, invocation } : source;
+}
+
+function jsxOwnerIsDeferredEventTarget(
+  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
+  source?: ChildComponentSource
+): boolean {
+  if (jsxOwnerIsIntrinsic(attribute)) return true;
+  const opening = jsxOwnerOpening(attribute);
+  if (!source?.invocation || !opening || !ts.isIdentifier(opening.tagName)) return false;
+
+  const declaration = uniqueVariableDeclaration(source.body, opening.tagName.text);
+  if (
+    !declaration?.initializer ||
+    !ts.isIdentifier(declaration.name) ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    bindingDeclarationCount(source.owner, declaration.name.text) !== 1
+  ) {
+    return false;
+  }
+
+  const initializer = unwrapTransparentExpression(declaration.initializer);
+  if (!ts.isConditionalExpression(initializer)) return false;
+  const condition = unwrapTransparentExpression(initializer.condition);
+  if (!ts.isIdentifier(condition)) return false;
+  const conditionValue = booleanPropAtInvocation(source, condition);
+  const selected = conditionValue === true
+    ? initializer.whenTrue
+    : conditionValue === false
+      ? initializer.whenFalse
+      : null;
+  if (!selected) return false;
+  const target = unwrapTransparentExpression(selected);
+  return ts.isStringLiteralLike(target) && /^[a-z]/.test(target.text);
+}
+
+function booleanPropAtInvocation(
+  source: ChildComponentSource,
+  binding: ts.Identifier
+): boolean | null {
+  const parameter = source.owner.parameters[0];
+  if (!parameter || !ts.isObjectBindingPattern(parameter.name)) return null;
+  const matches = parameter.name.elements.filter(element =>
+    !element.dotDotDotToken &&
+    ts.isIdentifier(element.name) &&
+    element.name.text === binding.text
+  );
+  const element = matches.length === 1 ? matches[0] : null;
+  const propName = element ? bindingElementPropertyName(element) : null;
+  if (!element || !propName || bindingDeclarationCount(source.owner, binding.text) !== 1) {
+    return null;
+  }
+
+  let written = false;
+  visit(source.body, node => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === binding.text &&
+      node !== element.name &&
+      !isNonValueIdentifier(node) &&
+      referenceIsWithinWriteTarget(node, source.owner)
+    ) {
+      written = true;
+    }
+  });
+  if (written) return null;
+
+  const attributes = source.invocation!.attributes.properties;
+  if (attributes.some(ts.isJsxSpreadAttribute)) return null;
+  const explicit = attributes.filter(
+    (attribute): attribute is ts.JsxAttribute =>
+      ts.isJsxAttribute(attribute) && attribute.name.getText() === propName
+  );
+  if (explicit.length > 1) return null;
+  if (explicit.length === 1) {
+    const initializer = explicit[0]!.initializer;
+    if (!initializer) return true;
+    if (!ts.isJsxExpression(initializer) || !initializer.expression) return null;
+    return booleanLiteral(unwrapTransparentExpression(initializer.expression));
+  }
+  return element.initializer
+    ? booleanLiteral(unwrapTransparentExpression(element.initializer))
+    : null;
+}
+
+function booleanLiteral(expression: ts.Expression): boolean | null {
+  if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
+  return null;
+}
+
+function referenceIsWithinWriteTarget(
+  reference: ts.Identifier,
+  owner: ChildComponentSource["owner"]
+): boolean {
+  for (let current: ts.Node = reference; current.parent && current.parent !== owner; current = current.parent) {
+    const parent = current.parent;
+    if (
+      ts.isBinaryExpression(parent) &&
+      isAssignmentOperator(parent.operatorToken.kind)
+    ) {
+      return nodeWithin(reference, parent.left);
+    }
+    if (
+      (ts.isPostfixUnaryExpression(parent) && parent.operand === current) ||
+      (ts.isPrefixUnaryExpression(parent) &&
+        parent.operand === current &&
+        (parent.operator === ts.SyntaxKind.PlusPlusToken ||
+          parent.operator === ts.SyntaxKind.MinusMinusToken))
+    ) {
+      return true;
+    }
+    if (ts.isDeleteExpression(parent) && parent.expression === current) return true;
+    if (
+      (ts.isForInStatement(parent) || ts.isForOfStatement(parent)) &&
+      nodeWithin(reference, parent.initializer)
+    ) {
+      return true;
+    }
+    if (
+      ts.isStatement(parent) ||
+      ts.isCallExpression(parent) ||
+      isRuntimeFunctionLike(parent)
+    ) {
+      return false;
+    }
+  }
+  return false;
 }
 
 function jsxTagName(name: ts.JsxTagNameExpression): string | null {
@@ -1328,7 +1487,7 @@ function callbackInvocationIsDeferred(
       /^on[A-Z]/.test(attribute.name.getText()) &&
       jsxAttributeCarriesCallbackIdentity(attribute, node, owner)
     ) {
-      if (jsxOwnerIsIntrinsic(attribute)) return;
+      if (jsxOwnerIsDeferredEventTarget(attribute, source)) return;
       const target = jsxOwnerTarget(attribute);
       if (source && resolver && target && resolver.frameworkEventComponent(source.file, target)) {
         return;
@@ -1339,7 +1498,7 @@ function callbackInvocationIsDeferred(
       if (
         child &&
         sourceInputCallbackIsDeferred(
-          child,
+          atJsxInvocation(child, attribute),
           0,
           [attribute.name.getText()],
           resolver!,
@@ -1428,12 +1587,12 @@ function callbackIsDeferredByJsx(
   ) {
     return false;
   }
-  if (jsxOwnerIsIntrinsic(attribute)) return true;
+  if (jsxOwnerIsDeferredEventTarget(attribute, source)) return true;
   const target = jsxOwnerTarget(attribute);
   if (target && resolver.frameworkEventComponent(source.file, target)) return true;
   const child = target ? resolver.resolveComponent(source.file, target) : null;
   return child !== null && sourceInputCallbackIsDeferred(
-    child,
+    atJsxInvocation(child, attribute),
     0,
     [attribute.name.getText()],
     resolver,
@@ -1498,12 +1657,12 @@ function callResultIsDeferredEvent(
   ) {
     return false;
   }
-  if (jsxOwnerIsIntrinsic(attribute)) return true;
+  if (jsxOwnerIsDeferredEventTarget(attribute, source)) return true;
   const target = jsxOwnerTarget(attribute);
   if (target && resolver.frameworkEventComponent(source.file, target)) return true;
   const child = target ? resolver.resolveComponent(source.file, target) : null;
   return child !== null && sourceInputCallbackIsDeferred(
-    child,
+    atJsxInvocation(child, attribute),
     0,
     [attribute.name.getText()],
     resolver,

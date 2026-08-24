@@ -3832,6 +3832,9 @@ function classifyState(
   }
   const unusedStateDeletionConfidence = setterCallsDiscardConfidence(usage.setterCallNodes);
   const onlyCalculatesOwnSetter = stateReadsOnlyCalculateOwnSetter(state, usage);
+  const onlyGuardsIdempotentSetter = usage.deferredReads > 0 &&
+    stateReadsOnlyGuardIdempotentSetter(state, usage);
+  const hasOnlyDiscardableSelfReads = onlyCalculatesOwnSetter || onlyGuardsIdempotentSetter;
   if (
     usage.setterCalls > 0 &&
     usage.setterReferences === usage.setterCalls &&
@@ -3843,14 +3846,16 @@ function classifyState(
     (state.call.arguments[0] === undefined || isEvaluationInert(state.call.arguments[0])) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
-    (usage.deferredReads === 0 || onlyCalculatesOwnSetter) &&
+    (usage.deferredReads === 0 || hasOnlyDiscardableSelfReads) &&
     usage.transportedOccurrences === 0 &&
-    (unusedStateDeletionConfidence !== null || onlyCalculatesOwnSetter)
+    (unusedStateDeletionConfidence !== null || hasOnlyDiscardableSelfReads)
   ) {
     return {
       action: "delete-unused-state",
       confidence: unusedStateDeletionConfidence ?? "certain",
-      message: unusedStateDeletionConfidence === "probable"
+      message: onlyGuardsIdempotentSetter
+        ? `Delete invariant React state \`${state.valueName}\`, its idempotent setter calls, and the inert conditions that only guard those calls; keep any separately evaluated guard inputs at their existing positions, because the state is initialized and always assigned the same primitive.`
+        : unusedStateDeletionConfidence === "probable"
         ? `Delete React state \`${state.valueName}\`; replace each setter call with a \`void\` expression that evaluates the same argument at the same position, because the assigned value is never consumed but property evaluation must be preserved.`
         : `Delete React state \`${state.valueName}\` and its setter calls; assigned values are never consumed.`,
     };
@@ -5775,6 +5780,85 @@ function stateReadsOnlyCalculateOwnSetter(
     );
   });
   return safe && reads > 0;
+}
+
+function stateReadsOnlyGuardIdempotentSetter(
+  state: StateCandidate,
+  usage: StateUsage
+): boolean {
+  const initializer = state.call.arguments[0];
+  const initialValue = initializer ? primitiveLiteralKey(initializer) : null;
+  if (
+    !state.setterName ||
+    initialValue === null ||
+    usage.effectWrites > 0 ||
+    usage.setterCallNodes.length === 0 ||
+    usage.setterCallNodes.some(call =>
+      call.arguments.length !== 1 ||
+      !call.arguments[0] ||
+      primitiveLiteralKey(call.arguments[0]) !== initialValue
+    )
+  ) {
+    return false;
+  }
+
+  let reads = 0;
+  let safe = true;
+  visit(state.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== state.valueName ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    reads += 1;
+    safe = readOnlyGuardsSetter(node, state, usage);
+  });
+  return safe && reads > 0;
+}
+
+function readOnlyGuardsSetter(
+  reference: ts.Identifier,
+  state: StateCandidate,
+  usage: StateUsage
+): boolean {
+  const statement = findAncestorUntil(reference, ts.isIfStatement, state.owner);
+  if (!statement || statement.elseStatement) return false;
+  const condition = unwrapTransparentExpression(statement.expression);
+  if (
+    !ts.isBinaryExpression(condition) ||
+    (condition.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
+      condition.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsEqualsToken)
+  ) {
+    return false;
+  }
+  const left = unwrapTransparentExpression(condition.left);
+  const right = unwrapTransparentExpression(condition.right);
+  const other = left === reference ? right : right === reference ? left : null;
+  if (!other || !isEvaluationInert(other)) return false;
+
+  const branch = ts.isBlock(statement.thenStatement)
+    ? statement.thenStatement.statements.length === 1
+      ? statement.thenStatement.statements[0]
+      : null
+    : statement.thenStatement;
+  if (!branch || !ts.isExpressionStatement(branch)) return false;
+  const expression = unwrapTransparentExpression(branch.expression);
+  return ts.isCallExpression(expression) && usage.setterCallNodes.includes(expression);
+}
+
+function primitiveLiteralKey(expression: ts.Expression): string | null {
+  const value = unwrapTransparentExpression(expression);
+  if (value.kind === ts.SyntaxKind.NullKeyword) return "null";
+  if (value.kind === ts.SyntaxKind.TrueKeyword) return "boolean:true";
+  if (value.kind === ts.SyntaxKind.FalseKeyword) return "boolean:false";
+  if (ts.isStringLiteralLike(value)) return `string:${value.text}`;
+  if (ts.isNumericLiteral(value)) return `number:${value.text}`;
+  if (ts.isBigIntLiteral(value)) return `bigint:${value.text}`;
+  return null;
 }
 
 function discardableExpressionConfidence(

@@ -137,6 +137,20 @@ const refresh = () => setTick(loadVersion());
 const refresh = () => { loadVersion(); };
 ```
 
+```tsx
+// before, the value can never differ from null
+const [invalid, setInvalid] = useState<string | null>(null);
+const choiceValue = choices[index].label;
+if (invalid === choiceValue) setInvalid(null);
+
+// after, keep the existing choice evaluation and delete the dead guard
+const choiceValue = choices[index].label;
+```
+
+Invariant-state deletion requires one primitive initializer, only identical literal writes, and reads confined to inert
+equality guards whose sole branch is that idempotent setter. Different writes, extra branch work, published reads, effects,
+and setter escape remain candidates.
+
 ### Calculate during render
 
 ```tsx
@@ -772,7 +786,11 @@ function LogoButtonState({ uploading$, children }: Props) {
 
 Multi-leaf advice requires one complete async event interval, two or three non-repeated call sites in one owner return,
 and source-proven deferred callback timing. Small cohesive workflows, eager child callbacks, effect-triggered commands,
-companion React writes, and repeated rows remain candidates.
+synchronous companion writes before awaited work, and repeated rows remain candidates.
+
+Deferred callback proof also follows a polymorphic wrapper when an immutable local conditional selects a lowercase
+intrinsic tag from one destructured boolean prop and the concrete callsite fixes that prop with a literal or literal
+default. Dynamic values, JSX spreads, reassigned props, mutable targets, and selected custom components remain candidates.
 
 ### Subscribe once per keyed row
 
@@ -1046,14 +1064,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,363 hooks across 227 targets. It contains 843 manually audited hook labels, 26 state groups,
-and 107 Legend practice labels. One audited polymorphic callback path remains an explicit known miss.
+The pinned corpus covers 2,365 hooks across 228 targets. It contains 847 manually audited hook labels, 26 state groups,
+and 107 Legend practice labels, with no known labeled misses.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 567/567 |
-| Actionable precision | 458/458 |
-| Actionable recall | 458/459 |
+| Unit tests | 569/569 |
+| Actionable precision | 463/463 |
+| Actionable recall | 463/463 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

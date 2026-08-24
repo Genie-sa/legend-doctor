@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,363 hooks across 227 source roots. The corpus currently contains
-843 manual hook labels with one explicit known miss, plus twenty-six
+At the pinned commits, the analyzer inventories 2,365 hooks across 228 source roots. The corpus currently contains
+847 manual hook labels with no known misses, plus twenty-six
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -43,7 +43,7 @@ Two replace a complete conditional child slot with an always-mounted subscriber 
 One cross-file transport label moves a primitive `useValue` subscription from a provider into its existing source-resolved
 child. The proof rejects React wrappers, conditional or repeated call sites, non-primitive props, and any second value read.
 Run the eval for the current precision/recall table. If the root README publishes those metrics, update them only
-from a fresh full eval so the numbers stay synchronized as known misses are added.
+from a fresh full eval so the numbers stay synchronized as labels change.
 
 Two Legend Music labels verify that a measured scalar can cross a bounded chain of immutable pure projections and
 subscribe in one uniquely selected repeated branch. The receiver must be structurally deduplicated, the switch literal
@@ -310,6 +310,17 @@ React Hook Form's imported `handleSubmit` is a proven event adapter for this rul
 helper beneath that submit command. Arbitrary functions called while building an `onSubmit` prop remain unknown because
 they may execute the callback during render. A Promise-chain command also abstains when later synchronous React state
 work in the same callback already invalidates the owner before the Promise settles.
+
+A source-resolved callback may cross one polymorphic component target when an immutable local conditional selects a
+lowercase intrinsic tag from a destructured boolean prop and the concrete JSX invocation fixes that prop with a boolean
+literal or literal default. This is callsite proof, not a `Button` or `asChild` convention. Dynamic expressions, any JSX
+spread at the invocation, reassigned prop bindings, mutable targets, and selected custom components abstain.
+
+Two Formbricks labels delete invariant nullable markers whose only writes repeat their `null` initializer and whose only
+reads are inert equality guards around those idempotent writes. The earlier choice lookup remains evaluated at its
+original position. Different literals, extra branch work, published reads, effects, setter escape, and non-primitive
+initializers abstain.
+
 Presentation-gate labels keep observable ownership above a condition and replace the complete controlling expression
 with an always-mounted subscriber; this prevents dead subscriptions when the selected child starts hidden. Gate
 conditions must be side-effect free, confined to one strict subtree, and independent of repeated-list shape or effects.

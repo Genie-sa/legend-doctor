@@ -6167,6 +6167,30 @@ test("deletes state whose only reads calculate inert arguments for its own sette
   assert.notEqual(findings.find(finding => finding.name === "published")?.action, "delete-unused-state");
 });
 
+test("deletes invariant state whose only reads guard its own idempotent setter", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    export function Choices({ value }: { value: string | null }) {
+      const [invalid, setInvalid] = useState<string | null>(null);
+      const [published, setPublished] = useState<string | null>(null);
+      const [changing, setChanging] = useState<string | null>(null);
+      const [branchWork, setBranchWork] = useState<string | null>(null);
+      const remove = () => {
+        if (invalid === value) setInvalid(null);
+        if (published === value) { setPublished(null); save(published); }
+        if (changing === value) setChanging("next");
+        if (branchWork === value) { setBranchWork(null); save(value); }
+        discard(value);
+      };
+      return <button onClick={remove}>Remove</button>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "invalid")?.action, "delete-unused-state");
+  assert.notEqual(findings.find(finding => finding.name === "published")?.action, "delete-unused-state");
+  assert.notEqual(findings.find(finding => finding.name === "changing")?.action, "delete-unused-state");
+  assert.notEqual(findings.find(finding => finding.name === "branchWork")?.action, "delete-unused-state");
+});
+
 test("deletes setter-only state written by an effect when arguments are discardable", () => {
   const findings = analyzeSource(`
     import { useEffect, useState } from "react";
