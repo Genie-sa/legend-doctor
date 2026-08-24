@@ -437,7 +437,8 @@ function analyzeParsedSource(
     states,
     usageByState
   );
-  const statesWithCompanionWrites = findStatesWithCompanionWrites(states, stateFlow);
+  const companionWrites = findStateCompanionWrites(states, stateFlow);
+  const statesWithCompanionWrites = companionWrites.all;
   const propertyLocalObjectDrafts = new Set(
     states.filter(state => {
       const usage = usageByState.get(state);
@@ -604,7 +605,8 @@ function analyzeParsedSource(
     usageByState,
     knownComponents,
     sourceFile,
-    stateFlow
+    stateFlow,
+    childContracts
   );
   const subtreeClusters = findStateSubtreeClusters(
     subtreeByState,
@@ -697,6 +699,7 @@ function analyzeParsedSource(
           selfRefreshingCommandStates.has(state),
           observableSelectionOwners.has(state.owner),
           statesWithCompanionWrites.has(state),
+          companionWrites.nonClosing.has(state),
           independentStateWrites.directEventWrites.has(state),
           independentStateWrites.visibilitySetterTransports.has(state),
           reactiveMutationAffectedStates.has(state),
@@ -1568,7 +1571,8 @@ function findObservableStateClusters(
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   knownComponents: ReadonlySet<string>,
   sourceFile: ts.SourceFile,
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
+  childContracts: ChildContractResolver | null
 ): ReadonlyMap<StateCandidate, StateCluster> {
   const result = new Map<StateCandidate, StateCluster>();
   const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
@@ -1639,6 +1643,13 @@ function findObservableStateClusters(
             knownComponents,
             calls,
             stateFlow
+          ) ?? normalizePersistentScalarDialogClusterMembers(
+            members,
+            usageByState,
+            knownComponents,
+            calls,
+            stateFlow,
+            childContracts
           )
         : null;
       const gatedFeedbackMembers = broadOwner && !dialogMembers
@@ -1968,11 +1979,15 @@ function mutationIsEventRooted(
     callbackIsEventRooted(region, state.owner, "", new Set());
 }
 
-function findStatesWithCompanionWrites(
+function findStateCompanionWrites(
   states: readonly StateCandidate[],
   stateFlow: StateFlowIndex
-): ReadonlySet<StateCandidate> {
-  const result = new Set<StateCandidate>();
+): {
+  all: ReadonlySet<StateCandidate>;
+  nonClosing: ReadonlySet<StateCandidate>;
+} {
+  const all = new Set<StateCandidate>();
+  const nonClosing = new Set<StateCandidate>();
   const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
     if (!state.setterName) continue;
@@ -2012,13 +2027,101 @@ function findStatesWithCompanionWrites(
         ) {
           continue;
         }
-        result.add(left.state);
-        result.add(right.state);
+        all.add(left.state);
+        all.add(right.state);
+        if (!mutationIsProvenCloseDuringCompanion(left, right)) nonClosing.add(left.state);
+        if (!mutationIsProvenCloseDuringCompanion(right, left)) nonClosing.add(right.state);
       }
     }
   }
 
-  return result;
+  return { all, nonClosing };
+}
+
+function mutationIsProvenCloseDuringCompanion(
+  mutation: SetterMutation,
+  companion: SetterMutation
+): boolean {
+  if (callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) return true;
+  const argument = mutation.call.arguments[0];
+  if (
+    mutation.call.arguments.length !== 1 ||
+    !argument ||
+    !ts.isIdentifier(argument) ||
+    !isRuntimeFunctionLike(mutation.region) ||
+    bindingDeclarationCount(mutation.region, argument.text) !== 1 ||
+    !parameterIsBooleanVisibilityTransition(mutation.region, mutation.state, argument.text) ||
+    runtimeParameterIsReassigned(mutation.region, argument.text)
+  ) {
+    return false;
+  }
+  for (
+    let current: ts.Node | undefined = companion.call;
+    current && current !== mutation.region;
+    current = current.parent
+  ) {
+    if (
+      ts.isIfStatement(current) &&
+      nodeWithin(companion.call, current.thenStatement) &&
+      isNegatedIdentifier(current.expression, argument.text)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parameterIsBooleanVisibilityTransition(
+  owner: RuntimeFunctionLike,
+  state: StateCandidate,
+  name: string
+): boolean {
+  const parameter = owner.parameters.find(candidate =>
+    ts.isIdentifier(candidate.name) && candidate.name.text === name
+  );
+  if (!parameter) return false;
+  if (parameter.type?.kind === ts.SyntaxKind.BooleanKeyword) return true;
+  const attribute = findAncestorUntil(owner, ts.isJsxAttribute, state.owner);
+  if (
+    !attribute?.initializer ||
+    !ts.isJsxExpression(attribute.initializer) ||
+    attribute.initializer.expression !== owner
+  ) {
+    return false;
+  }
+  const opening = attribute.parent.parent;
+  return (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
+    isVisibilityTransitionAttribute(opening, attribute.name.getText(), state.valueName);
+}
+
+function runtimeParameterIsReassigned(owner: RuntimeFunctionLike, name: string): boolean {
+  if (!owner.body) return true;
+  let reassigned = false;
+  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    if (!ts.isBinaryExpression(node)) return;
+    const left = unwrapTransparentExpression(node.left);
+    if (
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      ts.isIdentifier(left) &&
+      left.text === name
+    ) {
+      reassigned = true;
+    }
+  });
+  return reassigned;
+}
+
+function isNegatedIdentifier(expression: ts.Expression, name: string): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (
+    !ts.isPrefixUnaryExpression(value) ||
+    value.operator !== ts.SyntaxKind.ExclamationToken
+  ) {
+    return false;
+  }
+  const operand = unwrapTransparentExpression(value.operand);
+  return ts.isIdentifier(operand) && operand.text === name;
 }
 
 function findBranchUnmountMoves(
@@ -2801,6 +2904,132 @@ function normalizeObservableDialogClusterMembers(
   return members;
 }
 
+function normalizePersistentScalarDialogClusterMembers(
+  members: readonly StateCandidate[],
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+  knownComponents: ReadonlySet<string>,
+  mutations: readonly SetterMutation[],
+  stateFlow: StateFlowIndex,
+  childContracts: ChildContractResolver | null
+): readonly StateCandidate[] | null {
+  if (!childContracts || members.length !== 2) return null;
+  const payload = members.find(hasLiteralScalarDialogPayloadInitializer);
+  const flag = members.find(state => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  if (!payload || !flag || payload === flag) return null;
+
+  const payloadUsage = usageByState.get(payload);
+  const flagUsage = usageByState.get(flag);
+  if (
+    !payloadUsage ||
+    !flagUsage ||
+    [payloadUsage, flagUsage].some(usage =>
+      usage.localRenderReads !== 0 ||
+      usage.effectReads !== 0 ||
+      usage.effectWrites !== 0 ||
+      usage.deferredReads !== 0 ||
+      usage.repeatedTransport ||
+      usage.unstableTransport ||
+      usage.setterUsesPreviousValue ||
+      usage.shadowed ||
+      usage.escaped
+    ) ||
+    stateMayHoldCallable(payload) ||
+    stateMayHoldCallable(flag) ||
+    payloadUsage.valueTransportSites.size !== 1 ||
+    flagUsage.valueTransportSites.size !== 1 ||
+    [...payloadUsage.valueTransportSites][0] !== [...flagUsage.valueTransportSites][0] ||
+    payloadUsage.valueTargets.size !== 1 ||
+    flagUsage.valueTargets.size !== 1 ||
+    [...payloadUsage.valueTargets][0] !== [...flagUsage.valueTargets][0] ||
+    payloadUsage.setterTransportSites.size !== 0 ||
+    payloadUsage.setterReferences !== payloadUsage.setterCalls ||
+    flagUsage.setterTransportSites.size !== 1 ||
+    flagUsage.setterReferences !== flagUsage.setterCalls + 1
+  ) {
+    return null;
+  }
+
+  const target = [...payloadUsage.valueTargets][0];
+  const payloadCallSite = directUniqueReturnCallSite(payloadUsage, payload.owner)?.opening;
+  const flagCallSite = directUniqueReturnCallSite(flagUsage, flag.owner)?.opening;
+  const closeTransport = directSetterTransport(flag);
+  if (
+    !target ||
+    !knownComponents.has(target) ||
+    !payloadCallSite ||
+    payloadCallSite !== flagCallSite ||
+    callSiteIsKeyed(payloadCallSite) ||
+    !closeTransport ||
+    closeTransport.target !== target ||
+    closeTransport.attribute.parent.parent !== payloadCallSite ||
+    !childContracts.componentCallbackPropIsDeferred(
+      target,
+      closeTransport.attribute.name.getText()
+    )
+  ) {
+    return null;
+  }
+
+  const payloadMutations = mutations.filter(mutation => mutation.state === payload);
+  const flagMutations = mutations.filter(mutation => mutation.state === flag);
+  const opens = flagMutations.filter(mutation => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword));
+  const closes = flagMutations.filter(mutation => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword));
+  const paired = (left: SetterMutation, right: SetterMutation) =>
+    left.region === right.region &&
+    mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow);
+  if (
+    payloadMutations.length === 0 ||
+    opens.length === 0 ||
+    flagMutations.length !== opens.length + closes.length ||
+    payloadMutations.some(mutation =>
+      !mutationIsEventRooted(mutation, payload) ||
+      !mutationWritesTypedPrimitive(mutation)
+    ) ||
+    flagMutations.some(mutation => !mutationIsEventRooted(mutation, flag)) ||
+    payloadMutations.some(payloadMutation =>
+      !opens.some(open => paired(payloadMutation, open))
+    ) ||
+    opens.some(open =>
+      !payloadMutations.some(payloadMutation => paired(open, payloadMutation))
+    )
+  ) {
+    return null;
+  }
+  return members;
+}
+
+function hasLiteralScalarDialogPayloadInitializer(state: StateCandidate): boolean {
+  const initializer = state.call.arguments[0];
+  if (!initializer) return false;
+  const value = unwrapTransparentExpression(initializer);
+  return ts.isStringLiteralLike(value) || ts.isNumericLiteral(value);
+}
+
+function mutationWritesTypedPrimitive(mutation: SetterMutation): boolean {
+  const argument = mutation.call.arguments[0];
+  if (!argument || mutation.call.arguments.length !== 1) return false;
+  const value = unwrapTransparentExpression(argument);
+  if (ts.isStringLiteralLike(value) || ts.isNumericLiteral(value)) return true;
+  if (!ts.isIdentifier(value) || !isRuntimeFunctionLike(mutation.region)) return false;
+  return mutation.region.parameters.some(parameter =>
+    ts.isIdentifier(parameter.name) &&
+    parameter.name.text === value.text &&
+    parameter.type !== undefined &&
+    primitiveDialogPayloadType(parameter.type)
+  );
+}
+
+function primitiveDialogPayloadType(type: ts.TypeNode): boolean {
+  if (ts.isParenthesizedTypeNode(type)) return primitiveDialogPayloadType(type.type);
+  if (ts.isUnionTypeNode(type)) {
+    return type.types.length > 0 && type.types.every(primitiveDialogPayloadType);
+  }
+  if (ts.isLiteralTypeNode(type)) {
+    return ts.isStringLiteralLike(type.literal) || ts.isNumericLiteral(type.literal);
+  }
+  return type.kind === ts.SyntaxKind.StringKeyword || type.kind === ts.SyntaxKind.NumberKeyword;
+}
+
 function isMonotonicDialogLatch(
   flag: StateCandidate,
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
@@ -3427,6 +3656,7 @@ function classifyState(
   isSelfRefreshingCommand: boolean,
   belongsToObservableSelection: boolean,
   hasCompanionWrites: boolean,
+  hasNonClosingCompanionWrites: boolean,
   hasIndependentDirectEventWrite: boolean,
   hasIndependentVisibilitySetterTransport: boolean,
   hasReactiveMutationPath: boolean,
@@ -3597,6 +3827,9 @@ function classifyState(
     );
   const hasRepeatedOwnerRenderCut = branchSubtree !== null &&
     hasRepeatedJsxRenderWorkOutside(state.owner, branchSubtree);
+  const hasVisibilityValueTransport = [...usage.valueProps.values()].some(props =>
+    [...props].some(prop => /^(?:isOpen|isVisible|open|visible)$/.test(prop))
+  );
   const hasCompactBooleanTransportCut = hasIndependentTransportRenderCut &&
     !hasCompanionWrites &&
     !hasReactiveMutationPath &&
@@ -3680,9 +3913,14 @@ function classifyState(
     usage.valueTargets.size === 1 &&
     branchCallSite !== null &&
     !usage.repeatedValueTransport &&
-    (!hasCompanionWrites ||
-      hasIndependentDirectEventWrite ||
-      hasIndependentVisibilitySetterTransport) &&
+    (
+      !hasCompanionWrites ||
+      (
+        hasVisibilityValueTransport &&
+        !hasNonClosingCompanionWrites &&
+        (hasIndependentDirectEventWrite || hasIndependentVisibilitySetterTransport)
+      )
+    ) &&
     (!hasReactiveMutationPath ||
       hasIndependentDirectEventWrite ||
       hasIndependentVisibilitySetterTransport) &&

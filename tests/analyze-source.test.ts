@@ -3886,7 +3886,7 @@ test("keeps observable ownership when a sibling command opens one exact leaf", (
   );
 });
 
-test("isolates a child-controlled close path from a coupled parent opener", () => {
+test("keeps a coupled parent opener atomic despite a child visibility callback", () => {
   const findings = analyzeSource(`
     import { useState } from "react";
     interface Item { id: string }
@@ -3901,8 +3901,83 @@ test("isolates a child-controlled close path from a coupled parent opener", () =
       </main>;
     }
   `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "open")?.action, "use-observable");
+  assert.equal(findings.find(finding => finding.name === "open")?.action, "review-state");
   assert.equal(findings.find(finding => finding.name === "target")?.action, "review-state");
+});
+
+test("isolates visibility when companion writes occur only while closing", () => {
+  const findings = analyzeSource(`
+    import { useState } from "react";
+    function Dialog(_props: unknown) { return null; }
+    export function Screen() {
+      const [draft, setDraft] = useState("");
+      const [open, setOpen] = useState(false);
+      const reset = () => { setDraft(""); setOpen(false); };
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <Dialog draft={draft} open={open} setOpen={setOpen} onReset={reset} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(findings.find(finding => finding.name === "open")?.action, "use-observable");
+  assert.equal(findings.find(finding => finding.name === "draft")?.action, "review-state");
+
+  const nonVisibility = analyzeSource(`
+    import { useState } from "react";
+    function Control(_props: unknown) { return null; }
+    export function Screen() {
+      const [draft, setDraft] = useState("");
+      const [active, setActive] = useState(false);
+      const reset = () => { setDraft(""); setActive(false); };
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={() => setActive(true)}>Activate</button>
+        <Control draft={draft} active={active} onReset={reset} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(nonVisibility.find(finding => finding.name === "active")?.action, "review-state");
+  assert.equal(nonVisibility.find(finding => finding.name === "draft")?.action, "review-state");
+});
+
+test("proves a controlled boolean forwards only guarded close companions", () => {
+  const safe = analyzeSource(`
+    import { useState } from "react";
+    function Dialog(_props: unknown) { return null; }
+    export function Screen() {
+      const [draft, setDraft] = useState("");
+      const [open, setOpen] = useState(false);
+      const changeOpen = (nextOpen: boolean) => {
+        if (!nextOpen) setDraft("");
+        setOpen(nextOpen);
+      };
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={() => setOpen(true)}>Open</button>
+        <Dialog draft={draft} open={open} onOpenChange={changeOpen} />
+      </main>;
+    }
+  `, "fixture.tsx");
+  assert.equal(safe.find(finding => finding.name === "open")?.action, "use-observable");
+  assert.equal(safe.find(finding => finding.name === "draft")?.action, "review-state");
+
+  for (const unsafeChange of [
+    `if (nextOpen) setDraft("next"); setOpen(nextOpen);`,
+    `nextOpen = false; if (!nextOpen) setDraft(""); setOpen(nextOpen);`,
+  ]) {
+    const unsafe = analyzeSource(`
+      import { useState } from "react";
+      function Dialog(_props: unknown) { return null; }
+      export function Screen() {
+        const [draft, setDraft] = useState("");
+        const [open, setOpen] = useState(false);
+        const changeOpen = (nextOpen: boolean) => { ${unsafeChange} };
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+          <button onClick={() => setOpen(true)}>Open</button>
+          <Dialog draft={draft} open={open} onOpenChange={changeOpen} />
+        </main>;
+      }
+    `, "fixture.tsx");
+    assert.equal(unsafe.find(finding => finding.name === "open")?.action, "review-state", unsafeChange);
+    assert.equal(unsafe.find(finding => finding.name === "draft")?.action, "review-state", unsafeChange);
+  }
 });
 
 test("does not put a subscriber inside its own false visibility gate", () => {

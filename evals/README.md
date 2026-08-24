@@ -31,8 +31,8 @@ Acceptance targets for the first useful release:
 
 ## Current baseline
 
-At the pinned commits, the analyzer inventories 2,356 hooks across 225 source roots. The corpus currently contains
-839 manual hook labels with no known misses, plus twenty-five
+At the pinned commits, the analyzer inventories 2,361 hooks across 226 source roots. The corpus currently contains
+841 manual hook labels with no known misses, plus twenty-six
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. One additional real label verifies the documented
@@ -111,6 +111,11 @@ Two Formbricks labels verify a persistent dialog payload and visibility flag beh
 payload and true flag must be written together, every transported member must reach a source-resolved component inside
 that slot, and an always-mounted leaf wrapper must preserve the existing payload gate and closed-dialog mount behavior.
 Payload fanout, repeated render gates, unresolved targets, broad branches, effects, escapes, and unpaired opens abstain.
+A Tree Wallet Vite pair and exact group verify the always-mounted scalar form. A false visibility flag and direct
+string or numeric literal payload must reach the same stable source-resolved child, and every event-rooted payload write
+must coexecute with a true open. The child close prop must resolve to a deferred callback, but the child keeps plain props
+so existing effects retain React timing. Owner reads, different targets, repeated or keyed call sites, functional
+payload updates, setter escape, and unpaired opens abstain.
 A persistent lazy-dialog group may include one monotonic false-to-true mount latch. Every latch write must set `true`
 and coexecute with a payload open, while one complete bounded gate contains every payload, visibility, and callback
 transport. A resettable latch, unresolved `React.lazy` provenance, or any second surface abstains. Named and namespace
@@ -313,6 +318,12 @@ synchronization effect remains unchanged; opaque helpers, multiple consumers, re
 Companion writes block per-state isolation even when another event independently opens the leaf: splitting a later
 payload/visibility transition across React and Legend would lose the original atomic workflow transaction. Those cases
 remain review until the complete state machine can be modeled and emitted as one grouped observable instruction.
+A close-only companion is the narrow exception. The state write must be literal `false`, or it must forward one
+immutable boolean callback parameter while every companion write is structurally inside `if (!parameter)`. An explicit
+boolean annotation or a paired `open` and visibility-transition JSX attribute proves the parameter contract. Positive
+guards, reassignment, hidden helper writes, dynamic non-visibility callbacks, and any companion that can run while
+opening abstain. The state must control a visibility prop and have a separately proven direct event write or paired
+visibility setter transport.
 Dependency-driven external effects stay in React when one standalone integration follows non-state dependencies. The
 effect may use one imported/module/global precondition, one command-argument builder, or one exact dependency collection
 mapped through a call-free static item-property projection; finite membership/string queries

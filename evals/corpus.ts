@@ -60,6 +60,12 @@ export const repositories = [
         root: "isolated-apps/tree-wallet-mobile/src",
         states: 135,
       },
+      {
+        effects: 2,
+        id: "tree-wallet-vite-user-card",
+        root: "apps/tree-wallet-vite/src/components/UserCard.tsx",
+        states: 3,
+      },
     ],
     url: "https://github.com/netzerosa/platform.git",
   },
@@ -2330,18 +2336,24 @@ export const goldCases = [
     rationale: "The payload-opening transaction remains in the table owner, while the mounted modal has an independent visibility callback and is the only value subscriber.",
     target: "tree-map",
   })),
-  ...[
-    ["components/species-management/species-management-page.tsx", 163, "mergeOpen"],
-    ["components/species-management/species-management-page.tsx", 164, "selectedOpen"],
-  ].map(([file, line, name]) => ({
-    action: "use-observable" as const,
-    file: file as string,
-    hook: "useState" as const,
-    line: line as number,
-    name: name as string,
-    rationale: "A direct call-free sibling event independently changes this dialog state, while coupled workflow transitions keep observable ownership in the parent.",
+  {
+    action: "review-state",
+    file: "components/species-management/species-management-page.tsx",
+    hook: "useState",
+    line: 163,
+    name: "mergeOpen",
+    rationale: "Merge visibility can open independently, but the selected-dialog handoff closes one React surface while opening this one; migrating only merge visibility would split that transition.",
     target: "tree-map",
-  })),
+  },
+  {
+    action: "use-observable",
+    file: "components/species-management/species-management-page.tsx",
+    hook: "useState",
+    line: 164,
+    name: "selectedOpen",
+    rationale: "The selected dialog opens independently, and its only companion transition closes this surface before opening merge; a stable selected-dialog leaf can subscribe without exposing stale payload.",
+    target: "tree-map",
+  },
   ...[
     ["components/account-management/account-form-dialog.tsx", 407, "previewUrl"],
     ["components/operations/landowner-modal.tsx", 47, "previewUrl"],
@@ -3503,7 +3515,6 @@ export const goldCases = [
   },
   ...[
     ["expensify-chronos", "ChronosScheduleOOOPage.tsx", 53, "isDurationUnitModalVisible"],
-    ["expensify-domain-member", "DomainMemberDetailsPage.tsx", 57, "isModalVisible"],
     ["formbricks-manage-airtable", "ManageIntegration.tsx", 52, "isDeleteIntegrationModalOpen"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
@@ -3514,6 +3525,15 @@ export const goldCases = [
     rationale: "A direct call-free JSX event independently changes this leaf state even though separate workflow transitions co-write companion React state.",
     target: target as string,
   })),
+  {
+    action: "review-state",
+    file: "DomainMemberDetailsPage.tsx",
+    hook: "useState",
+    line: 57,
+    name: "isModalVisible",
+    rationale: "One path reopens the decision modal while clearing its deferred force-close choice; migrating visibility alone could publish the reopened modal with the previous React snapshot.",
+    target: "expensify-domain-member",
+  },
   {
     action: "review-state",
     file: "ChronosScheduleOOOPage.tsx",
@@ -3551,12 +3571,12 @@ export const goldCases = [
     target: "expensify-address-search",
   },
   {
-    action: "use-observable",
+    action: "review-state",
     file: "index.tsx",
     hook: "useState",
     line: 141,
     name: "locationErrorCode",
-    rationale: "Only LocationErrorMessage renders the error code, and its direct dismiss event is independent from the async geolocation transitions that co-write other state.",
+    rationale: "Location errors are published with geolocation result and loading transitions; an independent dismiss path does not make the other writes safe to split across React and Legend ownership.",
     target: "expensify-address-search",
   },
   ...[
@@ -4220,23 +4240,35 @@ export const goldCases = [
     target: "formbricks-workflow-runs",
   },
   ...[
-    ["formbricks-chart-menu", "chart-dropdown-menu.tsx", 32, "isDeleteDialogOpen"],
-    ["formbricks-dashboard-menu", "dashboard-dropdown-menu.tsx", 33, "isDeleteDialogOpen"],
-    ["formbricks-quotas-card", "quotas-card.tsx", 76, "isQuotaModalOpen"],
-    ["formbricks-quotas-card", "quotas-card.tsx", 81, "openCreateQuotaConfirmationModal"],
-    ["formbricks-feedback-source-menu", "feedback-source-row-dropdown.tsx", 43, "isDeleteDialogOpen"],
     ["formbricks-edit-api-keys", "edit-api-keys.tsx", 73, "isAddAPIKeyModalOpen"],
-    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 74, "isDeleteKeyModalOpen"],
-    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 79, "viewPermissionsOpen"],
-    ["formbricks-editor-card-menu", "editor-card-menu.tsx", 77, "logicWarningModal"],
-    ["formbricks-language-view", "language-view.tsx", 79, "translationModalOpen"],
+    ["formbricks-quotas-card", "quotas-card.tsx", 81, "openCreateQuotaConfirmationModal"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A parent command may open the workflow with companion data, but the one receiving modal has an independent visibility callback; retain owner lifetime and subscribe only at that leaf.",
+    rationale: name === "openCreateQuotaConfirmationModal"
+      ? "The confirmation can open through its paired setter, while the only companion transaction closes it before handing off to the quota modal; one confirmation leaf can subscribe safely."
+      : "The add-key modal opens independently and one stable modal can subscribe without invalidating the API-key list owner.",
+    target: target as string,
+  })),
+  ...[
+    ["formbricks-chart-menu", "chart-dropdown-menu.tsx", 32, "isDeleteDialogOpen", "Opening the delete dialog also closes the dropdown; migrating visibility alone would expose the dialog before the React-owned dropdown commits closed."],
+    ["formbricks-dashboard-menu", "dashboard-dropdown-menu.tsx", 33, "isDeleteDialogOpen", "Opening the delete dialog also closes the dropdown; migrating visibility alone would split one atomic surface transition."],
+    ["formbricks-quotas-card", "quotas-card.tsx", 76, "isQuotaModalOpen", "Quota visibility opens with the active quota and response count and also switches from a sibling confirmation modal; migrate the complete workflow or keep it in React."],
+    ["formbricks-feedback-source-menu", "feedback-source-row-dropdown.tsx", 43, "isDeleteDialogOpen", "Opening the delete dialog also closes the source dropdown, so an isolated Legend write could render both surfaces open before React commits."],
+    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 74, "isDeleteKeyModalOpen", "The delete dialog opens only after selecting its active key; visibility alone could publish open with the previous key snapshot."],
+    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 79, "viewPermissionsOpen", "Permission visibility and active-key selection form one transition, and the active key also controls the modal mount; preserve the React transaction until the complete model can migrate."],
+    ["formbricks-editor-card-menu", "editor-card-menu.tsx", 77, "logicWarningModal", "The warning opens after changing the pending element type; visibility alone could expose the warning with the previous type."],
+    ["formbricks-language-view", "language-view.tsx", 79, "translationModalOpen", "Translation visibility opens with a new language code whose derived label is still computed by the owner; an isolated observable would publish stale language props."],
+  ].map(([target, file, line, name, rationale]) => ({
+    action: "review-state" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: rationale as string,
     target: target as string,
   })),
   ...[
@@ -6281,9 +6313,25 @@ export const goldCases = [
     rationale: "The preserved interval writes only presentation time; stable keyed stage rows and the progress leaf can subscribe without rebuilding the generation shell five times per second.",
     target: "tree-map",
   },
+  ...["showLevelInfoPopup", "numberOfLevelTrees"].map((name, index) => ({
+    action: "use-observable" as const,
+    file: "UserCard.tsx",
+    hook: "useState" as const,
+    line: 35 + index,
+    name,
+    rationale: "The selected level and popup visibility open together and feed one stable source-resolved popup; one observable model preserves the atomic open while keeping the thirty-one-element card outside popup updates.",
+    target: "tree-wallet-vite-user-card",
+  })),
 ] as const satisfies readonly GoldHookCase[];
 
 export const goldStateGroups = [
+  {
+    file: "UserCard.tsx",
+    line: 35,
+    members: ["showLevelInfoPopup", "numberOfLevelTrees"],
+    rationale: "The literal level payload and visibility flag are one persistent popup model; assign both atomically on open, keep close as a leaf write, and subscribe only around the stable LevelInfoPopup call site.",
+    target: "tree-wallet-vite-user-card",
+  },
   {
     file: "components/avatar-update.tsx",
     line: 40,

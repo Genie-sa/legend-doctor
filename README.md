@@ -681,6 +681,36 @@ complete conditional slot. The same model applies to an always-mounted drawer wh
 repeated gates, unresolved targets, and broad branches remain candidates. Dialog chrome may stay inside the leaf when
 the complete branch has at most twelve JSX elements and is no more than 40% of its owner.
 
+### Keep a scalar popup payload atomic with visibility
+
+```tsx
+// before, selecting a level rerenders the complete card
+const [open, setOpen] = useState(false);
+const [level, setLevel] = useState(1);
+const showLevel = (nextLevel: number) => { setLevel(nextLevel); setOpen(true); };
+return <><CardContent onSelect={showLevel} /><LevelPopup open={open} level={level} setOpen={setOpen} /></>;
+
+// after, one leaf receives the same plain props and the paired open stays atomic
+const popup$ = useObservable({ open: false, level: 1 });
+const showLevel = (nextLevel: number) => popup$.assign({ level: nextLevel, open: true });
+return <><CardContent onSelect={showLevel} /><LevelPopupState popup$={popup$} /></>;
+
+function LevelPopupState({ popup$ }: { popup$: Observable<{ open: boolean; level: number }> }) {
+  const popup = useValue(popup$);
+  return <LevelPopup open={popup.open} level={popup.level} setOpen={value => popup$.open.set(value)} />;
+}
+```
+
+Legend Doctor requires a literal string or number payload, a false visibility flag, paired event-rooted opens, one
+stable source-resolved child, and a deferred close callback. The child still receives plain props, so its effects and
+memoization keep their existing timing. Payload reads in the owner, functional updates, repeated or keyed popups,
+different child targets, and any unpaired open remain candidates.
+
+A controlled close may reset React draft state without blocking an otherwise independent popup leaf. The tool proves
+that exception only for a literal `false` write or an immutable boolean callback parameter whose companion writes are
+inside `if (!open)`. A positive guard, reassigned parameter, hidden helper, or payload write during open remains a
+candidate.
+
 A single nullable payload can also own an always-mounted dialog's `open` expression. Legend Doctor recommends one
 owner-lifetime observable only when every render read stays inside that complete dialog call site, every command is
 event-rooted, and no companion React write shares the transition. Event commands take non-tracking snapshots while the
@@ -986,14 +1016,14 @@ These rules follow the official
 
 ## Verified accuracy
 
-The pinned corpus covers 2,356 hooks across 225 targets. It contains 839 manually audited hook labels, 25 state groups,
+The pinned corpus covers 2,361 hooks across 226 targets. It contains 841 manually audited hook labels, 26 state groups,
 and 107 Legend practice labels.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 563/563 |
-| Actionable precision | 466/466 |
-| Actionable recall | 466/466 |
+| Unit tests | 566/566 |
+| Actionable precision | 457/457 |
+| Actionable recall | 457/457 |
 | Legend practice precision | 107/107 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

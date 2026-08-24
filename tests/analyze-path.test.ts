@@ -2141,6 +2141,90 @@ test("verifies a leaf child contract before promoting the transport", async () =
   assert.match(finding?.message ?? "", /renders the `busy` value directly/);
 });
 
+test("groups a literal popup payload with its visibility at one resolved child", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-popup-model-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "LevelPopup.tsx"),
+    `
+      import { useCallback, useEffect } from "react";
+      export function LevelPopup({ open, level, setOpen }: {
+        open: boolean;
+        level: number;
+        setOpen: (open: boolean) => void;
+      }) {
+        useEffect(() => reportVisibility(open), [open]);
+        const close = useCallback(() => setOpen(false), [setOpen]);
+        return <dialog open={open} data-level={level}><button onClick={close}>Close</button></dialog>;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screen.tsx"),
+    `
+      import { useState } from "react";
+      import { LevelPopup } from "./LevelPopup";
+
+      export function Screen() {
+        const [popupOpen, setPopupOpen] = useState(false);
+        const [popupLevel, setPopupLevel] = useState(1);
+        const show = (level: number) => { setPopupLevel(level); setPopupOpen(true); };
+        ${"\n".repeat(100)}
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+          <Actions /><Preview /><button onClick={() => show(5)}>Show</button>
+          <LevelPopup open={popupOpen} level={popupLevel} setOpen={setPopupOpen} /></main>;
+      }
+
+      export function SplitScreen() {
+        const [splitOpen, setSplitOpen] = useState(false);
+        const [splitLevel, setSplitLevel] = useState(1);
+        const show = () => { setSplitLevel(5); setSplitOpen(true); };
+        ${"\n".repeat(100)}
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+          <Actions /><Preview /><button onClick={show}>Show</button><output>{splitLevel}</output>
+          <LevelPopup open={splitOpen} level={0} setOpen={setSplitOpen} /></main>;
+      }
+
+      export function RepeatedScreen({ levels }: { levels: number[] }) {
+        const [repeatedOpen, setRepeatedOpen] = useState(false);
+        const [repeatedLevel, setRepeatedLevel] = useState(1);
+        const show = (level: number) => { setRepeatedLevel(level); setRepeatedOpen(true); };
+        ${"\n".repeat(100)}
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+          <Actions /><Preview />{levels.map(level => <LevelPopup key={level} open={repeatedOpen}
+            level={repeatedLevel} setOpen={setRepeatedOpen} />)}<button onClick={() => show(5)}>Show</button></main>;
+      }
+
+      export function FunctionalScreen() {
+        const [functionalOpen, setFunctionalOpen] = useState(false);
+        const [functionalLevel, setFunctionalLevel] = useState(1);
+        const show = () => { setFunctionalLevel(level => level + 1); setFunctionalOpen(true); };
+        ${"\n".repeat(100)}
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+          <Actions /><Preview /><button onClick={show}>Show</button>
+          <LevelPopup open={functionalOpen} level={functionalLevel} setOpen={setFunctionalOpen} /></main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const actions = new Map(report.findings.map(finding => [finding.name, finding.action]));
+  assert.equal(actions.get("popupOpen"), "use-observable");
+  assert.equal(actions.get("popupLevel"), "use-observable");
+  assert.equal(actions.get("splitOpen"), "review-state");
+  assert.equal(actions.get("splitLevel"), "review-state");
+  assert.equal(actions.get("repeatedOpen"), "review-state");
+  assert.equal(actions.get("repeatedLevel"), "review-state");
+  assert.equal(actions.get("functionalOpen"), "review-state");
+  assert.equal(actions.get("functionalLevel"), "review-state");
+  assert.deepEqual(
+    report.findings.find(finding => finding.name === "popupOpen")?.group?.members,
+    ["popupOpen", "popupLevel"]
+  );
+});
+
 test("proves memoized option commands through a resolved deferred child", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-option-command-"));
   t.after(() => rm(root, { force: true, recursive: true }));
