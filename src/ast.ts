@@ -20,6 +20,7 @@ const RUNTIME_FUNCTION_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
   ts.SyntaxKind.MethodDeclaration,
   ts.SyntaxKind.SetAccessor,
 ]);
+const identifiersByNode = new WeakMap<ts.Node, ReadonlyMap<string, readonly ts.Identifier[]>>();
 
 export function findAncestor<T extends ts.Node>(
   node: ts.Node,
@@ -48,6 +49,23 @@ export function findAncestorUntil<T extends ts.Node>(
 
 export function isRuntimeFunctionLike(node: ts.Node): node is RuntimeFunctionLike {
   return RUNTIME_FUNCTION_KINDS.has(node.kind);
+}
+
+export function identifiersNamed(node: ts.Node | undefined, name: string): readonly ts.Identifier[] {
+  if (!node) return [];
+  let identifiers = identifiersByNode.get(node);
+  if (!identifiers) {
+    const collected = new Map<string, ts.Identifier[]>();
+    visit(node, candidate => {
+      if (!ts.isIdentifier(candidate)) return;
+      const matches = collected.get(candidate.text) ?? [];
+      matches.push(candidate);
+      collected.set(candidate.text, matches);
+    });
+    identifiers = collected;
+    identifiersByNode.set(node, identifiers);
+  }
+  return identifiers.get(name) ?? [];
 }
 
 export function isNonProductionHarness(fileName: string): boolean {

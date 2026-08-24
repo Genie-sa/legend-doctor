@@ -19,6 +19,7 @@ import {
 import {
   findAncestor,
   findAncestorUntil,
+  identifiersNamed,
   isNonProductionHarness,
   isRuntimeFunctionLike,
   nearestNestedFunction,
@@ -108,7 +109,6 @@ import {
   isUnshadowedMathCall,
   jsxElementCount,
   jsxElementCountIn,
-  localFunctionBinding,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
   oneHopRenderProjectionReferences,
@@ -339,6 +339,7 @@ function analyzeParsedSource(
   const knownComponents = new Set([...localComponents, ...sourceComponents]);
   const usageByState = new Map(states.map(state => [state, collectStateUsage(state, lifecycleRegions, imports)]));
   const eventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
+  const sourceEventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
   const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
     const owned = statesByOwner.get(state.owner) ?? [];
@@ -377,7 +378,9 @@ function analyzeParsedSource(
       for (const callback of directReactHookFormEventCallbacks(owner)) {
         callbacks.add(callback);
       }
-      for (const callback of sourceProvenDirectEventCallbacks(owner, imports, childContracts)) {
+      const sourceCallbacks = sourceProvenDirectEventCallbacks(owner, imports, childContracts);
+      sourceEventCallbacksByOwner.set(owner, sourceCallbacks);
+      for (const callback of sourceCallbacks) {
         callbacks.add(callback);
       }
       if (childContracts) {
@@ -522,7 +525,6 @@ function analyzeParsedSource(
       });
     })
   );
-  const sourceEventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
   const sourceEventScalarStates = new Set(
     states.filter(state => {
       const usage = usageByState.get(state);
@@ -1129,28 +1131,10 @@ function collectStateUsage(
   return usage;
 }
 
-const identifiersByOwner = new WeakMap<
-  RuntimeFunctionLike,
-  ReadonlyMap<string, readonly ts.Identifier[]>
->();
-
 function stateBindingIdentifiers(state: StateCandidate): readonly ts.Identifier[] {
-  let byName = identifiersByOwner.get(state.owner);
-  if (!byName) {
-    const collected = new Map<string, ts.Identifier[]>();
-    visit(state.owner.body, node => {
-      if (!ts.isIdentifier(node)) return;
-      const identifiers = collected.get(node.text) ?? [];
-      identifiers.push(node);
-      collected.set(node.text, identifiers);
-    });
-    byName = collected;
-    identifiersByOwner.set(state.owner, byName);
-  }
-
-  const values = byName.get(state.valueName) ?? [];
+  const values = identifiersNamed(state.owner.body, state.valueName);
   if (!state.setterName || state.setterName === state.valueName) return values;
-  const setters = byName.get(state.setterName) ?? [];
+  const setters = identifiersNamed(state.owner.body, state.setterName);
   if (values.length === 0) return setters;
   if (setters.length === 0) return values;
 
@@ -1401,12 +1385,10 @@ function sourceProvenDirectEventCallbacks(
 ): ReadonlySet<RuntimeFunctionLike> {
   const callbacks = new Set<RuntimeFunctionLike>();
   if (!owner.body) return callbacks;
-  visit(owner.body, node => {
-    const directlyOwned = findAncestor(node, isRuntimeFunctionLike) === owner;
+  visitDirectOwnerNodes(owner.body, node => {
     if (
       node !== owner &&
-      (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
-      directlyOwned
+      (ts.isArrowFunction(node) || ts.isFunctionExpression(node))
     ) {
       const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
       if (
@@ -1419,7 +1401,6 @@ function sourceProvenDirectEventCallbacks(
         callbacks.add(node);
       }
     }
-    if (!directlyOwned) return;
     const binding = ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
       ? node.name.text
       : ts.isFunctionDeclaration(node) && node.name
@@ -1563,16 +1544,9 @@ function jsxComponentPublications(
 ): readonly ComponentPublication[] {
   const publications: ComponentPublication[] = [];
   let safe = true;
-  visit(owner.body, node => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== binding ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
+  for (const node of identifiersNamed(owner.body, binding)) {
+    if (!safe) break;
+    if (isDeclarationName(node) || isNonValueIdentifier(node)) continue;
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     const component = attribute ? jsxTargetName(attribute) : null;
     if (
@@ -1581,14 +1555,14 @@ function jsxComponentPublications(
       !isJsxEventHandlerReference(attribute, node)
     ) {
       safe = false;
-      return;
+      continue;
     }
     publications.push({
       component,
       intrinsic: !isCustomJsxTarget(component),
       prop: attribute.name.getText(),
     });
-  });
+  }
   return safe ? publications : [];
 }
 
@@ -1600,26 +1574,19 @@ function callbackPublishedOnlyThroughMemo(
 ): boolean {
   let propertyReferences = 0;
   let safe = true;
-  visit(owner.body, node => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== binding ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
+  for (const node of identifiersNamed(owner.body, binding)) {
+    if (!safe) break;
+    if (isDeclarationName(node) || isNonValueIdentifier(node)) continue;
     if (nodeWithin(node, property)) {
       propertyReferences += 1;
-      return;
+      continue;
     }
     if (isHookDependencyReference(node, new Set(["useMemo"]))) {
       const call = findAncestorUntil(node, ts.isCallExpression, owner);
-      if (call === memoCall) return;
+      if (call === memoCall) continue;
     }
     safe = false;
-  });
+  }
   return safe && propertyReferences === 1;
 }
 
@@ -1629,34 +1596,49 @@ function localCallbackByBinding(
   imports: HookImports
 ): RuntimeFunctionLike | null {
   if (!owner.body || bindingDeclarationCount(owner, binding) !== 1) return null;
-  const direct = localFunctionBinding(owner, binding);
-  if (direct) return direct;
-  let callback: RuntimeFunctionLike | null = null;
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (callback) return;
-    if (
-      !ts.isVariableDeclaration(node) ||
-      !ts.isIdentifier(node.name) ||
-      node.name.text !== binding ||
-      !node.initializer
-    ) {
-      return;
-    }
-    const initializer = unwrapTransparentExpression(node.initializer);
-    if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
-      callback = initializer;
-      return;
-    }
-    if (
-      ts.isCallExpression(initializer) &&
-      isImportedHookCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback") &&
-      initializer.arguments[0] &&
-      (ts.isArrowFunction(initializer.arguments[0]) || ts.isFunctionExpression(initializer.arguments[0]))
-    ) {
-      callback = initializer.arguments[0];
-    }
+  let callbacks = localCallbacksByOwner.get(owner);
+  if (!callbacks) {
+    const collected = new Map<string, RuntimeFunctionLike>();
+    visitDirectOwnerNodes(owner.body, node => {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        collected.set(node.name.text, node);
+        return;
+      }
+      if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) {
+        return;
+      }
+      const initializer = unwrapTransparentExpression(node.initializer);
+      if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+        collected.set(node.name.text, initializer);
+        return;
+      }
+      const callback = ts.isCallExpression(initializer) &&
+        isImportedHookCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback")
+        ? initializer.arguments[0]
+        : null;
+      if (callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {
+        collected.set(node.name.text, callback);
+      }
+    });
+    callbacks = collected;
+    localCallbacksByOwner.set(owner, callbacks);
+  }
+  return callbacks.get(binding) ?? null;
+}
+
+const localCallbacksByOwner = new WeakMap<
+  RuntimeFunctionLike,
+  ReadonlyMap<string, RuntimeFunctionLike>
+>();
+
+function visitDirectOwnerNodes(
+  node: ts.Node,
+  callback: (node: ts.Node) => void
+): void {
+  node.forEachChild(child => {
+    callback(child);
+    if (!isRuntimeFunctionLike(child)) visitDirectOwnerNodes(child, callback);
   });
-  return callback;
 }
 
 function jsxOpeningForAttribute(
@@ -2830,20 +2812,13 @@ function callbackResolvesToDeferredEvent(
   const nextSeen = new Set(seen).add(name);
   let referenced = false;
   let safe = true;
-  visit(owner.body, node => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== name ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
+  for (const node of identifiersNamed(owner.body, name)) {
+    if (!safe) break;
+    if (isDeclarationName(node) || isNonValueIdentifier(node)) continue;
     referenced = true;
     if (!ts.isCallExpression(node.parent) || node.parent.expression !== node) {
       safe = false;
-      return;
+      continue;
     }
     const caller = nearestNestedFunction(node, owner);
     safe = caller !== null &&
@@ -2855,7 +2830,7 @@ function callbackResolvesToDeferredEvent(
         childContracts,
         nextSeen
       );
-  });
+  }
   return referenced && safe;
 }
 
@@ -2887,22 +2862,15 @@ function callbackHasDirectJsxEventRoot(
   if (!name || bindingDeclarationCount(owner, name) !== 1) return false;
   let referenced = false;
   let safe = true;
-  visit(owner.body, node => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== name ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
+  for (const node of identifiersNamed(owner.body, name)) {
+    if (!safe) break;
+    if (isDeclarationName(node) || isNonValueIdentifier(node)) continue;
     referenced = true;
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     safe = attribute !== null &&
       isDirectJsxAttributeExpression(attribute, node) &&
       jsxEventAttributeIsDeferred(attribute, childContracts);
-  });
+  }
   return referenced && safe;
 }
 

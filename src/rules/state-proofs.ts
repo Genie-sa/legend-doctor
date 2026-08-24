@@ -29,6 +29,7 @@ const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
 const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
 const PURE_MATH_PROJECTION_CALLS: ReadonlySet<string> = new Set(["Math.max", "Math.min"]);
+const jsxElementCounts = new WeakMap<ts.Node, number>();
 
 export { stateMayHoldCallable, stateTypeMayBeCallable } from "./callable-state.js";
 
@@ -499,19 +500,18 @@ export function lowestCommonJsxSubtree(
 }
 
 export function jsxElementCountIn(node: ts.Node): number {
+  const cached = jsxElementCounts.get(node);
+  if (cached !== undefined) return cached;
   let count = 0;
   visit(node, current => {
     if (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current)) count += 1;
   });
+  jsxElementCounts.set(node, count);
   return count;
 }
 
 export function jsxElementCount(owner: RuntimeFunctionLike): number {
-  let count = 0;
-  visit(owner.body, node => {
-    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) count += 1;
-  });
-  return count;
+  return owner.body ? jsxElementCountIn(owner.body) : 0;
 }
 
 export function hasRepeatedJsxRenderWorkOutside(

@@ -38,6 +38,16 @@ interface ReexportBinding {
   moduleSpecifier: string;
 }
 
+interface IndexedImportBinding extends ImportBinding {
+  file: string;
+  localName: string;
+}
+
+interface IndexedReexportBinding extends ReexportBinding {
+  exportName: string;
+  file: string;
+}
+
 type ComponentFunction = ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression;
 
 const REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "useLayoutEffect"]);
@@ -126,6 +136,24 @@ export function buildSourceIndexFromFiles(
     records.set(normalized, moduleRecord(file.sourceFile));
     sourceFiles.set(normalized, file.sourceFile);
   }
+  const importsByName = new Map<string, IndexedImportBinding[]>();
+  const reexportsByName = new Map<string, IndexedReexportBinding[]>();
+  const starExporters: Array<{ file: string; moduleSpecifier: string }> = [];
+  for (const [file, record] of records) {
+    for (const [localName, binding] of record.imports) {
+      const indexed = importsByName.get(binding.importedName) ?? [];
+      indexed.push({ ...binding, file, localName });
+      importsByName.set(binding.importedName, indexed);
+    }
+    for (const [exportName, binding] of record.reexports) {
+      const indexed = reexportsByName.get(binding.importedName) ?? [];
+      indexed.push({ ...binding, exportName, file });
+      reexportsByName.set(binding.importedName, indexed);
+    }
+    for (const moduleSpecifier of record.starExports) {
+      starExporters.push({ file, moduleSpecifier });
+    }
+  }
 
   const compilerContexts = new Map<string, CompilerContext>();
   const compilerContextsByImporter = new Map<string, CompilerContext>();
@@ -143,8 +171,11 @@ export function buildSourceIndexFromFiles(
   const observablesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const pureProjectionsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const contextReaders = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
+  const contextReadersBySymbol = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
   const stableObservableContainers = new Map<string, boolean>();
   const resolvedModules = new Map<string, string | null>();
+  const aliasesBySymbol = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
+  const moduleResolutionHost = cachedModuleResolutionHost(new Set(records.keys()));
 
   function resolveModule(importer: string, specifier: string): string | null {
     const key = `${importer}\0${specifier}`;
@@ -160,7 +191,7 @@ export function buildSourceIndexFromFiles(
       specifier,
       importer,
       options,
-      ts.sys,
+      moduleResolutionHost,
       cache
     ).resolvedModule;
     if (!resolution || resolution.isExternalLibraryImport) {
@@ -275,6 +306,69 @@ export function buildSourceIndexFromFiles(
     return unique.size === 1 ? unique.values().next().value ?? null : null;
   }
 
+  function aliasesForSymbol(
+    symbol: ResolvedSymbol,
+    kind: "context-reader-hook" | "react-context"
+  ): ReadonlyMap<string, ReadonlySet<string>> {
+    const symbolKey = `${kind}\0${symbol.file}\0${symbol.localName}`;
+    const cached = aliasesBySymbol.get(symbolKey);
+    if (cached) return cached;
+    const aliases = new Map<string, Set<string>>();
+    const aliasQueue: ResolvedSymbol[] = [];
+    const exportQueue: Array<{ file: string; name: string }> = [];
+    const seenAliases = new Set<string>();
+    const seenExports = new Set<string>();
+    const addExport = (file: string, name: string): void => {
+      const key = `${file}\0${name}`;
+      if (seenExports.has(key)) return;
+      seenExports.add(key);
+      exportQueue.push({ file, name });
+    };
+    const addAlias = (file: string, localName: string): void => {
+      const key = `${file}\0${localName}`;
+      if (seenAliases.has(key)) return;
+      seenAliases.add(key);
+      const names = aliases.get(file) ?? new Set<string>();
+      names.add(localName);
+      aliases.set(file, names);
+      aliasQueue.push({ file, localName });
+    };
+    addAlias(symbol.file, symbol.localName);
+
+    let aliasIndex = 0;
+    let exportIndex = 0;
+    while (aliasIndex < aliasQueue.length || exportIndex < exportQueue.length) {
+      while (aliasIndex < aliasQueue.length) {
+        const alias = aliasQueue[aliasIndex++]!;
+        for (const [exportName, localName] of records.get(alias.file)?.localExports ?? []) {
+          if (localName === alias.localName) addExport(alias.file, exportName);
+        }
+      }
+      const exported = exportQueue[exportIndex++];
+      if (!exported) continue;
+      for (const binding of importsByName.get(exported.name) ?? []) {
+        if (resolveModule(binding.file, binding.moduleSpecifier) === exported.file) {
+          addAlias(binding.file, binding.localName);
+        }
+      }
+      for (const binding of reexportsByName.get(exported.name) ?? []) {
+        if (resolveModule(binding.file, binding.moduleSpecifier) === exported.file) {
+          addExport(binding.file, binding.exportName);
+        }
+      }
+      for (const star of starExporters) {
+        const resolved = resolveModule(star.file, star.moduleSpecifier) === exported.file
+          ? exportedSymbol(star.file, exported.name, kind, new Set(), 0)
+          : null;
+        if (sameResolvedSymbol(resolved, symbol)) {
+          addExport(star.file, exported.name);
+        }
+      }
+    }
+    aliasesBySymbol.set(symbolKey, aliases);
+    return aliases;
+  }
+
   function resolvedFor(file: string, kind: SourceSymbolKind): ReadonlyMap<string, ResolvedSymbol> {
     const importer = normalizeFile(file);
     const cache = kind === "component"
@@ -347,22 +441,18 @@ export function buildSourceIndexFromFiles(
       contextReaders.set(cacheKey, empty);
       return empty;
     }
-    for (const [candidateFile, record] of records) {
-      const aliases = new Set<string>();
-      for (const localName of record.reactContexts) {
-        if (sameResolvedSymbol({ file: candidateFile, localName }, context)) {
-          aliases.add(localName);
-        }
-      }
-      for (const [localName, binding] of record.imports) {
-        const target = resolveModule(candidateFile, binding.moduleSpecifier);
-        const imported = target
-          ? exportedSymbol(target, binding.importedName, "react-context", new Set(), 0)
-          : null;
-        if (sameResolvedSymbol(imported, context)) aliases.add(localName);
-      }
+    const symbolKey = `${context.file}\0${context.localName}`;
+    const symbolCached = contextReadersBySymbol.get(symbolKey);
+    if (symbolCached) {
+      contextReaders.set(cacheKey, symbolCached);
+      return symbolCached;
+    }
+    const contextAliases = aliasesForSymbol(context, "react-context");
+    for (const [candidateFile, aliases] of contextAliases) {
+      const record = records.get(candidateFile);
       const sourceFile = sourceFiles.get(candidateFile);
       if (
+        !record ||
         !sourceFile ||
         [...aliases].some(alias =>
           !contextReferencesAreKnown(sourceFile, record, alias)
@@ -370,14 +460,16 @@ export function buildSourceIndexFromFiles(
       ) {
         const empty = new Map<string, ReadonlySet<string>>();
         contextReaders.set(cacheKey, empty);
+        contextReadersBySymbol.set(symbolKey, empty);
         return empty;
       }
     }
     const readerSymbols: ResolvedSymbol[] = [];
-    for (const [candidateFile, record] of records) {
+    for (const [candidateFile, aliases] of contextAliases) {
+      const record = records.get(candidateFile);
+      if (!record) continue;
       for (const [readerName, localContextName] of record.contextReaderHooks) {
-        const readerContext = localSymbol(candidateFile, localContextName, "react-context");
-        if (sameResolvedSymbol(readerContext, context)) {
+        if (aliases.has(localContextName)) {
           readerSymbols.push({ file: candidateFile, localName: readerName });
         }
       }
@@ -387,26 +479,24 @@ export function buildSourceIndexFromFiles(
       const localNames = consumers.get(reader.file) ?? new Set<string>();
       localNames.add(reader.localName);
       consumers.set(reader.file, localNames);
-      for (const [consumerFile, record] of records) {
-        for (const [localName, binding] of record.imports) {
+      for (const [consumerFile, aliases] of aliasesForSymbol(reader, "context-reader-hook")) {
+        const names = consumers.get(consumerFile) ?? new Set<string>();
+        const record = records.get(consumerFile);
+        for (const localName of aliases) {
+          const importedName = record?.imports.get(localName)?.importedName;
           if (
-            !/^use[A-Z0-9]/.test(localName) &&
-            !/^use[A-Z0-9]/.test(binding.importedName)
+            (consumerFile === reader.file && localName === reader.localName) ||
+            /^use[A-Z0-9]/.test(localName) ||
+            (importedName !== undefined && /^use[A-Z0-9]/.test(importedName))
           ) {
-            continue;
+            names.add(localName);
           }
-          const target = resolveModule(consumerFile, binding.moduleSpecifier);
-          const imported = target
-            ? exportedSymbol(target, binding.importedName, "context-reader-hook", new Set(), 0)
-            : null;
-          if (!sameResolvedSymbol(imported, reader)) continue;
-          const names = consumers.get(consumerFile) ?? new Set<string>();
-          names.add(localName);
-          consumers.set(consumerFile, names);
         }
+        if (names.size > 0) consumers.set(consumerFile, names);
       }
     }
     contextReaders.set(cacheKey, consumers);
+    contextReadersBySymbol.set(symbolKey, consumers);
     return consumers;
   }
 
@@ -571,6 +661,52 @@ export function buildSourceIndexFromFiles(
     },
     observablesFor: file => new Set(resolvedFor(file, "observable").keys()),
     pureProjectionsFor: file => new Set(resolvedFor(file, "pure-projection").keys()),
+  };
+}
+
+function cachedModuleResolutionHost(
+  sourceFiles: ReadonlySet<string>
+): ts.ModuleResolutionHost {
+  const directories = new Map<string, boolean>();
+  const files = new Map<string, boolean>();
+  const reads = new Map<string, string | undefined>();
+  const realPaths = new Map<string, string>();
+  return {
+    directoryExists: directory => {
+      const key = normalizeFile(directory);
+      const cached = directories.get(key);
+      if (cached !== undefined) return cached;
+      const exists = ts.sys.directoryExists?.(directory) ?? false;
+      directories.set(key, exists);
+      return exists;
+    },
+    fileExists: file => {
+      const key = normalizeFile(file);
+      if (sourceFiles.has(key)) return true;
+      const cached = files.get(key);
+      if (cached !== undefined) return cached;
+      const exists = ts.sys.fileExists(file);
+      files.set(key, exists);
+      return exists;
+    },
+    getCurrentDirectory: ts.sys.getCurrentDirectory,
+    getDirectories: ts.sys.getDirectories,
+    readFile: file => {
+      const key = normalizeFile(file);
+      if (reads.has(key)) return reads.get(key);
+      const value = ts.sys.readFile(file);
+      reads.set(key, value);
+      return value;
+    },
+    realpath: file => {
+      const key = normalizeFile(file);
+      const cached = realPaths.get(key);
+      if (cached) return cached;
+      const resolved = ts.sys.realpath?.(file) ?? file;
+      realPaths.set(key, resolved);
+      return resolved;
+    },
+    useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
   };
 }
 

@@ -11,6 +11,7 @@ import {
 import {
   findAncestor,
   findAncestorUntil,
+  identifiersNamed,
   isRuntimeFunctionLike,
   nearestNestedFunction,
   nodeWithin,
@@ -659,16 +660,9 @@ function trackedCallbackPathIsDeferred(
   const nextVisited = new Set(visited).add(key);
   let references = 0;
   let safe = true;
-  visit(source.owner.body, node => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== tracked.name ||
-      isBindingName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
+  for (const node of identifiersNamed(source.owner.body, tracked.name)) {
+    if (!safe) break;
+    if (isBindingName(node) || isNonValueIdentifier(node)) continue;
     references += 1;
     safe = callbackPathReferenceIsDeferred(
       source,
@@ -679,7 +673,7 @@ function trackedCallbackPathIsDeferred(
       depth,
       returnTarget
     );
-  });
+  }
   return safe && references > 0;
 }
 
@@ -1615,21 +1609,19 @@ function contextPropertyConsumersAreDeferred(
     const sourceFile = resolver.sourceFile(file);
     if (!sourceFile) return false;
     for (const hookName of hookNames) {
-      visit(sourceFile, node => {
+      for (const node of identifiersNamed(sourceFile, hookName)) {
+        if (!safe) break;
         if (
-          !safe ||
-          !ts.isIdentifier(node) ||
-          node.text !== hookName ||
           isDeclarationName(node) ||
           isNonValueIdentifier(node) ||
           isModuleBindingReference(node)
         ) {
-          return;
+          continue;
         }
         const call = node.parent;
         if (!ts.isCallExpression(call) || call.expression !== node) {
           safe = false;
-          return;
+          continue;
         }
         const owner = findAncestor(call, isRuntimeFunctionLike);
         if (
@@ -1640,7 +1632,7 @@ function contextPropertyConsumersAreDeferred(
           !owner.body
         ) {
           safe = false;
-          return;
+          continue;
         }
         const carriedCall = climbTransparentExpression(call);
         const declaration = carriedCall.parent;
@@ -1649,13 +1641,13 @@ function contextPropertyConsumersAreDeferred(
           declaration.initializer !== carriedCall
         ) {
           safe = false;
-          return;
+          continue;
         }
         const tracked = bindCallbackPath(declaration.name, [property]);
         if (!tracked) {
-          if (objectBindingOmitsProperty(declaration.name, property)) return;
+          if (objectBindingOmitsProperty(declaration.name, property)) continue;
           safe = false;
-          return;
+          continue;
         }
         consumed = true;
         safe = trackedCallbackPathIsDeferred(
@@ -1670,7 +1662,7 @@ function contextPropertyConsumersAreDeferred(
           visited,
           depth
         );
-      });
+      }
     }
   }
   return safe && consumed;
@@ -1758,29 +1750,22 @@ function callbackInvocationIsDeferred(
 
   let referenced = false;
   let safe = true;
-  visit(owner.body, node => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== name ||
-      isBindingName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
+  for (const node of identifiersNamed(owner.body, name)) {
+    if (!safe) break;
+    if (isBindingName(node) || isNonValueIdentifier(node)) continue;
     referenced = true;
-    if (isHookDependencyReference(node, CALLBACK_IDENTITY_HOOKS)) return;
-    if (callbackReferenceIsObservationOnly(node)) return;
+    if (isHookDependencyReference(node, CALLBACK_IDENTITY_HOOKS)) continue;
+    if (callbackReferenceIsObservationOnly(node)) continue;
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     if (
       attribute &&
       /^on[A-Z]/.test(attribute.name.getText()) &&
       jsxAttributeCarriesCallbackIdentity(attribute, node)
     ) {
-      if (jsxOwnerIsDeferredEventTarget(attribute, source)) return;
+      if (jsxOwnerIsDeferredEventTarget(attribute, source)) continue;
       const target = jsxOwnerTarget(attribute);
       if (source && resolver && target && resolver.frameworkEventComponent(source.file, target)) {
-        return;
+        continue;
       }
       const child = source && resolver && target
         ? resolver.resolveComponent(source.file, target)
@@ -1796,10 +1781,10 @@ function callbackInvocationIsDeferred(
           depth + 1
         )
       ) {
-        return;
+        continue;
       }
     }
-    if (identifierRunsInProvenDeferredHook(node, deferredCallbackHooks)) return;
+    if (identifierRunsInProvenDeferredHook(node, deferredCallbackHooks)) continue;
     if (
       source &&
       resolver &&
@@ -1811,7 +1796,7 @@ function callbackInvocationIsDeferred(
         depth + 1
       )
     ) {
-      return;
+      continue;
     }
     if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
       const caller = nearestNestedFunction(node, owner);
@@ -1833,11 +1818,11 @@ function callbackInvocationIsDeferred(
             nextCallbacks
           ))
       ) {
-        return;
+        continue;
       }
     }
     safe = false;
-  });
+  }
   return referenced && safe;
 }
 
