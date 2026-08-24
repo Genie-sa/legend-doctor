@@ -32,7 +32,7 @@ Acceptance targets for the first useful release:
 ## Current baseline
 
 At the pinned commits, the analyzer inventories 2,392 hooks across 236 source roots. The corpus currently contains
-856 manual hook labels, including 17 explicit non-enforced opportunities, plus twenty-six
+856 manual hook labels, including 13 explicit non-enforced opportunities, plus twenty-six
 grouped-instruction labels that verify exact cluster membership, thirty-seven real Legend transaction labels, twelve direct
 `useValue` labels, sixteen lowest-path subscription labels, fifteen non-tracking snapshot labels, and eight narrow observable-write
 labels. Three boolean-toggle labels require the direct `.toggle()` operation. Three real labels verify the documented
@@ -319,21 +319,18 @@ rest-prop JSX spreads when each rest binding is immutable, has no non-JSX use, a
 boolean prop. Dynamic expressions, opaque or mutated spreads, reassigned prop bindings, mutable targets, and selected
 custom components abstain.
 
-Seventeen non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet prove.
+Thirteen non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet prove.
 The analyzer composes source-resolved JSX callback publications with recursively proven local event callers. It also
 proves inline adapters at their concrete JSX invocation, so a fixed or default intrinsic branch can qualify without
 making the wrapper safe at every callsite. One Formbricks pricing label now follows an inline retry command through an
 alert wrapper's rest props into a default intrinsic button; the `asChild` adversarial branch remains review. A dashboard
 save label follows `onSave` through an immutable action array, a filtered alias, and IconBar's button publication. Unknown
-array escapes and render-time item callback calls remain review. One Open WebUI label follows a conditionally selected
+array or item escapes and render-time item callback calls remain review. One Open WebUI label follows a conditionally selected
 callback through two transparent rest-prop objects into React Native Pressable; calling that tracked callback in either
-branch remains review. The remaining labels include unresolved local wrapper stacks, opaque prop spreads, and Radix
-checked-change events. They count against recall and form the next multi-file callback-contract work queue.
-
-Two Formbricks labels delete invariant nullable markers whose only writes repeat their `null` initializer and whose only
-reads are inert equality guards around those idempotent writes. The earlier choice lookup remains evaluated at its
-original position. Different literals, extra branch work, published reads, effects, setter escape, and non-primitive
-initializers abstain.
+branch remains review. Four broad-owner status labels now follow source wrappers to the exact Radix dropdown package;
+lookalike packages, shadowed imports, and eager wrappers remain review. The remaining labels include unresolved local
+wrapper stacks, opaque prop spreads, and other Radix checked-change events. They count against recall and form the next
+multi-file callback-contract work queue.
 
 Presentation-gate labels keep observable ownership above a condition and replace the complete controlling expression
 with an always-mounted subscriber; this prevents dead subscriptions when the selected child starts hidden. Gate

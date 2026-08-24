@@ -61,6 +61,7 @@ interface ModuleRecord {
   pureProjectionDeclarations: ReadonlySet<string>;
   reactContexts: ReadonlySet<string>;
   reexports: ReadonlyMap<string, ReexportBinding>;
+  shadowedImports: ReadonlySet<string>;
   starExports: readonly string[];
 }
 
@@ -498,9 +499,12 @@ export function buildSourceIndexFromFiles(
     },
     frameworkEventComponentFor: (file, name) => {
       const rootName = name.split(".", 1)[0] ?? name;
-      const binding = records.get(normalizeFile(file))?.imports.get(rootName);
+      const record = records.get(normalizeFile(file));
+      if (record?.shadowedImports.has(rootName)) return false;
+      const binding = record?.imports.get(rootName);
       return binding?.moduleSpecifier === "react-native" ||
         binding?.moduleSpecifier === "react-native-web" ||
+        binding?.moduleSpecifier === "@radix-ui/react-dropdown-menu" ||
         binding?.moduleSpecifier === "@base-ui/react" ||
         binding?.moduleSpecifier.startsWith("@base-ui/react/") === true ||
         resolvedFor(file, "framework-event-component").has(rootName);
@@ -972,6 +976,11 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
             moduleSpecifier: statement.moduleSpecifier.text,
           });
         }
+      } else if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+        imports.set(clause.namedBindings.name.text, {
+          importedName: "*",
+          moduleSpecifier: statement.moduleSpecifier.text,
+        });
       }
       continue;
     }
@@ -1033,6 +1042,13 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     if (!observableDeclarations.has(observable)) legendValueWriters.delete(name);
   }
 
+  const shadowedImports = new Set<string>();
+  visit(sourceFile, node => {
+    if (ts.isIdentifier(node) && imports.has(node.text) && isDeclarationName(node)) {
+      shadowedImports.add(node.text);
+    }
+  });
+
   return {
     componentDeclarations,
     contextReaderHooks,
@@ -1052,6 +1068,7 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     pureProjectionDeclarations,
     reactContexts,
     reexports,
+    shadowedImports,
     starExports,
   };
 }

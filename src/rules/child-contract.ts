@@ -311,16 +311,42 @@ export function propDefersArrayItemCallback(
   visit(source.owner.body, node => {
     if (
       !safe ||
-      !ts.isPropertyAccessExpression(node) ||
-      node.name.text !== callbackProp ||
-      !ts.isIdentifier(node.expression) ||
-      !itemNames.has(node.expression.text)
+      !ts.isIdentifier(node) ||
+      !itemNames.has(node.text) ||
+      isBindingName(node) ||
+      isNonValueIdentifier(node)
     ) {
       return;
     }
-    references += 1;
-    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+    const member = node.parent;
+    if (
+      ts.isSpreadAssignment(member) &&
+      member.expression === node &&
+      spreadCallbackIsOverridden(member, callbackProp)
+    ) {
+      return;
+    }
+    if (!ts.isPropertyAccessExpression(member) || member.expression !== node) {
       const callback = nearestNestedFunction(node, source.owner);
+      safe = callback !== null &&
+        callback !== source.owner &&
+        (ts.isArrowFunction(callback) ||
+          ts.isFunctionDeclaration(callback) ||
+          ts.isFunctionExpression(callback)) &&
+        callbackInvocationIsDeferred(
+          callback,
+          source.owner,
+          source.deferredCallbackHooks,
+          resolver ? source : undefined,
+          resolver
+        );
+      return;
+    }
+    if (member.name.text !== callbackProp) return;
+
+    references += 1;
+    if (ts.isCallExpression(member.parent) && member.parent.expression === member) {
+      const callback = nearestNestedFunction(member, source.owner);
       if (
         !callback ||
         (!ts.isArrowFunction(callback) &&
@@ -339,10 +365,10 @@ export function propDefersArrayItemCallback(
       }
       return;
     }
-    if (callbackReferenceIsObservationOnly(node)) return;
+    if (callbackReferenceIsObservationOnly(member)) return;
 
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, source.owner);
-    if (!resolver || !attribute || !jsxAttributeDirectlyCarries(attribute, node)) {
+    const attribute = findAncestorUntil(member, ts.isJsxAttribute, source.owner);
+    if (!resolver || !attribute || !jsxAttributeDirectlyCarries(attribute, member)) {
       safe = false;
       return;
     }
@@ -374,6 +400,19 @@ export function propDefersArrayItemCallback(
     }
   });
   return safe && references > 0;
+}
+
+function spreadCallbackIsOverridden(
+  spread: ts.SpreadAssignment,
+  callbackProp: string
+): boolean {
+  const object = spread.parent;
+  if (!ts.isObjectLiteralExpression(object)) return false;
+  const following = object.properties.slice(object.properties.indexOf(spread) + 1);
+  return !following.some(ts.isSpreadAssignment) &&
+    following.some(property =>
+      !ts.isSpreadAssignment(property) && propertyName(property.name) === callbackProp
+    );
 }
 
 function arrayBindingsStayWithinTrackedConsumers(

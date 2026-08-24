@@ -2979,21 +2979,21 @@ export const goldCases = [
     target: "formbricks-multiple-choice",
   })),
   {
-    action: "delete-unused-state",
+    action: "review-state",
     file: "multiple-choice-element-form.tsx",
     hook: "useState",
     line: 58,
     name: "isInvalidValue",
-    rationale: "The nullable marker is initialized to null, every write assigns null, and its only read guards that same idempotent write; deleting the inert guard removes dead state without changing choice evaluation or updates.",
+    rationale: "Every write repeats the current primitive, so React already bails out. This is dead-code cleanup without a proven render or lifecycle cost and stays non-actionable.",
     target: "formbricks-multiple-choice",
   },
   {
-    action: "delete-unused-state",
+    action: "review-state",
     file: "ranking-element-form.tsx",
     hook: "useState",
     line: 50,
     name: "isInvalidValue",
-    rationale: "The ranking marker has the same invariant null lifecycle: its only read guards its only null assignment, so both the dead guard and state can be deleted while choice removal stays unchanged.",
+    rationale: "Every write repeats the current primitive, so React already bails out. This is dead-code cleanup without a proven render or lifecycle cost and stays non-actionable.",
     target: "formbricks-ranking-element",
   },
   {
@@ -4383,12 +4383,6 @@ export const goldCases = [
     ["formbricks-organization-actions", "organization-actions.tsx", 73, "loading"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
-    ...(
-      target === "formbricks-chart-menu" ||
-      (target === "formbricks-dashboard-menu" && name === "isDuplicating")
-        ? { enforced: false as const }
-        : {}
-    ),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -5467,9 +5461,6 @@ export const goldCases = [
     ["outline-invite", "Invite.tsx", 36, "isSaving", "Button"],
   ].map(([target, file, line, name, leaf]) => ({
     action: "use-observable" as const,
-    ...(target === "formbricks-custom-filter" || target === "formbricks-selected-row-settings"
-      ? { enforced: false as const }
-      : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,

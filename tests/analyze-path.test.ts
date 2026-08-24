@@ -3976,6 +3976,124 @@ test("traces a conditionally selected event callback through prop spreads", asyn
   );
 });
 
+test("proves Radix dropdown events through source wrappers without trusting lookalike packages", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-radix-dropdown-events-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "MenuItems.tsx"),
+    `
+      import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+      import * as LookalikeMenu from "@radix-ui/react-dropdown-menu-addon";
+      type Props = { disabled: boolean; onClick: () => void };
+      export function MenuItem({ disabled, onClick }: Props) {
+        return <DropdownMenu.Item disabled={disabled} onClick={onClick} />;
+      }
+      export function EagerMenuItem({ disabled, onClick }: Props) {
+        onClick();
+        return <DropdownMenu.Item disabled={disabled} onClick={onClick} />;
+      }
+      export function LookalikeMenuItem({ disabled, onClick }: Props) {
+        return <LookalikeMenu.Item disabled={disabled} onClick={onClick} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "ShadowedMenuItem.tsx"),
+    `
+      import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+      type Props = { disabled: boolean; onClick: () => void };
+      export function ShadowedMenuItem({
+        disabled,
+        onClick,
+        DropdownMenu,
+      }: Props & { DropdownMenu: { Item: (props: Props) => JSX.Element } }) {
+        return <DropdownMenu.Item disabled={disabled} onClick={onClick} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useState } from "react";
+      import { EagerMenuItem, LookalikeMenuItem, MenuItem } from "./MenuItems";
+      import { ShadowedMenuItem } from "./ShadowedMenuItem";
+      export function SafeScreen() {
+        const [duplicating, setDuplicating] = useState(false);
+        const duplicate = async () => {
+          setDuplicating(true);
+          try { await duplicateWork(); } finally { setDuplicating(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <MenuItem disabled={duplicating} onClick={duplicate} />
+        </main>;
+      }
+      export function EagerScreen() {
+        const [eagerDuplicating, setEagerDuplicating] = useState(false);
+        const duplicate = async () => {
+          setEagerDuplicating(true);
+          try { await duplicateWork(); } finally { setEagerDuplicating(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <EagerMenuItem disabled={eagerDuplicating} onClick={duplicate} />
+        </main>;
+      }
+      export function LookalikeScreen() {
+        const [lookalikeDuplicating, setLookalikeDuplicating] = useState(false);
+        const duplicate = async () => {
+          setLookalikeDuplicating(true);
+          try { await duplicateWork(); } finally { setLookalikeDuplicating(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <LookalikeMenuItem disabled={lookalikeDuplicating} onClick={duplicate} />
+        </main>;
+      }
+      export function ShadowedScreen() {
+        const [shadowedDuplicating, setShadowedDuplicating] = useState(false);
+        const duplicate = async () => {
+          setShadowedDuplicating(true);
+          try { await duplicateWork(); } finally { setShadowedDuplicating(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <ShadowedMenuItem
+            disabled={shadowedDuplicating}
+            DropdownMenu={UnknownMenu}
+            onClick={duplicate}
+          />
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
+  assert.equal(
+    findings.get("duplicating")?.action,
+    "use-observable",
+    findings.get("duplicating")?.message
+  );
+  assert.equal(
+    findings.get("eagerDuplicating")?.action,
+    "review-state",
+    findings.get("eagerDuplicating")?.message
+  );
+  assert.equal(
+    findings.get("lookalikeDuplicating")?.action,
+    "review-state",
+    findings.get("lookalikeDuplicating")?.message
+  );
+  assert.equal(
+    findings.get("shadowedDuplicating")?.action,
+    "review-state",
+    findings.get("shadowedDuplicating")?.message
+  );
+});
+
 test("traces an async command through a child action array", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-action-array-command-"));
   t.after(() => rm(root, { force: true, recursive: true }));
@@ -4004,10 +4122,10 @@ test("traces an async command through a child action array", async t => {
         return <nav>{actions.map(action => <span>{String(action.loading)}</span>)}</nav>;
       }
       export function EscapingActionBar({ actions }: { actions: Action[] }) {
-        inspect(actions);
-        return <nav>{actions.map(action =>
-          <Button key={String(action.loading)} loading={action.loading} onClick={action.onClick} />
-        )}</nav>;
+        return <nav>{actions.map(action => {
+          inspect(action);
+          return <Button key={String(action.loading)} loading={action.loading} onClick={action.onClick} />;
+        })}</nav>;
       }
     `,
     "utf8"

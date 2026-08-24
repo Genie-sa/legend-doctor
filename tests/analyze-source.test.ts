@@ -2414,6 +2414,7 @@ test("keeps raw state transport and its projection in one stable call-site wrapp
     export function Screen() {
       const [target, setTarget] = useState<string | null>(null);
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={() => setTarget("details")} />
         <DetailDialog id={target} open={!!target} onOpenChange={open => !open && setTarget(null)} />
       </main>;
     }
@@ -2428,6 +2429,7 @@ test("keeps mixed transport ownership above a state-controlled call-site gate", 
     export function Screen() {
       const [target, setTarget] = useState<string | null>(null);
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={() => setTarget("details")} />
         {target && <DetailDialog id={target} open onOpenChange={open => !open && setTarget(null)} />}
       </main>;
     }
@@ -4104,7 +4106,7 @@ test("keeps observable ownership above a receiving leaf with an outside setter c
       export function Screen() {
         const [active, setActive] = useState("profile");
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
-          <button onClick={() => setActive("profile")} />
+          <button onClick={() => setActive("settings")} />
           <Tabs value={active} />
         </main>;
       }
@@ -6136,7 +6138,7 @@ test("keeps the ref recommendation when a functional updater has no later snapsh
   assert.match(finding?.message ?? "", /functional updaters against the current handle value/i);
 });
 
-test("deletes setter-only state when no assigned value is consumed", () => {
+test("keeps invariant same-value state non-actionable", () => {
   assert.deepEqual(
     actions(`
       import { useState } from "react";
@@ -6146,7 +6148,7 @@ test("deletes setter-only state when no assigned value is consumed", () => {
         return <Button onPress={retry} />;
       }
     `),
-    ["delete-unused-state"]
+    ["review-state"]
   );
 });
 
@@ -6165,30 +6167,6 @@ test("deletes state whose only reads calculate inert arguments for its own sette
   assert.equal(findings.find(finding => finding.name === "choice")?.action, "delete-unused-state");
   assert.notEqual(findings.find(finding => finding.name === "called")?.action, "delete-unused-state");
   assert.notEqual(findings.find(finding => finding.name === "published")?.action, "delete-unused-state");
-});
-
-test("deletes invariant state whose only reads guard its own idempotent setter", () => {
-  const findings = analyzeSource(`
-    import { useState } from "react";
-    export function Choices({ value }: { value: string | null }) {
-      const [invalid, setInvalid] = useState<string | null>(null);
-      const [published, setPublished] = useState<string | null>(null);
-      const [changing, setChanging] = useState<string | null>(null);
-      const [branchWork, setBranchWork] = useState<string | null>(null);
-      const remove = () => {
-        if (invalid === value) setInvalid(null);
-        if (published === value) { setPublished(null); save(published); }
-        if (changing === value) setChanging("next");
-        if (branchWork === value) { setBranchWork(null); save(value); }
-        discard(value);
-      };
-      return <button onClick={remove}>Remove</button>;
-    }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "invalid")?.action, "delete-unused-state");
-  assert.notEqual(findings.find(finding => finding.name === "published")?.action, "delete-unused-state");
-  assert.notEqual(findings.find(finding => finding.name === "changing")?.action, "delete-unused-state");
-  assert.notEqual(findings.find(finding => finding.name === "branchWork")?.action, "delete-unused-state");
 });
 
 test("deletes setter-only state written by an effect when arguments are discardable", () => {

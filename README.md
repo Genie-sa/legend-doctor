@@ -139,20 +139,6 @@ const refresh = () => setTick(loadVersion());
 const refresh = () => { loadVersion(); };
 ```
 
-```tsx
-// before, the value can never differ from null
-const [invalid, setInvalid] = useState<string | null>(null);
-const choiceValue = choices[index].label;
-if (invalid === choiceValue) setInvalid(null);
-
-// after, keep the existing choice evaluation and delete the dead guard
-const choiceValue = choices[index].label;
-```
-
-Invariant-state deletion requires one primitive initializer, only identical literal writes, and reads confined to inert
-equality guards whose sole branch is that idempotent setter. Different writes, extra branch work, published reads, effects,
-and setter escape remain candidates.
-
 ### Calculate during render
 
 ```tsx
@@ -769,7 +755,7 @@ projections, and conditional first awaits also remain candidates.
 
 A callback may cross one immutable action array when the array is published only to source-resolved consumers and every
 item callback reaches a deferred event. Filtered aliases and synchronous iteration are audited across files. An unknown
-array escape or render-time callback invocation keeps the command under review.
+array or item escape, or a render-time callback invocation, keeps the command under review.
 
 The same pending interval may feed two or three stable leaves without rendering their owner:
 
@@ -1083,14 +1069,14 @@ These rules follow the official
 ## Verified accuracy
 
 The pinned corpus covers 2,392 hooks across 236 targets. It contains 856 manually audited hook labels, 26 state groups,
-and 109 Legend practice labels. Seventeen safe async-leaf opportunities remain explicit non-enforced labels because
+and 109 Legend practice labels. Thirteen safe async-leaf opportunities remain explicit non-enforced labels because
 their complete custom callback chains are not yet source-proven.
 
 | Check | Result |
 | --- | ---: |
 | Unit tests | 573/573 |
-| Actionable precision | 453/453 |
-| Actionable recall | 453/470 |
+| Actionable precision | 455/455 |
+| Actionable recall | 455/468 |
 | Legend practice precision | 109/109 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

@@ -3743,6 +3743,13 @@ function classifyState(
       message: `Keep \`${state.valueName}\` as React state; it owns a stable component-lifetime value and has no setter.`,
     };
   }
+  if (stateOnlyReceivesItsInitialPrimitive(state, usage)) {
+    return {
+      action: "review-state",
+      confidence: "certain",
+      message: `Review \`${state.valueName}\` as dead-code cleanup only; every proven write repeats its primitive initializer, so React already bails out and no render or lifecycle improvement is established.`,
+    };
+  }
   if (isPropertyLocalObjectDraft) {
     return {
       action: "use-observable",
@@ -3835,9 +3842,6 @@ function classifyState(
   }
   const unusedStateDeletionConfidence = setterCallsDiscardConfidence(usage.setterCallNodes);
   const onlyCalculatesOwnSetter = stateReadsOnlyCalculateOwnSetter(state, usage);
-  const onlyGuardsIdempotentSetter = usage.deferredReads > 0 &&
-    stateReadsOnlyGuardIdempotentSetter(state, usage);
-  const hasOnlyDiscardableSelfReads = onlyCalculatesOwnSetter || onlyGuardsIdempotentSetter;
   if (
     usage.setterCalls > 0 &&
     usage.setterReferences === usage.setterCalls &&
@@ -3849,16 +3853,14 @@ function classifyState(
     (state.call.arguments[0] === undefined || isEvaluationInert(state.call.arguments[0])) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
-    (usage.deferredReads === 0 || hasOnlyDiscardableSelfReads) &&
+    (usage.deferredReads === 0 || onlyCalculatesOwnSetter) &&
     usage.transportedOccurrences === 0 &&
-    (unusedStateDeletionConfidence !== null || hasOnlyDiscardableSelfReads)
+    (unusedStateDeletionConfidence !== null || onlyCalculatesOwnSetter)
   ) {
     return {
       action: "delete-unused-state",
       confidence: unusedStateDeletionConfidence ?? "certain",
-      message: onlyGuardsIdempotentSetter
-        ? `Delete invariant React state \`${state.valueName}\`, its idempotent setter calls, and the inert conditions that only guard those calls; keep any separately evaluated guard inputs at their existing positions, because the state is initialized and always assigned the same primitive.`
-        : unusedStateDeletionConfidence === "probable"
+      message: unusedStateDeletionConfidence === "probable"
         ? `Delete React state \`${state.valueName}\`; replace each setter call with a \`void\` expression that evaluates the same argument at the same position, because the assigned value is never consumed but property evaluation must be preserved.`
         : `Delete React state \`${state.valueName}\` and its setter calls; assigned values are never consumed.`,
     };
@@ -5792,83 +5794,43 @@ function stateReadsOnlyCalculateOwnSetter(
   return safe && reads > 0;
 }
 
-function stateReadsOnlyGuardIdempotentSetter(
+function stateOnlyReceivesItsInitialPrimitive(
   state: StateCandidate,
   usage: StateUsage
 ): boolean {
   const initializer = state.call.arguments[0];
-  const initialValue = initializer ? primitiveLiteralKey(initializer) : null;
   if (
-    !state.setterName ||
-    initialValue === null ||
-    usage.effectWrites > 0 ||
+    !initializer ||
     usage.setterCallNodes.length === 0 ||
-    usage.setterCallNodes.some(call =>
-      call.arguments.length !== 1 ||
-      !call.arguments[0] ||
-      primitiveLiteralKey(call.arguments[0]) !== initialValue
-    )
+    usage.setterReferences !== usage.setterCalls ||
+    usage.shadowed ||
+    usage.escaped
   ) {
     return false;
   }
-
-  let reads = 0;
-  let safe = true;
-  visit(state.owner.body, node => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== state.valueName ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
-    reads += 1;
-    safe = readOnlyGuardsSetter(node, state, usage);
-  });
-  return safe && reads > 0;
+  return usage.setterCallNodes.every(call =>
+    call.arguments.length === 1 &&
+    call.arguments[0] !== undefined &&
+    samePrimitiveLiteral(initializer, call.arguments[0])
+  );
 }
 
-function readOnlyGuardsSetter(
-  reference: ts.Identifier,
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
-  const statement = findAncestorUntil(reference, ts.isIfStatement, state.owner);
-  if (!statement || statement.elseStatement) return false;
-  const condition = unwrapTransparentExpression(statement.expression);
+function samePrimitiveLiteral(left: ts.Expression, right: ts.Expression): boolean {
+  const leftValue = unwrapTransparentExpression(left);
+  const rightValue = unwrapTransparentExpression(right);
+  if (leftValue.kind !== rightValue.kind) return false;
   if (
-    !ts.isBinaryExpression(condition) ||
-    (condition.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
-      condition.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsEqualsToken)
+    leftValue.kind === ts.SyntaxKind.NullKeyword ||
+    leftValue.kind === ts.SyntaxKind.TrueKeyword ||
+    leftValue.kind === ts.SyntaxKind.FalseKeyword
   ) {
-    return false;
+    return true;
   }
-  const left = unwrapTransparentExpression(condition.left);
-  const right = unwrapTransparentExpression(condition.right);
-  const other = left === reference ? right : right === reference ? left : null;
-  if (!other || !isEvaluationInert(other)) return false;
-
-  const branch = ts.isBlock(statement.thenStatement)
-    ? statement.thenStatement.statements.length === 1
-      ? statement.thenStatement.statements[0]
-      : null
-    : statement.thenStatement;
-  if (!branch || !ts.isExpressionStatement(branch)) return false;
-  const expression = unwrapTransparentExpression(branch.expression);
-  return ts.isCallExpression(expression) && usage.setterCallNodes.includes(expression);
-}
-
-function primitiveLiteralKey(expression: ts.Expression): string | null {
-  const value = unwrapTransparentExpression(expression);
-  if (value.kind === ts.SyntaxKind.NullKeyword) return "null";
-  if (value.kind === ts.SyntaxKind.TrueKeyword) return "boolean:true";
-  if (value.kind === ts.SyntaxKind.FalseKeyword) return "boolean:false";
-  if (ts.isStringLiteralLike(value)) return `string:${value.text}`;
-  if (ts.isNumericLiteral(value)) return `number:${value.text}`;
-  if (ts.isBigIntLiteral(value)) return `bigint:${value.text}`;
-  return null;
+  return (ts.isStringLiteralLike(leftValue) && ts.isStringLiteralLike(rightValue)) ||
+    (ts.isNumericLiteral(leftValue) && ts.isNumericLiteral(rightValue)) ||
+    (ts.isBigIntLiteral(leftValue) && ts.isBigIntLiteral(rightValue))
+    ? leftValue.text === rightValue.text
+    : false;
 }
 
 function discardableExpressionConfidence(
