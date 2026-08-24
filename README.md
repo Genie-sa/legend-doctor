@@ -767,6 +767,10 @@ spreads when the rest binding is immutable, used only for JSX forwarding, and th
 branch prop. Eager selections, dynamic branches, opaque spreads, and unresolved wrappers remain candidates. Repeated controls, mount gates, impure
 projections, and conditional first awaits also remain candidates.
 
+A callback may cross one immutable action array when the array is published only to source-resolved consumers and every
+item callback reaches a deferred event. Filtered aliases and synchronous iteration are audited across files. An unknown
+array escape or render-time callback invocation keeps the command under review.
+
 The same pending interval may feed two or three stable leaves without rendering their owner:
 
 ```tsx
@@ -1076,14 +1080,14 @@ These rules follow the official
 ## Verified accuracy
 
 The pinned corpus covers 2,392 hooks across 236 targets. It contains 856 manually audited hook labels, 26 state groups,
-and 109 Legend practice labels. Nineteen safe async-leaf opportunities remain explicit non-enforced labels because
+and 109 Legend practice labels. Eighteen safe async-leaf opportunities remain explicit non-enforced labels because
 their complete custom callback chains are not yet source-proven.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 571/571 |
-| Actionable precision | 451/451 |
-| Actionable recall | 451/470 |
+| Unit tests | 572/572 |
+| Actionable precision | 452/452 |
+| Actionable recall | 452/470 |
 | Legend practice precision | 109/109 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

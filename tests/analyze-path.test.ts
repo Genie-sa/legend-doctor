@@ -3872,3 +3872,114 @@ test("proves every async command path through source wrappers and inline event a
     findings.get("eagerAlertSaving")?.message
   );
 });
+
+test("traces an async command through a child action array", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-action-array-command-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Button.tsx"),
+    `
+      export function Button({ onClick, loading }: { onClick?: () => void; loading: boolean }) {
+        return <button onClick={onClick}>{String(loading)}</button>;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "ActionBar.tsx"),
+    `
+      import { Button } from "./Button";
+      type Action = { loading: boolean; onClick?: () => void; visible: boolean };
+      export function ActionBar({ actions }: { actions: Action[] }) {
+        const visible = actions.filter(candidate => candidate.visible);
+        return <nav>{visible.map(action =>
+          <Button key={String(action.loading)} loading={action.loading} onClick={action.onClick} />
+        )}</nav>;
+      }
+      export function EagerActionBar({ actions }: { actions: Action[] }) {
+        actions.forEach(candidate => candidate.onClick?.());
+        return <nav>{actions.map(action => <span>{String(action.loading)}</span>)}</nav>;
+      }
+      export function EscapingActionBar({ actions }: { actions: Action[] }) {
+        inspect(actions);
+        return <nav>{actions.map(action =>
+          <Button key={String(action.loading)} loading={action.loading} onClick={action.onClick} />
+        )}</nav>;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "ControlBar.tsx"),
+    `
+      import { ActionBar, EagerActionBar, EscapingActionBar } from "./ActionBar";
+      export function ControlBar({ saving, onSave }: { saving: boolean; onSave: () => void }) {
+        const actions = [{ loading: saving, onClick: onSave, visible: true }];
+        return <ActionBar actions={actions} />;
+      }
+      export function EagerControlBar({ saving, onSave }: { saving: boolean; onSave: () => void }) {
+        const actions = [{ loading: saving, onClick: onSave, visible: true }];
+        return <EagerActionBar actions={actions} />;
+      }
+      export function EscapingControlBar({ saving, onSave }: { saving: boolean; onSave: () => void }) {
+        const actions = [{ loading: saving, onClick: onSave, visible: true }];
+        return <EscapingActionBar actions={actions} />;
+      }
+    `,
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "Screens.tsx"),
+    `
+      import { useState } from "react";
+      import { ControlBar, EagerControlBar, EscapingControlBar } from "./ControlBar";
+      export function SafeScreen() {
+        const [saving, setSaving] = useState(false);
+        const save = async () => {
+          setSaving(true);
+          try { await persist(); } finally { setSaving(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <ControlBar saving={saving} onSave={save} />
+        </main>;
+      }
+      export function EagerScreen() {
+        const [eagerSaving, setEagerSaving] = useState(false);
+        const save = async () => {
+          setEagerSaving(true);
+          try { await persist(); } finally { setEagerSaving(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <EagerControlBar saving={eagerSaving} onSave={save} />
+        </main>;
+      }
+      export function EscapingScreen() {
+        const [escapingSaving, setEscapingSaving] = useState(false);
+        const save = async () => {
+          setEscapingSaving(true);
+          try { await persist(); } finally { setEscapingSaving(false); }
+        };
+        return <main>
+          <Header/><Toolbar/><Summary/><Fields/><Preview/><Help/><Status/><History/><Aside/><Footer/><Actions/>
+          <EscapingControlBar saving={escapingSaving} onSave={save} />
+        </main>;
+      }
+    `,
+    "utf8"
+  );
+
+  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
+  assert.equal(findings.get("saving")?.action, "use-observable", findings.get("saving")?.message);
+  assert.equal(
+    findings.get("eagerSaving")?.action,
+    "review-state",
+    findings.get("eagerSaving")?.message
+  );
+  assert.equal(
+    findings.get("escapingSaving")?.action,
+    "review-state",
+    findings.get("escapingSaving")?.message
+  );
+});

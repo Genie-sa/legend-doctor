@@ -85,6 +85,16 @@ export interface ChildContractResolver {
 }
 
 const MAX_TRACKED_NAMES = 8;
+const TRACKED_ARRAY_ITERATION_METHODS = new Set([
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "flatMap",
+  "forEach",
+  "map",
+  "some",
+]);
 
 /**
  * Proves that a child component consumes one prop as a pure render value:
@@ -252,13 +262,36 @@ export function propDefersArrayItemCallback(
   if (!bound || !source.owner.body) return false;
   if (bindingDeclarationCount(source.owner, bound.text) !== 1) return false;
 
+  const arrayNames = new Set([bound.text]);
+  let addedAlias = true;
+  while (addedAlias && arrayNames.size < MAX_TRACKED_NAMES) {
+    addedAlias = false;
+    visit(source.owner.body, node => {
+      if (
+        !ts.isVariableDeclaration(node) ||
+        !ts.isIdentifier(node.name) ||
+        !node.initializer ||
+        arrayNames.has(node.name.text) ||
+        !ts.isVariableDeclarationList(node.parent) ||
+        (node.parent.flags & ts.NodeFlags.Const) === 0 ||
+        bindingDeclarationCount(source.owner, node.name.text) !== 1 ||
+        !isFilteredArrayAlias(node.initializer, arrayNames)
+      ) {
+        return;
+      }
+      arrayNames.add(node.name.text);
+      addedAlias = true;
+    });
+  }
+  if (!arrayBindingsStayWithinTrackedConsumers(source, arrayNames)) return false;
+
   const itemNames = new Set<string>();
   visit(source.owner.body, node => {
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
       node.initializer &&
-      isArrayItemLookup(node.initializer, bound.text)
+      [...arrayNames].some(name => isArrayItemLookup(node.initializer!, name))
     ) {
       itemNames.add(node.name.text);
     }
@@ -266,7 +299,7 @@ export function propDefersArrayItemCallback(
       (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
       node.parameters[0] &&
       ts.isIdentifier(node.parameters[0].name) &&
-      isArrayIterationCallback(node, bound.text)
+      isArrayIterationCallback(node, arrayNames)
     ) {
       itemNames.add(node.parameters[0].name.text);
     }
@@ -341,6 +374,43 @@ export function propDefersArrayItemCallback(
     }
   });
   return safe && references > 0;
+}
+
+function arrayBindingsStayWithinTrackedConsumers(
+  source: ChildComponentSource,
+  arrayNames: ReadonlySet<string>
+): boolean {
+  let safe = true;
+  visit(source.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      !arrayNames.has(node.text) ||
+      isBindingName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const value = climbTransparentExpression(node);
+    const member = value.parent;
+    if (
+      !ts.isPropertyAccessExpression(member) ||
+      member.expression !== value
+    ) {
+      safe = false;
+      return;
+    }
+    if (member.name.text === "length") return;
+    if (
+      ts.isCallExpression(member.parent) &&
+      member.parent.expression === member &&
+      (member.name.text === "at" || TRACKED_ARRAY_ITERATION_METHODS.has(member.name.text))
+    ) {
+      return;
+    }
+    safe = false;
+  });
+  return safe;
 }
 
 /**
@@ -727,6 +797,15 @@ function callbackPathExpressionIsDeferred(
   if (path.length === 0 && callbackReferenceIsObservationOnly(value)) return true;
 
   if (path.length === 0) {
+    const arrayPublication = deferredArrayItemCallbackPublication(
+      source,
+      value,
+      resolver
+    );
+    if (arrayPublication !== null) return arrayPublication;
+  }
+
+  if (path.length === 0) {
     const publication = memoizedContextPublication(value, source.owner);
     if (
       publication &&
@@ -807,6 +886,90 @@ function callbackPathExpressionIsDeferred(
   }
 
   return false;
+}
+
+function deferredArrayItemCallbackPublication(
+  source: ChildComponentSource,
+  callback: ts.Expression,
+  resolver: CallbackContractSourceResolver
+): boolean | null {
+  const property = callback.parent;
+  if (
+    !ts.isPropertyAssignment(property) ||
+    unwrapTransparentExpression(property.initializer) !== callback
+  ) {
+    return null;
+  }
+  const callbackProperty = propertyName(property.name);
+  const object = property.parent;
+  const carriedObject = ts.isObjectLiteralExpression(object)
+    ? climbTransparentExpression(object)
+    : null;
+  const array = carriedObject?.parent;
+  if (
+    !callbackProperty ||
+    !ts.isObjectLiteralExpression(object) ||
+    !array ||
+    !ts.isArrayLiteralExpression(array) ||
+    !array.elements.includes(carriedObject) ||
+    object.properties.some(ts.isSpreadAssignment) ||
+    object.properties.filter(member =>
+      (ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member)) &&
+      propertyName(member.name) === callbackProperty
+    ).length !== 1
+  ) {
+    return null;
+  }
+
+  const carriedArray = climbTransparentExpression(array);
+  const declaration = carriedArray.parent;
+  if (
+    !ts.isVariableDeclaration(declaration) ||
+    declaration.initializer !== carriedArray ||
+    !ts.isIdentifier(declaration.name) ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    bindingDeclarationCount(source.owner, declaration.name.text) !== 1
+  ) {
+    return false;
+  }
+  const arrayBinding = declaration.name.text;
+
+  let publications = 0;
+  let safe = true;
+  visit(source.owner.body, node => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      node.text !== arrayBinding ||
+      node === declaration.name ||
+      isBindingName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, source.owner);
+    if (!attribute || !jsxAttributeDirectlyCarries(attribute, node)) {
+      safe = false;
+      return;
+    }
+    const target = jsxOwnerTarget(attribute);
+    const child = target ? resolver.resolveComponent(source.file, target) : null;
+    if (
+      !child ||
+      !propDefersArrayItemCallback(
+        atJsxInvocation(child, attribute, source),
+        attribute.name.getText(),
+        callbackProperty,
+        resolver
+      )
+    ) {
+      safe = false;
+      return;
+    }
+    publications += 1;
+  });
+  return safe && publications > 0;
 }
 
 function staticPropertyAccessFrom(
@@ -1503,17 +1666,31 @@ function isArrayItemLookup(expression: ts.Expression, arrayName: string): boolea
     expression.expression.name.text === "at";
 }
 
+function isFilteredArrayAlias(
+  expression: ts.Expression,
+  arrayNames: ReadonlySet<string>
+): boolean {
+  const call = unwrapTransparentExpression(expression);
+  return ts.isCallExpression(call) &&
+    ts.isPropertyAccessExpression(call.expression) &&
+    ts.isIdentifier(call.expression.expression) &&
+    arrayNames.has(call.expression.expression.text) &&
+    call.expression.name.text === "filter" &&
+    call.arguments[0] !== undefined &&
+    (ts.isArrowFunction(call.arguments[0]) || ts.isFunctionExpression(call.arguments[0]));
+}
+
 function isArrayIterationCallback(
   callback: ts.ArrowFunction | ts.FunctionExpression,
-  arrayName: string
+  arrayNames: ReadonlySet<string>
 ): boolean {
   const call = callback.parent;
   return ts.isCallExpression(call) &&
     call.arguments[0] === callback &&
     ts.isPropertyAccessExpression(call.expression) &&
     ts.isIdentifier(call.expression.expression) &&
-    call.expression.expression.text === arrayName &&
-    ["every", "filter", "find", "findIndex", "flatMap", "map", "some"].includes(call.expression.name.text);
+    arrayNames.has(call.expression.expression.text) &&
+    TRACKED_ARRAY_ITERATION_METHODS.has(call.expression.name.text);
 }
 
 function callbackInvocationIsDeferred(

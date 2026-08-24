@@ -4415,14 +4415,13 @@ export const goldCases = [
     ["formbricks-dashboard-detail", "dashboard-detail-client.tsx", 194, "editingChartId"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
-    ...(target === "formbricks-dashboard-detail" && name === "isSaving"
-      ? { enforced: false as const }
-      : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Manual review proves this leaf update remains outside the component's React transition, but the conservative owner boundary abstains instead of building a partial transition call graph.",
+    rationale: target === "formbricks-dashboard-detail" && name === "isSaving"
+      ? "The save command is published through a source-resolved action array whose stable IconBar consumer defers every onClick; only DashboardControlBar subscribes while the dashboard owner stays stable."
+      : "Manual review proves this leaf update remains outside the component's React transition, but the conservative owner boundary abstains instead of building a partial transition call graph.",
     target: target as string,
   })),
   {
