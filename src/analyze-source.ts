@@ -261,7 +261,8 @@ export function analyzeSourceFile(
   stateFlow: StateFlowIndex = new StateFlowIndex(),
   childContracts: ChildContractResolver | null = null,
   legendValueBridges: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
-  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>> = new Map()
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>> = new Map(),
+  hookImports: HookImports = collectHookImports(file.sourceFile)
 ): HookFinding[] {
   return analyzeParsedSource(
     file.sourceFile,
@@ -270,8 +271,27 @@ export function analyzeSourceFile(
     stateFlow,
     childContracts,
     legendValueBridges,
-    deferredCallbackHooks
+    deferredCallbackHooks,
+    hookImports
   );
+}
+
+export function findingHookImports(file: AnalysisFile): HookImports | null {
+  const imports = collectHookImports(file.sourceFile);
+  return containsFindingHookCall(file.sourceFile, imports) ? imports : null;
+}
+
+function containsFindingHookCall(node: ts.Node, imports: HookImports): boolean {
+  if (
+    ts.isCallExpression(node) &&
+    (
+      isImportedHookCall(node, imports.useState, imports.reactNamespaces, "useState") ||
+      isImportedHookCall(node, imports.useEffect, imports.reactNamespaces, "useEffect")
+    )
+  ) {
+    return true;
+  }
+  return node.forEachChild(child => containsFindingHookCall(child, imports) || undefined) === true;
 }
 
 function analyzeParsedSource(
@@ -281,9 +301,9 @@ function analyzeParsedSource(
   stateFlow: StateFlowIndex,
   childContracts: ChildContractResolver | null,
   legendValueBridges: ReadonlyMap<string, ReadonlySet<string>>,
-  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
+  imports: HookImports = collectHookImports(sourceFile)
 ): HookFinding[] {
-  const imports = collectHookImports(sourceFile);
   const pureProjectionImports = new Set([
     ...collectPureProjectionImports(sourceFile),
     ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
@@ -1078,24 +1098,23 @@ function collectStateUsage(
     valueProps: new Map<string, Set<string>>(),
   };
 
-  visit(state.owner.body, node => {
-    if (!ts.isIdentifier(node)) return;
-    if (isNonValueIdentifier(node)) return;
+  for (const node of stateBindingIdentifiers(state)) {
+    if (isNonValueIdentifier(node)) continue;
     if (isDeclarationName(node)) {
       if (node.text === state.valueName || (state.setterName !== null && node.text === state.setterName)) {
         if (!isOriginalStateBinding(node, state.call)) usage.shadowed = true;
       }
-      return;
+      continue;
     }
 
     if (state.setterName !== null && node.text === state.setterName) {
       classifySetterReference(node, state, effectNodes, imports, usage);
-      return;
+      continue;
     }
     if (node.text === state.valueName) {
       classifyValueReference(node, state, effectNodes, imports, usage);
     }
-  });
+  }
 
   const callableReads = collectCommandOnlyCallableReads(state, effectNodes);
   const renderCallableSites = callableReads.renderSites;
@@ -1108,6 +1127,49 @@ function collectStateUsage(
   }
 
   return usage;
+}
+
+const identifiersByOwner = new WeakMap<
+  RuntimeFunctionLike,
+  ReadonlyMap<string, readonly ts.Identifier[]>
+>();
+
+function stateBindingIdentifiers(state: StateCandidate): readonly ts.Identifier[] {
+  let byName = identifiersByOwner.get(state.owner);
+  if (!byName) {
+    const collected = new Map<string, ts.Identifier[]>();
+    visit(state.owner.body, node => {
+      if (!ts.isIdentifier(node)) return;
+      const identifiers = collected.get(node.text) ?? [];
+      identifiers.push(node);
+      collected.set(node.text, identifiers);
+    });
+    byName = collected;
+    identifiersByOwner.set(state.owner, byName);
+  }
+
+  const values = byName.get(state.valueName) ?? [];
+  if (!state.setterName || state.setterName === state.valueName) return values;
+  const setters = byName.get(state.setterName) ?? [];
+  if (values.length === 0) return setters;
+  if (setters.length === 0) return values;
+
+  const ordered: ts.Identifier[] = [];
+  let valueIndex = 0;
+  let setterIndex = 0;
+  while (valueIndex < values.length && setterIndex < setters.length) {
+    const value = values[valueIndex]!;
+    const setter = setters[setterIndex]!;
+    if (value.pos < setter.pos) {
+      ordered.push(value);
+      valueIndex += 1;
+    } else {
+      ordered.push(setter);
+      setterIndex += 1;
+    }
+  }
+  ordered.push(...values.slice(valueIndex), ...setters.slice(setterIndex));
+  return ordered;
 }
 
 function addMapSet<Key, Value>(map: Map<Key, Set<Value>>, key: Key, value: Value): void {

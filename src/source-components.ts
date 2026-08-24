@@ -129,6 +129,7 @@ export function buildSourceIndexFromFiles(
 
   const compilerContexts = new Map<string, CompilerContext>();
   const compilerContextsByImporter = new Map<string, CompilerContext>();
+  const configFilesByDirectory = new Map<string, string | null>();
   const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const contextReaderHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const deferredCallbackOwnersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
@@ -143,13 +144,17 @@ export function buildSourceIndexFromFiles(
   const pureProjectionsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
   const contextReaders = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
   const stableObservableContainers = new Map<string, boolean>();
+  const resolvedModules = new Map<string, string | null>();
 
   function resolveModule(importer: string, specifier: string): string | null {
+    const key = `${importer}\0${specifier}`;
+    if (resolvedModules.has(key)) return resolvedModules.get(key) ?? null;
     const { cache, options } = compilerContextFor(
       importer,
       root,
       compilerContexts,
-      compilerContextsByImporter
+      compilerContextsByImporter,
+      configFilesByDirectory
     );
     const resolution = ts.resolveModuleName(
       specifier,
@@ -158,9 +163,14 @@ export function buildSourceIndexFromFiles(
       ts.sys,
       cache
     ).resolvedModule;
-    if (!resolution || resolution.isExternalLibraryImport) return null;
+    if (!resolution || resolution.isExternalLibraryImport) {
+      resolvedModules.set(key, null);
+      return null;
+    }
     const resolved = normalizeFile(resolution.resolvedFileName.replace(/\.d\.(?:ts|mts|cts)$/, ".ts"));
-    return records.has(resolved) ? resolved : null;
+    const local = records.has(resolved) ? resolved : null;
+    resolvedModules.set(key, local);
+    return local;
   }
 
   function exportedSymbol(
@@ -645,12 +655,13 @@ function compilerContextFor(
   importer: string,
   fallbackRoot: string,
   contexts: Map<string, CompilerContext>,
-  contextsByImporter: Map<string, CompilerContext>
+  contextsByImporter: Map<string, CompilerContext>,
+  configFilesByDirectory: Map<string, string | null>
 ): CompilerContext {
   const importerKey = normalizeFile(importer);
   const importerContext = contextsByImporter.get(importerKey);
   if (importerContext) return importerContext;
-  const configFile = ts.findConfigFile(path.dirname(importer), ts.sys.fileExists);
+  const configFile = nearestConfigFile(path.dirname(importer), configFilesByDirectory);
   const key = configFile ? normalizeFile(configFile) : normalizeFile(fallbackRoot);
   const cached = contexts.get(key);
   if (cached) {
@@ -670,6 +681,23 @@ function compilerContextFor(
   contexts.set(key, context);
   contextsByImporter.set(importerKey, context);
   return context;
+}
+
+function nearestConfigFile(
+  startDirectory: string,
+  cache: Map<string, string | null>
+): string | null {
+  const directory = normalizeFile(startDirectory);
+  if (cache.has(directory)) return cache.get(directory) ?? null;
+  const candidate = path.join(directory, "tsconfig.json");
+  const parent = path.dirname(directory);
+  const configFile = ts.sys.fileExists(candidate)
+    ? candidate
+    : parent === directory
+      ? null
+      : nearestConfigFile(parent, cache);
+  cache.set(directory, configFile);
+  return configFile;
 }
 
 function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
@@ -1635,10 +1663,15 @@ function localObservableMemberFactories(
   return proven;
 }
 
+const assignedBindingsByFile = new WeakMap<ts.SourceFile, ReadonlySet<string>>();
+
 function bindingIsAssigned(sourceFile: ts.SourceFile, name: string): boolean {
-  let assigned = false;
+  let assigned = assignedBindingsByFile.get(sourceFile);
+  if (assigned) return assigned.has(name);
+
+  const collected = new Set<string>();
   visit(sourceFile, node => {
-    if (assigned || !ts.isIdentifier(node) || node.text !== name) return;
+    if (!ts.isIdentifier(node)) return;
     const parent = node.parent;
     if (
       (ts.isBinaryExpression(parent) &&
@@ -1650,10 +1683,12 @@ function bindingIsAssigned(sourceFile: ts.SourceFile, name: string): boolean {
           parent.operator === ts.SyntaxKind.MinusMinusToken)) ||
       (ts.isPostfixUnaryExpression(parent) && parent.operand === node)
     ) {
-      assigned = true;
+      collected.add(node.text);
     }
   });
-  return assigned;
+  assigned = collected;
+  assignedBindingsByFile.set(sourceFile, assigned);
+  return assigned.has(name);
 }
 
 function exactReturnedObject(declaration: ComponentFunction): ts.ObjectLiteralExpression | null {

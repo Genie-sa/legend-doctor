@@ -955,34 +955,56 @@ export function bindingContainsName(binding: ts.BindingName, name: string): bool
 }
 
 export function uniqueVariableDeclaration(boundary: ts.Node, name: string): ts.VariableDeclaration | null {
-  const matches: ts.VariableDeclaration[] = [];
-  visitSkippingNestedRuntimeFunctions(boundary, node => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) matches.push(node);
-  });
-  return matches.length === 1 ? matches[0]! : null;
+  let declarations = uniqueVariableDeclarationsByBoundary.get(boundary);
+  if (!declarations) {
+    const collected = new Map<string, ts.VariableDeclaration | null>();
+    visitSkippingNestedRuntimeFunctions(boundary, node => {
+      if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return;
+      collected.set(node.name.text, collected.has(node.name.text) ? null : node);
+    });
+    declarations = collected;
+    uniqueVariableDeclarationsByBoundary.set(boundary, declarations);
+  }
+  return declarations.get(name) ?? null;
 }
+
+const uniqueVariableDeclarationsByBoundary = new WeakMap<
+  ts.Node,
+  ReadonlyMap<string, ts.VariableDeclaration | null>
+>();
 
 export function localFunctionBinding(
   owner: RuntimeFunctionLike,
   name: string
 ): ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null {
   if (!owner.body || bindingDeclarationCount(owner, name) !== 1) return null;
-  let match: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null = null;
-  visit(owner.body, node => {
-    if (match) return;
-    if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
-      match = node;
-      return;
-    }
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === name &&
-      node.initializer &&
-      (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
-    ) {
-      match = node.initializer;
-    }
-  });
-  return match;
+  let bindings = localFunctionBindingsByOwner.get(owner);
+  if (!bindings) {
+    const collected = new Map<
+      string,
+      ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression
+    >();
+    visit(owner.body, node => {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        collected.set(node.name.text, node);
+        return;
+      }
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+      ) {
+        collected.set(node.name.text, node.initializer);
+      }
+    });
+    bindings = collected;
+    localFunctionBindingsByOwner.set(owner, bindings);
+  }
+  return bindings.get(name) ?? null;
 }
+
+const localFunctionBindingsByOwner = new WeakMap<
+  RuntimeFunctionLike,
+  ReadonlyMap<string, ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression>
+>();

@@ -11,6 +11,16 @@ export type RuntimeFunctionLike =
   | ts.MethodDeclaration
   | ts.SetAccessorDeclaration;
 
+const RUNTIME_FUNCTION_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.ArrowFunction,
+  ts.SyntaxKind.Constructor,
+  ts.SyntaxKind.FunctionDeclaration,
+  ts.SyntaxKind.FunctionExpression,
+  ts.SyntaxKind.GetAccessor,
+  ts.SyntaxKind.MethodDeclaration,
+  ts.SyntaxKind.SetAccessor,
+]);
+
 export function findAncestor<T extends ts.Node>(
   node: ts.Node,
   predicate: (candidate: ts.Node) => candidate is T
@@ -37,15 +47,7 @@ export function findAncestorUntil<T extends ts.Node>(
 }
 
 export function isRuntimeFunctionLike(node: ts.Node): node is RuntimeFunctionLike {
-  return (
-    ts.isArrowFunction(node) ||
-    ts.isConstructorDeclaration(node) ||
-    ts.isFunctionDeclaration(node) ||
-    ts.isFunctionExpression(node) ||
-    ts.isGetAccessorDeclaration(node) ||
-    ts.isMethodDeclaration(node) ||
-    ts.isSetAccessorDeclaration(node)
-  );
+  return RUNTIME_FUNCTION_KINDS.has(node.kind);
 }
 
 export function isNonProductionHarness(fileName: string): boolean {

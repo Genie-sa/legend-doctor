@@ -36,6 +36,21 @@ test("scans source files deterministically and ignores generated directories", a
   assert.equal(report.findings[0]?.location.file, path.join("src", "component.tsx"));
 });
 
+test("finds aliased React hooks through the ordinary path scan", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-aliased-hooks-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "component.tsx"),
+    'import { useState as state } from "react"; export function C() { const [value] = state(1); return <>{value}</>; }',
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.equal(report.hooks.states, 1);
+  assert.equal(report.findings[0]?.name, "value");
+});
+
 test("reports parser diagnostics and complete coverage without changing the default report", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-coverage-"));
   t.after(() => rm(root, { force: true, recursive: true }));

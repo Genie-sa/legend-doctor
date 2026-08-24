@@ -2,27 +2,48 @@ import ts from "typescript";
 
 import { isRuntimeFunctionLike, type RuntimeFunctionLike, visit } from "./ast.js";
 
+const bindingCountsByOwner = new WeakMap<RuntimeFunctionLike, ReadonlyMap<string, number>>();
+
 export function bindingDeclarationCount(owner: RuntimeFunctionLike, name: string): number {
-  let count = 0;
-  for (const parameter of owner.parameters) {
-    if (bindingNameContains(parameter.name, name)) count += 1;
+  let counts = bindingCountsByOwner.get(owner);
+  if (!counts) {
+    counts = collectBindingDeclarationCounts(owner);
+    bindingCountsByOwner.set(owner, counts);
   }
-  if (!owner.body) return count;
+  return counts.get(name) ?? 0;
+}
+
+function collectBindingDeclarationCounts(owner: RuntimeFunctionLike): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const parameter of owner.parameters) {
+    incrementBindingCounts(parameter.name, counts);
+  }
+  if (!owner.body) return counts;
   visit(owner.body, node => {
-    if (ts.isVariableDeclaration(node) && bindingNameContains(node.name, name)) count += 1;
+    if (ts.isVariableDeclaration(node)) incrementBindingCounts(node.name, counts);
     if (
       (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isClassDeclaration(node)) &&
-      node.name?.text === name
+      node.name
     ) {
-      count += 1;
+      incrementCount(node.name.text, counts);
     }
     if (isRuntimeFunctionLike(node) && node !== owner) {
       for (const parameter of node.parameters) {
-        if (bindingNameContains(parameter.name, name)) count += 1;
+        incrementBindingCounts(parameter.name, counts);
       }
     }
   });
-  return count;
+  return counts;
+}
+
+function incrementBindingCounts(binding: ts.BindingName, counts: Map<string, number>): void {
+  const names = new Set<string>();
+  collectBindingNames(binding, names);
+  for (const name of names) incrementCount(name, counts);
+}
+
+function incrementCount(name: string, counts: Map<string, number>): void {
+  counts.set(name, (counts.get(name) ?? 0) + 1);
 }
 
 export function callRootIdentifier(expression: ts.LeftHandSideExpression): string | null {
@@ -277,13 +298,6 @@ export function unwrapTransparentExpression(expression: ts.Expression): ts.Expre
     current = current.expression;
   }
   return current;
-}
-
-function bindingNameContains(binding: ts.BindingName, name: string): boolean {
-  if (ts.isIdentifier(binding)) return binding.text === name;
-  return binding.elements.some(element =>
-    !ts.isOmittedExpression(element) && bindingNameContains(element.name, name)
-  );
 }
 
 function propertyNameText(name: ts.PropertyName): string | null {

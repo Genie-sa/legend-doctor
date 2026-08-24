@@ -1,6 +1,7 @@
 import ts from "typescript";
 
 import {
+  collectBindingNames,
   isDeclarationName,
   isNonValueIdentifier,
   unwrapTransparentExpression,
@@ -350,16 +351,21 @@ function isTransitionReference(node: ts.Node, imports: HookImports): boolean {
   ) {
     return true;
   }
-  const owner = findAncestor(node, isRuntimeFunctionLike);
   if (ts.isIdentifier(node)) {
-    return imports.startTransition.has(node.text) &&
-      (owner === null || !hasLexicalBindingAt(node, owner, node.text));
+    if (!imports.startTransition.has(node.text)) return false;
+    const owner = findAncestor(node, isRuntimeFunctionLike);
+    return owner === null || !hasLexicalBindingAt(node, owner, node.text);
   }
-  return ts.isPropertyAccessExpression(node) &&
-    ts.isIdentifier(node.expression) &&
-    imports.reactNamespaces.has(node.expression.text) &&
-    node.name.text === "startTransition" &&
-    (owner === null || !hasLexicalBindingAt(node, owner, node.expression.text));
+  if (
+    !ts.isPropertyAccessExpression(node) ||
+    !ts.isIdentifier(node.expression) ||
+    !imports.reactNamespaces.has(node.expression.text) ||
+    node.name.text !== "startTransition"
+  ) {
+    return false;
+  }
+  const owner = findAncestor(node, isRuntimeFunctionLike);
+  return owner === null || !hasLexicalBindingAt(node, owner, node.expression.text);
 }
 
 function isImportedReactCall(
@@ -368,16 +374,21 @@ function isImportedReactCall(
   namespaceNames: ReadonlySet<string>,
   canonicalName: string
 ): boolean {
+  const expression = call.expression;
+  const binding = ts.isIdentifier(expression) && localNames.has(expression.text)
+    ? expression.text
+    : ts.isPropertyAccessExpression(expression) &&
+        ts.isIdentifier(expression.expression) &&
+        namespaceNames.has(expression.expression.text) &&
+        expression.name.text === canonicalName
+      ? expression.expression.text
+      : null;
+  if (!binding) return false;
   const owner = findAncestor(call, isRuntimeFunctionLike);
-  return ts.isIdentifier(call.expression)
-    ? localNames.has(call.expression.text) &&
-        (owner === null || !hasLexicalBindingAt(call, owner, call.expression.text))
-    : ts.isPropertyAccessExpression(call.expression) &&
-        ts.isIdentifier(call.expression.expression) &&
-        namespaceNames.has(call.expression.expression.text) &&
-        call.expression.name.text === canonicalName &&
-        (owner === null || !hasLexicalBindingAt(call, owner, call.expression.expression.text));
+  return owner === null || !hasLexicalBindingAt(call, owner, binding);
 }
+
+const functionScopedBindingsByOwner = new WeakMap<RuntimeFunctionLike, ReadonlySet<string>>();
 
 function hasLexicalBindingAt(
   node: ts.Node,
@@ -387,19 +398,22 @@ function hasLexicalBindingAt(
   if (owner.parameters.some(parameter => bindingContainsName(parameter.name, name))) return true;
   if (!owner.body) return false;
 
-  let functionScoped = false;
-  visitSkippingNestedRuntimeFunctions(owner.body, current => {
-    if (
-      !functionScoped &&
-      ts.isVariableDeclaration(current) &&
-      ts.isVariableDeclarationList(current.parent) &&
-      (current.parent.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0 &&
-      bindingContainsName(current.name, name)
-    ) {
-      functionScoped = true;
-    }
-  });
-  if (functionScoped) return true;
+  let functionScopedBindings = functionScopedBindingsByOwner.get(owner);
+  if (!functionScopedBindings) {
+    const collected = new Set<string>();
+    visitSkippingNestedRuntimeFunctions(owner.body, current => {
+      if (
+        ts.isVariableDeclaration(current) &&
+        ts.isVariableDeclarationList(current.parent) &&
+        (current.parent.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0
+      ) {
+        collectBindingNames(current.name, collected);
+      }
+    });
+    functionScopedBindings = collected;
+    functionScopedBindingsByOwner.set(owner, functionScopedBindings);
+  }
+  if (functionScopedBindings.has(name)) return true;
 
   for (
     let current: ts.Node | undefined = node.parent;

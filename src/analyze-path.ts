@@ -5,7 +5,7 @@ import ts from "typescript";
 
 import { unwrapTransparentExpression } from "./analysis-ast.js";
 import { analyzeLegendPracticesFile } from "./analyze-legend-practices.js";
-import { analyzeSourceFile } from "./analyze-source.js";
+import { analyzeSourceFile, findingHookImports } from "./analyze-source.js";
 import {
   isNonProductionHarness,
   isRuntimeFunctionLike,
@@ -68,6 +68,7 @@ const IGNORED_DIRECTORIES = new Set([
   "node_modules",
   "vendor",
 ]);
+const SOURCE_READ_BATCH_SIZE = 64;
 
 export interface AnalysisContext {
   installedLegendState: InstalledLegendState | null;
@@ -98,8 +99,24 @@ export async function createAnalysisContext(
 ): Promise<AnalysisContext> {
   const root = path.resolve(rootPath);
   const files = await collectSourceFiles(root);
+  return createAnalysisContextFromFiles(root, files, options);
+}
+
+async function createAnalysisContextFromFiles(
+  root: string,
+  files: readonly string[],
+  options: AnalysisContextOptions
+): Promise<AnalysisContext> {
   const sources = new Map<string, string>();
-  for (const file of files) sources.set(file, await readFile(file, "utf8"));
+  for (let start = 0; start < files.length; start += SOURCE_READ_BATCH_SIZE) {
+    const batch = files.slice(start, start + SOURCE_READ_BATCH_SIZE);
+    const results = await Promise.allSettled(batch.map(file => readFile(file, "utf8")));
+    for (let index = 0; index < batch.length; index += 1) {
+      const result = results[index]!;
+      if (result.status === "rejected") throw result.reason;
+      sources.set(batch[index]!, result.value);
+    }
+  }
   const project = new AnalysisProject(sources);
   const semantic = options.configFilePath
     ? createSemanticContext(project, { configFilePath: options.configFilePath })
@@ -118,18 +135,40 @@ export async function analyzePath(
   targetPath: string,
   sharedContext?: AnalysisContext
 ): Promise<AnalysisReport> {
-  return (await analyzePathDetailed(targetPath, sharedContext)).report;
+  return analyzePathInternal(targetPath, sharedContext, false);
 }
 
 export async function analyzePathDetailed(
   targetPath: string,
   sharedContext?: AnalysisContext
 ): Promise<DetailedAnalysisResult> {
+  return analyzePathInternal(targetPath, sharedContext, true);
+}
+
+async function analyzePathInternal(
+  targetPath: string,
+  sharedContext: AnalysisContext | undefined,
+  includeDetails: false
+): Promise<AnalysisReport>;
+async function analyzePathInternal(
+  targetPath: string,
+  sharedContext: AnalysisContext | undefined,
+  includeDetails: true
+): Promise<DetailedAnalysisResult>;
+async function analyzePathInternal(
+  targetPath: string,
+  sharedContext: AnalysisContext | undefined,
+  includeDetails: boolean
+): Promise<AnalysisReport | DetailedAnalysisResult> {
   const absoluteTarget = path.resolve(targetPath);
   const targetStats = await stat(absoluteTarget);
   const analysisRoot = targetStats.isDirectory() ? absoluteTarget : path.dirname(absoluteTarget);
   const files = targetStats.isDirectory() ? await collectSourceFiles(absoluteTarget) : [absoluteTarget];
-  const context = sharedContext ?? await createAnalysisContext(analysisRoot);
+  const context = sharedContext ?? (
+    targetStats.isDirectory()
+      ? await createAnalysisContextFromFiles(analysisRoot, files, {})
+      : await createAnalysisContext(analysisRoot)
+  );
   const findings: HookFinding[] = [];
   const practices: LegendPracticeFinding[] = [];
   const analysisFiles = files.map(file => {
@@ -144,79 +183,102 @@ export async function analyzePathDetailed(
     return {
       analysisFile,
       file,
-      functionEntries: functionCoverageEntries(analysisFile, reportFileName),
+      functionEntries: includeDetails ? functionCoverageEntries(analysisFile, reportFileName) : [],
       reportFileName,
     };
   });
-  const coverageTargets: AnalysisCoverageTarget[] = analysisFiles.flatMap(entry => [
-    { kind: "file" as const, file: entry.reportFileName },
-    ...entry.functionEntries.map(functionEntry => functionEntry.target),
-  ]);
-  const coverage = new AnalysisCoverageLedger(coverageTargets);
+  const coverage = includeDetails
+    ? new AnalysisCoverageLedger(analysisFiles.flatMap(entry => [
+        { kind: "file" as const, file: entry.reportFileName },
+        ...entry.functionEntries.map(functionEntry => functionEntry.target),
+      ]))
+    : null;
   const diagnostics: AnalysisDiagnostic[] = [];
   for (const { analysisFile, file, functionEntries, reportFileName } of analysisFiles) {
     if (!analysisFile) {
-      coverage.record({
+      coverage?.record({
         target: { kind: "file", file: reportFileName },
         stages: unsupportedFileCoverage(),
       });
       continue;
     }
-    diagnostics.push(
-      ...analysisFile.parserDiagnostics.map(diagnostic => ({
-        ...diagnostic,
-        file: reportFileName,
-      }))
-    );
+    if (includeDetails) {
+      diagnostics.push(
+        ...analysisFile.parserDiagnostics.map(diagnostic => ({
+          ...diagnostic,
+          file: reportFileName,
+        }))
+      );
+    }
     const stateFlow = new StateFlowIndex();
-    const childContracts = createChildContractResolver(context, file);
-    findings.push(
-      ...analyzeSourceFile(
-        analysisFile,
-        reportFileName,
-        context.sourceIndex.componentsFor(file),
-        stateFlow,
-        childContracts,
-        context.sourceIndex.legendValueBridgesFor(file),
-        context.sourceIndex.deferredCallbackHooksFor(file)
-      )
-    );
-    const importedObservables = new Set([
-      ...context.sourceIndex.observablesFor(file),
-      ...context.sourceIndex.observablePathsFor(file),
-    ]);
-    const importedObservableFactories = context.sourceIndex.observableFactoriesFor(file);
-    practices.push(
-      ...analyzeLegendPracticesFile(
-        analysisFile,
-        reportFileName,
-        importedObservables,
-        importedObservableFactories,
-        isLegendPracticeEligible(
+    const hookImports = findingHookImports(analysisFile);
+    const mayContainPractice = mayContainLegendPractice(analysisFile);
+    const analyzeHooks = hookImports !== null || includeDetails;
+    const analyzePractices = mayContainPractice || includeDetails;
+    const childContracts = analyzeHooks || analyzePractices
+      ? createChildContractResolver(context, file)
+      : null;
+    if (analyzeHooks) {
+      findings.push(
+        ...analyzeSourceFile(
           analysisFile,
+          reportFileName,
+          context.sourceIndex.componentsFor(file),
+          stateFlow,
+          childContracts,
+          context.sourceIndex.legendValueBridgesFor(file),
+          context.sourceIndex.deferredCallbackHooksFor(file),
+          hookImports ?? undefined
+        )
+      );
+    }
+    if (analyzePractices) {
+      const importedObservables = new Set([
+        ...context.sourceIndex.observablesFor(file),
+        ...context.sourceIndex.observablePathsFor(file),
+      ]);
+      const importedObservableFactories = context.sourceIndex.observableFactoriesFor(file);
+      practices.push(
+        ...analyzeLegendPracticesFile(
+          analysisFile,
+          reportFileName,
           importedObservables,
-          importedObservableFactories
-        ),
-        context.installedLegendState,
-        context.sourceIndex.observableKeysFor(file),
-        childContracts
-      )
-    );
-    const stages = analyzedFileCoverage(analysisFile, context, functionEntries, stateFlow);
-    coverage.record({
-      target: { kind: "file", file: reportFileName },
-      stages,
-    });
-    for (const { node, target } of functionEntries) {
+          importedObservableFactories,
+          isLegendPracticeEligible(
+            analysisFile,
+            importedObservables,
+            importedObservableFactories
+          ),
+          context.installedLegendState,
+          context.sourceIndex.observableKeysFor(file),
+          childContracts
+        )
+      );
+    }
+    if (coverage) {
+      const stages = analyzedFileCoverage(analysisFile, context, functionEntries, stateFlow);
       coverage.record({
-        target,
-        stages: analyzedFunctionCoverage(analysisFile, context, target, node, stateFlow),
+        target: { kind: "file", file: reportFileName },
+        stages,
       });
+      for (const { node, target } of functionEntries) {
+        coverage.record({
+          target,
+          stages: analyzedFunctionCoverage(analysisFile, context, target, node, stateFlow),
+        });
+      }
     }
   }
 
   const states = findings.filter(finding => finding.hook === "useState").length;
   const effects = findings.filter(finding => finding.hook === "useEffect").length;
+  const report: AnalysisReport = {
+    files: files.length,
+    findings,
+    hooks: { effects, states, total: states + effects },
+    practices,
+  };
+  if (!coverage) return report;
   return {
     coverage: coverage.report(),
     diagnostics: {
@@ -227,12 +289,7 @@ export async function analyzePathDetailed(
         analysisRoot
       ),
     },
-    report: {
-      files: files.length,
-      findings,
-      hooks: { effects, states, total: states + effects },
-      practices,
-    },
+    report,
   };
 }
 
@@ -309,14 +366,16 @@ function isLegendPracticeEligible(
   importedObservables: ReadonlySet<string>,
   importedObservableFactories: ReadonlySet<string>
 ): boolean {
-  const sourceText = file.sourceFile.text;
-  const mayContainPractice =
-    /\.(?:get|set)\s*\(/.test(sourceText) ||
-    /\b(?:useValue|useSelector|use\$)\s*\(/.test(sourceText);
-  return mayContainPractice &&
-    (sourceText.includes("@legendapp/state") ||
+  return mayContainLegendPractice(file) &&
+    (file.sourceFile.text.includes("@legendapp/state") ||
       importedObservables.size > 0 ||
       importedObservableFactories.size > 0);
+}
+
+function mayContainLegendPractice(file: AnalysisFile): boolean {
+  const sourceText = file.sourceFile.text;
+  return /\.(?:get|set)\s*\(/.test(sourceText) ||
+    /\b(?:useValue|useSelector|use\$)\s*\(/.test(sourceText);
 }
 
 function portableDiagnosticMessage(message: string, root: string): string {
