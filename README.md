@@ -6,18 +6,9 @@ renders, post-commit updates, broad subscriptions, duplicate state, and fragment
 The agent reads the evidence, makes one semantic change, runs the application's checks, and scans again. Findings that
 lack timing or ownership proof stay as candidates.
 
-## Agent prompt
-
-```text
-Run Legend Doctor on <absolute root> before editing. Apply proven change findings one semantic group at a time.
-Preserve state lifetime, mount identity, effect timing, cleanup, dependencies, write order, keys, and atomic writes.
-Inspect candidates and leave code unchanged unless source proves the missing fact. Run the app's formatter, typecheck,
-and relevant tests, scan the same root again, and report the exact finding delta.
-```
-
-For persistent agent setups, copy [skills/legend-doctor/SKILL.md](skills/legend-doctor/SKILL.md) into the agent's
-skill directory (for Claude Code: `.claude/skills/legend-doctor/SKILL.md`); it packages this prompt, the scan
-commands, and the disposition contract.
+Agent setups install [skills/legend-doctor/SKILL.md](skills/legend-doctor/SKILL.md) (for Claude Code:
+`.claude/skills/legend-doctor/SKILL.md`); it packages the scan commands, the disposition contract, and the agent loop
+below.
 
 ## Run it
 
@@ -54,11 +45,10 @@ node dist/src/cli.js /absolute/path/to/root --json --coverage
 3. Read every `candidate`. Edit only when the named source proves the missing fact.
 4. Preserve lifecycle, mount identity, state ownership, command timing, keys, and atomic transitions.
 5. Run the application's formatter, typecheck, and relevant tests.
-6. Scan the same root again.
+6. Scan the same root again; applied changes can expose a smaller subscription boundary, so the second scan is part of
+   the edit, not optional cleanup.
 7. Report each added, removed, or changed finding, including a zero delta.
-8. Stop when checks pass and every remaining finding is intentional.
-
-Applied changes can expose a smaller subscription boundary, so the second scan is part of the edit, not optional cleanup.
+8. Stop when checks pass and every remaining finding is a `keep` or a `candidate` whose missing proof you can name.
 
 ## Output
 
@@ -1079,7 +1069,7 @@ their complete custom callback chains are not yet source-proven.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 583/583 |
+| Unit tests | 584/584 |
 | Actionable precision | 457/457 |
 | Actionable recall | 457/468 |
 | Legend practice precision | 109/109 |
