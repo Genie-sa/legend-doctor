@@ -594,6 +594,16 @@ const CALLBACK_IDENTITY_HOOKS = new Set([
   "useMemo",
 ]);
 
+const reactNamespacesBySourceFile = new WeakMap<ts.SourceFile, ReadonlySet<string>>();
+
+function reactNamespacesFor(sourceFile: ts.SourceFile): ReadonlySet<string> {
+  const cached = reactNamespacesBySourceFile.get(sourceFile);
+  if (cached) return cached;
+  const namespaces = collectHookImports(sourceFile).reactNamespaces;
+  reactNamespacesBySourceFile.set(sourceFile, namespaces);
+  return namespaces;
+}
+
 function sourceInputCallbackIsDeferred(
   source: ChildComponentSource,
   argumentIndex: number,
@@ -823,7 +833,14 @@ function callbackPathExpressionIsDeferred(
     );
   }
 
-  if (ts.isIdentifier(value) && isHookDependencyReference(value, CALLBACK_IDENTITY_HOOKS)) {
+  if (
+    ts.isIdentifier(value) &&
+    isHookDependencyReference(
+      value,
+      CALLBACK_IDENTITY_HOOKS,
+      reactNamespacesFor(source.owner.getSourceFile())
+    )
+  ) {
     return true;
   }
 
@@ -1754,7 +1771,15 @@ function callbackInvocationIsDeferred(
     if (!safe) break;
     if (isBindingName(node) || isNonValueIdentifier(node)) continue;
     referenced = true;
-    if (isHookDependencyReference(node, CALLBACK_IDENTITY_HOOKS)) continue;
+    if (
+      isHookDependencyReference(
+        node,
+        CALLBACK_IDENTITY_HOOKS,
+        reactNamespacesFor(owner.getSourceFile())
+      )
+    ) {
+      continue;
+    }
     if (callbackReferenceIsObservationOnly(node)) continue;
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     if (
@@ -2101,15 +2126,8 @@ function callbackBindingName(
   if (ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)) {
     return callback.parent.name.text;
   }
-  const call = callback.parent;
-  if (
-    !ts.isCallExpression(call) ||
-    call.arguments[0] !== callback ||
-    hookCallName(call) !== "useCallback" ||
-    bindingDeclarationCount(owner, "useCallback") !== 0
-  ) {
-    return null;
-  }
+  const call = memoizedCallbackIdentityCall(callback, owner);
+  if (!call) return null;
   const expression = climbTransparentExpression(call);
   const declaration = expression.parent;
   return ts.isVariableDeclaration(declaration) &&
@@ -2117,6 +2135,31 @@ function callbackBindingName(
     ts.isIdentifier(declaration.name) &&
     bindingDeclarationCount(owner, declaration.name.text) === 1
     ? declaration.name.text
+    : null;
+}
+
+function memoizedCallbackIdentityCall(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  owner: ChildComponentSource["owner"]
+): ts.CallExpression | null {
+  const direct = callback.parent;
+  if (
+    ts.isCallExpression(direct) &&
+    direct.arguments[0] === callback &&
+    hookCallName(direct) === "useCallback" &&
+    bindingDeclarationCount(owner, "useCallback") === 0
+  ) {
+    return direct;
+  }
+  const returned = climbTransparentExpression(callback);
+  const factory = returned.parent;
+  if (!ts.isArrowFunction(factory) || factory.body !== returned) return null;
+  const memo = factory.parent;
+  return ts.isCallExpression(memo) &&
+    memo.arguments[0] === factory &&
+    hookCallName(memo) === "useMemo" &&
+    bindingDeclarationCount(owner, "useMemo") === 0
+    ? memo
     : null;
 }
 

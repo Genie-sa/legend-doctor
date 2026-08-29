@@ -4219,3 +4219,149 @@ test("traces an async command through a child action array", async t => {
     findings.get("escapingSaving")?.message
   );
 });
+
+const STYLED_SWITCH_PANEL = `
+  import * as React from "react";
+  import Switch from "./Switch";
+
+  export function Panel({ share, canPublish }: { share: { save(o: object): Promise<void> } | null; canPublish: boolean }) {
+    const [creating, setCreating] = React.useState(false);
+    const handlePublishedChange = React.useCallback(
+      async (checked: boolean) => {
+        try {
+          setCreating(true);
+          await share?.save({ published: checked });
+        } finally {
+          setCreating(false);
+        }
+      },
+      [share]
+    );
+    return (
+      <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview /><Nav />
+        <Switch checked={canPublish} onChange={handlePublishedChange} disabled={!canPublish || creating} />
+      </main>
+    );
+  }
+`;
+
+function styledSwitchWrapper(useCallbackCall: string): string {
+  return `
+    import * as RadixSwitch from "@radix-ui/react-switch";
+    import * as React from "react";
+    import * as Lookalike from "./lookalike";
+    import styled from "styled-components";
+
+    interface Props {
+      checked?: boolean;
+      disabled?: boolean;
+      onChange?: (checked: boolean) => void;
+    }
+
+    function Switch({ checked, disabled, onChange, ...props }: Props, ref: React.Ref<HTMLButtonElement>) {
+      const handleCheckedChange = ${useCallbackCall}(
+        (checkedState: boolean) => {
+          if (onChange) {
+            onChange(checkedState);
+          }
+        },
+        [onChange]
+      );
+      return (
+        <StyledSwitchRoot ref={ref} checked={checked} onCheckedChange={handleCheckedChange} disabled={disabled} {...props}>
+          <span />
+        </StyledSwitchRoot>
+      );
+    }
+
+    const StyledSwitchRoot = styled(RadixSwitch.Root)<{ width?: number }>\`position: relative;\`;
+
+    export default React.forwardRef(Switch);
+  `;
+}
+
+test("proves async pending status through a React.useCallback adapter and a plain styled package host", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-styled-switch-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(path.join(root, "lookalike.ts"), "export const useCallback = (fn: unknown, deps: unknown) => fn;", "utf8");
+  await writeFile(path.join(root, "Switch.tsx"), styledSwitchWrapper("React.useCallback"), "utf8");
+  await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
+
+  const report = await analyzePath(root);
+  const creating = report.findings.find(finding => finding.name === "creating");
+  assert.equal(creating?.action, "use-observable");
+});
+
+test("keeps async pending status under review behind a lookalike namespace useCallback", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-lookalike-callback-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(path.join(root, "lookalike.ts"), "export const useCallback = (fn: unknown, deps: unknown) => fn;", "utf8");
+  await writeFile(path.join(root, "Switch.tsx"), styledSwitchWrapper("Lookalike.useCallback"), "utf8");
+  await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
+
+  const report = await analyzePath(root);
+  const creating = report.findings.find(finding => finding.name === "creating");
+  assert.equal(creating?.action, "review-state");
+});
+
+function memoHandlerSwitchWrapper(handlerDeclaration: string): string {
+  return `
+    import * as RadixSwitch from "@radix-ui/react-switch";
+    import * as React from "react";
+    import styled from "styled-components";
+
+    interface Props {
+      checked?: boolean;
+      disabled?: boolean;
+      onChange?: (checked: boolean) => void;
+    }
+
+    function Switch({ checked, disabled, onChange, ...props }: Props, ref: React.Ref<HTMLButtonElement>) {
+      ${handlerDeclaration}
+      return (
+        <StyledSwitchRoot ref={ref} checked={checked} onCheckedChange={handleCheckedChange} disabled={disabled} {...props}>
+          <span />
+        </StyledSwitchRoot>
+      );
+    }
+
+    const StyledSwitchRoot = styled(RadixSwitch.Root)<{ width?: number }>\`position: relative;\`;
+
+    export default React.forwardRef(Switch);
+  `;
+}
+
+test("proves async pending status through a concise React.useMemo handler factory", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-memo-handler-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Switch.tsx"),
+    memoHandlerSwitchWrapper(
+      "const handleCheckedChange = React.useMemo(() => (checkedState: boolean) => { onChange?.(checkedState); }, [onChange]);"
+    ),
+    "utf8"
+  );
+  await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
+
+  const report = await analyzePath(root);
+  const creating = report.findings.find(finding => finding.name === "creating");
+  assert.equal(creating?.action, "use-observable");
+});
+
+test("keeps async pending status under review behind a block-bodied useMemo handler factory", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-memo-block-handler-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "Switch.tsx"),
+    memoHandlerSwitchWrapper(
+      "const handleCheckedChange = React.useMemo(() => { return (checkedState: boolean) => { onChange?.(checkedState); }; }, [onChange]);"
+    ),
+    "utf8"
+  );
+  await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
+
+  const report = await analyzePath(root);
+  const creating = report.findings.find(finding => finding.name === "creating");
+  assert.equal(creating?.action, "review-state");
+});

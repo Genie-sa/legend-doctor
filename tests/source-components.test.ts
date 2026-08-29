@@ -285,3 +285,65 @@ test("does not infer exported observables from names or unrelated factories", as
     }
   );
 });
+
+test("proves plain styled() hosts of framework event package components", async () => {
+  await withProject(
+    {
+      "Switch.tsx": `
+        import * as RadixSwitch from "@radix-ui/react-switch";
+        import styled from "styled-components";
+        export const StyledRoot = styled(RadixSwitch.Root)<{ width?: number }>\`position: relative;\`;
+        const LocalRoot = styled(RadixSwitch.Root)\`padding: 0;\`;
+        export function Switch() { return <LocalRoot />; }
+      `,
+      "screen.tsx": 'import { StyledRoot } from "./Switch"; export function Screen() { return <StyledRoot />; }',
+    },
+    (root, sources) => {
+      const index = buildSourceIndex(root, sources);
+      assert.equal(index.frameworkEventComponentFor(path.join(root, "Switch.tsx"), "LocalRoot"), true);
+      assert.equal(index.frameworkEventComponentFor(path.join(root, "screen.tsx"), "StyledRoot"), true);
+    }
+  );
+});
+
+test("rejects styled hosts without plain factory, const binding, and proven target provenance", async () => {
+  await withProject(
+    {
+      "hosts.tsx": `
+        import * as RadixSwitch from "@radix-ui/react-switch";
+        import * as SomeUi from "some-ui";
+        import styled from "styled-components";
+        import fancy from "styled-components-lite";
+        function LocalThing() { return <button />; }
+        export const Configured = styled(RadixSwitch.Root).attrs({ type: "button" })\`padding: 0;\`;
+        export const Narrowed = styled(RadixSwitch.Root).withConfig({ displayName: "N" })\`padding: 0;\`;
+        export const Lookalike = fancy(RadixSwitch.Root)\`padding: 0;\`;
+        export const Unproven = styled(SomeUi.Root)\`padding: 0;\`;
+        export const LocalTarget = styled(LocalThing)\`padding: 0;\`;
+        export const Intrinsic = styled.button\`padding: 0;\`;
+        export let Mutable = styled(RadixSwitch.Root)\`padding: 0;\`;
+      `,
+      "shadowed.tsx": `
+        import * as RadixSwitch from "@radix-ui/react-switch";
+        import styled from "styled-components";
+        export const Shadowed = styled(RadixSwitch.Root)\`padding: 0;\`;
+        function rebind(styled: (target: unknown) => (parts: TemplateStringsArray) => unknown) {
+          return styled(RadixSwitch.Root);
+        }
+        export const other = rebind(() => () => null);
+      `,
+    },
+    (root, sources) => {
+      const index = buildSourceIndex(root, sources);
+      const file = path.join(root, "hosts.tsx");
+      for (const name of ["Configured", "Narrowed", "Lookalike", "Unproven", "LocalTarget", "Intrinsic", "Mutable"]) {
+        assert.equal(index.frameworkEventComponentFor(file, name), false, name);
+      }
+      assert.equal(
+        index.frameworkEventComponentFor(path.join(root, "shadowed.tsx"), "Shadowed"),
+        false,
+        "Shadowed"
+      );
+    }
+  );
+});

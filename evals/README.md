@@ -319,7 +319,7 @@ rest-prop JSX spreads when each rest binding is immutable, has no non-JSX use, a
 boolean prop. Dynamic expressions, opaque or mutated spreads, reassigned prop bindings, mutable targets, and selected
 custom components abstain.
 
-Thirteen non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet prove.
+Eleven non-enforced async labels record safe opportunities behind callback chains that the analyzer does not yet prove.
 The analyzer composes source-resolved JSX callback publications with recursively proven local event callers. It also
 proves inline adapters at their concrete JSX invocation, so a fixed or default intrinsic branch can qualify without
 making the wrapper safe at every callsite. One Formbricks pricing label now follows an inline retry command through an
@@ -328,9 +328,13 @@ save label follows `onSave` through an immutable action array, a filtered alias,
 array or item escapes and render-time item callback calls remain review. One Open WebUI label follows a conditionally selected
 callback through two transparent rest-prop objects into React Native Pressable; calling that tracked callback in either
 branch remains review. Four broad-owner status labels now follow source wrappers to the exact Radix dropdown package;
-lookalike packages, shadowed imports, and eager wrappers remain review. The remaining labels include unresolved local
-wrapper stacks, opaque prop spreads, and other Radix checked-change events. They count against recall and form the next
-multi-file callback-contract work queue.
+lookalike packages, shadowed imports, and eager wrappers remain review. Two Outline labels now resolve a wrapper's
+memoized adapter — a callback prop invoked inside an imported React `useCallback` argument or a concise `useMemo`
+factory's returned function, bare or namespace-qualified — published onto a plain `styled(Component)` tagged-template
+host whose const target resolves to the imported `@radix-ui/react-switch` package. `.attrs`/`.withConfig` chains,
+non-const bindings, lookalike styled factories, shadowed imports, styled intrinsics, unproven target packages, and
+block-bodied memo factories abstain. The remaining labels include unresolved local wrapper stacks and opaque prop
+spreads. They count against recall and form the next multi-file callback-contract work queue.
 
 Presentation-gate labels keep observable ownership above a condition and replace the complete controlling expression
 with an always-mounted subscriber; this prevents dead subscriptions when the selected child starts hidden. Gate

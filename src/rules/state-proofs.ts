@@ -666,15 +666,19 @@ export function isJsxNode(
 
 export function isHookDependencyReference(
   node: ts.Identifier,
-  hookNames: ReadonlySet<string>
+  hookNames: ReadonlySet<string>,
+  namespaces?: ReadonlySet<string>
 ): boolean {
   const array = node.parent;
   if (!ts.isArrayLiteralExpression(array) || !array.elements.includes(node)) return false;
   const call = array.parent;
-  return ts.isCallExpression(call) &&
-    call.arguments[1] === array &&
-    ts.isIdentifier(call.expression) &&
-    hookNames.has(call.expression.text);
+  if (!ts.isCallExpression(call) || call.arguments[1] !== array) return false;
+  if (ts.isIdentifier(call.expression)) return hookNames.has(call.expression.text);
+  return namespaces !== undefined &&
+    ts.isPropertyAccessExpression(call.expression) &&
+    ts.isIdentifier(call.expression.expression) &&
+    namespaces.has(call.expression.expression.text) &&
+    hookNames.has(call.expression.name.text);
 }
 
 export function repeatedRenderHasStableItemKey(

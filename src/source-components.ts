@@ -601,12 +601,9 @@ export function buildSourceIndexFromFiles(
       const rootName = name.split(".", 1)[0] ?? name;
       const record = records.get(normalizeFile(file));
       if (record?.shadowedImports.has(rootName)) return false;
+      if (record?.frameworkEventComponents.has(rootName)) return true;
       const binding = record?.imports.get(rootName);
-      return binding?.moduleSpecifier === "react-native" ||
-        binding?.moduleSpecifier === "react-native-web" ||
-        binding?.moduleSpecifier === "@radix-ui/react-dropdown-menu" ||
-        binding?.moduleSpecifier === "@base-ui/react" ||
-        binding?.moduleSpecifier.startsWith("@base-ui/react/") === true ||
+      return (binding !== undefined && isFrameworkEventModuleSpecifier(binding.moduleSpecifier)) ||
         resolvedFor(file, "framework-event-component").has(rootName);
     },
     hookDeclarationFor: (file, name) => {
@@ -836,6 +833,39 @@ function nearestConfigFile(
   return configFile;
 }
 
+function isFrameworkEventModuleSpecifier(specifier: string): boolean {
+  return specifier === "react-native" ||
+    specifier === "react-native-web" ||
+    specifier === "@radix-ui/react-dropdown-menu" ||
+    specifier === "@radix-ui/react-switch" ||
+    specifier === "@base-ui/react" ||
+    specifier.startsWith("@base-ui/react/");
+}
+
+interface StyledComponentCandidate {
+  exported: boolean;
+  factory: string;
+  name: string;
+  targetRoot: string;
+}
+
+function styledComponentTarget(
+  initializer: ts.Expression
+): { factory: string; targetRoot: string } | null {
+  if (!ts.isTaggedTemplateExpression(initializer)) return null;
+  const tag = initializer.tag;
+  if (!ts.isCallExpression(tag) || !ts.isIdentifier(tag.expression) || tag.arguments.length !== 1) {
+    return null;
+  }
+  const target = tag.arguments[0];
+  if (!target) return null;
+  let root: ts.Expression = target;
+  while (ts.isPropertyAccessExpression(root)) root = root.expression;
+  return ts.isIdentifier(root)
+    ? { factory: tag.expression.text, targetRoot: root.text }
+    : null;
+}
+
 function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const componentDeclarations = new Map<string, ComponentFunction>();
   const contextReaderHooks = new Map<string, string>();
@@ -864,6 +894,8 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const reactContexts = new Set<string>();
   const reactNamespaces = new Set<string>();
   const nativeComponentFactories = new Set<string>();
+  const styledFactories = new Set<string>();
+  const styledComponentCandidates: StyledComponentCandidate[] = [];
   const useValueHooks = new Set<string>();
   const deferredMethodsByClass = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
 
@@ -910,6 +942,9 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           nativeComponentFactories.add(element.name.text);
         }
       }
+    }
+    if (statement.moduleSpecifier.text === "styled-components" && statement.importClause?.name) {
+      styledFactories.add(statement.importClause.name.text);
     }
     if (statement.moduleSpecifier.text === "@legendapp/state/react") {
       if (bindings && ts.isNamedImports(bindings)) {
@@ -1046,6 +1081,21 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           if (methods) {
             deferredCallbackOwners.set(declaration.name.text, methods);
             if (hasExport(statement)) localExports.set(declaration.name.text, declaration.name.text);
+          }
+        }
+        if (
+          ts.isIdentifier(declaration.name) &&
+          initializer &&
+          ts.isVariableDeclarationList(declaration.parent) &&
+          (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+        ) {
+          const styledTarget = styledComponentTarget(initializer);
+          if (styledTarget) {
+            styledComponentCandidates.push({
+              exported: hasExport(statement),
+              name: declaration.name.text,
+              ...styledTarget,
+            });
           }
         }
         if (
@@ -1212,6 +1262,18 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
       shadowedImports.add(node.text);
     }
   });
+
+  for (const candidate of styledComponentCandidates) {
+    if (!styledFactories.has(candidate.factory) || shadowedImports.has(candidate.factory)) continue;
+    if (shadowedImports.has(candidate.targetRoot)) continue;
+    const binding = imports.get(candidate.targetRoot);
+    const provenTarget = binding
+      ? isFrameworkEventModuleSpecifier(binding.moduleSpecifier)
+      : frameworkEventComponents.has(candidate.targetRoot);
+    if (!provenTarget) continue;
+    frameworkEventComponents.add(candidate.name);
+    if (candidate.exported) localExports.set(candidate.name, candidate.name);
+  }
 
   return {
     componentDeclarations,

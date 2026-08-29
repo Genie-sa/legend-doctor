@@ -1069,14 +1069,14 @@ These rules follow the official
 ## Verified accuracy
 
 The pinned corpus covers 2,392 hooks across 236 targets. It contains 856 manually audited hook labels, 26 state groups,
-and 109 Legend practice labels. Thirteen safe async-leaf opportunities remain explicit non-enforced labels because
+and 109 Legend practice labels. Eleven safe async-leaf opportunities remain explicit non-enforced labels because
 their complete custom callback chains are not yet source-proven.
 
 | Check | Result |
 | --- | ---: |
-| Unit tests | 573/573 |
-| Actionable precision | 455/455 |
-| Actionable recall | 455/468 |
+| Unit tests | 583/583 |
+| Actionable precision | 457/457 |
+| Actionable recall | 457/468 |
 | Legend practice precision | 109/109 |
 
 The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain

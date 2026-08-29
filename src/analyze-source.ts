@@ -703,7 +703,13 @@ function analyzeParsedSource(
       transitionTouchesState &&
       state.setterName !== null &&
       !nonProductionHarness;
-    const baseClassification = cluster
+    const baseClassification = nonProductionHarness
+      ? {
+          action: "keep-state" as const,
+          confidence: "certain" as const,
+          message: `Keep \`${state.valueName}\` in this test, story, or demo harness; production render-boundary migrations do not apply here.`,
+        }
+      : cluster
       ? {
           action: cluster.action,
           confidence: "probable" as const,
@@ -733,7 +739,6 @@ function analyzeParsedSource(
           localComponents,
           sourceComponents,
           sourceFile,
-          nonProductionHarness,
           propertyLocalObjectDrafts.has(state),
           subtreeByState.get(state) ?? null,
           dialogPayloadCuts.get(state) ?? null,
@@ -804,7 +809,7 @@ function analyzeParsedSource(
   }
 
   for (const effect of effects) {
-    const classification = effectDrafts.effects.has(effect)
+    const classification = !nonProductionHarness && effectDrafts.effects.has(effect)
       ? {
           action: "review-effect" as const,
           confidence: "probable" as const,
@@ -3725,7 +3730,6 @@ function classifyState(
   localComponents: ReadonlySet<string>,
   sourceComponents: ReadonlySet<string>,
   sourceFile: ts.SourceFile,
-  nonProductionHarness: boolean,
   isPropertyLocalObjectDraft: boolean,
   subtree: StateSubtree | null,
   dialogPayloadCut: DialogPayloadCut | null,
@@ -3759,13 +3763,6 @@ function classifyState(
   hasSourceEventScalarConsumers: boolean,
   hasReactiveHostPropScalarConsumer: boolean
 ): ClassifiedState {
-  if (nonProductionHarness) {
-    return {
-      action: "keep-state",
-      confidence: "certain",
-      message: `Keep \`${state.valueName}\` in this test, story, or demo harness; production render-boundary migrations do not apply here.`,
-    };
-  }
   if (state.setterName === null) {
     return {
       action: "keep-state",

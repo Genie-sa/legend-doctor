@@ -3781,6 +3781,45 @@ test("does not issue production state migrations for test harnesses", () => {
   assert.equal(finding?.disposition, "keep");
 });
 
+test("does not issue production effect migrations for test harnesses", () => {
+  const [finding] = analyzeSource(`
+    import { useEffect } from "react";
+    export function Harness({ observer, result }: { observer: () => void; result: string }) {
+      useEffect(observer, [result]);
+      return null;
+    }
+  `, "Subject.test.tsx");
+  assert.equal(finding?.action, "keep-effect");
+  assert.equal(finding?.disposition, "keep");
+});
+
+test("does not delete derived state inside a test harness", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Harness({ price, quantity }: { price: number; quantity: number }) {
+      const [total, setTotal] = useState(0);
+      useEffect(() => setTotal(price * quantity), [price, quantity]);
+      return <output>{total}</output>;
+    }
+  `, "Harness.test.tsx");
+  assert.deepEqual(findings.map(finding => finding.action), ["keep-state", "keep-effect"]);
+});
+
+test("does not migrate an effect-synchronized draft cluster inside a story harness", () => {
+  const findings = analyzeSource(`
+    import { useEffect, useState } from "react";
+    export function Profile({ initialName }: { initialName: string }) {
+      const [name, setName] = useState(initialName);
+      useEffect(() => { setName(initialName); }, [initialName]);
+      return <main>
+        <Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><Content />
+        <input value={name} onChange={event => setName(event.target.value)} />
+      </main>;
+    }
+  `, "Profile.stories.tsx");
+  assert.deepEqual(findings.map(finding => finding.action), ["keep-state", "keep-effect"]);
+});
+
 test("moves transport-only state into one child", () => {
   assert.deepEqual(
     actions(`

@@ -48,6 +48,14 @@ export function classifyEffect(
   nonProductionHarness: boolean,
   childContracts: ChildContractResolver | null
 ): ClassifiedEffect {
+  if (nonProductionHarness) {
+    return {
+      action: "keep-effect",
+      confidence: "certain",
+      derivedState: null,
+      message: "Keep this effect in its test, story, or demo harness; production lifecycle migrations do not apply here.",
+    };
+  }
   if (hasReactEffectOwnershipDirective(effect)) {
     return {
       action: "keep-effect",
@@ -85,7 +93,6 @@ export function classifyEffect(
     stateBySetter,
     stateByValue,
     usageBySetter,
-    nonProductionHarness,
     childContracts
   );
   if (eventReset) {
@@ -1264,15 +1271,13 @@ function findMutationSiteReset(
   stateBySetter: ReadonlyMap<string, StateCandidate>,
   stateByValue: ReadonlyMap<string, StateCandidate>,
   usageBySetter: ReadonlyMap<string, StateUsage>,
-  nonProductionHarness: boolean,
   childContracts: ChildContractResolver | null
 ): MutationSiteReset | null {
   if (
     !effect.callback ||
     !effect.owner ||
     !effect.dependencies ||
-    effect.dependencies.elements.length === 0 ||
-    nonProductionHarness
+    effect.dependencies.elements.length === 0
   ) {
     return null;
   }
