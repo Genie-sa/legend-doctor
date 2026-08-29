@@ -64,6 +64,11 @@ node dist/src/cli.js /absolute/path/to/root --json --coverage
 
 `--actionable` includes `change` and `candidate` findings. It hides intentional `keep` findings.
 
+`legend-doctor --help` documents the complete surface: flags, dispositions, the agent loop, the
+suppression comment, and exit codes. Unknown flags, extra targets, and invalid values fail with
+exit code 2 and a named fix; a failed scan exits 1; a completed scan exits 0 regardless of how
+many findings it reports.
+
 ## Reading the report
 
 Text output is a short edit queue:

@@ -1,10 +1,11 @@
 import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
 
-export function formatTextReport(report: AnalysisReport): string {
+export function formatTextReport(report: AnalysisReport, target?: string): string {
   const findings = report.findings;
   const lines = [...findings.map(formatFinding), ...report.practices.map(formatPracticeFinding)];
+  const scope = target ? `Scanned ${report.files} files under ${target}` : `Scanned ${report.files} files`;
   lines.push(
-    `Scanned ${report.files} files: ${report.hooks.states} useState, ${report.hooks.effects} useEffect, ${findings.length + report.practices.length} shown.`
+    `${scope}: ${report.hooks.states} useState, ${report.hooks.effects} useEffect, ${findings.length + report.practices.length} shown.`
   );
   if (findings.some(finding => finding.action === "review-effect")) {
     lines.push(

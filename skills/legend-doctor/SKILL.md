@@ -22,7 +22,8 @@ Scan the smallest complete root that contains the relevant components, hooks, im
 single-file scan can hide the proof a safe result needs. The report root carries `schemaVersion` (currently `1`).
 
 Filters: `--disposition change` (proven edits only), `--disposition candidate` (needs review), plain text without
-`--json` for a compact queue.
+`--json` for a compact queue. `--help` documents the complete surface; exit 2 means invalid usage (the error names the
+fix), exit 1 means the scan failed, exit 0 means the report is complete whatever it contains.
 
 ## Dispositions
 

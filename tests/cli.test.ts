@@ -65,15 +65,123 @@ test("--disposition keep composes with the equals form and drops practices", asy
   assert.deepEqual(report.practices, []);
 });
 
-test("rejects an unknown disposition value", async t => {
+interface CliFailure {
+  code: number;
+  stderr: string;
+  stdout: string;
+}
+
+async function runExpectingFailure(args: readonly string[]): Promise<CliFailure> {
+  try {
+    await run(process.execPath, [CLI_PATH, ...args]);
+  } catch (error) {
+    const failure = error as { code?: number; stderr?: string; stdout?: string };
+    return { code: failure.code ?? 0, stderr: failure.stderr ?? "", stdout: failure.stdout ?? "" };
+  }
+  throw new Error(`expected CLI failure for: ${args.join(" ")}`);
+}
+
+test("rejects an unknown disposition value as a usage error", async t => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 
-  await assert.rejects(
-    run(process.execPath, [CLI_PATH, root, "--json", "--disposition", "bogus"]),
-    (error: unknown) =>
-      error instanceof Error && /--disposition must be one of/.test((error as { stderr?: string }).stderr ?? "")
-  );
+  const failure = await runExpectingFailure([root, "--json", "--disposition", "bogus"]);
+
+  assert.equal(failure.code, 2);
+  assert.equal(failure.stdout, "");
+  assert.match(failure.stderr, /bogus/);
+  for (const valid of ["candidate", "change", "keep", "style"]) {
+    assert.match(failure.stderr, new RegExp(valid));
+  }
+  assert.match(failure.stderr, /--help/);
+});
+
+test("rejects --disposition without a value", async t => {
+  const root = await writeFixtureRoot();
+  t.after(() => rm(root, { force: true, recursive: true }));
+
+  const failure = await runExpectingFailure([root, "--disposition", "--json"]);
+
+  assert.equal(failure.code, 2);
+  assert.match(failure.stderr, /--disposition/);
+});
+
+test("rejects an unknown flag and suggests the closest known flag", async () => {
+  const failure = await runExpectingFailure([".", "--acitonable"]);
+
+  assert.equal(failure.code, 2);
+  assert.equal(failure.stdout, "");
+  assert.match(failure.stderr, /--acitonable/);
+  assert.match(failure.stderr, /--actionable/);
+  assert.match(failure.stderr, /--help/);
+});
+
+test("rejects a second positional target", async t => {
+  const root = await writeFixtureRoot();
+  t.after(() => rm(root, { force: true, recursive: true }));
+
+  const failure = await runExpectingFailure([root, "extra-target"]);
+
+  assert.equal(failure.code, 2);
+  assert.match(failure.stderr, /extra-target/);
+});
+
+test("rejects --coverage without --json and names the fix", async t => {
+  const root = await writeFixtureRoot();
+  t.after(() => rm(root, { force: true, recursive: true }));
+
+  const failure = await runExpectingFailure([root, "--coverage"]);
+
+  assert.equal(failure.code, 2);
+  assert.match(failure.stderr, /--json/);
+});
+
+test("reports a missing target with the resolved path and exit code 1", async () => {
+  const missing = path.join(os.tmpdir(), "legend-doctor-missing", "nope");
+
+  const failure = await runExpectingFailure([missing, "--json"]);
+
+  assert.equal(failure.code, 1);
+  assert.equal(failure.stdout, "");
+  assert.match(failure.stderr, new RegExp(`legend-doctor-missing.*nope`));
+  assert.doesNotMatch(failure.stderr, /--help/);
+});
+
+test("--help documents flags, dispositions, and exit codes on stdout", async () => {
+  const { stdout, stderr } = await run(process.execPath, [CLI_PATH, "--help"]);
+
+  assert.equal(stderr, "");
+  assert.match(stdout, /Usage/);
+  assert.match(stdout, /--json/);
+  assert.match(stdout, /--actionable/);
+  assert.match(stdout, /--disposition/);
+  assert.match(stdout, /--coverage/);
+  assert.match(stdout, /candidate \| change \| keep \| style/);
+  assert.match(stdout, /Agent loop/);
+  assert.match(stdout, /keep-react-effect/);
+  assert.match(stdout, /Exit codes/);
+});
+
+test("-h prints the same help without scanning", async () => {
+  const { stdout } = await run(process.execPath, [CLI_PATH, "-h", "/definitely/not/a/real/path"]);
+
+  assert.match(stdout, /Usage/);
+});
+
+test("--version prints the package version", async () => {
+  const { stdout, stderr } = await run(process.execPath, [CLI_PATH, "--version"]);
+
+  assert.equal(stderr, "");
+  assert.match(stdout, /^legend-doctor \d+\.\d+\.\d+\n$/);
+});
+
+test("text summary names the resolved scan root", async t => {
+  const root = await writeFixtureRoot();
+  t.after(() => rm(root, { force: true, recursive: true }));
+
+  const { stdout } = await run(process.execPath, [CLI_PATH, root]);
+
+  assert.match(stdout, new RegExp(`Scanned \\d+ files under .*${path.basename(root)}`));
 });
 
 test("text output appends the re-run hint when change findings are shown", async t => {
