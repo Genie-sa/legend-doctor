@@ -1034,6 +1034,11 @@ items$.set(previous => [...previous, item]); // before
 items$.push(item);                           // after
 ```
 
+In a package that compiles with React Compiler (an explicit `babel-plugin-react-compiler` or `react-compiler-runtime`
+dependency, or Expo `experiments.reactCompiler`), Legend Doctor keeps the clone write and does not emit this finding:
+the clone changes the container reference that compiler-memoized consumers of `useValue(container$)` key on, while an
+in-place child write preserves it and can leave that memoized JSX stale.
+
 ### Toggle directly
 
 ```tsx
@@ -1073,6 +1078,8 @@ Legend Doctor emits `change` only when TypeScript structure proves the edit. Com
 allowlists, disabled UI, and corpus expectations are not proof.
 
 - Keep cohesive one-control state in React when an observable cannot remove an owner render.
+- Keep identity-changing clone writes in React Compiler packages; in-place child writes preserve the container
+  reference that memoized consumers key on.
 - Keep observable ownership at the lifetime named in `stateModel`.
 - Subscribe with `useValue` at the lowest proven stable render leaf.
 - Use `.peek()` only in a proven non-tracking path.

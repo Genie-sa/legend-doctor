@@ -6737,20 +6737,6 @@ export const goldPracticeCases = [
     target: "open-webui-form-chat-input",
   })),
   {
-    action: "narrow-observable-write",
-    file: "use-attached-files.ts",
-    line: 12,
-    rationale: "A file upload appends one already-evaluated item to a locally proven observable array, so cloning existing entries is unnecessary.",
-    target: "open-webui-attached-files",
-  },
-  {
-    action: "narrow-observable-write",
-    file: "use-attached-files.ts",
-    line: 31,
-    rationale: "Image processing finishes before this command appends one local value to a proven observable array.",
-    target: "open-webui-attached-files",
-  },
-  {
     action: "batch-observable-writes",
     file: "use-attached-files.ts",
     line: 39,
@@ -6762,13 +6748,6 @@ export const goldPracticeCases = [
     file: "apps/web/src/features/shell/command-palette/command-palette.tsx",
     line: 112,
     rationale: "Query text and active-row reset are one command-palette transition and must publish atomically.",
-    target: "genie-courses",
-  },
-  {
-    action: "narrow-observable-write",
-    file: "apps/web/src/features/admin/course-comments-tab.tsx",
-    line: 194,
-    rationale: "Pagination appends one resolved cursor to a component-local observable array without changing existing pages.",
     target: "genie-courses",
   },
   {
@@ -6972,13 +6951,6 @@ export const goldPracticeCases = [
     file: "components/LocalAudioPlayer.tsx",
     line: 257,
     rationale: "One player failure publishes error, loading, and playback state together.",
-    target: "legend-music",
-  },
-  {
-    action: "narrow-observable-write",
-    file: "components/LocalAudioPlayer.tsx",
-    line: 245,
-    rationale: "Hydration changes only the current track thumbnail, so the thumbnail child can update without cloning and replacing the complete track.",
     target: "legend-music",
   },
   {

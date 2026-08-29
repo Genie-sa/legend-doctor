@@ -5,6 +5,7 @@ import ts from "typescript";
 
 import { unwrapTransparentExpression } from "./analysis-ast.js";
 import { analyzeLegendPracticesFile } from "./analyze-legend-practices.js";
+import { ReactCompilerResolver } from "./react-compiler-package.js";
 import { analyzeSourceFile, findingHookImports } from "./analyze-source.js";
 import {
   isNonProductionHarness,
@@ -194,6 +195,7 @@ async function analyzePathInternal(
       ]))
     : null;
   const diagnostics: AnalysisDiagnostic[] = [];
+  const reactCompiler = new ReactCompilerResolver();
   for (const { analysisFile, file, functionEntries, reportFileName } of analysisFiles) {
     if (!analysisFile) {
       coverage?.record({
@@ -251,7 +253,8 @@ async function analyzePathInternal(
           ),
           context.installedLegendState,
           context.sourceIndex.observableKeysFor(file),
-          childContracts
+          childContracts,
+          await reactCompiler.packageCompilesFile(file)
         )
       );
     }

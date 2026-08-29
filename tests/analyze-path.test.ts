@@ -76,6 +76,124 @@ test("comments and blank lines never change findings", async t => {
   assert.deepEqual(triviaSignatures, plainSignatures);
 });
 
+const CLONE_WRITE_COMPONENT = `
+import { observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
+
+const pages$ = observable<Array<{ id: string } | null>>([null]);
+const open$ = observable(false);
+
+export function Pages() {
+  const pages = useValue(pages$);
+  return (
+    <button
+      onClick={() => pages$.set([...pages$.peek(), { id: "next" }])}
+      onFocus={() => open$.set(!open$.peek())}
+    >
+      {pages.length}
+    </button>
+  );
+}
+`;
+
+async function cloneWriteRoot(
+  prefix: string,
+  manifest: Record<string, unknown>
+): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), prefix));
+  await writeFile(path.join(root, "package.json"), JSON.stringify(manifest), "utf8");
+  await writeFile(path.join(root, "pages.tsx"), CLONE_WRITE_COMPONENT, "utf8");
+  return root;
+}
+
+test("react compiler packages keep identity-changing clone writes", async t => {
+  const root = await cloneWriteRoot("legend-doctor-compiler-", {
+    devDependencies: { "babel-plugin-react-compiler": "1.0.0" },
+    name: "app",
+  });
+  t.after(() => rm(root, { force: true, recursive: true }));
+
+  const report = await analyzePath(root);
+  const actions = report.practices.map(practice => practice.action);
+
+  assert.ok(actions.includes("toggle-observable"));
+  assert.ok(!actions.includes("narrow-observable-write"));
+});
+
+test("clone writes stay narrowed without an explicit react compiler marker", async t => {
+  const root = await cloneWriteRoot("legend-doctor-no-compiler-", {
+    dependencies: { "react-native": "0.86.2" },
+    name: "app",
+  });
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "app.json"),
+    JSON.stringify({ expo: { experiments: { reactCompiler: false } } }),
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.ok(report.practices.some(practice => practice.action === "narrow-observable-write"));
+});
+
+test("expo experiments enable the react compiler gate", async t => {
+  const root = await cloneWriteRoot("legend-doctor-expo-compiler-", { name: "app" });
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "app.json"),
+    JSON.stringify({ expo: { experiments: { reactCompiler: true } } }),
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+  const actions = report.practices.map(practice => practice.action);
+
+  assert.ok(actions.includes("toggle-observable"));
+  assert.ok(!actions.includes("narrow-observable-write"));
+});
+
+test("a code-based expo config enabling the compiler gates clone writes", async t => {
+  const root = await cloneWriteRoot("legend-doctor-expo-config-", { name: "app" });
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "app.config.ts"),
+    'export default { experiments: { reactCompiler: true } };\n',
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
+});
+
+test("compiler ownership walks up from each file's nearest package", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-compiler-workspace-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await mkdir(path.join(root, "apps", "web"), { recursive: true });
+  await mkdir(path.join(root, "packages", "ui"), { recursive: true });
+  await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "workspace" }), "utf8");
+  await writeFile(
+    path.join(root, "apps", "web", "package.json"),
+    JSON.stringify({ dependencies: { "react-compiler-runtime": "19.0.0" }, name: "web" }),
+    "utf8"
+  );
+  await writeFile(
+    path.join(root, "packages", "ui", "package.json"),
+    JSON.stringify({ name: "ui" }),
+    "utf8"
+  );
+  await writeFile(path.join(root, "apps", "web", "pages.tsx"), CLONE_WRITE_COMPONENT, "utf8");
+  await writeFile(path.join(root, "packages", "ui", "pages.tsx"), CLONE_WRITE_COMPONENT, "utf8");
+
+  const report = await analyzePath(root);
+  const narrowWriteFiles = report.practices
+    .filter(practice => practice.action === "narrow-observable-write")
+    .map(practice => practice.location.file);
+
+  assert.deepEqual(narrowWriteFiles, [path.join("packages", "ui", "pages.tsx")]);
+});
+
 test("finds aliased React hooks through the ordinary path scan", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-aliased-hooks-"));
   t.after(() => rm(root, { force: true, recursive: true }));

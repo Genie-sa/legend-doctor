@@ -68,7 +68,8 @@ export function analyzeLegendPracticesFile(
   includeFindings = true,
   installedLegendState: InstalledLegendState | null = null,
   importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
-  childContracts: ChildContractResolver | null = null
+  childContracts: ChildContractResolver | null = null,
+  reactCompilerPackage = false
 ): LegendPracticeFinding[] {
   const findings = analyzeParsedLegendPractices(
     file.sourceFile,
@@ -77,7 +78,8 @@ export function analyzeLegendPracticesFile(
     importedObservableFactories,
     installedLegendState,
     importedObservableKeys,
-    childContracts
+    childContracts,
+    reactCompilerPackage
   );
   return includeFindings ? findings : [];
 }
@@ -89,7 +91,8 @@ function analyzeParsedLegendPractices(
   importedObservableFactories: ReadonlySet<string>,
   installedLegendState: InstalledLegendState | null,
   importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
+  reactCompilerPackage = false
 ): LegendPracticeFinding[] {
   if (isNonProductionHarness(fileName)) return [];
   const imports = collectHookImports(sourceFile);
@@ -168,7 +171,9 @@ function analyzeParsedLegendPractices(
     observableKeys,
     childContracts
   ));
-  findings.push(...findObservableCloneWritePractices(sourceFile, fileName, observableBindings));
+  if (!reactCompilerPackage) {
+    findings.push(...findObservableCloneWritePractices(sourceFile, fileName, observableBindings));
+  }
   findings.push(...findObservableTogglePractices(sourceFile, fileName, observableBindings));
 
   return findings.sort(

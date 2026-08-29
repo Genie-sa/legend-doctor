@@ -336,6 +336,15 @@ non-const bindings, lookalike styled factories, shadowed imports, styled intrins
 block-bodied memo factories abstain. The remaining labels include unresolved local wrapper stacks and opaque prop
 spreads. They count against recall and form the next multi-file callback-contract work queue.
 
+`narrow-observable-write` abstains in packages that compile with React Compiler — an explicit
+`babel-plugin-react-compiler` or `react-compiler-runtime` dependency in any manifest on the file's directory chain, or
+Expo `experiments.reactCompiler`. Legend keeps the container reference on in-place child writes (verified against
+`@legendapp/state` 3.0.0-beta.48), so compiler-memoized consumers of `useValue(container$)` never re-render and the UI
+goes stale; a production regression in Genie Courses pagination confirmed this failure. Four previously enforced labels
+(two Open WebUI array appends, one Genie Courses append, one Legend Music keyed child write) were withdrawn because
+their packages compile; the four Memoria labels stand because Expo leaves the compiler off there. Package manifests and
+Expo config are the proof; installed `node_modules` are not required.
+
 Presentation-gate labels keep observable ownership above a condition and replace the complete controlling expression
 with an always-mounted subscriber; this prevents dead subscriptions when the selected child starts hidden. Gate
 conditions must be side-effect free, confined to one strict subtree, and independent of repeated-list shape or effects.
