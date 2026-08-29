@@ -1,14 +1,41 @@
 # Legend Doctor
 
-Legend Doctor is a read-only analyzer for coding agents. It finds proven ways to remove owner
-renders, post-commit updates, broad subscriptions, duplicate state, and fragmented observable writes.
+React re-renders a component every time its `useState` changes — the whole component, whether one leaf or fifty
+elements read the value. Legend State inverts that: an observable update renders only the leaves that subscribed with
+`useValue`. Legend Doctor is the read-only analyzer that moves a codebase from the first model to the second. It reads
+every `useState` and `useEffect`, proves which ones can become observables, move into the leaf that actually renders
+them, or be deleted outright, and hands a coding agent the edits as an ordered queue.
 
-The agent reads the evidence, makes one semantic change, runs the application's checks, and scans again. Findings that
-lack timing or ownership proof stay as candidates.
+```tsx
+// before — every keystroke renders the whole page
+const [query, setQuery] = useState("");
+
+// after — every keystroke renders only the leaves that read query$
+const query$ = useObservable("");
+const query = useValue(query$); // inside the leaf that renders it
+```
+
+The goal never changes: fewer renders, with state owned by the smallest subtree that reads it.
+
+## Built for the agent loop
+
+Legend Doctor guesses nothing. Every instruction rests on structural TypeScript proof — component ownership, callback
+flow, effect timing, observable provenance, resolved across files. A complete proof becomes a `change` finding the
+agent applies mechanically; a missing fact becomes a `candidate` that names exactly what to go read. That split is
+what lets the tool sit inside the edit loop instead of in front of it:
+
+1. Scan before editing.
+2. Apply one group of `change` findings.
+3. Read every `candidate`. Edit only when the named source proves the missing fact.
+4. Preserve lifecycle, mount identity, state ownership, command timing, keys, and atomic transitions.
+5. Run the application's formatter, typecheck, and relevant tests.
+6. Scan the same root again; applied changes can expose a smaller subscription boundary, so the second scan is part of
+   the edit, not optional cleanup.
+7. Report each added, removed, or changed finding, including a zero delta.
+8. Stop when checks pass and every remaining finding is a `keep` or a `candidate` whose missing proof you can name.
 
 Agent setups install [skills/legend-doctor/SKILL.md](skills/legend-doctor/SKILL.md) (for Claude Code:
-`.claude/skills/legend-doctor/SKILL.md`); it packages the scan commands, the disposition contract, and the agent loop
-below.
+`.claude/skills/legend-doctor/SKILL.md`); it packages the scan commands, the disposition contract, and this loop.
 
 ## Run it
 
@@ -18,9 +45,8 @@ npm run build
 node dist/src/cli.js /absolute/path/to/app-or-feature --json --actionable
 ```
 
-Scan the smallest complete root that contains the relevant components, hooks, imports, re-exports, and observables.
-Legend Doctor resolves TypeScript configuration, component props, callback flow, barrels, and observable provenance across
-files. A single-file scan can hide the proof needed for a safe result.
+Scan the smallest complete root that contains the relevant components, hooks, imports, re-exports, and observables;
+proofs resolve across files, so a single-file scan can hide the fact a safe result needs.
 
 ```bash
 # Proven edits only
@@ -38,19 +64,7 @@ node dist/src/cli.js /absolute/path/to/root --json --coverage
 
 `--actionable` includes `change` and `candidate` findings. It hides intentional `keep` findings.
 
-## Agent loop
-
-1. Scan before editing.
-2. Apply one group of `change` findings.
-3. Read every `candidate`. Edit only when the named source proves the missing fact.
-4. Preserve lifecycle, mount identity, state ownership, command timing, keys, and atomic transitions.
-5. Run the application's formatter, typecheck, and relevant tests.
-6. Scan the same root again; applied changes can expose a smaller subscription boundary, so the second scan is part of
-   the edit, not optional cleanup.
-7. Report each added, removed, or changed finding, including a zero delta.
-8. Stop when checks pass and every remaining finding is a `keep` or a `candidate` whose missing proof you can name.
-
-## Output
+## Reading the report
 
 Text output is a short edit queue:
 
@@ -94,7 +108,9 @@ consumer on it. Each finding names the edit, proof, location, and required owner
 | `keep` | Preserve the current React or lifecycle boundary. |
 | `style` | Apply only when the installed Legend API supports the equivalent form. |
 
-## Detected value
+## What each finding removes
+
+Every action names the render or lifecycle cost it deletes, and each has a worked before/after example below.
 
 | Finding | Proven cost removed |
 | --- | --- |
@@ -1061,18 +1077,6 @@ allowlists, disabled UI, and corpus expectations are not proof.
 These rules follow the official
 [Legend State best-practices skill](https://github.com/LegendApp/legend-skills/tree/main/legend-state-best-practices).
 
-## Verified accuracy
-
-The pinned corpus covers 2,392 hooks across 236 targets. It contains 856 manually audited hook labels, 26 state groups,
-and 109 Legend practice labels. Eleven safe async-leaf opportunities remain explicit non-enforced labels because
-their complete custom callback chains are not yet source-proven.
-
-| Check | Result |
-| --- | ---: |
-| Unit tests | 584/584 |
-| Actionable precision | 457/457 |
-| Actionable recall | 457/468 |
-| Legend practice precision | 109/109 |
-
-The corpus keeps known opportunities as non-enforced labels. A detector cannot improve its score by turning uncertain
-code into a forced edit.
+Every detector earns its place against a pinned corpus of real applications with manually audited labels; a finding
+ships as `change` only after it is proven there. Uncertain opportunities stay visible as candidates — a wrong
+instruction costs an agent more than a surfaced review.
