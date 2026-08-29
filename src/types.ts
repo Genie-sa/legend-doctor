@@ -80,4 +80,5 @@ export interface AnalysisReport {
     total: number;
   };
   practices: LegendPracticeFinding[];
+  schemaVersion: 1;
 }

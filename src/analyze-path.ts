@@ -277,6 +277,7 @@ async function analyzePathInternal(
     findings,
     hooks: { effects, states, total: states + effects },
     practices,
+    schemaVersion: 1,
   };
   if (!coverage) return report;
   return {

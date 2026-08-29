@@ -36,6 +36,46 @@ test("scans source files deterministically and ignores generated directories", a
   assert.equal(report.findings[0]?.location.file, path.join("src", "component.tsx"));
 });
 
+test("comments and blank lines never change findings", async t => {
+  const plain = [
+    'import { useEffect, useState } from "react";',
+    "export function Price({ amount }: { amount: number }) {",
+    '  const [label, setLabel] = useState("");',
+    "  useEffect(() => {",
+    "    setLabel(`$${amount}`);",
+    "  }, [amount]);",
+    "  return <span>{label}</span>;",
+    "}",
+  ];
+  const withTrivia = [
+    "/* banner */",
+    "",
+    ...plain.map(line => `${line} // trailing`),
+    "",
+    "// footer",
+  ];
+  const signatures = async (source: string) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-trivia-"));
+    t.after(() => rm(root, { force: true, recursive: true }));
+    await writeFile(path.join(root, "price.tsx"), source, "utf8");
+    const report = await analyzePath(root);
+    return report.findings.map(finding => [
+      finding.hook,
+      finding.name,
+      finding.action,
+      finding.disposition,
+    ]);
+  };
+
+  const [plainSignatures, triviaSignatures] = await Promise.all([
+    signatures(plain.join("\n")),
+    signatures(withTrivia.join("\n")),
+  ]);
+
+  assert.ok(plainSignatures.length > 0);
+  assert.deepEqual(triviaSignatures, plainSignatures);
+});
+
 test("finds aliased React hooks through the ordinary path scan", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-aliased-hooks-"));
   t.after(() => rm(root, { force: true, recursive: true }));

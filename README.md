@@ -15,6 +15,10 @@ Inspect candidates and leave code unchanged unless source proves the missing fac
 and relevant tests, scan the same root again, and report the exact finding delta.
 ```
 
+For persistent agent setups, copy [skills/legend-doctor/SKILL.md](skills/legend-doctor/SKILL.md) into the agent's
+skill directory (for Claude Code: `.claude/skills/legend-doctor/SKILL.md`); it packages this prompt, the scan
+commands, and the disposition contract.
+
 ## Run it
 
 ```bash
@@ -68,7 +72,8 @@ Scanned 1 files: 4 useState, 0 useEffect, 4 shown.
 Re-run legend-doctor after applying change findings; applied changes can reveal new ones.
 ```
 
-JSON is the agent interface. Each finding names the edit, proof, location, and required ownership boundary:
+JSON is the agent interface. The report root carries `schemaVersion` (currently `1`); version-gate any programmatic
+consumer on it. Each finding names the edit, proof, location, and required ownership boundary:
 
 ```json
 {

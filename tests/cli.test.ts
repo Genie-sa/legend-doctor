@@ -46,6 +46,7 @@ test("--disposition change keeps only change findings and practices", async t =>
   const { stdout } = await run(process.execPath, [CLI_PATH, root, "--json", "--disposition", "change"]);
   const report = JSON.parse(stdout) as AnalysisReport;
 
+  assert.equal(report.schemaVersion, 1);
   assert.equal(report.findings.length, 0);
   assert.deepEqual(
     report.practices.map(practice => [practice.action, practice.disposition]),

@@ -37,6 +37,7 @@ test("text output includes Legend practice findings", () => {
       message: "Batch these writes.",
       practice: "batch",
     }],
+    schemaVersion: 1,
   });
   assert.match(output, /store\.ts:8:3 \[batch-observable-writes\]/);
   assert.match(output, /1 shown/);
@@ -58,6 +59,7 @@ test("text output surfaces the keep-react-effect directive for review-effect fin
     }],
     hooks: { effects: 1, states: 0, total: 1 },
     practices: [],
+    schemaVersion: 1,
   });
   assert.match(output, /legend-doctor keep-react-effect/);
   assert.doesNotMatch(output, /Re-run legend-doctor/);
