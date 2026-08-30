@@ -1,0 +1,5 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "sortPackageJson": true,
+  "ignorePatterns": ["dist/**", "tools/oxlint/anti-slop/**", "tools/oxlint/stella/**"]
+}

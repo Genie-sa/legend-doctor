@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "node", "promise"],
+  "jsPlugins": [
+    { "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" },
+    { "name": "stella", "specifier": "./tools/oxlint/stella/index.ts" },
+    { "name": "local", "specifier": "./tools/oxlint/local/index.ts" }
+  ],
+  "env": {
+    "builtin": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error",
+    "style": "error",
+    "restriction": "error"
+  },
+  "rules": {
+    // Unsatisfiable pair with promise/prefer-await-to-callbacks and prefer-await-to-then
+    "oxc/no-async-await": "off",
+    // Unsatisfiable pair with import/no-default-export; named exports win
+    "import/no-named-export": "off",
+    "import/prefer-default-export": "off",
+    "anti-slop/no-chained-type-assertions": "error",
+    "anti-slop/no-conditional-empty-object-spread": "error",
+    "anti-slop/no-known-value-widening": "error",
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/no-object-parameters": "error",
+    "anti-slop/no-reflect-apply": "error",
+    "anti-slop/no-reflect-get": "error",
+    "anti-slop/no-runtime-typeof": "error",
+    "anti-slop/no-shape-in-symbol-names": "error",
+    "anti-slop/no-unknown-parameters": "error",
+    "anti-slop/no-unknown-returns": "error",
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-unsafe-dictionary-type": "error",
+    "anti-slop/no-widen-then-assert": "error",
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "stella/no-ambient-nondeterminism": "error",
+    "stella/no-async-context-enter-with": "error",
+    "stella/no-partial-record-satisfies": "error",
+    "stella/no-path-prefix-containment": "error",
+    "stella/no-swallowed-rejection": "error",
+    "stella/no-unvalidated-json-domain-cast": "error",
+    "stella/require-description": "error",
+    "stella/no-foreign-directive": "error",
+    "local/no-banned-type-assertions": "error",
+    "local/no-in-operator": "error",
+    "local/no-optional-function-parameters": "error",
+    "local/no-reexport-only-modules": "error",
+    "local/no-switch": "error"
+  },
+  "ignorePatterns": ["dist/**", ".claude/**", "tools/oxlint/**"]
+}

@@ -3,13 +3,17 @@
   "version": "0.0.1",
   "private": true,
   "description": "Agent-first React hook triage for Legend State",
-  "type": "module",
   "bin": {
     "legend-doctor": "./dist/src/cli.js"
   },
+  "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "eval": "npm run build && node dist/evals/run.js",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
@@ -17,7 +21,10 @@
     "typescript": "5.9.3"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@oxlint/plugins": "^1.80.0",
+    "@types/node": "^22.0.0",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0"
   },
   "engines": {
     "node": ">=22"
