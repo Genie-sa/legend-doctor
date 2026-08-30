@@ -168,11 +168,9 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   return sets;
 }
 
-export function isImportedHookCall(
-  call: ts.CallExpression,
-  localNames: ReadonlySet<string>,
-  namespaceNames: ReadonlySet<string>,
-  canonicalName:
+export interface HookCallQuery {
+  readonly call: ts.CallExpression;
+  readonly canonicalName:
     | "useCallback"
     | "useEffect"
     | "useImperativeHandle"
@@ -183,8 +181,17 @@ export function isImportedHookCall(
     | "useRef"
     | "useState"
     | "useUnmount"
-    | "useValue",
-): boolean {
+    | "useValue";
+  readonly localNames: ReadonlySet<string>;
+  readonly namespaceNames: ReadonlySet<string>;
+}
+
+export function isImportedHookCall({
+  call,
+  canonicalName,
+  localNames,
+  namespaceNames,
+}: HookCallQuery): boolean {
   const { expression } = call;
   if (ts.isIdentifier(expression)) {
     return localNames.has(expression.text);

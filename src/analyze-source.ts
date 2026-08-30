@@ -408,20 +408,31 @@ export function analyzeSource(
   });
 }
 
-export function analyzeSourceFile(
-  file: AnalysisFile,
-  reportFileName: string,
-  sourceComponents: ReadonlySet<string> = new Set(),
-  stateFlow: StateFlowIndex = new StateFlowIndex(),
-  childContracts: ChildContractResolver | null = null,
-  legendValueBridges: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
-  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>> = new Map(),
-  hookImports: HookImports = collectHookImports(file.sourceFile),
-): HookFinding[] {
+export interface SourceAnalysisRequest {
+  readonly childContracts?: ChildContractResolver | null;
+  readonly deferredCallbackHooks?: ReadonlyMap<string, ReadonlySet<number>>;
+  readonly file: AnalysisFile;
+  readonly hookImports?: HookImports | null;
+  readonly legendValueBridges?: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly reportFileName: string;
+  readonly sourceComponents?: ReadonlySet<string>;
+  readonly stateFlow?: StateFlowIndex;
+}
+
+export function analyzeSourceFile({
+  childContracts = null,
+  deferredCallbackHooks = new Map(),
+  file,
+  hookImports,
+  legendValueBridges = new Map(),
+  reportFileName,
+  sourceComponents = new Set(),
+  stateFlow = new StateFlowIndex(),
+}: SourceAnalysisRequest): HookFinding[] {
   return analyzeParsedSource(file.sourceFile, reportFileName, {
     childContracts,
     deferredCallbackHooks,
-    imports: hookImports,
+    imports: hookImports ?? collectHookImports(file.sourceFile),
     legendValueBridges,
     sourceComponents,
     stateFlow,
@@ -436,8 +447,18 @@ export function findingHookImports(file: AnalysisFile): HookImports | null {
 function containsFindingHookCall(node: ts.Node, imports: HookImports): boolean {
   if (
     ts.isCallExpression(node) &&
-    (isImportedHookCall(node, imports.useState, imports.reactNamespaces, "useState") ||
-      isImportedHookCall(node, imports.useEffect, imports.reactNamespaces, "useEffect"))
+    (isImportedHookCall({
+      call: node,
+      localNames: imports.useState,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: "useState",
+    }) ||
+      isImportedHookCall({
+        call: node,
+        localNames: imports.useEffect,
+        namespaceNames: imports.reactNamespaces,
+        canonicalName: "useEffect",
+      }))
   ) {
     return true;
   }
@@ -620,7 +641,12 @@ function collectStateCandidates(
   visit(sourceFile, (node) => {
     if (
       !ts.isCallExpression(node) ||
-      !isImportedHookCall(node, imports.useState, imports.reactNamespaces, "useState")
+      !isImportedHookCall({
+        call: node,
+        localNames: imports.useState,
+        namespaceNames: imports.reactNamespaces,
+        canonicalName: "useState",
+      })
     ) {
       return;
     }
@@ -1021,7 +1047,7 @@ function collectLeafConsumerProofs(
   return {
     ...booleanLeafConsumerProofs(analysis, proofs),
     ...scalarLeafConsumerProofs(analysis, callbacks, proofs),
-    asyncLeafStatuses: findAsyncLeafStatuses(
+    asyncLeafStatuses: findAsyncLeafStatuses({
       states,
       usageByState,
       safeCommandStates,
@@ -1030,7 +1056,7 @@ function collectLeafConsumerProofs(
       sourceComponents,
       childContracts,
       eventCallbacksByOwner,
-    ),
+    }),
     branchUnmountMoves: findBranchUnmountMoves(states, {
       safeCommandStates,
       stateFlow,
@@ -1203,25 +1229,25 @@ function collectClusterProofs(
     proofs;
   const siblingRenderCuts = collectSiblingRenderCuts(analysis, proofs);
   return {
-    effectDrafts: findEffectSynchronizedDrafts(
+    effectDrafts: findEffectSynchronizedDrafts({
       effects,
       states,
-      effectStateScopes,
+      scopes: effectStateScopes,
       usageByState,
       siblingRenderCuts,
       localComponents,
       sourceComponents,
-      effectDraftProofs(stateFlow),
-    ),
-    keyedSelections: analyzeKeyedSelections(
+      proofs: effectDraftProofs(stateFlow),
+    }),
+    keyedSelections: analyzeKeyedSelections({
       states,
       usageByState,
       safeCommandStates,
       statesWithCompanionWrites,
       imports,
       childContracts,
-    ),
-    listenerRefClusters: findListenerRefStateClusters(states, usageByState, effects, imports),
+    }),
+    listenerRefClusters: findListenerRefStateClusters({ states, usageByState, effects, imports }),
     observableClusters: findObservableStateClusters(states, {
       childContracts,
       knownComponents,
@@ -1287,21 +1313,23 @@ function classifyEffectFor(
     useValueBindingsByOwner,
   } = analysis;
   const scope = effect.owner ? effectStateScopes.get(effect.owner) : undefined;
-  return classifyEffect(
+  return classifyEffect({
     effect,
-    scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
-    scope?.byValue ?? EMPTY_STATE_CANDIDATES,
-    scope?.usageBySetter ?? EMPTY_STATE_USAGES,
-    effect.owner ? (useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS) : EMPTY_BINDINGS,
-    effect.owner
+    stateBySetter: scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
+    stateByValue: scope?.byValue ?? EMPTY_STATE_CANDIDATES,
+    usageBySetter: scope?.usageBySetter ?? EMPTY_STATE_USAGES,
+    useValueBindings: effect.owner
+      ? (useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)
+      : EMPTY_BINDINGS,
+    useObservableBindings: effect.owner
       ? (useObservableBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)
       : EMPTY_BINDINGS,
-    imports.useRef,
-    imports.reactNamespaces,
+    useRefBindings: imports.useRef,
+    reactNamespaces: imports.reactNamespaces,
     moduleScopeBindings,
     nonProductionHarness,
     childContracts,
-  );
+  });
 }
 
 interface StateAnalysisResult {
@@ -1697,7 +1725,12 @@ function unshadowedUseCallbackFactory(
 ): ts.ArrowFunction | ts.FunctionExpression | null {
   if (
     !ts.isCallExpression(initializer) ||
-    !isImportedHookCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback") ||
+    !isImportedHookCall({
+      call: initializer,
+      localNames: imports.useCallback,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: "useCallback",
+    }) ||
     initializer.arguments.length !== HOOK_CALL_ARITY
   ) {
     return null;
@@ -2550,7 +2583,12 @@ function memoHookCall(initializer: ts.Expression, imports: HookImports): MemoHoo
   const call = unwrapTransparentExpression(initializer);
   if (
     !ts.isCallExpression(call) ||
-    !isImportedHookCall(call, imports.useMemo, imports.reactNamespaces, "useMemo") ||
+    !isImportedHookCall({
+      call,
+      localNames: imports.useMemo,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: "useMemo",
+    }) ||
     call.arguments.length !== HOOK_CALL_ARITY
   ) {
     return null;
@@ -2694,7 +2732,12 @@ function useCallbackFactory(
 ): ts.ArrowFunction | ts.FunctionExpression | null {
   if (
     !ts.isCallExpression(initializer) ||
-    !isImportedHookCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback")
+    !isImportedHookCall({
+      call: initializer,
+      localNames: imports.useCallback,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: "useCallback",
+    })
   ) {
     return null;
   }
@@ -3435,7 +3478,12 @@ function mutationIsEventRooted(mutation: SetterMutation, state: StateCandidate):
     (ts.isArrowFunction(region) ||
       ts.isFunctionDeclaration(region) ||
       ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted(region, state.owner, "", new Set())
+    callbackIsEventRooted({
+      callback: region,
+      owner: state.owner,
+      dependencyName: "",
+      seen: new Set(),
+    })
   );
 }
 
@@ -3830,7 +3878,12 @@ function isBranchUnmountReset(
     (!ts.isArrowFunction(region) &&
       !ts.isFunctionDeclaration(region) &&
       !ts.isFunctionExpression(region)) ||
-    !callbackIsEventRooted(region, state.owner, "", new Set())
+    !callbackIsEventRooted({
+      callback: region,
+      owner: state.owner,
+      dependencyName: "",
+      seen: new Set(),
+    })
   ) {
     return false;
   }
@@ -5802,12 +5855,12 @@ function isIndependentTransportRenderCut(
   if (branchCallSite === null || branchSubtree === null) {
     return false;
   }
-  return hasIndependentRenderCutWitness(
-    branchCallSite.returned,
-    [branchSubtree],
+  return hasIndependentRenderCutWitness({
+    returned: branchCallSite.returned,
+    excluded: [branchSubtree],
     localComponents,
     sourceComponents,
-  );
+  });
 }
 
 function isCommandEndingBooleanState(state: StateCandidate, usage: StateUsage): boolean {
@@ -5856,13 +5909,13 @@ function stateRenderCutEvidence(inputs: StateClassificationInputs): StateRenderC
     hasIndependentVisibilitySetterTransport &&
     setterOwnedByValueCallSite(usage, state.owner) &&
     hasIndependentTransportRenderCut;
-  const callbackLeaf = findLazyCallbackLeaf(
+  const callbackLeaf = findLazyCallbackLeaf({
     state,
     usage,
     localComponents,
     sourceComponents,
-    LAZY_CALLBACK_LEAF_PROOFS,
-  );
+    proofs: LAZY_CALLBACK_LEAF_PROOFS,
+  });
   return {
     branchCallSite,
     callbackLeaf,
@@ -7582,7 +7635,7 @@ function isAsyncEventCommand(command: RuntimeFunctionLike, owner: RuntimeFunctio
     ts.isBlock(command.body) &&
     (command.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ??
       false) &&
-    callbackIsEventRooted(command, owner, "", new Set())
+    callbackIsEventRooted({ callback: command, owner, dependencyName: "", seen: new Set() })
   );
 }
 
@@ -7736,12 +7789,12 @@ function controlledLeafRenderCut(
   const controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlled)
     ? controlled.parent
     : controlled;
-  return hasIndependentRenderCutWitness(
-    callSite.returned,
-    [controlledSubtree],
+  return hasIndependentRenderCutWitness({
+    returned: callSite.returned,
+    excluded: [controlledSubtree],
     localComponents,
     sourceComponents,
-  )
+  })
     ? callSite
     : null;
 }
@@ -7788,12 +7841,12 @@ function controlledLeafProjectionCut(
     nodeWithin(controlled, consumer) ||
     nodeWithin(consumer, controlled) ||
     !shareUniqueOwnerReturn(controlled, consumer, state.owner) ||
-    !hasIndependentRenderCutWitness(
-      callSite.returned,
-      [controlled, consumer],
+    !hasIndependentRenderCutWitness({
+      returned: callSite.returned,
+      excluded: [controlled, consumer],
       localComponents,
       sourceComponents,
-    )
+    })
   ) {
     return null;
   }
@@ -7827,12 +7880,12 @@ function controlledSameCallSiteProjectionCut(
   const controlled: ts.Node = ts.isJsxOpeningElement(callSite.opening)
     ? callSite.opening.parent
     : callSite.opening;
-  return hasIndependentRenderCutWitness(
-    callSite.returned,
-    [controlled],
+  return hasIndependentRenderCutWitness({
+    returned: callSite.returned,
+    excluded: [controlled],
     localComponents,
     sourceComponents,
-  );
+  });
 }
 
 function cohesiveControlledLeafOwner(state: StateCandidate, usage: StateUsage): string | null {
@@ -7987,7 +8040,12 @@ function referenceIsEventRooted(reference: ts.Identifier, owner: RuntimeFunction
   ) {
     return false;
   }
-  return callbackIsEventRooted(callback, owner, reference.text, new Set());
+  return callbackIsEventRooted({
+    callback,
+    owner,
+    dependencyName: reference.text,
+    seen: new Set(),
+  });
 }
 
 function hasDirectInteractionSetter(
@@ -9211,12 +9269,12 @@ function projectionHopIsSafe(
     ts.isVariableDeclarationList(declaration.parent) &&
     (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
     bindingDeclarationCount(owner, declaration.name.text) === 1 &&
-    isSafeProjectionExpression(
-      declaration.initializer,
-      current.reference,
-      allowedCalls,
-      projectionMathCalls(owner),
-    )
+    isSafeProjectionExpression({
+      expression: declaration.initializer,
+      reference: current.reference,
+      allowedIdentifierCalls: allowedCalls,
+      allowedPropertyCalls: projectionMathCalls(owner),
+    })
   );
 }
 
@@ -9379,7 +9437,12 @@ function localProjectionFunctionIsPure(
     return false;
   }
   if (
-    !isSafeProjectionExpression(expression, expression, EMPTY_BINDINGS, projectionMathCalls(fn))
+    !isSafeProjectionExpression({
+      expression,
+      reference: expression,
+      allowedIdentifierCalls: EMPTY_BINDINGS,
+      allowedPropertyCalls: projectionMathCalls(fn),
+    })
   ) {
     return false;
   }
@@ -9766,7 +9829,12 @@ function memoizedOptionCallbackFor(
     setter,
     (node): node is ts.CallExpression =>
       ts.isCallExpression(node) &&
-      isImportedHookCall(node, imports.useMemo, imports.reactNamespaces, "useMemo"),
+      isImportedHookCall({
+        call: node,
+        localNames: imports.useMemo,
+        namespaceNames: imports.reactNamespaces,
+        canonicalName: "useMemo",
+      }),
     owner,
   );
   const factory = containingMemo?.arguments[0];
@@ -9892,7 +9960,12 @@ function sharedContainingMemoCall(
       setterCall,
       (node): node is ts.CallExpression =>
         ts.isCallExpression(node) &&
-        isImportedHookCall(node, imports.useMemo, imports.reactNamespaces, "useMemo"),
+        isImportedHookCall({
+          call: node,
+          localNames: imports.useMemo,
+          namespaceNames: imports.reactNamespaces,
+          canonicalName: "useMemo",
+        }),
       owner,
     );
     if (!containingMemo || (memoCall !== null && memoCall !== containingMemo)) {
@@ -10135,7 +10208,12 @@ function syncUseCallbackCommand(
     setterCall,
     (node): node is ts.CallExpression =>
       ts.isCallExpression(node) &&
-      isImportedHookCall(node, imports.useCallback, imports.reactNamespaces, "useCallback"),
+      isImportedHookCall({
+        call: node,
+        localNames: imports.useCallback,
+        namespaceNames: imports.reactNamespaces,
+        canonicalName: "useCallback",
+      }),
     owner,
   );
   const factory = memoCall?.arguments[0];

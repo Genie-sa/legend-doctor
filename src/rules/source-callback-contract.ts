@@ -67,12 +67,19 @@ const reactHookImportsCache = new WeakMap<ts.SourceFile, ReactHookImports>();
  * latest-callback ref, but every terminal invocation must remain under a
  * React effect. Unknown calls, stale ref storage, aliases, and escapes fail.
  */
-export function sourceHookDefersCallback(
-  source: SourceHookDeclaration,
-  argumentIndex: number,
-  property: string | null,
-  resolver: SourceHookResolver,
-): boolean {
+export interface SourceHookCallbackQuery {
+  readonly argumentIndex: number;
+  readonly property: string | null;
+  readonly resolver: SourceHookResolver;
+  readonly source: SourceHookDeclaration;
+}
+
+export function sourceHookDefersCallback({
+  argumentIndex,
+  property,
+  resolver,
+  source,
+}: SourceHookCallbackQuery): boolean {
   return hookDefersCallback(
     { argumentIndex, property, source },
     { depth: 0, resolver, visited: new Set() },

@@ -55,12 +55,19 @@ interface RegionScan {
   readonly stateBySetter: ReadonlyMap<string, StateCandidate>;
 }
 
-export function findListenerRefStateClusters(
-  states: readonly StateCandidate[],
-  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  effects: readonly EffectCandidate[],
-  imports: HookImports,
-): ReadonlyMap<StateCandidate, ListenerRefStateCluster> {
+export interface ListenerRefStateScan {
+  readonly effects: readonly EffectCandidate[];
+  readonly imports: HookImports;
+  readonly states: readonly StateCandidate[];
+  readonly usageByState: ReadonlyMap<StateCandidate, StateUsage>;
+}
+
+export function findListenerRefStateClusters({
+  effects,
+  imports,
+  states,
+  usageByState,
+}: ListenerRefStateScan): ReadonlyMap<StateCandidate, ListenerRefStateCluster> {
   const result = new Map<StateCandidate, ListenerRefStateCluster>();
   for (const [owner, ownerStates] of groupByOwner(states)) {
     for (const [state, cluster] of ownerClusters({
@@ -321,12 +328,12 @@ function callbackBindings(
       !ts.isIdentifier(node.name) ||
       !node.initializer ||
       !ts.isCallExpression(node.initializer) ||
-      !isImportedHookCall(
-        node.initializer,
-        imports.useCallback,
-        imports.reactNamespaces,
-        "useCallback",
-      ) ||
+      !isImportedHookCall({
+        call: node.initializer,
+        localNames: imports.useCallback,
+        namespaceNames: imports.reactNamespaces,
+        canonicalName: "useCallback",
+      }) ||
       bindingDeclarationCount(owner, node.name.text) !== 1
     ) {
       return;
@@ -519,7 +526,12 @@ function referenceInEventRootedCallback(node: ts.Node, state: StateCandidate): b
       ts.isFunctionExpression(callback)) &&
     !isAsync(callback) &&
     !containsAwaitOrYield(callback.body) &&
-    callbackIsEventRooted(callback, state.owner, state.valueName, new Set())
+    callbackIsEventRooted({
+      callback,
+      owner: state.owner,
+      dependencyName: state.valueName,
+      seen: new Set(),
+    })
   );
 }
 
@@ -552,7 +564,7 @@ function regionIsSynchronousEvent(
     (ts.isArrowFunction(region) ||
       ts.isFunctionDeclaration(region) ||
       ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted(region, owner, "", new Set())
+    callbackIsEventRooted({ callback: region, owner, dependencyName: "", seen: new Set() })
   );
 }
 

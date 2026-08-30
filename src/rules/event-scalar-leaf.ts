@@ -83,8 +83,11 @@ export function isReactiveHostPropScalarState(
   const projections = oneHopRenderProjectionReferences(
     state.owner,
     usage.directRenderNodes,
-    (expression, reference) =>
-      isSafeProjectionExpression(expression, reference, options.pureProjectionImports),
+    (query) =>
+      isSafeProjectionExpression({
+        ...query,
+        allowedIdentifierCalls: options.pureProjectionImports,
+      }),
   );
   if (!projections || projections.length === 0) {
     return false;
@@ -161,8 +164,12 @@ export function isSourceEventScalarLeafState(
   const projections = oneHopRenderProjectionReferences(
     state.owner,
     usage.directRenderNodes,
-    (expression, reference) =>
-      isSafeProjectionExpression(expression, reference, options.pureProjectionImports, mathCalls),
+    (query) =>
+      isSafeProjectionExpression({
+        ...query,
+        allowedIdentifierCalls: options.pureProjectionImports,
+        allowedPropertyCalls: mathCalls,
+      }),
   );
   if (!projections || projections.length < MIN_LEAF_SURFACES) {
     return false;
@@ -231,12 +238,12 @@ function isIndependentLeafCut(
     leaves.length >= MIN_LEAF_SURFACES &&
     leaves.length <= MAX_LEAF_SURFACES &&
     leafElements / jsxElementCount(state.owner) <= MAX_LEAF_ELEMENT_SHARE &&
-    hasIndependentRenderCutWitness(
-      collected.returned,
-      leaves,
-      options.localComponents,
-      options.sourceComponents,
-    )
+    hasIndependentRenderCutWitness({
+      returned: collected.returned,
+      excluded: leaves,
+      localComponents: options.localComponents,
+      sourceComponents: options.sourceComponents,
+    })
   );
 }
 

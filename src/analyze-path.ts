@@ -351,16 +351,16 @@ function analyzeSupportedFileEntry(entry: SupportedAnalysisFileEntry, pass: Anal
     analyzeHooks || analyzePractices ? createChildContractResolver(pass.context, entry.file) : null;
   if (analyzeHooks) {
     pass.accumulator.findings.push(
-      ...analyzeSourceFile(
-        entry.analysisFile,
-        entry.reportFileName,
-        pass.context.sourceIndex.componentsFor(entry.file),
+      ...analyzeSourceFile({
+        file: entry.analysisFile,
+        reportFileName: entry.reportFileName,
+        sourceComponents: pass.context.sourceIndex.componentsFor(entry.file),
         stateFlow,
         childContracts,
-        pass.context.sourceIndex.legendValueBridgesFor(entry.file),
-        pass.context.sourceIndex.deferredCallbackHooksFor(entry.file),
-        hookImports ?? undefined,
-      ),
+        legendValueBridges: pass.context.sourceIndex.legendValueBridgesFor(entry.file),
+        deferredCallbackHooks: pass.context.sourceIndex.deferredCallbackHooksFor(entry.file),
+        hookImports,
+      }),
     );
   }
   if (analyzePractices) {
@@ -380,17 +380,21 @@ function legendPracticeFindings(
     ...sourceIndex.observablePathsFor(entry.file),
   ]);
   const importedObservableFactories = sourceIndex.observableFactoriesFor(entry.file);
-  return analyzeLegendPracticesFile(
-    entry.analysisFile,
-    entry.reportFileName,
+  return analyzeLegendPracticesFile({
+    file: entry.analysisFile,
+    reportFileName: entry.reportFileName,
     importedObservables,
     importedObservableFactories,
-    isLegendPracticeEligible(entry.analysisFile, importedObservables, importedObservableFactories),
-    pass.context.installedLegendState,
-    sourceIndex.observableKeysFor(entry.file),
+    includeFindings: isLegendPracticeEligible(
+      entry.analysisFile,
+      importedObservables,
+      importedObservableFactories,
+    ),
+    installedLegendState: pass.context.installedLegendState,
+    importedObservableKeys: sourceIndex.observableKeysFor(entry.file),
     childContracts,
-    pass.compiledFiles.has(entry.file),
-  );
+    reactCompilerPackage: pass.compiledFiles.has(entry.file),
+  });
 }
 
 function recordEntryCoverage(
@@ -801,7 +805,7 @@ class ChildContracts implements ChildContractResolver {
       const source = this.resolveHookDeclaration(this.importerFile, hookName);
       return (
         source !== null &&
-        sourceHookDefersCallback(source, argumentIndex, property, this.hookResolver)
+        sourceHookDefersCallback({ source, argumentIndex, property, resolver: this.hookResolver })
       );
     });
   }
@@ -826,7 +830,12 @@ class ChildContracts implements ChildContractResolver {
         const source = this.resolveComponentSource(this.importerFile, componentName);
         return (
           source !== null &&
-          propDefersArrayItemCallback(source, propName, callbackProperty, this.callbackSources)
+          propDefersArrayItemCallback({
+            source,
+            propName,
+            callbackProp: callbackProperty,
+            resolver: this.callbackSources,
+          })
         );
       },
     );
@@ -879,7 +888,12 @@ class ChildContracts implements ChildContractResolver {
         const source = this.resolveComponentSource(this.importerFile, componentName);
         return (
           source !== null &&
-          propObjectCallbackIsDeferred(source, propName, callbackProperty, this.callbackSources)
+          propObjectCallbackIsDeferred({
+            source,
+            propName,
+            callbackProperty,
+            resolver: this.callbackSources,
+          })
         );
       },
     );
@@ -912,7 +926,13 @@ class ChildContracts implements ChildContractResolver {
   private hookDefersCallback(file: string, name: string, argumentIndex: number): boolean {
     const source = this.resolveHookDeclaration(file, name);
     return (
-      source !== null && sourceHookDefersCallback(source, argumentIndex, null, this.hookResolver)
+      source !== null &&
+      sourceHookDefersCallback({
+        source,
+        argumentIndex,
+        property: null,
+        resolver: this.hookResolver,
+      })
     );
   }
 
@@ -999,12 +1019,12 @@ class ChildContracts implements ChildContractResolver {
     return importedHookBindings(file.sourceFile)
       .filter((binding) => this.bindingResolvesTo(file, binding, query.declaration))
       .map((binding) =>
-        keyedCursorConsumerResult(
-          file.sourceFile,
-          binding,
-          query.stateProperty,
-          query.setterProperty,
-        ),
+        keyedCursorConsumerResult({
+          sourceFile: file.sourceFile,
+          hookBinding: binding,
+          cursorProperty: query.stateProperty,
+          setterProperty: query.setterProperty,
+        }),
       );
   }
 

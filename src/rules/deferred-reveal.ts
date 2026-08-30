@@ -290,7 +290,7 @@ function renderGateSubtree(node: ts.Node, boundary: ts.Node): JsxSubtreeNode | n
     if (
       ts.isConditionalExpression(current) &&
       nodeWithin(node, current.condition) &&
-      isSafeProjectionExpression(current.condition, node)
+      isSafeProjectionExpression({ expression: current.condition, reference: node })
     ) {
       return jsxSubtreeAncestors(current, boundary)[0] ?? null;
     }
@@ -299,7 +299,7 @@ function renderGateSubtree(node: ts.Node, boundary: ts.Node): JsxSubtreeNode | n
       (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
         current.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
       nodeWithin(node, current.left) &&
-      isSafeProjectionExpression(current.left, node)
+      isSafeProjectionExpression({ expression: current.left, reference: node })
     ) {
       const subtree = directJsxSubtree(current.right, boundary);
       if (subtree) {
@@ -427,12 +427,19 @@ export function expressionContainsJsx(expression: ts.Expression): boolean {
   return found;
 }
 
-export function isSafeProjectionExpression(
-  expression: ts.Expression,
-  reference: ts.Node,
-  allowedIdentifierCalls: ReadonlySet<string> = EMPTY_BINDINGS,
-  allowedPropertyCalls: ReadonlySet<string> = EMPTY_BINDINGS,
-): boolean {
+export interface SafeProjectionQuery {
+  readonly allowedIdentifierCalls?: ReadonlySet<string>;
+  readonly allowedPropertyCalls?: ReadonlySet<string>;
+  readonly expression: ts.Expression;
+  readonly reference: ts.Node;
+}
+
+export function isSafeProjectionExpression({
+  allowedIdentifierCalls = EMPTY_BINDINGS,
+  allowedPropertyCalls = EMPTY_BINDINGS,
+  expression,
+  reference,
+}: SafeProjectionQuery): boolean {
   if (!nodeWithin(reference, expression)) {
     return false;
   }

@@ -173,26 +173,8 @@ export function directReactHookFormEventCallbacks(
   return callbacks;
 }
 
-export function findAsyncLeafStatuses(
-  states: readonly StateCandidate[],
-  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  safeCommandStates: ReadonlySet<StateCandidate>,
-  reactiveMutationAffectedStates: ReadonlySet<StateCandidate>,
-  localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>,
-  childContracts: ChildContractResolver | null,
-  eventCallbacksByOwner: ReadonlyMap<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>,
-): AsyncLeafStatusAnalysis {
-  const inputs: AsyncLeafStatusInputs = {
-    childContracts,
-    eventCallbacksByOwner,
-    localComponents,
-    reactiveMutationAffectedStates,
-    safeCommandStates,
-    sourceComponents,
-    states,
-    usageByState,
-  };
+export function findAsyncLeafStatuses(inputs: AsyncLeafStatusInputs): AsyncLeafStatusAnalysis {
+  const { states } = inputs;
   const buckets = {
     cohesive: new Set<StateCandidate>(),
     isolated: new Set<StateCandidate>(),
@@ -357,12 +339,12 @@ function hasRenderCut(
 ): boolean {
   return (
     jsxElementCount(owner) >= DENSE_JSX_ELEMENT_COUNT ||
-    hasIndependentRenderCutWitness(
-      leaves.returned,
-      leaves.boundaries,
-      inputs.localComponents,
-      inputs.sourceComponents,
-    )
+    hasIndependentRenderCutWitness({
+      returned: leaves.returned,
+      excluded: leaves.boundaries,
+      localComponents: inputs.localComponents,
+      sourceComponents: inputs.sourceComponents,
+    })
   );
 }
 
@@ -1118,7 +1100,7 @@ function isSafeLeafProjectionReference(node: ts.Node, owner: RuntimeFunctionLike
     current = current.parent
   ) {
     if (ts.isConditionalExpression(current) && nodeWithin(node, current.condition)) {
-      return isSafeProjectionExpression(current.condition, node);
+      return isSafeProjectionExpression({ expression: current.condition, reference: node });
     }
     if (
       ts.isBinaryExpression(current) &&
@@ -1126,7 +1108,7 @@ function isSafeLeafProjectionReference(node: ts.Node, owner: RuntimeFunctionLike
         current.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
       nodeWithin(node, current.left)
     ) {
-      return isSafeProjectionExpression(current.left, node);
+      return isSafeProjectionExpression({ expression: current.left, reference: node });
     }
   }
   return false;

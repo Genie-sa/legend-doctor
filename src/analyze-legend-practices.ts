@@ -92,14 +92,23 @@ interface SetCall {
 type NamedVariableDeclaration = ts.VariableDeclaration & { name: ts.Identifier };
 type NamedParameter = ts.ParameterDeclaration & { name: ts.Identifier };
 
-export function analyzeLegendPractices(
-  sourceText: string,
-  fileName: string,
-  importedObservables: ReadonlySet<string> = new Set(),
-  importedObservableFactories: ReadonlySet<string> = new Set(),
-  installedLegendState: InstalledLegendState | null = null,
-  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
-): LegendPracticeFinding[] {
+export interface LegendPracticesSourceRequest {
+  readonly fileName: string;
+  readonly importedObservableFactories?: ReadonlySet<string>;
+  readonly importedObservableKeys?: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly importedObservables?: ReadonlySet<string>;
+  readonly installedLegendState?: InstalledLegendState | null;
+  readonly sourceText: string;
+}
+
+export function analyzeLegendPractices({
+  fileName,
+  importedObservableFactories = new Set(),
+  importedObservableKeys = new Map(),
+  importedObservables = new Set(),
+  installedLegendState = null,
+  sourceText,
+}: LegendPracticesSourceRequest): LegendPracticeFinding[] {
   const sourceFile = ts.createSourceFile(
     fileName,
     sourceText,
@@ -119,17 +128,29 @@ export function analyzeLegendPractices(
   });
 }
 
-export function analyzeLegendPracticesFile(
-  file: AnalysisFile,
-  reportFileName: string,
-  importedObservables: ReadonlySet<string> = new Set(),
-  importedObservableFactories: ReadonlySet<string> = new Set(),
+export interface LegendPracticesFileRequest {
+  readonly childContracts?: ChildContractResolver | null;
+  readonly file: AnalysisFile;
+  readonly importedObservableFactories?: ReadonlySet<string>;
+  readonly importedObservableKeys?: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly importedObservables?: ReadonlySet<string>;
+  readonly includeFindings?: boolean;
+  readonly installedLegendState?: InstalledLegendState | null;
+  readonly reactCompilerPackage?: boolean;
+  readonly reportFileName: string;
+}
+
+export function analyzeLegendPracticesFile({
+  childContracts = null,
+  file,
+  importedObservableFactories = new Set(),
+  importedObservableKeys = new Map(),
+  importedObservables = new Set(),
   includeFindings = true,
-  installedLegendState: InstalledLegendState | null = null,
-  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
-  childContracts: ChildContractResolver | null = null,
+  installedLegendState = null,
   reactCompilerPackage = false,
-): LegendPracticeFinding[] {
+  reportFileName,
+}: LegendPracticesFileRequest): LegendPracticeFinding[] {
   const findings = analyzeParsedLegendPractices({
     childContracts,
     fileName: reportFileName,
@@ -150,13 +171,13 @@ function analyzeParsedLegendPractices(request: LegendPracticesRequest): LegendPr
   }
   const imports = collectHookImports(sourceFile);
   const observableBindings = resolveObservableBindings(request, imports);
-  const legacyFindings = findLegacyUseValuePractices(
+  const legacyFindings = findLegacyUseValuePractices({
     sourceFile,
     fileName,
     imports,
     observableBindings,
-    request.installedLegendState,
-  );
+    installedLegendState: request.installedLegendState,
+  });
   if (observableBindings.size === 0) {
     return [...legacyFindings];
   }
@@ -179,14 +200,14 @@ function collectMemberFindings(
   const { childContracts, fileName, sourceFile } = request;
   const observableKeys = collectObservableKeys(request, imports, observableBindings);
   const findings = [
-    ...findObservableReadPractices(
+    ...findObservableReadPractices({
       sourceFile,
       fileName,
       imports,
       observableBindings,
       observableKeys,
       childContracts,
-    ),
+    }),
   ];
   if (!request.reactCompilerPackage) {
     findings.push(...findObservableCloneWritePractices(sourceFile, fileName, observableBindings));
@@ -357,12 +378,12 @@ function recordBindingNode(node: ts.Node, scan: BindingScan): void {
 function recordUseValueInput(node: ts.Node, scan: BindingScan): void {
   if (
     !ts.isCallExpression(node) ||
-    !isImportedHookCall(
-      node,
-      scan.imports.useValue,
-      scan.imports.legendReactNamespaces,
-      "useValue",
-    ) ||
+    !isImportedHookCall({
+      call: node,
+      localNames: scan.imports.useValue,
+      namespaceNames: scan.imports.legendReactNamespaces,
+      canonicalName: "useValue",
+    }) ||
     node.arguments.length === 0
   ) {
     return;

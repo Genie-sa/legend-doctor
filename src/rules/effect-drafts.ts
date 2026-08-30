@@ -29,6 +29,7 @@ import {
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
+import type { RenderCutWitnessQuery } from "./state-proofs.js";
 import type { RuntimeFunctionLike } from "../ast.js";
 import { callbackHasCleanup } from "./effects.js";
 import ts from "typescript";
@@ -68,12 +69,7 @@ export interface EffectDraftProofs {
     usage: StateUsage,
     owner: RuntimeFunctionLike,
   ) => DirectReturnCallSite | null;
-  hasIndependentRenderCutWitness: (
-    returned: ts.Expression,
-    excluded: readonly ts.Node[],
-    localComponents: ReadonlySet<string>,
-    sourceComponents: ReadonlySet<string>,
-  ) => boolean;
+  hasIndependentRenderCutWitness: (query: RenderCutWitnessQuery) => boolean;
   isCustomHookOwner: (owner: RuntimeFunctionLike) => boolean;
   nearestMutationFunction: (node: ts.Node, owner: RuntimeFunctionLike) => RuntimeFunctionLike;
   setterMutationsCanCooccur: (
@@ -122,16 +118,27 @@ interface SetterMutation {
 const MIN_OWNER_JSX = 12;
 const MAX_CUT_SHARE = 0.4;
 
-export function findEffectSynchronizedDrafts(
-  effects: readonly EffectCandidate[],
-  states: readonly StateCandidate[],
-  scopes: ReadonlyMap<RuntimeFunctionLike, EffectDraftScope>,
-  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  siblingRenderCuts: ReadonlyMap<StateCandidate, unknown>,
-  localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>,
-  proofs: EffectDraftProofs,
-): EffectDraftAnalysis {
+export interface EffectDraftSearch {
+  readonly effects: readonly EffectCandidate[];
+  readonly localComponents: ReadonlySet<string>;
+  readonly proofs: EffectDraftProofs;
+  readonly scopes: ReadonlyMap<RuntimeFunctionLike, EffectDraftScope>;
+  readonly siblingRenderCuts: ReadonlyMap<StateCandidate, unknown>;
+  readonly sourceComponents: ReadonlySet<string>;
+  readonly states: readonly StateCandidate[];
+  readonly usageByState: ReadonlyMap<StateCandidate, StateUsage>;
+}
+
+export function findEffectSynchronizedDrafts({
+  effects,
+  localComponents,
+  proofs,
+  scopes,
+  siblingRenderCuts,
+  sourceComponents,
+  states,
+  usageByState,
+}: EffectDraftSearch): EffectDraftAnalysis {
   const context: DraftContext = {
     effects,
     localComponents,
@@ -282,7 +289,12 @@ function isEventRootedEditRegion(
     (ts.isArrowFunction(region) ||
       ts.isFunctionDeclaration(region) ||
       ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted(region, state.owner, "", new Set())
+    callbackIsEventRooted({
+      callback: region,
+      owner: state.owner,
+      dependencyName: "",
+      seen: new Set(),
+    })
   );
 }
 
@@ -793,12 +805,12 @@ function hasLocalRenderCutWitness(
   const returned = draft.context.proofs.uniqueReturnedExpression(draft.owner);
   return (
     returned !== null &&
-    draft.context.proofs.hasIndependentRenderCutWitness(
+    draft.context.proofs.hasIndependentRenderCutWitness({
+      excluded: localCuts,
+      localComponents: draft.context.localComponents,
       returned,
-      localCuts,
-      draft.context.localComponents,
-      draft.context.sourceComponents,
-    )
+      sourceComponents: draft.context.sourceComponents,
+    })
   );
 }
 

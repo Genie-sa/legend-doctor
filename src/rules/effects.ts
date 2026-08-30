@@ -113,19 +113,25 @@ function soleReturnStatementBody(
     : undefined;
 }
 
-export function classifyEffect(
-  effect: EffectCandidate,
-  stateBySetter: ReadonlyMap<string, StateCandidate>,
-  stateByValue: ReadonlyMap<string, StateCandidate>,
-  usageBySetter: ReadonlyMap<string, StateUsage>,
-  useValueBindings: ReadonlySet<string>,
-  useObservableBindings: ReadonlySet<string>,
-  useRefBindings: ReadonlySet<string>,
-  reactNamespaces: ReadonlySet<string>,
-  moduleScopeBindings: ReadonlySet<string>,
-  nonProductionHarness: boolean,
-  childContracts: ChildContractResolver | null,
-): ClassifiedEffect {
+export interface EffectClassificationRequest extends EffectClassificationContext {
+  readonly effect: EffectCandidate;
+  readonly nonProductionHarness: boolean;
+}
+
+export function classifyEffect(request: EffectClassificationRequest): ClassifiedEffect {
+  const {
+    childContracts,
+    effect,
+    moduleScopeBindings,
+    nonProductionHarness,
+    reactNamespaces,
+    stateBySetter,
+    stateByValue,
+    usageBySetter,
+    useObservableBindings,
+    useRefBindings,
+    useValueBindings,
+  } = request;
   if (nonProductionHarness) {
     return harnessEffect();
   }
@@ -1031,12 +1037,12 @@ function isSeededCommittedRefDeclaration(
     declaration.name.text === query.refName &&
     initializer !== undefined &&
     ts.isCallExpression(initializer) &&
-    isImportedHookCall(
-      initializer,
-      query.context.useRefBindings,
-      query.context.reactNamespaces,
-      "useRef",
-    ) &&
+    isImportedHookCall({
+      call: initializer,
+      localNames: query.context.useRefBindings,
+      namespaceNames: query.context.reactNamespaces,
+      canonicalName: "useRef",
+    }) &&
     importedHookIsUnshadowed(initializer, query.owner) &&
     initializer.arguments.length === 1 &&
     ts.isIdentifier(initializer.arguments[0]!) &&
@@ -1311,7 +1317,12 @@ function localCommittedRefBindings(
       ts.isIdentifier(node.name) &&
       node.initializer &&
       ts.isCallExpression(node.initializer) &&
-      isImportedHookCall(node.initializer, useRefBindings, reactNamespaces, "useRef") &&
+      isImportedHookCall({
+        call: node.initializer,
+        localNames: useRefBindings,
+        namespaceNames: reactNamespaces,
+        canonicalName: "useRef",
+      }) &&
       importedHookIsUnshadowed(node.initializer, owner) &&
       bindingDeclarationCount(owner, node.name.text) === 1
     ) {

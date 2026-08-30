@@ -1949,12 +1949,22 @@ test("shares one cached AST across source indexing and both detector families", 
   const factories = context.sourceIndex.observableFactoriesFor(screenPath);
 
   assert.deepEqual(
-    analyzeSourceFile(file, reportName, components),
+    analyzeSourceFile({ file, reportFileName: reportName, sourceComponents: components }),
     analyzeSource(screenSource, reportName, components),
   );
   assert.deepEqual(
-    analyzeLegendPracticesFile(file, reportName, observables, factories),
-    analyzeLegendPractices(screenSource, reportName, observables, factories),
+    analyzeLegendPracticesFile({
+      file,
+      reportFileName: reportName,
+      importedObservables: observables,
+      importedObservableFactories: factories,
+    }),
+    analyzeLegendPractices({
+      sourceText: screenSource,
+      fileName: reportName,
+      importedObservables: observables,
+      importedObservableFactories: factories,
+    }),
   );
 
   const report = await analyzePath(root, context);
@@ -2015,8 +2025,8 @@ test("keeps JavaScript and JSX practice results stable through the cached parser
     const [file] = project.files;
     assert.ok(file);
     assert.deepEqual(
-      analyzeLegendPracticesFile(file, fileName),
-      analyzeLegendPractices(source, fileName),
+      analyzeLegendPracticesFile({ file, reportFileName: fileName }),
+      analyzeLegendPractices({ sourceText: source, fileName }),
       extension,
     );
   }

@@ -8,13 +8,21 @@ import { visit } from "../ast.js";
 
 const LEGACY_HOOKS = new Set(["useSelector", "use$"]);
 
-export function findLegacyUseValuePractices(
-  sourceFile: ts.SourceFile,
-  fileName: string,
-  imports: HookImports,
-  observableBindings: ReadonlySet<string>,
-  installedLegendState: InstalledLegendState | null = null,
-): readonly LegendPracticeFinding[] {
+export interface LegacyUseValueScan {
+  readonly fileName: string;
+  readonly imports: HookImports;
+  readonly installedLegendState?: InstalledLegendState | null;
+  readonly observableBindings: ReadonlySet<string>;
+  readonly sourceFile: ts.SourceFile;
+}
+
+export function findLegacyUseValuePractices({
+  fileName,
+  imports,
+  installedLegendState = null,
+  observableBindings,
+  sourceFile,
+}: LegacyUseValueScan): readonly LegendPracticeFinding[] {
   if (imports.legacyUseValue.size === 0 && imports.legendReactNamespaces.size === 0) {
     return [];
   }

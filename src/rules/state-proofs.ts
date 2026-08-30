@@ -47,12 +47,19 @@ const jsxElementCounts = new WeakMap<ts.Node, number>();
 
 export { stateMayHoldCallable, stateTypeMayBeCallable } from "./callable-state.js";
 
-export function hasIndependentRenderCutWitness(
-  returned: ts.Expression,
-  excluded: readonly ts.Node[],
-  localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>,
-): boolean {
+export interface RenderCutWitnessQuery {
+  readonly excluded: readonly ts.Node[];
+  readonly localComponents: ReadonlySet<string>;
+  readonly returned: ts.Expression;
+  readonly sourceComponents: ReadonlySet<string>;
+}
+
+export function hasIndependentRenderCutWitness({
+  excluded,
+  localComponents,
+  returned,
+  sourceComponents,
+}: RenderCutWitnessQuery): boolean {
   let hasIndependentComponent = false;
   let independentElements = 0;
   visitSkippingNestedRuntimeFunctions(returned, (node) => {
@@ -132,10 +139,7 @@ function isComponentBoundaryName(name: string): boolean {
 export function oneHopRenderProjectionReferences(
   owner: RuntimeFunctionLike,
   renderNodes: readonly ts.Node[],
-  isAllowedProjection: (
-    expression: ts.Expression,
-    reference: ts.Node,
-  ) => boolean = isSafeProjectionExpression,
+  isAllowedProjection: typeof isSafeProjectionExpression = isSafeProjectionExpression,
 ): readonly ts.Identifier[] | null {
   if (renderNodes.length === 0 || renderNodes.some((node) => !ts.isIdentifier(node))) {
     return null;
@@ -148,7 +152,9 @@ export function oneHopRenderProjectionReferences(
   const projection = constProjectionDeclaration(declaration, owner, renderNodes);
   if (
     !projection ||
-    !renderNodes.every((node) => isAllowedProjection(projection.initializer, node))
+    !renderNodes.every((node) =>
+      isAllowedProjection({ expression: projection.initializer, reference: node }),
+    )
   ) {
     return null;
   }
@@ -204,14 +210,14 @@ function nextProjectionHop(
   if (
     !projection ||
     !references.every((node) =>
-      isSafeProjectionExpression(
-        projection.initializer,
-        node,
-        EMPTY_BINDINGS,
-        sourceHasRuntimeBinding(owner.getSourceFile(), "Math")
+      isSafeProjectionExpression({
+        expression: projection.initializer,
+        reference: node,
+        allowedIdentifierCalls: EMPTY_BINDINGS,
+        allowedPropertyCalls: sourceHasRuntimeBinding(owner.getSourceFile(), "Math")
           ? EMPTY_BINDINGS
           : PURE_MATH_PROJECTION_CALLS,
-      ),
+      }),
     )
   ) {
     return null;
@@ -409,9 +415,13 @@ function stateReadIsEventCommand(
   return (
     candidate !== undefined &&
     (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
-    callbackIsEventRooted(candidate, state.owner, state.valueName, new Set(), (root) =>
-      additionalRoots.has(root),
-    )
+    callbackIsEventRooted({
+      callback: candidate,
+      owner: state.owner,
+      dependencyName: state.valueName,
+      seen: new Set(),
+      additionalRoot: (root) => additionalRoots.has(root),
+    })
   );
 }
 
@@ -430,9 +440,13 @@ function callbackOrAncestorIsEventRooted(
   ) {
     if (
       isPlainFunction(candidate) &&
-      callbackIsEventRooted(candidate, state.owner, state.valueName, new Set(), (root) =>
-        additionalRoots.has(root),
-      )
+      callbackIsEventRooted({
+        callback: candidate,
+        owner: state.owner,
+        dependencyName: state.valueName,
+        seen: new Set(),
+        additionalRoot: (root) => additionalRoots.has(root),
+      })
     ) {
       return true;
     }
@@ -440,13 +454,21 @@ function callbackOrAncestorIsEventRooted(
   return false;
 }
 
-export function callbackIsEventRooted(
-  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  owner: RuntimeFunctionLike,
-  dependencyName: string,
-  seen: ReadonlySet<string>,
-  additionalRoot: AdditionalEventRoot = () => false,
-): boolean {
+export interface EventRootQuery {
+  readonly additionalRoot?: AdditionalEventRoot;
+  readonly callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression;
+  readonly dependencyName: string;
+  readonly owner: RuntimeFunctionLike;
+  readonly seen: ReadonlySet<string>;
+}
+
+export function callbackIsEventRooted({
+  additionalRoot = () => false,
+  callback,
+  dependencyName,
+  owner,
+  seen,
+}: EventRootQuery): boolean {
   if (additionalRoot(callback, owner)) {
     return true;
   }
@@ -558,13 +580,13 @@ function eventReferenceIsRooted(reference: ts.Identifier, trace: EventRootTrace)
   return (
     caller !== null &&
     isPlainFunction(caller) &&
-    callbackIsEventRooted(
-      caller,
-      trace.owner,
-      trace.dependencyName,
-      trace.seen,
-      trace.additionalRoot,
-    )
+    callbackIsEventRooted({
+      callback: caller,
+      owner: trace.owner,
+      dependencyName: trace.dependencyName,
+      seen: trace.seen,
+      additionalRoot: trace.additionalRoot,
+    })
   );
 }
 
@@ -614,14 +636,22 @@ export function isSafeJsxProjectionReference(
       initializer !== undefined &&
       ts.isJsxExpression(initializer) &&
       initializer.expression !== undefined &&
-      isSafeProjectionExpression(initializer.expression, node, allowedIdentifierCalls)
+      isSafeProjectionExpression({
+        expression: initializer.expression,
+        reference: node,
+        allowedIdentifierCalls,
+      })
     );
   }
   const expression = findAncestorUntil(node, ts.isJsxExpression, boundary);
   return (
     expression !== null &&
     expression.expression !== undefined &&
-    isSafeProjectionExpression(expression.expression, node, allowedIdentifierCalls)
+    isSafeProjectionExpression({
+      expression: expression.expression,
+      reference: node,
+      allowedIdentifierCalls,
+    })
   );
 }
 
@@ -1099,7 +1129,12 @@ function isPureSubsetFilter(call: ts.CallExpression, boundary: ts.Node): boolean
   });
   return (
     callsAreReadOnly &&
-    isSafeProjectionExpression(callback.body, callback.body, EMPTY_BINDINGS, allowedCalls)
+    isSafeProjectionExpression({
+      expression: callback.body,
+      reference: callback.body,
+      allowedIdentifierCalls: EMPTY_BINDINGS,
+      allowedPropertyCalls: allowedCalls,
+    })
   );
 }
 

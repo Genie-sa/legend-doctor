@@ -21,12 +21,19 @@ import { uniqueVariableDeclaration } from "./state-proofs.js";
 export type HookConsumerResult = "none" | "safe" | "unsafe";
 
 /** Proves one imported hook result is broadcast only to stable keyed row presentation. */
-export function keyedCursorConsumerResult(
-  sourceFile: ts.SourceFile,
-  hookBinding: string,
-  cursorProperty: string,
-  setterProperty: string,
-): HookConsumerResult {
+export interface KeyedCursorConsumerQuery {
+  readonly cursorProperty: string;
+  readonly hookBinding: string;
+  readonly setterProperty: string;
+  readonly sourceFile: ts.SourceFile;
+}
+
+export function keyedCursorConsumerResult({
+  cursorProperty,
+  hookBinding,
+  setterProperty,
+  sourceFile,
+}: KeyedCursorConsumerQuery): HookConsumerResult {
   if (declaresRuntimeBinding(sourceFile, hookBinding)) {
     return "unsafe";
   }
@@ -441,7 +448,12 @@ function isImportedUseCallback(call: ts.CallExpression): boolean {
   return (
     root !== null &&
     !bindingIsShadowed(call, root.text) &&
-    isImportedHookCall(call, imports.useCallback, imports.reactNamespaces, "useCallback")
+    isImportedHookCall({
+      call,
+      localNames: imports.useCallback,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: "useCallback",
+    })
   );
 }
 

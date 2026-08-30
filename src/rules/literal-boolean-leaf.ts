@@ -350,7 +350,11 @@ function conditionalPresentationSurface(
     nearestNestedFunction(projection, owner) ||
     nearestRepeatedRenderCall(projection, owner) ||
     !condition ||
-    !isSafeProjectionExpression(condition, projection, pureProjectionImports) ||
+    !isSafeProjectionExpression({
+      expression: condition,
+      reference: projection,
+      allowedIdentifierCalls: pureProjectionImports,
+    }) ||
     findAncestorUntil(projection, ts.isJsxAttribute, owner)
   ) {
     return null;
@@ -374,8 +378,11 @@ function presentationProjections(
     const aliases =
       declaration?.initializer && containsJsx(declaration.initializer)
         ? null
-        : oneHopRenderProjectionReferences(state.owner, [renderNode], (expression, reference) =>
-            isSafeProjectionExpression(expression, reference, pureProjectionImports),
+        : oneHopRenderProjectionReferences(state.owner, [renderNode], (query) =>
+            isSafeProjectionExpression({
+              ...query,
+              allowedIdentifierCalls: pureProjectionImports,
+            }),
           );
     for (const projection of aliases ?? [renderNode]) {
       projections.set(projection.getStart(), projection);

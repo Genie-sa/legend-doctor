@@ -189,7 +189,12 @@ function hasIndependentSinkWitness(
     sinks !== null &&
     returned !== null &&
     sinks.length >= MINIMUM_INDEPENDENT_SINKS &&
-    hasIndependentRenderCutWitness(returned, sinks, proofs.localComponents, proofs.sourceComponents)
+    hasIndependentRenderCutWitness({
+      returned,
+      excluded: sinks,
+      localComponents: proofs.localComponents,
+      sourceComponents: proofs.sourceComponents,
+    })
   );
 }
 

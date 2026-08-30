@@ -253,7 +253,7 @@ function isEventRootedTransition(node: ts.CallExpression, owner: RuntimeFunction
     (ts.isArrowFunction(caller) ||
       ts.isFunctionDeclaration(caller) ||
       ts.isFunctionExpression(caller)) &&
-    callbackIsEventRooted(caller, owner, "", new Set())
+    callbackIsEventRooted({ callback: caller, owner, dependencyName: "", seen: new Set() })
   );
 }
 

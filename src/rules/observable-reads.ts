@@ -74,21 +74,23 @@ interface UseValueDeclaration {
   readonly owner: RuntimeFunctionLike;
 }
 
+export interface ObservableReadRequest {
+  readonly childContracts?: ChildContractResolver | null;
+  readonly fileName: string;
+  readonly imports: HookImports;
+  readonly observableBindings: ReadonlySet<string>;
+  readonly observableKeys?: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly sourceFile: ts.SourceFile;
+}
+
 export function findObservableReadPractices(
-  sourceFile: ts.SourceFile,
-  fileName: string,
-  imports: HookImports,
-  observableBindings: ReadonlySet<string>,
-  observableKeys: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
-  childContracts: ChildContractResolver | null = null,
+  request: ObservableReadRequest,
 ): LegendPracticeFinding[] {
+  const { sourceFile } = request;
   const scan: ObservableReadScan = {
-    childContracts,
-    fileName,
-    imports,
-    observableBindings,
-    observableKeys,
-    sourceFile,
+    ...request,
+    childContracts: request.childContracts ?? null,
+    observableKeys: request.observableKeys ?? new Map(),
   };
   const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, (node) => {
@@ -688,12 +690,12 @@ function localBindingIsRenderOwned(
     !ts.isOmittedExpression(declaration.name.elements[0]) &&
     bindingContainsName(declaration.name.elements[0].name, name) &&
     ts.isCallExpression(initializer) &&
-    isImportedHookCall(
-      initializer,
-      ownership.imports.useState,
-      ownership.imports.reactNamespaces,
-      "useState",
-    )
+    isImportedHookCall({
+      call: initializer,
+      localNames: ownership.imports.useState,
+      namespaceNames: ownership.imports.reactNamespaces,
+      canonicalName: "useState",
+    })
   ) {
     return true;
   }
@@ -792,7 +794,9 @@ function eventRootedSnapshotSource(
   if (sourceProvenEffectJsxCallback(callback, scan.childContracts)) {
     return "source-proven-effect";
   }
-  return callbackIsEventRooted(callback, owner, "", new Set()) ? "react-or-event" : null;
+  return callbackIsEventRooted({ callback, owner, dependencyName: "", seen: new Set() })
+    ? "react-or-event"
+    : null;
 }
 
 function provenNonTrackingCallbackSource(
@@ -887,7 +891,12 @@ function isDirectHookCallback(
     hook === "useMount" || hook === "useUnmount"
       ? imports.legendReactNamespaces
       : imports.reactNamespaces;
-  return isImportedHookCall(parent, imports[hook], namespaces, hook);
+  return isImportedHookCall({
+    call: parent,
+    localNames: imports[hook],
+    namespaceNames: namespaces,
+    canonicalName: hook,
+  });
 }
 
 function isDirectJsxEventCallback(callback: HookCallback): boolean {
@@ -1575,7 +1584,14 @@ function narrowFinding(
 }
 
 function isUseValueCall(call: ts.CallExpression, imports: HookImports): boolean {
-  if (!isImportedHookCall(call, imports.useValue, imports.legendReactNamespaces, "useValue")) {
+  if (
+    !isImportedHookCall({
+      call,
+      localNames: imports.useValue,
+      namespaceNames: imports.legendReactNamespaces,
+      canonicalName: "useValue",
+    })
+  ) {
     return false;
   }
   const binding = rootIdentifier(call.expression);

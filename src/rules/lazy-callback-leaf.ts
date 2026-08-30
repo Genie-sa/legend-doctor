@@ -18,7 +18,7 @@ export interface LazyCallbackLeaf {
   target: string;
 }
 
-interface LazyCallbackLeafRequest {
+export interface LazyCallbackLeafRequest {
   localComponents: ReadonlySet<string>;
   proofs: LazyCallbackLeafProofs;
   sourceComponents: ReadonlySet<string>;
@@ -31,14 +31,8 @@ interface TransportedCallbackOpening {
   target: string;
 }
 
-export function findLazyCallbackLeaf(
-  state: StateCandidate,
-  usage: StateUsage,
-  localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>,
-  proofs: LazyCallbackLeafProofs,
-): LazyCallbackLeaf | null {
-  return lazyCallbackLeaf({ localComponents, proofs, sourceComponents, state, usage });
+export function findLazyCallbackLeaf(request: LazyCallbackLeafRequest): LazyCallbackLeaf | null {
+  return lazyCallbackLeaf(request);
 }
 
 function lazyCallbackLeaf(request: LazyCallbackLeafRequest): LazyCallbackLeaf | null {
@@ -150,6 +144,11 @@ function isIndependentRenderCut(
     nodeWithin(callbackOwner, returned) &&
     !nearestRepeatedRenderCall(callbackOwner, state.owner) &&
     !proofs.hasUnstableSubtreeLifetime(callbackOwner, state.owner) &&
-    hasIndependentRenderCutWitness(returned, [callbackOwner], localComponents, sourceComponents)
+    hasIndependentRenderCutWitness({
+      returned,
+      excluded: [callbackOwner],
+      localComponents,
+      sourceComponents,
+    })
   );
 }

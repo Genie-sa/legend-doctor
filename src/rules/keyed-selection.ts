@@ -67,22 +67,7 @@ export interface KeyedSelectionAnalysis {
   secondaryLeafStates: ReadonlySet<StateCandidate>;
 }
 
-export function analyzeKeyedSelections(
-  states: readonly StateCandidate[],
-  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  safeCommandStates: ReadonlySet<StateCandidate>,
-  statesWithCompanionWrites: ReadonlySet<StateCandidate>,
-  imports: HookImports,
-  childContracts: ChildContractResolver | null,
-): KeyedSelectionAnalysis {
-  const inputs: KeyedSelectionInputs = {
-    childContracts,
-    imports,
-    safeCommandStates,
-    states,
-    statesWithCompanionWrites,
-    usageByState,
-  };
+export function analyzeKeyedSelections(inputs: KeyedSelectionInputs): KeyedSelectionAnalysis {
   return {
     collectionStates: keyedCollectionStates(inputs),
     recordStates: keyedRecordStates(inputs),
@@ -91,7 +76,7 @@ export function analyzeKeyedSelections(
   };
 }
 
-interface KeyedSelectionInputs {
+export interface KeyedSelectionInputs {
   childContracts: ChildContractResolver | null;
   imports: HookImports;
   safeCommandStates: ReadonlySet<StateCandidate>;
@@ -203,7 +188,12 @@ function hasIndependentCollectionEventWrite(
         !ts.isFunctionDeclaration(region) &&
         !ts.isFunctionExpression(region)) ||
       !region.body ||
-      !callbackIsEventRooted(region, state.owner, "", new Set())
+      !callbackIsEventRooted({
+        callback: region,
+        owner: state.owner,
+        dependencyName: "",
+        seen: new Set(),
+      })
     ) {
       return false;
     }
@@ -216,22 +206,33 @@ function hasIndependentCollectionEventWrite(
       return false;
     }
 
-    let safe = true;
-    visitSkippingNestedFunctions(region.body, region, (node) => {
-      if (!safe || !ts.isCallExpression(node)) {
-        return;
-      }
-      if (ts.isIdentifier(node.expression) && node.expression.text === state.setterName) {
-        safe = !setterArgumentCallsOwnerCommand(node, state, ownerSetters);
-        return;
-      }
-      const root = callRootIdentifier(node.expression);
-      if (root && (ownerSetters.has(root) || bindingDeclarationCount(state.owner, root) > 0)) {
-        safe = false;
-      }
-    });
-    return safe;
+    return regionWritesOnlyOwnState(region, state, ownerSetters);
   });
+}
+
+function regionWritesOnlyOwnState(
+  region: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  state: StateCandidate,
+  ownerSetters: ReadonlySet<string>,
+): boolean {
+  if (!region.body) {
+    return false;
+  }
+  let safe = true;
+  visitSkippingNestedFunctions(region.body, region, (node) => {
+    if (!safe || !ts.isCallExpression(node)) {
+      return;
+    }
+    if (ts.isIdentifier(node.expression) && node.expression.text === state.setterName) {
+      safe = !setterArgumentCallsOwnerCommand(node, state, ownerSetters);
+      return;
+    }
+    const root = callRootIdentifier(node.expression);
+    if (root && (ownerSetters.has(root) || bindingDeclarationCount(state.owner, root) > 0)) {
+      safe = false;
+    }
+  });
+  return safe;
 }
 
 function setterArgumentCallsOwnerCommand(
@@ -626,7 +627,14 @@ interface ReactHookCallCheck {
 function isUnshadowedReactHookCall(check: ReactHookCallCheck): boolean {
   const { call, hook, imports, owner } = check;
   const names = hook === "useCallback" ? imports.useCallback : imports.useImperativeHandle;
-  if (!isImportedHookCall(call, names, imports.reactNamespaces, hook)) {
+  if (
+    !isImportedHookCall({
+      call,
+      localNames: names,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: hook,
+    })
+  ) {
     return false;
   }
   const root = hookCallRootIdentifier(call);
@@ -1766,9 +1774,9 @@ function secondaryLeafReferences(
   return oneHopRenderProjectionReferences(
     state.owner,
     secondaryNodes,
-    (initializer, reference) =>
-      isPureExpression(initializer) ||
-      (ts.isIdentifier(reference) && isSelectedItemLookup(initializer, reference)),
+    ({ expression, reference }) =>
+      isPureExpression(expression) ||
+      (ts.isIdentifier(reference) && isSelectedItemLookup(expression, reference)),
   );
 }
 
@@ -1800,7 +1808,12 @@ function classifySecondaryReference(
     return (ts.isArrowFunction(callback) ||
       ts.isFunctionDeclaration(callback) ||
       ts.isFunctionExpression(callback)) &&
-      callbackIsEventRooted(callback, state.owner, reference.text, new Set())
+      callbackIsEventRooted({
+        callback,
+        owner: state.owner,
+        dependencyName: reference.text,
+        seen: new Set(),
+      })
       ? "deferred"
       : "unsafe";
   }
@@ -1830,7 +1843,12 @@ function isDeferredHookDependency(reference: ts.Identifier, state: StateCandidat
   return (
     candidate !== undefined &&
     (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
-    callbackIsEventRooted(candidate, state.owner, reference.text, new Set())
+    callbackIsEventRooted({
+      callback: candidate,
+      owner: state.owner,
+      dependencyName: reference.text,
+      seen: new Set(),
+    })
   );
 }
 
@@ -2448,7 +2466,10 @@ function summaryFeedsStableRowProjection(
     !declaration?.initializer ||
     !ts.isIdentifier(declaration.name) ||
     !nodeWithin(summaryReference, declaration.initializer) ||
-    !isSafeProjectionExpression(declaration.initializer, summaryReference)
+    !isSafeProjectionExpression({
+      expression: declaration.initializer,
+      reference: summaryReference,
+    })
   ) {
     return false;
   }

@@ -305,12 +305,19 @@ interface ArrayItemCallbackScan {
 
 type ArrayItemVerdict = "counted" | "counted-unsafe" | "ignored" | "unsafe";
 
-export function propDefersArrayItemCallback(
-  source: ChildComponentSource,
-  propName: string,
-  callbackProp: string,
-  resolver: CallbackContractSourceResolver | undefined,
-): boolean {
+export interface ArrayItemCallbackQuery {
+  readonly callbackProp: string;
+  readonly propName: string;
+  readonly resolver: CallbackContractSourceResolver | undefined;
+  readonly source: ChildComponentSource;
+}
+
+export function propDefersArrayItemCallback({
+  callbackProp,
+  propName,
+  resolver,
+  source,
+}: ArrayItemCallbackQuery): boolean {
   const bound = boundPropIdentifier(source.owner, propName);
   if (!bound || !source.owner.body || bindingDeclarationCount(source.owner, bound.text) !== 1) {
     return false;
@@ -551,12 +558,19 @@ function arrayReferenceStaysTracked(node: ts.Identifier): boolean {
  * in a host-style event prop or a callback whose own registration is proven
  * deferred.
  */
-export function propObjectCallbackIsDeferred(
-  source: ChildComponentSource,
-  propName: string,
-  callbackProperty: string,
-  resolver: CallbackContractSourceResolver,
-): boolean {
+export interface ObjectPropCallbackQuery {
+  readonly callbackProperty: string;
+  readonly propName: string;
+  readonly resolver: CallbackContractSourceResolver;
+  readonly source: ChildComponentSource;
+}
+
+export function propObjectCallbackIsDeferred({
+  callbackProperty,
+  propName,
+  resolver,
+  source,
+}: ObjectPropCallbackQuery): boolean {
   return sourceInputCallbackIsDeferred({
     argumentIndex: 0,
     path: [propName, callbackProperty],
@@ -670,14 +684,24 @@ function effectCallReferenceUsage(
 
 function isReactEffectCall(call: ts.CallExpression, imports: HookImports): boolean {
   return (
-    isImportedHookCall(call, imports.useEffect, imports.reactNamespaces, "useEffect") ||
-    isImportedHookCall(call, imports.useLayoutEffect, imports.reactNamespaces, "useLayoutEffect") ||
-    isImportedHookCall(
+    isImportedHookCall({
       call,
-      imports.useInsertionEffect,
-      imports.reactNamespaces,
-      "useInsertionEffect",
-    )
+      localNames: imports.useEffect,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: "useEffect",
+    }) ||
+    isImportedHookCall({
+      call,
+      localNames: imports.useLayoutEffect,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: "useLayoutEffect",
+    }) ||
+    isImportedHookCall({
+      call,
+      localNames: imports.useInsertionEffect,
+      namespaceNames: imports.reactNamespaces,
+      canonicalName: "useInsertionEffect",
+    })
   );
 }
 
@@ -1228,12 +1252,12 @@ function arrayPublicationIsDeferred(node: ts.Identifier, scan: ArrayPublicationS
   const child = target ? resolver.resolveComponent(source.file, target) : null;
   return (
     child !== null &&
-    propDefersArrayItemCallback(
-      atJsxInvocation(child, attribute, source),
-      attribute.name.getText(),
-      callbackProperty,
+    propDefersArrayItemCallback({
+      source: atJsxInvocation(child, attribute, source),
+      propName: attribute.name.getText(),
+      callbackProp: callbackProperty,
       resolver,
-    )
+    })
   );
 }
 
