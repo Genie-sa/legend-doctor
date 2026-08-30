@@ -3779,11 +3779,11 @@ function mutationsMayCoexecute(
 class DisjointSet {
   private readonly parents: number[];
 
-  constructor(size: number) {
+  public constructor(size: number) {
     this.parents = Array.from({ length: size }, (_, index) => index);
   }
 
-  find(index: number): number {
+  public find(index: number): number {
     const parent = this.parents[index];
     if (parent === undefined || parent === index) {
       return index;
@@ -3793,7 +3793,7 @@ class DisjointSet {
     return root;
   }
 
-  join(left: number, right: number): void {
+  public join(left: number, right: number): void {
     const leftRoot = this.find(left);
     const rightRoot = this.find(right);
     if (leftRoot !== rightRoot) {

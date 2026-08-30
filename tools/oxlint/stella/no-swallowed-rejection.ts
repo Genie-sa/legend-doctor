@@ -38,7 +38,7 @@
 // propagate it. A `.catch` callback with a real body — logging, capture, state
 // reset — is untouched by this rule.
 
-import { isAstNode, isIdentifier, type AstNode } from "./utils.ts";
+import { type AstNode, isAstNode, isIdentifier } from "./utils.ts";
 
 const ALLOWED_RECEIVER_METHODS = new Set([
   // Response body consumption.

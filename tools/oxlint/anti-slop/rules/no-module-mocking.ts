@@ -51,7 +51,7 @@ function isTestFrameworkObject(
 function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): boolean {
   if (!("property" in callee) || !("object" in callee) || !("computed" in callee)) return false;
   if (!isTestFrameworkObject(sourceCode, callee.object)) return false;
-  const property = callee.property;
+  const {property} = callee;
   const method = callee.computed
     ? property.type === "Literal" &&
       (property.value === "doMock" ||

@@ -1,11 +1,11 @@
 import { defineRule } from "@oxlint/plugins";
 
 import {
+	type TypeEnvironment,
+	type WideningTarget,
 	classifyWideningTarget,
 	createTypeEnvironment,
 	isKnownEvidenceExpression,
-	type TypeEnvironment,
-	type WideningTarget,
 } from "../shared/dictionary-types.ts";
 
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
@@ -110,7 +110,7 @@ function sourceKeyName(sourceCode: SourceCode, key: ESTree.PropertyKey): string 
 function functionName(sourceCode: SourceCode, owner: FunctionExpression | null): string {
 	if (owner === null) return "anonymous function";
 	if (owner.id !== null) return owner.id.name;
-	const parent = owner.parent;
+	const {parent} = owner;
 	if (parent.type === "VariableDeclarator" && parent.id.type === "Identifier")
 		return parent.id.name;
 	if (parent.type === "MethodDefinition") return sourceKeyName(sourceCode, parent.key);

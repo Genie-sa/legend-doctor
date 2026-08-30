@@ -19,7 +19,7 @@ export class StateFlowIndex {
     Exclude<StateFlowCoverage, "not-requested">
   >();
 
-  proveSynchronousCoexecution(
+  public proveSynchronousCoexecution(
     fn: RuntimeFunctionLike,
     left: ts.CallExpression,
     right: ts.CallExpression,
@@ -35,7 +35,7 @@ export class StateFlowIndex {
     return result;
   }
 
-  coverageFor(fn: RuntimeFunctionLike): StateFlowCoverage {
+  public coverageFor(fn: RuntimeFunctionLike): StateFlowCoverage {
     return this.#coverage.get(fn) ?? "not-requested";
   }
 }
@@ -66,11 +66,11 @@ const MAX_PATHS = 128;
 class FunctionWriteFlow {
   readonly #body: ts.ConciseBody | undefined;
 
-  constructor(private readonly fn: RuntimeFunctionLike) {
+  public constructor(private readonly fn: RuntimeFunctionLike) {
     this.#body = fn.body;
   }
 
-  prove(left: ts.CallExpression, right: ts.CallExpression): FlowProof {
+  public prove(left: ts.CallExpression, right: ts.CallExpression): FlowProof {
     if (!this.#body || !nodeWithinFunction(left, this.fn) || !nodeWithinFunction(right, this.fn)) {
       return "unknown";
     }

@@ -163,7 +163,7 @@ export class AnalysisCoverageLedger {
   readonly #entries = new Map<string, AnalysisCoverageEntry>();
   readonly #expectedTargets: ReadonlyMap<string, AnalysisCoverageTarget>;
 
-  constructor(expectedTargets: readonly AnalysisCoverageTarget[] = []) {
+  public constructor(expectedTargets: readonly AnalysisCoverageTarget[] = []) {
     const expected = new Map<string, AnalysisCoverageTarget>();
     for (const candidate of expectedTargets) {
       const target = normalizeTarget(candidate);
@@ -176,7 +176,7 @@ export class AnalysisCoverageLedger {
     this.#expectedTargets = expected;
   }
 
-  record(entry: AnalysisCoverageEntry): void {
+  public record(entry: AnalysisCoverageEntry): void {
     const normalized: AnalysisCoverageEntry = {
       stages: normalizeStages(entry.stages),
       target: normalizeTarget(entry.target),
@@ -197,7 +197,7 @@ export class AnalysisCoverageLedger {
     this.#entries.set(key, normalized);
   }
 
-  report(): AnalysisCoverageReport {
+  public report(): AnalysisCoverageReport {
     const missing = [...this.#expectedTargets].filter(([key]) => !this.#entries.has(key));
     if (missing.length > 0) {
       throw new Error(
@@ -220,7 +220,7 @@ export class AnalysisCoverageLedger {
     };
   }
 
-  toJSON(): AnalysisCoverageReport {
+  public toJSON(): AnalysisCoverageReport {
     return this.report();
   }
 }

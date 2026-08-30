@@ -59,21 +59,21 @@ class ProgramSemanticContext implements SemanticContext {
   readonly #checker: ts.TypeChecker;
   readonly #program: ts.Program;
 
-  constructor(program: ts.Program) {
+  public constructor(program: ts.Program) {
     this.#program = program;
     this.#checker = program.getTypeChecker();
   }
 
-  getSourceFile(file: AnalysisFile): ts.SourceFile | undefined {
+  public getSourceFile(file: AnalysisFile): ts.SourceFile | undefined {
     const sourceFile = this.#program.getSourceFile(file.identityPath);
     return sourceFile === file.sourceFile ? sourceFile : undefined;
   }
 
-  getSymbol(node: ts.Node): ts.Symbol | undefined {
+  public getSymbol(node: ts.Node): ts.Symbol | undefined {
     return this.#ownsNode(node) ? this.#checker.getSymbolAtLocation(node) : undefined;
   }
 
-  getCanonicalSymbol(node: ts.Node): ts.Symbol | undefined {
+  public getCanonicalSymbol(node: ts.Node): ts.Symbol | undefined {
     const symbol = this.getSymbol(node);
     if (!symbol) {
       return undefined;
@@ -81,18 +81,18 @@ class ProgramSemanticContext implements SemanticContext {
     return symbol.flags & ts.SymbolFlags.Alias ? this.#checker.getAliasedSymbol(symbol) : symbol;
   }
 
-  getDeclarations(symbol: ts.Symbol): readonly ts.Declaration[] {
+  public getDeclarations(symbol: ts.Symbol): readonly ts.Declaration[] {
     const declarations = symbol.declarations ?? [];
     return declarations.every((declaration) => this.#ownsNode(declaration))
       ? [...declarations]
       : [];
   }
 
-  getType(node: ts.Node): ts.Type | undefined {
+  public getType(node: ts.Node): ts.Type | undefined {
     return this.#ownsNode(node) ? this.#checker.getTypeAtLocation(node) : undefined;
   }
 
-  getTypeText(node: ts.Node): string | undefined {
+  public getTypeText(node: ts.Node): string | undefined {
     if (!this.#ownsNode(node)) {
       return undefined;
     }
@@ -100,7 +100,7 @@ class ProgramSemanticContext implements SemanticContext {
     return this.#checker.typeToString(type, node, ts.TypeFormatFlags.NoTruncation);
   }
 
-  getImportProvenance(node: ts.Node): ImportProvenance | undefined {
+  public getImportProvenance(node: ts.Node): ImportProvenance | undefined {
     if (!this.#ownsNode(node)) {
       return undefined;
     }

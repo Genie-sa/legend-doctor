@@ -302,7 +302,7 @@ const isGlobalReference = (context: unknown, node: unknown): boolean => {
   ) {
     return false;
   }
-  const sourceCode = context.sourceCode;
+  const {sourceCode} = context;
   if (
     "isGlobalReference" in sourceCode &&
     typeof sourceCode.isGlobalReference === "function" &&
@@ -532,7 +532,7 @@ const writeIsConditional = (
   let current = identifier;
   let conditional = false;
   while (isAstNode(current)) {
-    const parent = current.parent;
+    const {parent} = current;
     if (Object.is(current, boundary) || Object.is(parent, boundary)) {
       return conditional;
     }
@@ -572,7 +572,7 @@ const writeIsConditional = (
 const enclosingZeroArgumentFunction = (node: unknown): unknown => {
   let current = node;
   while (isAstNode(current)) {
-    const parent = current.parent;
+    const {parent} = current;
     if (
       isAstNode(parent) &&
       (parent.type === "ArrowFunctionExpression" ||
@@ -703,7 +703,7 @@ const staticMemberRootAndPath = (
 const aliasInitializerExpression = (value: unknown): unknown => {
   let current = value;
   while (isAstNode(current)) {
-    const parent = current.parent;
+    const {parent} = current;
     if (
       isAstNode(parent) &&
       (parent.type === "ParenthesizedExpression" ||
@@ -796,7 +796,7 @@ const staticPropertyWrites = (
     ) {
       continue;
     }
-    const identifier = reference.identifier;
+    const {identifier} = reference;
     const selectedMember = staticMemberPathFromRoot(context, identifier);
     if (
       selectedMember !== null &&
@@ -1263,7 +1263,7 @@ const resolveStaticObjectPath = (
       )
         .filter((write) => write.position > ancestorCutoff)
         .filter((write) => {
-          const aliasCapturePosition = write.aliasCapturePosition;
+          const {aliasCapturePosition} = write;
           return (
             aliasCapturePosition === undefined ||
             !ancestorWrites.some(

@@ -34,7 +34,7 @@ export const rules = {
       createOnce(context) {
         return {
           CallExpression(node) {
-            const callee = node.callee;
+            const {callee} = node;
             if (
               callee.type !== "MemberExpression" ||
               callee.computed ||

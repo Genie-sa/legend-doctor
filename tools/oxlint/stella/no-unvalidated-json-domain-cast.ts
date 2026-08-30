@@ -673,7 +673,7 @@ export const rules = {
           ) {
             return;
           }
-          const body = node.body;
+          const {body} = node;
           const returnsRawJson =
             isUnvalidatedJsonValue(body) || containsRawJsonReturn(body);
           if (returnsRawJson) {

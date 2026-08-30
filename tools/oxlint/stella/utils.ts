@@ -80,7 +80,7 @@ export const getImportedName = (specifier: unknown): string | null => {
   if (!isAstNode(specifier) || specifier.type !== "ImportSpecifier") {
     return null;
   }
-  const imported = specifier.imported;
+  const {imported} = specifier;
   if (isIdentifier(imported)) {
     return imported.name;
   }

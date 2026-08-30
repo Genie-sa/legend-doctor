@@ -30,11 +30,11 @@ export interface AnalysisFile {
 }
 
 export class AnalysisProject {
-  readonly files: readonly AnalysisFile[];
+  public readonly files: readonly AnalysisFile[];
 
   readonly #filesByIdentity: ReadonlyMap<string, AnalysisFile>;
 
-  constructor(sources: ReadonlyMap<string, string>) {
+  public constructor(sources: ReadonlyMap<string, string>) {
     const filesByIdentity = new Map<string, AnalysisFile>();
     for (const [fileName, sourceText] of sources) {
       const file = createAnalysisFile(fileName, sourceText);
@@ -53,7 +53,7 @@ export class AnalysisProject {
     this.#filesByIdentity = filesByIdentity;
   }
 
-  getFile(fileName: string): AnalysisFile | undefined {
+  public getFile(fileName: string): AnalysisFile | undefined {
     return this.#filesByIdentity.get(pathIdentityKey(fileName));
   }
 }

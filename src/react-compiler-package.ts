@@ -40,7 +40,7 @@ const CONFIG_MARKER =
 export class ReactCompilerResolver {
   private readonly directories = new Map<string, Promise<boolean>>();
 
-  packageCompilesFile(filePath: string): Promise<boolean> {
+  public packageCompilesFile(filePath: string): Promise<boolean> {
     return this.directoryCompiles(path.dirname(path.resolve(filePath)));
   }
 

@@ -1,10 +1,10 @@
 import { defineRule } from "@oxlint/plugins";
 
 import {
+	type TypeEnvironment,
 	classifyUnsafeDictionary,
 	classifyUnsafeDictionaryValue,
 	createTypeEnvironment,
-	type TypeEnvironment,
 } from "../shared/dictionary-types.ts";
 
 import type { ESTree } from "@oxlint/plugins";
