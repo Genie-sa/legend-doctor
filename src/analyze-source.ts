@@ -116,6 +116,37 @@ import {
 import { StateFlowIndex } from "./state-flow.js";
 import type { EffectAction, HookFinding, StateAction } from "./types.js";
 
+const localCallbacksByOwner = new WeakMap<
+  RuntimeFunctionLike,
+  ReadonlyMap<string, RuntimeFunctionLike>
+>();
+
+class DisjointSet {
+  private readonly parents: number[];
+
+  public constructor(size: number) {
+    this.parents = Array.from({ length: size }, (_, index) => index);
+  }
+
+  public find(index: number): number {
+    const parent = this.parents[index];
+    if (parent === undefined || parent === index) {
+      return index;
+    }
+    const root = this.find(parent);
+    this.parents[index] = root;
+    return root;
+  }
+
+  public join(left: number, right: number): void {
+    const leftRoot = this.find(left);
+    const rightRoot = this.find(right);
+    if (leftRoot !== rightRoot) {
+      this.parents[rightRoot] = leftRoot;
+    }
+  }
+}
+
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
 const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
@@ -1750,11 +1781,6 @@ function localCallbackByBinding(
   }
   return callbacks.get(binding) ?? null;
 }
-
-const localCallbacksByOwner = new WeakMap<
-  RuntimeFunctionLike,
-  ReadonlyMap<string, RuntimeFunctionLike>
->();
 
 function visitDirectOwnerNodes(node: ts.Node, callback: (node: ts.Node) => void): void {
   node.forEachChild((child) => {
@@ -3775,32 +3801,6 @@ function mutationsMayCoexecute(
   stateFlow: StateFlowIndex,
 ): boolean {
   return stateFlow.proveSynchronousCoexecution(region, left, right) !== "disproven";
-}
-
-class DisjointSet {
-  private readonly parents: number[];
-
-  public constructor(size: number) {
-    this.parents = Array.from({ length: size }, (_, index) => index);
-  }
-
-  public find(index: number): number {
-    const parent = this.parents[index];
-    if (parent === undefined || parent === index) {
-      return index;
-    }
-    const root = this.find(parent);
-    this.parents[index] = root;
-    return root;
-  }
-
-  public join(left: number, right: number): void {
-    const leftRoot = this.find(left);
-    const rightRoot = this.find(right);
-    if (leftRoot !== rightRoot) {
-      this.parents[rightRoot] = leftRoot;
-    }
-  }
 }
 
 function classifySetterReference(

@@ -22,6 +22,16 @@ import { isSafeProjectionExpression, jsxSubtreeAncestors } from "./deferred-reve
 import type { RuntimeFunctionLike } from "../ast.js";
 import type { JsxSubtreeNode } from "./deferred-reveal.js";
 
+const uniqueVariableDeclarationsByBoundary = new WeakMap<
+  ts.Node,
+  ReadonlyMap<string, ts.VariableDeclaration | null>
+>();
+
+const localFunctionBindingsByOwner = new WeakMap<
+  RuntimeFunctionLike,
+  ReadonlyMap<string, ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression>
+>();
+
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
 const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
@@ -1134,11 +1144,6 @@ export function uniqueVariableDeclaration(
   return declarations.get(name) ?? null;
 }
 
-const uniqueVariableDeclarationsByBoundary = new WeakMap<
-  ts.Node,
-  ReadonlyMap<string, ts.VariableDeclaration | null>
->();
-
 export function localFunctionBinding(
   owner: RuntimeFunctionLike,
   name: string,
@@ -1171,8 +1176,3 @@ export function localFunctionBinding(
   }
   return bindings.get(name) ?? null;
 }
-
-const localFunctionBindingsByOwner = new WeakMap<
-  RuntimeFunctionLike,
-  ReadonlyMap<string, ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression>
->();

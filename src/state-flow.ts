@@ -3,6 +3,65 @@ import ts from "typescript";
 import { isRuntimeFunctionLike } from "./ast.js";
 import type { RuntimeFunctionLike } from "./ast.js";
 
+class FunctionWriteFlow {
+  readonly #body: ts.ConciseBody | undefined;
+
+  public constructor(private readonly fn: RuntimeFunctionLike) {
+    this.#body = fn.body;
+  }
+
+  public prove(left: ts.CallExpression, right: ts.CallExpression): FlowProof {
+    if (!this.#body || !nodeWithinFunction(left, this.fn) || !nodeWithinFunction(right, this.fn)) {
+      return "unknown";
+    }
+    const leftControls = controlArms(left, this.fn);
+    const rightControls = controlArms(right, this.fn);
+    if (haveOppositeSharedArm(leftControls, rightControls)) {
+      return "disproven";
+    }
+    if (
+      leftControls.length > 0 &&
+      rightControls.length > 0 &&
+      !sameControlArms(leftControls, rightControls) &&
+      !shareSwitchControl(leftControls, rightControls)
+    ) {
+      return "unknown";
+    }
+
+    const initial: ExecutionPath = { awaitEpoch: 0, events: [], termination: null };
+    const result = ts.isBlock(this.#body)
+      ? lowerStatements(this.#body.statements, [initial], { breakable: false }, left, right)
+      : lowerExpression(this.#body, [initial], left, right);
+    if (result.unknown) {
+      return "unknown";
+    }
+    const together = result.paths.filter(
+      (path) =>
+        path.events.some((event) => event.call === left) &&
+        path.events.some((event) => event.call === right),
+    );
+    if (together.length === 0) {
+      return "disproven";
+    }
+    const synchronous = together.filter((path) => callsShareAwaitEpoch(path, left, right));
+    if (synchronous.length === 0) {
+      return "disproven";
+    }
+    if (sameControlArms(leftControls, rightControls)) {
+      return hasEarlierCorrelatedControlRisk(leftControls, this.fn) ? "unknown" : "proven";
+    }
+    return unconditionalCallPrecedesControlledCall(
+      synchronous,
+      left,
+      right,
+      leftControls,
+      rightControls,
+    )
+      ? "proven"
+      : "unknown";
+  }
+}
+
 export type FlowProof = "disproven" | "proven" | "unknown";
 export type StateFlowCoverage = "complete" | "not-requested" | "unknown";
 
@@ -62,65 +121,6 @@ interface StatementContext {
 }
 
 const MAX_PATHS = 128;
-
-class FunctionWriteFlow {
-  readonly #body: ts.ConciseBody | undefined;
-
-  public constructor(private readonly fn: RuntimeFunctionLike) {
-    this.#body = fn.body;
-  }
-
-  public prove(left: ts.CallExpression, right: ts.CallExpression): FlowProof {
-    if (!this.#body || !nodeWithinFunction(left, this.fn) || !nodeWithinFunction(right, this.fn)) {
-      return "unknown";
-    }
-    const leftControls = controlArms(left, this.fn);
-    const rightControls = controlArms(right, this.fn);
-    if (haveOppositeSharedArm(leftControls, rightControls)) {
-      return "disproven";
-    }
-    if (
-      leftControls.length > 0 &&
-      rightControls.length > 0 &&
-      !sameControlArms(leftControls, rightControls) &&
-      !shareSwitchControl(leftControls, rightControls)
-    ) {
-      return "unknown";
-    }
-
-    const initial: ExecutionPath = { awaitEpoch: 0, events: [], termination: null };
-    const result = ts.isBlock(this.#body)
-      ? lowerStatements(this.#body.statements, [initial], { breakable: false }, left, right)
-      : lowerExpression(this.#body, [initial], left, right);
-    if (result.unknown) {
-      return "unknown";
-    }
-    const together = result.paths.filter(
-      (path) =>
-        path.events.some((event) => event.call === left) &&
-        path.events.some((event) => event.call === right),
-    );
-    if (together.length === 0) {
-      return "disproven";
-    }
-    const synchronous = together.filter((path) => callsShareAwaitEpoch(path, left, right));
-    if (synchronous.length === 0) {
-      return "disproven";
-    }
-    if (sameControlArms(leftControls, rightControls)) {
-      return hasEarlierCorrelatedControlRisk(leftControls, this.fn) ? "unknown" : "proven";
-    }
-    return unconditionalCallPrecedesControlledCall(
-      synchronous,
-      left,
-      right,
-      leftControls,
-      rightControls,
-    )
-      ? "proven"
-      : "unknown";
-  }
-}
 
 /**
  * Successive dynamic controls are enumerated independently. Until the lowerer

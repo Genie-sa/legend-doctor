@@ -35,6 +35,8 @@ import { isDependencyDrivenBrowserStorageEffect } from "./browser-storage-effect
 import type { ChildContractResolver } from "./child-contract.js";
 import type { RuntimeFunctionLike } from "../ast.js";
 
+const KNOWN_GLOBAL_OBJECTS = new Set(["console", "Date", "Math", "JSON", "Promise", "globalThis"]);
+
 export function classifyEffect(
   effect: EffectCandidate,
   stateBySetter: ReadonlyMap<string, StateCandidate>,
@@ -1109,8 +1111,6 @@ function isSetupOnlyMountCandidate(
   });
   return !capturesOwnerLocal;
 }
-
-const KNOWN_GLOBAL_OBJECTS = new Set(["console", "Date", "Math", "JSON", "Promise", "globalThis"]);
 
 function expressionContainsCall(expression: ts.Expression): boolean {
   let contains = false;
