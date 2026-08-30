@@ -974,7 +974,7 @@ function callbackIsCommittedRefIntegration(
     }
     return safe;
   };
-  const statementIsRefIntegration = (statement: ts.Statement): boolean => {
+  function statementIsRefIntegration(statement: ts.Statement): boolean {
     if (ts.isBlock(statement)) {
       return statementsAreRefIntegration(statement.statements);
     }
@@ -1005,7 +1005,7 @@ function callbackIsCommittedRefIntegration(
       );
     }
     return ts.isExpressionStatement(statement) && expressionIsRefIntegration(statement.expression);
-  };
+  }
   if (ts.isBlock(callback.body)) {
     return statementsAreRefIntegration(callback.body.statements) && integratesCommittedRef;
   }
