@@ -96,6 +96,14 @@
     "local/no-reexport-only-modules": "error",
     // Switch is the clearest dispatch form for TypeScript SyntaxKind values.
     "local/no-switch": "off",
+    // tsconfig sets noUncheckedIndexedAccess, so every proven-safe index access types as
+    // T | undefined. Banning the `!` that resolves it would mean 200+ runtime guards for
+    // statically-guaranteed reads. The compiler flag is the stronger guarantee; it stays.
+    "typescript/no-non-null-assertion": "off",
+    // Pure module-organization style with no correctness content. Both fight the inline
+    // `export function` idiom used throughout, cost 342 mechanical edits, and reduce locality.
+    "import/group-exports": "off",
+    "import/exports-last": "off",
     // JSON.parse(JSON.stringify(x)) is not a clone here, it is the assertion that the report
     // survives JSON serialization. structuredClone preserves what JSON drops and voids the test.
     "unicorn/prefer-structured-clone": "off"
@@ -116,10 +124,12 @@
       }
     },
     {
-      // Benchmark corpora are data: thresholds, scores and offsets are the content.
+      // Benchmark corpora are data: thresholds, scores and offsets are the content, and the
+      // harness parses that corpus rather than shipping in the CLI.
       "files": ["evals/**"],
       "rules": {
-        "eslint/no-magic-numbers": "off"
+        "eslint/no-magic-numbers": "off",
+        "anti-slop/require-safety-comment-for-type-assertion": "off"
       }
     },
     {
