@@ -95,9 +95,33 @@
     "local/no-optional-function-parameters": "off",
     "local/no-reexport-only-modules": "error",
     // Switch is the clearest dispatch form for TypeScript SyntaxKind values.
-    "local/no-switch": "off"
+    "local/no-switch": "off",
+    // JSON.parse(JSON.stringify(x)) is not a clone here, it is the assertion that the report
+    // survives JSON serialization. structuredClone preserves what JSON drops and voids the test.
+    "unicorn/prefer-structured-clone": "off"
   },
   "overrides": [
+    {
+      // Fixture setup is deliberately sequential and synchronous, and table-driven test bodies
+      // are long by design; splitting them hides which case failed.
+      "files": ["tests/**"],
+      "rules": {
+        "node/no-sync": "off",
+        "eslint/no-await-in-loop": "off",
+        "unicorn/consistent-function-scoping": "off",
+        "eslint/max-lines": "off",
+        "eslint/max-lines-per-function": "off",
+        "eslint/max-statements": "off",
+        "eslint/no-magic-numbers": "off"
+      }
+    },
+    {
+      // Benchmark corpora are data: thresholds, scores and offsets are the content.
+      "files": ["evals/**"],
+      "rules": {
+        "eslint/no-magic-numbers": "off"
+      }
+    },
     {
       "files": ["src/index.ts"],
       "rules": {
