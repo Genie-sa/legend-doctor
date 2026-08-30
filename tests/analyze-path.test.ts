@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,13 +8,14 @@ import {
   analyzeLegendPractices,
   analyzeLegendPracticesFile,
 } from "../src/analyze-legend-practices.js";
-import {
-  analyzePath,
-  analyzePathDetailed,
-  createAnalysisContext,
-} from "../src/analyze-path.js";
+import { analyzePath, analyzePathDetailed, createAnalysisContext } from "../src/analyze-path.js";
 import { analyzeSource, analyzeSourceFile } from "../src/analyze-source.js";
 import { AnalysisProject } from "../src/analysis-project.js";
+
+const requireValue = <Value>(value: Value | undefined): Value => {
+  assert.ok(value);
+  return value;
+};
 
 test("scans source files deterministically and ignores generated directories", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-test-"));
@@ -22,55 +23,54 @@ test("scans source files deterministically and ignores generated directories", a
   await mkdir(path.join(root, "node_modules"));
   await writeFile(
     path.join(root, "src", "component.tsx"),
-    'import { useState } from "react"; export function C() { const [x] = useState(1); return <>{x}</>; }'
+    'import { useState } from "react"; export function C() { const [x] = useState(1); return <>{x}</>; }',
   );
   await writeFile(
     path.join(root, "node_modules", "ignored.tsx"),
-    'import { useState } from "react"; export function C() { const [x] = useState(1); return <>{x}</>; }'
+    'import { useState } from "react"; export function C() { const [x] = useState(1); return <>{x}</>; }',
   );
 
   const report = await analyzePath(root);
 
   assert.equal(report.files, 1);
   assert.equal(report.hooks.states, 1);
-  assert.equal(report.findings[0]?.location.file, path.join("src", "component.tsx"));
+  assert.equal(requireValue(report.findings[0]).location.file, path.join("src", "component.tsx"));
 });
 
-test("comments and blank lines never change findings", async t => {
+test("comments and blank lines never change findings", async (testContext) => {
   const plain = [
-    'import { useEffect, useState } from "react";',
-    "export function Price({ amount }: { amount: number }) {",
-    '  const [label, setLabel] = useState("");',
-    "  useEffect(() => {",
-    "    setLabel(`$${amount}`);",
-    "  }, [amount]);",
-    "  return <span>{label}</span>;",
-    "}",
-  ];
-  const withTrivia = [
-    "/* banner */",
-    "",
-    ...plain.map(line => `${line} // trailing`),
-    "",
-    "// footer",
-  ];
-  const signatures = async (source: string) => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-trivia-"));
-    t.after(() => rm(root, { force: true, recursive: true }));
-    await writeFile(path.join(root, "price.tsx"), source, "utf8");
-    const report = await analyzePath(root);
-    return report.findings.map(finding => [
-      finding.hook,
-      finding.name,
-      finding.action,
-      finding.disposition,
+      'import { useEffect, useState } from "react";',
+      "export function Price({ amount }: { amount: number }) {",
+      '  const [label, setLabel] = useState("");',
+      "  useEffect(() => {",
+      "    setLabel(`$${amount}`);",
+      "  }, [amount]);",
+      "  return <span>{label}</span>;",
+      "}",
+    ],
+    withTrivia = [
+      "/* banner */",
+      "",
+      ...plain.map((line) => `${line} // trailing`),
+      "",
+      "// footer",
+    ],
+    signatures = async (source: string) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-trivia-"));
+      testContext.after(() => rm(root, { force: true, recursive: true }));
+      await writeFile(path.join(root, "price.tsx"), source, "utf8");
+      const report = await analyzePath(root);
+      return report.findings.map((finding) => [
+        finding.hook,
+        finding.name,
+        finding.action,
+        finding.disposition,
+      ]);
+    },
+    [plainSignatures, triviaSignatures] = await Promise.all([
+      signatures(plain.join("\n")),
+      signatures(withTrivia.join("\n")),
     ]);
-  };
-
-  const [plainSignatures, triviaSignatures] = await Promise.all([
-    signatures(plain.join("\n")),
-    signatures(withTrivia.join("\n")),
-  ]);
 
   assert.ok(plainSignatures.length > 0);
   assert.deepEqual(triviaSignatures, plainSignatures);
@@ -96,9 +96,9 @@ export function Pages() {
 }
 `;
 
-async function cloneWriteRoot(
+async function cloneWriteRoot<Manifest extends object>(
   prefix: string,
-  manifest: Record<string, unknown>
+  manifest: Manifest,
 ): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), prefix));
   await writeFile(path.join(root, "package.json"), JSON.stringify(manifest), "utf8");
@@ -106,185 +106,185 @@ async function cloneWriteRoot(
   return root;
 }
 
-test("react compiler packages keep identity-changing clone writes", async t => {
+test("react compiler packages keep identity-changing clone writes", async (testContext) => {
   const root = await cloneWriteRoot("legend-doctor-compiler-", {
     devDependencies: { "babel-plugin-react-compiler": "1.0.0" },
     name: "app",
   });
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
-  const report = await analyzePath(root);
-  const actions = report.practices.map(practice => practice.action);
+  const report = await analyzePath(root),
+    actions = new Set(report.practices.map((practice) => practice.action));
 
-  assert.ok(actions.includes("toggle-observable"));
-  assert.ok(!actions.includes("narrow-observable-write"));
+  assert.ok(actions.has("toggle-observable"));
+  assert.ok(!actions.has("narrow-observable-write"));
 });
 
-test("clone writes stay narrowed without an explicit react compiler marker", async t => {
+test("clone writes stay narrowed without an explicit react compiler marker", async (testContext) => {
   const root = await cloneWriteRoot("legend-doctor-no-compiler-", {
     dependencies: { "react-native": "0.86.2" },
     name: "app",
   });
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "app.json"),
     JSON.stringify({ expo: { experiments: { reactCompiler: false } } }),
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
-  assert.ok(report.practices.some(practice => practice.action === "narrow-observable-write"));
+  assert.ok(report.practices.some((practice) => practice.action === "narrow-observable-write"));
 });
 
-test("expo experiments enable the react compiler gate", async t => {
+test("expo experiments enable the react compiler gate", async (testContext) => {
   const root = await cloneWriteRoot("legend-doctor-expo-compiler-", { name: "app" });
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "app.json"),
     JSON.stringify({ expo: { experiments: { reactCompiler: true } } }),
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const actions = report.practices.map(practice => practice.action);
+  const report = await analyzePath(root),
+    actions = new Set(report.practices.map((practice) => practice.action));
 
-  assert.ok(actions.includes("toggle-observable"));
-  assert.ok(!actions.includes("narrow-observable-write"));
+  assert.ok(actions.has("toggle-observable"));
+  assert.ok(!actions.has("narrow-observable-write"));
 });
 
-test("a code-based expo config enabling the compiler gates clone writes", async t => {
+test("a code-based expo config enabling the compiler gates clone writes", async (testContext) => {
   const root = await cloneWriteRoot("legend-doctor-expo-config-", { name: "app" });
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "app.config.ts"),
-    'export default { experiments: { reactCompiler: true } };\n',
-    "utf8"
+    "export default { experiments: { reactCompiler: true } };\n",
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
-  assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
+  assert.ok(!report.practices.some((practice) => practice.action === "narrow-observable-write"));
 });
 
-test("a babel config naming the compiler plugin gates clone writes", async t => {
+test("a babel config naming the compiler plugin gates clone writes", async (testContext) => {
   const root = await cloneWriteRoot("legend-doctor-babel-compiler-", { name: "app" });
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "babel.config.js"),
     'module.exports = { plugins: [["babel-plugin-react-compiler", { target: "19" }]] };\n',
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
-  assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
+  assert.ok(!report.practices.some((practice) => practice.action === "narrow-observable-write"));
 });
 
-test("a vite config using reactCompilerPreset gates clone writes", async t => {
+test("a vite config using reactCompilerPreset gates clone writes", async (testContext) => {
   const root = await cloneWriteRoot("legend-doctor-vite-compiler-", { name: "app" });
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "vite.config.js"),
     'import react, { reactCompilerPreset } from "@vitejs/plugin-react";\nexport default { plugins: [react({ babel: { presets: [reactCompilerPreset()] } })] };\n',
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
-  assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
+  assert.ok(!report.practices.some((practice) => practice.action === "narrow-observable-write"));
 });
 
-test("a next config enabling reactCompiler gates clone writes", async t => {
+test("a next config enabling reactCompiler gates clone writes", async (testContext) => {
   const root = await cloneWriteRoot("legend-doctor-next-compiler-", { name: "app" });
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "next.config.mjs"),
     "export default { experimental: { reactCompiler: true } };\n",
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
-  assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
+  assert.ok(!report.practices.some((practice) => practice.action === "narrow-observable-write"));
 });
 
-test("a next config with reactCompiler disabled keeps clone writes narrowed", async t => {
+test("a next config with reactCompiler disabled keeps clone writes narrowed", async (testContext) => {
   const root = await cloneWriteRoot("legend-doctor-next-off-", { name: "app" });
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "next.config.mjs"),
     "export default { experimental: { reactCompiler: false } };\n",
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
-  assert.ok(report.practices.some(practice => practice.action === "narrow-observable-write"));
+  assert.ok(report.practices.some((practice) => practice.action === "narrow-observable-write"));
 });
 
-test("compiler ownership walks up from each file's nearest package", async t => {
+test("compiler ownership walks up from each file's nearest package", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-compiler-workspace-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await mkdir(path.join(root, "apps", "web"), { recursive: true });
   await mkdir(path.join(root, "packages", "ui"), { recursive: true });
   await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "workspace" }), "utf8");
   await writeFile(
     path.join(root, "apps", "web", "package.json"),
     JSON.stringify({ dependencies: { "react-compiler-runtime": "19.0.0" }, name: "web" }),
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "packages", "ui", "package.json"),
     JSON.stringify({ name: "ui" }),
-    "utf8"
+    "utf8",
   );
   await writeFile(path.join(root, "apps", "web", "pages.tsx"), CLONE_WRITE_COMPONENT, "utf8");
   await writeFile(path.join(root, "packages", "ui", "pages.tsx"), CLONE_WRITE_COMPONENT, "utf8");
 
-  const report = await analyzePath(root);
-  const narrowWriteFiles = report.practices
-    .filter(practice => practice.action === "narrow-observable-write")
-    .map(practice => practice.location.file);
+  const report = await analyzePath(root),
+    narrowWriteFiles = report.practices
+      .filter((practice) => practice.action === "narrow-observable-write")
+      .map((practice) => practice.location.file);
 
   assert.deepEqual(narrowWriteFiles, [path.join("packages", "ui", "pages.tsx")]);
 });
 
-test("finds aliased React hooks through the ordinary path scan", async t => {
+test("finds aliased React hooks through the ordinary path scan", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-aliased-hooks-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "component.tsx"),
     'import { useState as state } from "react"; export function C() { const [value] = state(1); return <>{value}</>; }',
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
   assert.equal(report.hooks.states, 1);
-  assert.equal(report.findings[0]?.name, "value");
+  assert.equal(requireValue(report.findings[0]).name, "value");
 });
 
-test("reports parser diagnostics and complete coverage without changing the default report", async t => {
+test("reports parser diagnostics and complete coverage without changing the default report", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-coverage-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "broken.ts"),
     'import { useState } from "react"; const [value] = useState(;',
-    "utf8"
+    "utf8",
   );
   await writeFile(path.join(root, "valid.ts"), "export const value = 1;", "utf8");
 
-  const detailed = await analyzePathDetailed(root);
-  const ordinary = await analyzePath(root);
+  const detailed = await analyzePathDetailed(root),
+    ordinary = await analyzePath(root);
 
   assert.deepEqual(detailed.report, ordinary);
   assert.equal(detailed.diagnostics.parser.length, 1);
-  assert.equal(detailed.diagnostics.parser[0]?.file, "broken.ts");
+  assert.equal(requireValue(detailed.diagnostics.parser[0]).file, "broken.ts");
   assert.deepEqual(detailed.diagnostics.semantic, []);
   assert.equal(detailed.coverage.entries.length, 2);
   assert.deepEqual(
-    detailed.coverage.entries.map(entry => [
+    detailed.coverage.entries.map((entry) => [
       entry.target.file,
       entry.stages.parser.reason.code,
       entry.stages.detector.status,
@@ -292,13 +292,13 @@ test("reports parser diagnostics and complete coverage without changing the defa
     [
       ["broken.ts", "parser-recovered", "unknown"],
       ["valid.ts", "parser-complete", "analyzed"],
-    ]
+    ],
   );
 });
 
-test("inventories named and anonymous runtime functions in coverage", async t => {
+test("inventories named and anonymous runtime functions in coverage", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-functions-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "screen.ts"),
     `
@@ -306,23 +306,25 @@ test("inventories named and anonymous runtime functions in coverage", async t =>
         return [1].map(value => value + 1);
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const detailed = await analyzePathDetailed(root);
-  const functions = detailed.coverage.entries.filter(entry => entry.target.kind === "function");
+  const detailed = await analyzePathDetailed(root),
+    functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function");
 
   assert.deepEqual(
-    functions.map(entry => entry.target.kind === "function" ? entry.target.name : null),
-    ["Screen", null]
+    functions.map((entry) => (entry.target.kind === "function" ? entry.target.name : null)),
+    ["Screen", null],
   );
-  assert.ok(functions.every(entry => entry.stages.detector.status === "analyzed"));
-  assert.ok(functions.every(entry => entry.stages.lowering.reason.code === "bounded-flow-not-requested"));
+  assert.ok(functions.every((entry) => entry.stages.detector.status === "analyzed"));
+  assert.ok(
+    functions.every((entry) => entry.stages.lowering.reason.code === "bounded-flow-not-requested"),
+  );
 });
 
-test("reports complete, uncertain, and unrequested bounded state-flow coverage", async t => {
+test("reports complete, uncertain, and unrequested bounded state-flow coverage", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-flow-coverage-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   const source = `
     import { useState } from "react";
     export function Screen({ items }: { items: string[] }) {
@@ -336,20 +338,37 @@ test("reports complete, uncertain, and unrequested bounded state-flow coverage",
   `;
   await writeFile(path.join(root, "screen.tsx"), source, "utf8");
 
-  const detailed = await analyzePathDetailed(root);
-  const functions = detailed.coverage.entries.filter(entry => entry.target.kind === "function");
-  const byName = new Map(functions.map(entry => [entry.target.kind === "function" ? entry.target.name : null, entry]));
+  const detailed = await analyzePathDetailed(root),
+    functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function"),
+    byName = new Map(
+      functions.map((entry) => [
+        entry.target.kind === "function" ? entry.target.name : null,
+        entry,
+      ]),
+    );
 
-  assert.equal(byName.get("complete")?.stages.lowering.reason.code, "bounded-flow-complete");
-  assert.equal(byName.get("uncertain")?.stages.lowering.reason.code, "bounded-flow-uncertain");
-  assert.equal(byName.get("Unrelated")?.stages.lowering.reason.code, "bounded-flow-not-requested");
-  assert.equal(detailed.coverage.entries[0]?.stages.lowering.reason.code, "bounded-flow-uncertain");
+  assert.equal(
+    requireValue(byName.get("complete")).stages.lowering.reason.code,
+    "bounded-flow-complete",
+  );
+  assert.equal(
+    requireValue(byName.get("uncertain")).stages.lowering.reason.code,
+    "bounded-flow-uncertain",
+  );
+  assert.equal(
+    requireValue(byName.get("Unrelated")).stages.lowering.reason.code,
+    "bounded-flow-not-requested",
+  );
+  assert.equal(
+    requireValue(detailed.coverage.entries[0]).stages.lowering.reason.code,
+    "bounded-flow-uncertain",
+  );
   assert.deepEqual(detailed.report.findings, analyzeSource(source, "screen.tsx"));
 });
 
-test("excludes ambient declarations, overload signatures, and abstract methods from runtime coverage", async t => {
+test("excludes ambient declarations, overload signatures, and abstract methods from runtime coverage", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-runtime-only-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "contracts.ts"),
     `
@@ -358,34 +377,34 @@ test("excludes ambient declarations, overload signatures, and abstract methods f
       function overloaded(value: string) { return value; }
       abstract class Base { abstract method(): void; }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const detailed = await analyzePathDetailed(root);
-  const names = detailed.coverage.entries.flatMap(entry =>
-    entry.target.kind === "function" ? [entry.target.name] : []
-  );
+  const detailed = await analyzePathDetailed(root),
+    names = detailed.coverage.entries.flatMap((entry) =>
+      entry.target.kind === "function" ? [entry.target.name] : [],
+    );
 
   assert.deepEqual(names, ["overloaded"]);
 });
 
-test("localizes parser recovery to the overlapping function", async t => {
+test("localizes parser recovery to the overlapping function", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-recovery-range-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "screen.ts"),
     `
       function broken() { const value = ; return value; }
       function healthy() { return 1; }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const detailed = await analyzePathDetailed(root);
-  const functions = detailed.coverage.entries.filter(entry => entry.target.kind === "function");
+  const detailed = await analyzePathDetailed(root),
+    functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function");
 
   assert.deepEqual(
-    functions.map(entry => [
+    functions.map((entry) => [
       entry.target.kind === "function" ? entry.target.name : null,
       entry.stages.parser.reason.code,
       entry.stages.detector.status,
@@ -393,55 +412,58 @@ test("localizes parser recovery to the overlapping function", async t => {
     [
       ["broken", "parser-recovered-in-function", "unknown"],
       ["healthy", "parser-complete", "unknown"],
-    ]
+    ],
   );
 });
 
-test("attributes an end-of-file recovery diagnostic to the unfinished function", async t => {
+test("attributes an end-of-file recovery diagnostic to the unfinished function", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-recovery-eof-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
-  await writeFile(
-    path.join(root, "screen.ts"),
-    "function broken() { const value = 1;",
-    "utf8"
-  );
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(path.join(root, "screen.ts"), "function broken() { const value = 1;", "utf8");
 
-  const detailed = await analyzePathDetailed(root);
-  const functionEntry = detailed.coverage.entries.find(
-    entry => entry.target.kind === "function"
-  );
+  const detailed = await analyzePathDetailed(root),
+    functionEntry = detailed.coverage.entries.find((entry) => entry.target.kind === "function");
 
-  assert.equal(functionEntry?.stages.parser.reason.code, "parser-recovered-in-function");
-  assert.equal(functionEntry?.stages.lowering.reason.code, "bounded-flow-uncertain");
-  assert.equal(functionEntry?.stages.detector.status, "unknown");
+  assert.equal(
+    requireValue(functionEntry).stages.parser.reason.code,
+    "parser-recovered-in-function",
+  );
+  assert.equal(requireValue(functionEntry).stages.lowering.reason.code, "bounded-flow-uncertain");
+  assert.equal(requireValue(functionEntry).stages.detector.status, "unknown");
 });
 
-test("scopes directory coverage to supported sources and reports direct unsupported targets", async t => {
+test("scopes directory coverage to supported sources and reports direct unsupported targets", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-coverage-universe-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(path.join(root, "valid.ts"), "export const value = 1;", "utf8");
   const unsupportedPath = path.join(root, "component.vue");
   await writeFile(unsupportedPath, "<template />", "utf8");
 
-  const directory = await analyzePathDetailed(root);
-  const direct = await analyzePathDetailed(unsupportedPath);
+  const directory = await analyzePathDetailed(root),
+    direct = await analyzePathDetailed(unsupportedPath);
 
-  assert.deepEqual(directory.coverage.entries.map(entry => entry.target.file), ["valid.ts"]);
+  assert.deepEqual(
+    directory.coverage.entries.map((entry) => entry.target.file),
+    ["valid.ts"],
+  );
   assert.equal(direct.coverage.entries.length, 1);
-  assert.equal(direct.coverage.entries[0]?.stages.parser.reason.code, "unsupported-extension");
-  assert.equal(direct.coverage.entries[0]?.stages.detector.status, "unsupported");
+  assert.equal(
+    requireValue(direct.coverage.entries[0]).stages.parser.reason.code,
+    "unsupported-extension",
+  );
+  assert.equal(requireValue(direct.coverage.entries[0]).stages.detector.status, "unsupported");
 });
 
-test("surfaces legacy hook practices in read-only files through the path prefilter", async t => {
+test("surfaces legacy hook practices in read-only files through the path prefilter", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-practice-eligibility-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "legacy.ts"),
     `
       import { useSelector } from "@legendapp/state/react";
       export function read(value: string) { return useSelector(() => value); }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "use-t.ts"),
@@ -450,39 +472,39 @@ test("surfaces legacy hook practices in read-only files through the path prefilt
       import { i18n$ } from "./legacy.js";
       export function useT() { return use$(i18n$.strings); }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "plain.ts"),
     "export function useT(value: string) { return value.trim(); }",
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
   assert.deepEqual(
-    report.practices.map(practice => [practice.location.file, practice.action]),
+    report.practices.map((practice) => [practice.location.file, practice.action]),
     [
       ["legacy.ts", "replace-legacy-use-value"],
       ["use-t.ts", "replace-legacy-use-value"],
-    ]
+    ],
   );
 });
 
-test("downgrades replace-legacy-use-value to style when the installed useValue is an alias", async t => {
+test("downgrades replace-legacy-use-value to style when the installed useValue is an alias", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-installed-alias-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   const packageDirectory = path.join(root, "node_modules", "@legendapp", "state");
   await mkdir(packageDirectory, { recursive: true });
   await writeFile(
     path.join(packageDirectory, "package.json"),
     JSON.stringify({ name: "@legendapp/state", version: "3.0.0-beta.48" }),
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(packageDirectory, "react.d.ts"),
     "export { useSelector as use$, useSelector, useSelector as useValue };",
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "legacy.ts"),
@@ -490,22 +512,22 @@ test("downgrades replace-legacy-use-value to style when the installed useValue i
       import { use$ } from "@legendapp/state/react";
       export function read(value: string) { return use$(() => value); }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
 
-  assert.equal(report.practices[0]?.action, "replace-legacy-use-value");
-  assert.equal(report.practices[0]?.disposition, "style");
+  assert.equal(requireValue(report.practices[0]).action, "replace-legacy-use-value");
+  assert.equal(requireValue(report.practices[0]).disposition, "style");
   assert.match(
-    report.practices[0]?.evidence.join("\n") ?? "",
-    /alias of useSelector in the installed @legendapp\/state@3\.0\.0-beta\.48/
+    requireValue(report.practices[0]).evidence.join("\n") ?? "",
+    /alias of useSelector in the installed @legendapp\/state@3\.0\.0-beta\.48/u,
   );
 });
 
-test("replaces an exact React mirror of a one-hop Legend value hook", async t => {
+test("replaces an exact React mirror of a one-hop Legend value hook", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-value-bridge-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "state.ts"),
     `
@@ -517,7 +539,7 @@ test("replaces an exact React mirror of a one-hop Legend value hook", async t =>
       export function setName(next: string) { name$.set(next); }
       export function setOther(next: string) { other$.set(next); }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -539,18 +561,27 @@ test("replaces an exact React mirror of a one-hop Legend value hook", async t =>
           <input value={wrongSource} onChange={event => onWrongSource(event.target.value)} /></>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "name")?.action, "use-value");
-  assert.notEqual(report.findings.find(finding => finding.name === "mismatch")?.action, "use-value");
-  assert.notEqual(report.findings.find(finding => finding.name === "wrongSource")?.action, "use-value");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "name")).action,
+    "use-value",
+  );
+  assert.notEqual(
+    requireValue(report.findings.find((finding) => finding.name === "mismatch")).action,
+    "use-value",
+  );
+  assert.notEqual(
+    requireValue(report.findings.find((finding) => finding.name === "wrongSource")).action,
+    "use-value",
+  );
 });
 
-test("preserves the pre-update snapshot for state read by a source-proven deferred callback", async t => {
+test("preserves the pre-update snapshot for state read by a source-proven deferred callback", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-deferred-counter-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "use-deferred.ts"),
     `
@@ -564,7 +595,7 @@ test("preserves the pre-update snapshot for state read by a source-proven deferr
         }, []);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "use-immediate.ts"),
@@ -575,7 +606,7 @@ test("preserves the pre-update snapshot for state read by a source-proven deferr
         useEffect(() => { callback(); }, [callback]);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "use-counter.ts"),
@@ -602,20 +633,26 @@ test("preserves the pre-update snapshot for state read by a source-proven deferr
         });
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const ticks = report.findings.find(finding => finding.name === "ticks");
-  assert.equal(ticks?.action, "use-ref");
-  assert.match(ticks?.message ?? "", /pre-update snapshot/);
-  assert.notEqual(report.findings.find(finding => finding.name === "unsafeTicks")?.action, "use-ref");
-  assert.notEqual(report.findings.find(finding => finding.name === "asyncTicks")?.action, "use-ref");
+  const report = await analyzePath(root),
+    ticks = report.findings.find((finding) => finding.name === "ticks");
+  assert.equal(requireValue(ticks).action, "use-ref");
+  assert.match(requireValue(ticks).message ?? "", /pre-update snapshot/u);
+  assert.notEqual(
+    requireValue(report.findings.find((finding) => finding.name === "unsafeTicks")).action,
+    "use-ref",
+  );
+  assert.notEqual(
+    requireValue(report.findings.find((finding) => finding.name === "asyncTicks")).action,
+    "use-ref",
+  );
 });
 
-test("proves transitive object callback deferral across source hooks", async t => {
+test("proves transitive object callback deferral across source hooks", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-transitive-hook-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "use-guard.ts"),
     `
@@ -625,7 +662,7 @@ test("proves transitive object callback deferral across source hooks", async t =
         useStoredGuard(hasSnapshot);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "use-stored-guard.ts"),
@@ -646,7 +683,7 @@ test("proves transitive object callback deferral across source hooks", async t =
         useEffect(() => subscribe(() => callbacksRef.current.callback()), []);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "use-unsafe-guard.ts"),
@@ -656,7 +693,7 @@ test("proves transitive object callback deferral across source hooks", async t =
         useUnsafeStoredGuard(getSnapshot);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "use-stale-guard.ts"),
@@ -666,7 +703,7 @@ test("proves transitive object callback deferral across source hooks", async t =
         useStaleStoredGuard(getSnapshot);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -696,19 +733,31 @@ test("proves transitive object callback deferral across source hooks", async t =
         return <input onChange={event => setStaleDraft(event.target.value)} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "draft")?.action, "use-ref");
-  assert.equal(report.findings.find(finding => finding.name === "methodDraft")?.action, "use-ref");
-  assert.equal(report.findings.find(finding => finding.name === "unsafeDraft")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "staleDraft")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "draft")).action,
+    "use-ref",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "methodDraft")).action,
+    "use-ref",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "unsafeDraft")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "staleDraft")).action,
+    "review-state",
+  );
 });
 
-test("proves an effect-owned custom-hook cursor has only stable keyed row consumers", async t => {
+test("proves an effect-owned custom-hook cursor has only stable keyed row consumers", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-hook-cursor-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "keyboard.ts"),
     `
@@ -721,7 +770,7 @@ test("proves an effect-owned custom-hook cursor has only stable keyed row consum
       }
       export default new Keyboard();
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "immediate.ts"),
@@ -734,7 +783,7 @@ test("proves an effect-owned custom-hook cursor has only stable keyed row consum
       }
       export default new Immediate();
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "use-cursors.ts"),
@@ -792,7 +841,7 @@ test("proves an effect-owned custom-hook cursor has only stable keyed row consum
         return { syncCursor, setSyncCursor };
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Lists.tsx"),
@@ -838,21 +887,39 @@ test("proves an effect-owned custom-hook cursor has only stable keyed row consum
         return <List data={rows} renderItem={renderItem} keyExtractor={item => item.id} extraData={{ setterCursor }} onReset={() => setSetterCursor(-1)} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "cursor")?.action, "use-observable");
-  assert.equal(report.findings.find(finding => finding.name === "mountCursor")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "indexKeyCursor")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "syncCursor")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "shadowCursor")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "setterCursor")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "cursor")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "mountCursor")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "indexKeyCursor")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "syncCursor")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "shadowCursor")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "setterCursor")).action,
+    "review-state",
+  );
 });
 
-test("proves source-resolved event measurements have only bounded scalar leaf projections", async t => {
+test("proves source-resolved event measurements have only bounded scalar leaf projections", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-event-measurement-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "NativeHost.tsx"),
     `
@@ -866,7 +933,7 @@ test("proves source-resolved event measurements have only bounded scalar leaf pr
         children?: React.ReactNode;
       }>("MutableNativeHost");
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "MeasuredShell.tsx"),
@@ -892,7 +959,7 @@ test("proves source-resolved event measurements have only bounded scalar leaf pr
         return <MutableNativeHost onNativeLayout={event => onLayout(event.nativeEvent)}>{children}</MutableNativeHost>;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -977,15 +1044,15 @@ test("proves source-resolved event measurements have only bounded scalar leaf pr
         </MeasuredShell>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const states = new Map(
-    report.findings
-      .filter(finding => finding.hook === "useState" && finding.name)
-      .map(finding => [finding.name!, finding.action])
-  );
+  const report = await analyzePath(root),
+    states = new Map(
+      report.findings
+        .filter((finding) => finding.hook === "useState" && finding.name)
+        .map((finding) => [requireValue(finding.name), finding.action]),
+    );
   assert.equal(states.get("outerWidth"), "use-observable");
   assert.equal(states.get("eagerWidth"), "review-state");
   assert.equal(states.get("companionWidth"), "review-state");
@@ -995,9 +1062,9 @@ test("proves source-resolved event measurements have only bounded scalar leaf pr
   assert.equal(states.get("impureWidth"), "review-state");
 });
 
-test("isolates one event-owned scalar in a reactive host prop", async t => {
+test("isolates one event-owned scalar in a reactive host prop", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-reactive-host-prop-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Screens.tsx"),
     `
@@ -1140,36 +1207,39 @@ test("isolates one event-owned scalar in a reactive host prop", async t => {
         </View>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const states = new Map(
-    report.findings
-      .filter(finding => finding.hook === "useState" && finding.name)
-      .map(finding => [finding.name!, finding])
-  );
-  assert.equal(states.get("scale")?.action, "use-observable");
-  assert.match(states.get("scale")?.message ?? "", /single host prop reactive/);
-  assert.equal(states.get("scrollLeft")?.action, "use-observable");
-  assert.match(states.get("scrollLeft")?.message ?? "", /single host prop reactive/);
-  assert.equal(states.get("hovered")?.action, "use-observable");
-  assert.match(states.get("hovered")?.message ?? "", /single host prop reactive/);
-  assert.equal(states.get("focused")?.action, "use-observable");
-  assert.match(states.get("focused")?.message ?? "", /single host prop reactive/);
+  const report = await analyzePath(root),
+    states = new Map(
+      report.findings
+        .filter((finding) => finding.hook === "useState" && finding.name)
+        .map((finding) => [requireValue(finding.name), finding]),
+    );
+  assert.equal(requireValue(states.get("scale")).action, "use-observable");
+  assert.match(requireValue(states.get("scale")).message ?? "", /single host prop reactive/u);
+  assert.equal(requireValue(states.get("scrollLeft")).action, "use-observable");
+  assert.match(requireValue(states.get("scrollLeft")).message ?? "", /single host prop reactive/u);
+  assert.equal(requireValue(states.get("hovered")).action, "use-observable");
+  assert.match(requireValue(states.get("hovered")).message ?? "", /single host prop reactive/u);
+  assert.equal(requireValue(states.get("focused")).action, "use-observable");
+  assert.match(requireValue(states.get("focused")).message ?? "", /single host prop reactive/u);
   for (const name of ["companionWidth", "repeatedWidth", "impureOpacity"]) {
-    assert.equal(states.get(name)?.action, "review-state", name);
+    assert.equal(requireValue(states.get(name)).action, "review-state", name);
   }
   for (const name of ["hoveredWithCompanion", "active", "toggled"]) {
-    assert.equal(states.get(name)?.action, "review-state", name);
+    assert.equal(requireValue(states.get(name)).action, "review-state", name);
   }
-  assert.doesNotMatch(states.get("customWidth")?.message ?? "", /single host prop reactive/);
-  assert.equal(states.get("effectOpacity")?.action, "delete-derived-state");
+  assert.doesNotMatch(
+    requireValue(states.get("customWidth")).message ?? "",
+    /single host prop reactive/u,
+  );
+  assert.equal(requireValue(states.get("effectOpacity")).action, "delete-derived-state");
 });
 
-test("isolates effect-owned scalar ticks across bounded stable leaves", async t => {
+test("isolates effect-owned scalar ticks across bounded stable leaves", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-effect-scalar-leaves-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Screens.tsx"),
     `
@@ -1260,15 +1330,15 @@ test("isolates effect-owned scalar ticks across bounded stable leaves", async t 
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const states = new Map(
-    report.findings
-      .filter(finding => finding.hook === "useState" && finding.name)
-      .map(finding => [finding.name!, finding.action])
-  );
+  const report = await analyzePath(root),
+    states = new Map(
+      report.findings
+        .filter((finding) => finding.hook === "useState" && finding.name)
+        .map((finding) => [requireValue(finding.name), finding.action]),
+    );
   assert.equal(states.get("elapsed"), "use-observable");
   for (const name of [
     "unkeyedElapsed",
@@ -1282,9 +1352,9 @@ test("isolates effect-owned scalar ticks across bounded stable leaves", async t 
   }
 });
 
-test("isolates an event-owned boolean across small presentation leaves and reactive props", async t => {
+test("isolates an event-owned boolean across small presentation leaves and reactive props", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-multi-leaf-boolean-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "cx.ts"),
     `
@@ -1292,7 +1362,7 @@ test("isolates an event-owned boolean across small presentation leaves and react
       export function cx(...values: unknown[]) { return clsx(values); }
       export function noisy(...values: unknown[]) { console.log(values); return clsx(values); }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screens.tsx"),
@@ -1480,31 +1550,79 @@ test("isolates an event-owned boolean across small presentation leaves and react
         </section>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "active")?.action, "use-observable");
-  assert.equal(report.findings.find(finding => finding.name === "noisyActive")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "broadActive")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "branchActive")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "scrolled")?.action, "use-observable");
-  assert.equal(report.findings.find(finding => finding.name === "customComputed")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "inlineComputed")?.action, "use-observable");
-  assert.equal(report.findings.find(finding => finding.name === "opaque")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "companion")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "effectOwned")?.action, "delete-derived-state");
-  assert.equal(report.findings.find(finding => finding.name === "measuredOverflow")?.action, "use-observable");
-  assert.equal(report.findings.find(finding => finding.name === "opaqueMeasured")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "mixedMeasured")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "separatedMeasured")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "repeated")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "separated")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "active")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "noisyActive")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "broadActive")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "branchActive")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "scrolled")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "customComputed")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "inlineComputed")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "opaque")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "companion")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "effectOwned")).action,
+    "delete-derived-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "measuredOverflow")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "opaqueMeasured")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "mixedMeasured")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "separatedMeasured")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "repeated")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "separated")).action,
+    "review-state",
+  );
 });
 
-test("traces a command payload through memoized options and source component wrappers", async t => {
+test("traces a command payload through memoized options and source component wrappers", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-option-command-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "useShortcut.ts"),
     `
@@ -1516,7 +1634,7 @@ test("traces a command payload through memoized options and source component wra
         useShortcut(() => options.onConfirm());
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Button.tsx"),
@@ -1527,7 +1645,7 @@ test("traces a command payload through memoized options and source component wra
       const Button = Object.assign(ButtonBase, { Text: () => null });
       export default Button;
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Footer.tsx"),
@@ -1543,7 +1661,7 @@ test("traces a command payload through memoized options and source component wra
       }
       export default React.memo(Footer) as typeof Footer;
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Selection.tsx"),
@@ -1573,7 +1691,7 @@ test("traces a command payload through memoized options and source component wra
         return <EagerButton onConfirm={options.onConfirm} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screens.tsx"),
@@ -1605,18 +1723,27 @@ test("traces a command payload through memoized options and source component wra
         return <EagerPropSelection options={options} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "payload")?.action, "use-ref");
-  assert.equal(report.findings.find(finding => finding.name === "unsafePayload")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "unsafePropPayload")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "payload")).action,
+    "use-ref",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "unsafePayload")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "unsafePropPayload")).action,
+    "review-state",
+  );
 });
 
-test("proves deferred context and higher-order callback paths and rejects eager readers", async t => {
+test("proves deferred context and higher-order callback paths and rejects eager readers", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-command-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "useLater.ts"),
     `
@@ -1625,7 +1752,7 @@ test("proves deferred context and higher-order callback paths and rejects eager 
         useEffect(() => subscribe(callback), [callback]);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Selections.tsx"),
@@ -1671,7 +1798,7 @@ test("proves deferred context and higher-order callback paths and rejects eager 
         return <EagerButton onPress={options.onConfirm} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screens.tsx"),
@@ -1700,18 +1827,27 @@ test("proves deferred context and higher-order callback paths and rejects eager 
         return <GuardSelection options={options} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "payload")?.action, "use-ref");
-  assert.equal(report.findings.find(finding => finding.name === "guardPayload")?.action, "use-ref");
-  assert.equal(report.findings.find(finding => finding.name === "eagerPayload")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "payload")).action,
+    "use-ref",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "guardPayload")).action,
+    "use-ref",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "eagerPayload")).action,
+    "review-state",
+  );
 });
 
-test("proves keyed record commands through source-resolved event wrappers", async t => {
+test("proves keyed record commands through source-resolved event wrappers", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-keyed-record-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Buttons.tsx"),
     `
@@ -1723,7 +1859,7 @@ test("proves keyed record commands through source-resolved event wrappers", asyn
         return <button aria-pressed={active}>Vote</button>;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screens.tsx"),
@@ -1757,32 +1893,32 @@ test("proves keyed record commands through source-resolved event wrappers", asyn
         </div>)}</main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const safe = report.findings.find(finding => finding.name === "safeFeedback");
-  const eager = report.findings.find(finding => finding.name === "eagerFeedback");
-  assert.equal(safe?.action, "use-observable");
-  assert.match(safe?.message ?? "", /dynamic entry/);
-  assert.doesNotMatch(eager?.message ?? "", /dynamic entry/);
+  const report = await analyzePath(root),
+    safe = report.findings.find((finding) => finding.name === "safeFeedback"),
+    eager = report.findings.find((finding) => finding.name === "eagerFeedback");
+  assert.equal(requireValue(safe).action, "use-observable");
+  assert.match(requireValue(safe).message ?? "", /dynamic entry/u);
+  assert.doesNotMatch(requireValue(eager).message ?? "", /dynamic entry/u);
 });
 
-test("shares one cached AST across source indexing and both detector families", async t => {
+test("shares one cached AST across source indexing and both detector families", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
-  const statePath = path.join(root, "state.ts");
-  const leafPath = path.join(root, "Leaf.tsx");
-  const screenPath = path.join(root, "Screen.tsx");
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  const statePath = path.join(root, "state.ts"),
+    leafPath = path.join(root, "Leaf.tsx"),
+    screenPath = path.join(root, "Screen.tsx");
   await writeFile(
     statePath,
     'import { observable } from "@legendapp/state"; export const profile$ = observable({ name: "Ada", email: "ada@example.com" });',
-    "utf8"
+    "utf8",
   );
   await writeFile(
     leafPath,
     "export function Leaf({ busy }: { busy: boolean }) { return <span>{String(busy)}</span>; }",
-    "utf8"
+    "utf8",
   );
   const screenSource = `
     import { useState } from "react";
@@ -1799,32 +1935,35 @@ test("shares one cached AST across source indexing and both detector families", 
   `;
   await writeFile(screenPath, screenSource, "utf8");
 
-  const context = await createAnalysisContext(root);
-  const file = context.project.getFile(screenPath);
+  const context = await createAnalysisContext(root),
+    file = context.project.getFile(screenPath);
   assert.ok(file);
-  assert.strictEqual(context.project.getFile(screenPath)?.sourceFile, file.sourceFile);
-  const reportName = "Screen.tsx";
-  const components = context.sourceIndex.componentsFor(screenPath);
-  const observables = context.sourceIndex.observablesFor(screenPath);
-  const factories = context.sourceIndex.observableFactoriesFor(screenPath);
+  assert.strictEqual(requireValue(context.project.getFile(screenPath)).sourceFile, file.sourceFile);
+  const reportName = "Screen.tsx",
+    components = context.sourceIndex.componentsFor(screenPath),
+    observables = context.sourceIndex.observablesFor(screenPath),
+    factories = context.sourceIndex.observableFactoriesFor(screenPath);
 
   assert.deepEqual(
     analyzeSourceFile(file, reportName, components),
-    analyzeSource(screenSource, reportName, components)
+    analyzeSource(screenSource, reportName, components),
   );
   assert.deepEqual(
     analyzeLegendPracticesFile(file, reportName, observables, factories),
-    analyzeLegendPractices(screenSource, reportName, observables, factories)
+    analyzeLegendPractices(screenSource, reportName, observables, factories),
   );
 
   const report = await analyzePath(root, context);
-  assert.equal(report.findings.find(finding => finding.name === "busy")?.action, "use-observable");
-  assert.equal(report.practices[0]?.action, "narrow-use-value-subscription");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "busy")).action,
+    "use-observable",
+  );
+  assert.equal(requireValue(report.practices[0]).action, "narrow-use-value-subscription");
 });
 
-test("keeps display-path harness semantics separate from cached absolute identity", async t => {
+test("keeps display-path harness semantics separate from cached absolute identity", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-display-path-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   const harnessDirectory = path.join(root, "src", "__tests__");
   await mkdir(harnessDirectory, { recursive: true });
   const harnessPath = path.join(harnessDirectory, "Screen.tsx");
@@ -1839,21 +1978,26 @@ test("keeps display-path harness semantics separate from cached absolute identit
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const directoryFinding = (await analyzePath(root)).findings[0];
-  const focusedFinding = (await analyzePath(harnessPath)).findings[0];
-  assert.equal(directoryFinding?.action, "keep-state");
-  assert.equal(directoryFinding?.location.file, path.join("src", "__tests__", "Screen.tsx"));
-  assert.equal(focusedFinding?.action, "use-observable");
-  assert.equal(focusedFinding?.location.file, "Screen.tsx");
+  const directoryReport = await analyzePath(root),
+    focusedReport = await analyzePath(harnessPath),
+    [directoryFinding] = directoryReport.findings,
+    [focusedFinding] = focusedReport.findings;
+  assert.equal(requireValue(directoryFinding).action, "keep-state");
+  assert.equal(
+    requireValue(directoryFinding).location.file,
+    path.join("src", "__tests__", "Screen.tsx"),
+  );
+  assert.equal(requireValue(focusedFinding).action, "use-observable");
+  assert.equal(requireValue(focusedFinding).location.file, "Screen.tsx");
 });
 
 test("keeps JavaScript and JSX practice results stable through the cached parser", () => {
   for (const extension of ["js", "jsx", "mjs", "cjs"] as const) {
-    const fileName = `screen.${extension}`;
-    const source = `
+    const fileName = `screen.${extension}`,
+      source = `
       import { observable } from "@legendapp/state";
       import { useValue } from "@legendapp/state/react";
       const profile$ = observable({ name: "Ada" });
@@ -1862,46 +2006,47 @@ test("keeps JavaScript and JSX practice results stable through the cached parser
         const profile = useValue(profile$);
         return profile.name;
       }
-    `;
-    const file = new AnalysisProject(new Map([[fileName, source]])).files[0];
+    `,
+      project = new AnalysisProject(new Map([[fileName, source]])),
+      [file] = project.files;
     assert.ok(file);
     assert.deepEqual(
       analyzeLegendPracticesFile(file, fileName),
       analyzeLegendPractices(source, fileName),
-      extension
+      extension,
     );
   }
 });
 
-test("reports optional semantic coverage only for an explicit tsconfig shard", async t => {
+test("reports optional semantic coverage only for an explicit tsconfig shard", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-semantic-context-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
-  const sourcePath = path.join(root, "screen.ts");
-  const configFilePath = path.join(root, "tsconfig.json");
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  const sourcePath = path.join(root, "screen.ts"),
+    configFilePath = path.join(root, "tsconfig.json");
   await writeFile(sourcePath, "export const value: string = 'ready';", "utf8");
   await writeFile(
     configFilePath,
     JSON.stringify({ compilerOptions: { strict: true }, files: ["screen.ts"] }),
-    "utf8"
+    "utf8",
   );
 
-  const context = await createAnalysisContext(root, { configFilePath });
-  const detailed = await analyzePathDetailed(root, context);
+  const context = await createAnalysisContext(root, { configFilePath }),
+    detailed = await analyzePathDetailed(root, context);
 
   assert.ok(context.semanticContext);
   assert.deepEqual(detailed.diagnostics.semantic, []);
-  assert.equal(detailed.coverage.entries[0]?.stages.semantic.status, "analyzed");
+  assert.equal(requireValue(detailed.coverage.entries[0]).stages.semantic.status, "analyzed");
 });
 
 test("does not require application component provenance for a focused call-site wrapper", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-"));
-  const components = path.join(root, "components");
-  const screens = path.join(root, "screens");
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-")),
+    components = path.join(root, "components"),
+    screens = path.join(root, "screens");
   await mkdir(components);
   await mkdir(screens);
   await writeFile(
     path.join(components, "Leaf.tsx"),
-    'export function Leaf({ value }: { value: string }) { return <output>{value}</output>; }'
+    "export function Leaf({ value }: { value: string }) { return <output>{value}</output>; }",
   );
   const screen = path.join(screens, "Screen.tsx");
   await writeFile(
@@ -1914,24 +2059,24 @@ test("does not require application component provenance for a focused call-site 
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
           <button onClick={() => setValue("done")}>Done</button><Leaf value={value} /></main>;
       }
-    `
+    `,
   );
 
   const focused = await analyzePath(screen);
-  assert.equal(focused.findings[0]?.action, "use-observable");
+  assert.equal(requireValue(focused.findings[0]).action, "use-observable");
 
-  const context = await createAnalysisContext(root);
-  const contextual = await analyzePath(screen, context);
+  const context = await createAnalysisContext(root),
+    contextual = await analyzePath(screen, context);
   assert.equal(contextual.files, 1);
-  assert.equal(contextual.findings[0]?.location.file, "Screen.tsx");
-  assert.equal(contextual.findings[0]?.action, "use-observable");
+  assert.equal(requireValue(contextual.findings[0]).location.file, "Screen.tsx");
+  assert.equal(requireValue(contextual.findings[0]).action, "use-observable");
 });
 
-test("rejects targets outside a shared analysis project", async t => {
-  const contextRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-root-"));
-  const targetRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-target-root-"));
-  t.after(() => rm(contextRoot, { force: true, recursive: true }));
-  t.after(() => rm(targetRoot, { force: true, recursive: true }));
+test("rejects targets outside a shared analysis project", async (testContext) => {
+  const contextRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-root-")),
+    targetRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-target-root-"));
+  testContext.after(() => rm(contextRoot, { force: true, recursive: true }));
+  testContext.after(() => rm(targetRoot, { force: true, recursive: true }));
   await writeFile(path.join(contextRoot, "owned.ts"), "export const owned = true;", "utf8");
   const targetPath = path.join(targetRoot, "foreign.ts");
   await writeFile(targetPath, "export const foreign = true;", "utf8");
@@ -1940,7 +2085,7 @@ test("rejects targets outside a shared analysis project", async t => {
 
   await assert.rejects(
     analyzePath(targetPath, context),
-    /analysis context does not own target file/
+    /analysis context does not own target file/u,
   );
 });
 
@@ -1954,7 +2099,7 @@ test("uses cross-file observable provenance for batching findings", async () => 
         import { observable } from "@legendapp/state";
         export const player$ = observable({ loading: false, error: null as string | null });
       `,
-      "utf8"
+      "utf8",
     );
     await writeFile(
       path.join(root, "screen.ts"),
@@ -1965,13 +2110,13 @@ test("uses cross-file observable provenance for batching findings", async () => 
           player$.loading.set(false);
         }
       `,
-      "utf8"
+      "utf8",
     );
 
     const report = await analyzePath(root);
     assert.equal(report.practices.length, 1);
-    assert.equal(report.practices[0]?.action, "assign-observable-fields");
-    assert.equal(report.practices[0]?.location.file, "screen.ts");
+    assert.equal(requireValue(report.practices[0]).action, "assign-observable-fields");
+    assert.equal(requireValue(report.practices[0]).location.file, "screen.ts");
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -1988,7 +2133,7 @@ test("uses typed project factory provenance for narrow leaf subscriptions", asyn
           return observable(value);
         }
       `,
-      "utf8"
+      "utf8",
     );
     await writeFile(
       path.join(root, "screen.tsx"),
@@ -2002,14 +2147,15 @@ test("uses typed project factory provenance for narrow leaf subscriptions", asyn
         }
         export function Screen() { return <span>{Name(state$.profile)}</span>; }
       `,
-      "utf8"
+      "utf8",
     );
 
     const report = await analyzePath(root);
-    assert.deepEqual(report.practices.map(finding => finding.action), [
-      "narrow-use-value-subscription",
-    ]);
-    assert.match(report.practices[0]?.message ?? "", /useValue\(profile\$\.name\)/);
+    assert.deepEqual(
+      report.practices.map((finding) => finding.action),
+      ["narrow-use-value-subscription"],
+    );
+    assert.match(requireValue(report.practices[0]).message ?? "", /useValue\(profile\$\.name\)/u);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -2025,7 +2171,7 @@ test("uses cross-file observable provenance for direct useValue findings", async
         import { observable } from "@legendapp/state";
         export const theme$ = observable({ accent: "blue" });
       `,
-      "utf8"
+      "utf8",
     );
     await writeFile(
       path.join(root, "screen.tsx"),
@@ -2036,28 +2182,28 @@ test("uses cross-file observable provenance for direct useValue findings", async
           return <span>{observe(() => theme$.accent.get())}</span>;
         }
       `,
-      "utf8"
+      "utf8",
     );
 
     const report = await analyzePath(root);
     assert.equal(report.practices.length, 1);
-    assert.equal(report.practices[0]?.action, "pass-observable-to-use-value");
-    assert.equal(report.practices[0]?.location.file, "screen.tsx");
+    assert.equal(requireValue(report.practices[0]).action, "pass-observable-to-use-value");
+    assert.equal(requireValue(report.practices[0]).location.file, "screen.tsx");
   } finally {
     await rm(root, { force: true, recursive: true });
   }
 });
 
-test("moves a transported useValue subscription into one source-proven child", async t => {
+test("moves a transported useValue subscription into one source-proven child", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-subscription-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "state.ts"),
     `
       import { observable } from "@legendapp/state";
       export const paletteOpen$ = observable(false);
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "palette.tsx"),
@@ -2066,7 +2212,7 @@ test("moves a transported useValue subscription into one source-proven child", a
         return <dialog open={open}>Commands</dialog>;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "screen.tsx"),
@@ -2080,22 +2226,22 @@ test("moves a transported useValue subscription into one source-proven child", a
         return <>{children}<Palette open={open} /></>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const [finding] = report.practices.filter(
-    candidate => candidate.action === "move-use-value-into-child"
-  );
-  assert.equal(finding?.location.file, "screen.tsx");
-  assert.equal(finding?.location.line, 6);
-  assert.match(finding?.message ?? "", /pass `paletteOpen\$` to `Palette`/);
-  assert.match(finding?.message ?? "", /subscribe inside the child/);
+  const report = await analyzePath(root),
+    finding = report.practices.find(
+      (candidate) => candidate.action === "move-use-value-into-child",
+    );
+  assert.equal(requireValue(finding).location.file, "screen.tsx");
+  assert.equal(requireValue(finding).location.line, 6);
+  assert.match(requireValue(finding).message ?? "", /pass `paletteOpen\$` to `Palette`/u);
+  assert.match(requireValue(finding).message ?? "", /subscribe inside the child/u);
 });
 
-test("keeps transported useValue subscriptions without one stable primitive child contract", async t => {
+test("keeps transported useValue subscriptions without one stable primitive child contract", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-subscription-negative-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "state.ts"),
     `
@@ -2103,7 +2249,7 @@ test("keeps transported useValue subscriptions without one stable primitive chil
       export const open$ = observable(false);
       export const panel$ = observable({ open: false });
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "palette.tsx"),
@@ -2117,7 +2263,7 @@ test("keeps transported useValue subscriptions without one stable primitive chil
         return <dialog open={panel.open} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "screen.tsx"),
@@ -2155,26 +2301,26 @@ test("keeps transported useValue subscriptions without one stable primitive chil
         return <ObjectPalette panel={panel} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
   assert.deepEqual(
-    report.practices.filter(candidate => candidate.action === "move-use-value-into-child"),
-    []
+    report.practices.filter((candidate) => candidate.action === "move-use-value-into-child"),
+    [],
   );
 });
 
-test("uses peek only for a source-proven effect callback prop", async t => {
+test("uses peek only for a source-proven effect callback prop", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-effect-callback-read-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "state.ts"),
     `
       import { observable } from "@legendapp/state";
       export const state$ = observable({ ready: false, mixed: false, forwarded: false });
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "consumers.tsx"),
@@ -2196,7 +2342,7 @@ test("uses peek only for a source-proven effect callback prop", async t => {
       }
       declare function subscribe(callback: () => unknown): void;
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "screen.tsx"),
@@ -2211,14 +2357,17 @@ test("uses peek only for a source-proven effect callback prop", async t => {
         </>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const findings = report.practices.filter(finding => finding.action === "use-peek-for-snapshot");
+  const report = await analyzePath(root),
+    findings = report.practices.filter((finding) => finding.action === "use-peek-for-snapshot");
   assert.equal(findings.length, 1);
-  assert.match(findings[0]?.message ?? "", /state\$\.ready\.peek\(\)/);
-  assert.match(findings[0]?.evidence.join(" ") ?? "", /source-proven React effect callback/);
+  assert.match(requireValue(findings[0]).message ?? "", /state\$\.ready\.peek\(\)/u);
+  assert.match(
+    requireValue(findings[0]).evidence.join(" ") ?? "",
+    /source-proven React effect callback/u,
+  );
 });
 
 test("uses source-proven wrapper member provenance without treating the wrapper as observable", async () => {
@@ -2237,12 +2386,12 @@ test("uses source-proven wrapper member provenance without treating the wrapper 
         }
         export const controller = createController();
       `,
-      "utf8"
+      "utf8",
     );
     await writeFile(
       path.join(root, "state", "index.ts"),
       'export { controller as dialog } from "./controller";',
-      "utf8"
+      "utf8",
     );
     await writeFile(
       path.join(root, "screen.tsx"),
@@ -2255,19 +2404,23 @@ test("uses source-proven wrapper member provenance without treating the wrapper 
           return <span>{value.profile.name}</span>;
         }
       `,
-      "utf8"
+      "utf8",
     );
 
     const context = await createAnalysisContext(root);
     assert.deepEqual(
       [...context.sourceIndex.observablePathsFor(path.join(root, "screen.tsx"))],
-      ["dialog.value$"]
+      ["dialog.value$"],
     );
     const report = await analyzePath(root, context);
-    assert.deepEqual(report.practices.map(finding => finding.action), [
-      "narrow-use-value-subscription",
-    ]);
-    assert.match(report.practices[0]?.message ?? "", /useValue\(dialog\.value\$\.profile\.name\)/);
+    assert.deepEqual(
+      report.practices.map((finding) => finding.action),
+      ["narrow-use-value-subscription"],
+    );
+    assert.match(
+      requireValue(report.practices[0]).message ?? "",
+      /useValue\(dialog\.value\$\.profile\.name\)/u,
+    );
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -2283,7 +2436,7 @@ test("analyzes useValue-only files for the narrowest observable child", async ()
         import { observable } from "@legendapp/state";
         export const profile$ = observable({ name: "Ada", email: "ada@example.com" });
       `,
-      "utf8"
+      "utf8",
     );
     await writeFile(
       path.join(root, "screen.tsx"),
@@ -2295,13 +2448,13 @@ test("analyzes useValue-only files for the narrowest observable child", async ()
           return <span>{profile.name}</span>;
         }
       `,
-      "utf8"
+      "utf8",
     );
 
     const report = await analyzePath(root);
     assert.equal(report.practices.length, 1);
-    assert.equal(report.practices[0]?.action, "narrow-use-value-subscription");
-    assert.equal(report.practices[0]?.location.file, "screen.tsx");
+    assert.equal(requireValue(report.practices[0]).action, "narrow-use-value-subscription");
+    assert.equal(requireValue(report.practices[0]).location.file, "screen.tsx");
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -2311,7 +2464,7 @@ test("places an observable subscription at one resolved child call site", async 
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-contract-"));
   await writeFile(
     path.join(root, "StatusLeaf.tsx"),
-    'export function StatusLeaf({ busy, onRun }: { busy: boolean; onRun: () => void }) { return <button onClick={onRun}>{busy ? "Busy" : "Ready"}</button>; }'
+    'export function StatusLeaf({ busy, onRun }: { busy: boolean; onRun: () => void }) { return <button onClick={onRun}>{busy ? "Busy" : "Ready"}</button>; }',
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2325,13 +2478,13 @@ test("places an observable subscription at one resolved child call site", async 
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><StatusLeaf busy={busy} onRun={run} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /stable `StatusLeaf` call site/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /stable `StatusLeaf` call site/u);
 });
 
 test("verifies a leaf child contract before promoting the transport", async () => {
@@ -2343,7 +2496,7 @@ test("verifies a leaf child contract before promoting the transport", async () =
         const label = busy ? "Busy" : "Ready";
         return <section data-busy={busy}><span>{label}</span></section>;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2360,19 +2513,19 @@ test("verifies a leaf child contract before promoting the transport", async () =
         );
         return <Shell>{content}</Shell>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /child contract is verified/);
-  assert.match(finding?.message ?? "", /renders the `busy` value directly/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /child contract is verified/u);
+  assert.match(requireValue(finding).message ?? "", /renders the `busy` value directly/u);
 });
 
-test("groups a literal popup payload with its visibility at one resolved child", async t => {
+test("groups a literal popup payload with its visibility at one resolved child", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-popup-model-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "LevelPopup.tsx"),
     `
@@ -2387,7 +2540,7 @@ test("groups a literal popup payload with its visibility at one resolved child",
         return <dialog open={open} data-level={level}><button onClick={close}>Close</button></dialog>;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2435,11 +2588,14 @@ test("groups a literal popup payload with its visibility at one resolved child",
           <LevelPopup open={functionalOpen} level={functionalLevel} setOpen={setFunctionalOpen} /></main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const actions = new Map(report.findings.map(finding => [finding.name, finding.action]));
+  const report = await analyzePath(root),
+    actions = new Map(report.findings.map((finding) => [finding.name, finding.action])),
+    popupOpenFinding = requireValue(
+      report.findings.find((finding) => finding.name === "popupOpen"),
+    );
   assert.equal(actions.get("popupOpen"), "use-observable");
   assert.equal(actions.get("popupLevel"), "use-observable");
   assert.equal(actions.get("splitOpen"), "review-state");
@@ -2448,15 +2604,12 @@ test("groups a literal popup payload with its visibility at one resolved child",
   assert.equal(actions.get("repeatedLevel"), "review-state");
   assert.equal(actions.get("functionalOpen"), "review-state");
   assert.equal(actions.get("functionalLevel"), "review-state");
-  assert.deepEqual(
-    report.findings.find(finding => finding.name === "popupOpen")?.group?.members,
-    ["popupOpen", "popupLevel"]
-  );
+  assert.deepEqual(requireValue(popupOpenFinding.group).members, ["popupOpen", "popupLevel"]);
 });
 
-test("isolates source-proven async status across bounded leaf call sites", async t => {
+test("isolates source-proven async status across bounded leaf call sites", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-async-fanout-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "SelectControl.tsx"),
     `
@@ -2475,7 +2628,7 @@ test("isolates source-proven async status across bounded leaf call sites", async
         return <select disabled={loading} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2551,25 +2704,25 @@ test("isolates source-proven async status across bounded leaf call sites", async
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const actions = new Map(report.findings.map(finding => [finding.name, finding.action]));
+  const report = await analyzePath(root),
+    actions = new Map(report.findings.map((finding) => [finding.name, finding.action]));
   assert.equal(actions.get("loading"), "use-observable");
   assert.equal(actions.get("smallLoading"), "review-state");
   assert.equal(actions.get("eagerLoading"), "review-state");
   assert.equal(actions.get("mixedLoading"), "review-state");
   assert.equal(actions.get("repeatedLoading"), "review-state");
   assert.match(
-    report.findings.find(finding => finding.name === "loading")?.message ?? "",
-    /three stable status call sites/
+    requireValue(report.findings.find((finding) => finding.name === "loading")).message ?? "",
+    /three stable status call sites/u,
   );
 });
 
-test("resolves a defaulted intrinsic branch through a polymorphic event wrapper", async t => {
+test("resolves a defaulted intrinsic branch through a polymorphic event wrapper", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-polymorphic-event-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Controls.tsx"),
     `
@@ -2642,9 +2795,10 @@ test("resolves a defaulted intrinsic branch through a polymorphic event wrapper"
         return <output>{loading ? "Busy" : "Ready"}</output>;
       }
     `,
-    "utf8"
+    "utf8",
   );
-  const broadOwner = "<Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions />";
+  const broadOwner =
+    "<Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions />";
   await writeFile(
     path.join(root, "Screen.tsx"),
     `
@@ -2687,11 +2841,11 @@ test("resolves a defaulted intrinsic branch through a polymorphic event wrapper"
         return <main>${broadOwner}<ReassignedDialog loading={reassignedLoading} onRun={run} /><Status loading={reassignedLoading} /></main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const actions = new Map(report.findings.map(finding => [finding.name, finding.action]));
+  const report = await analyzePath(root),
+    actions = new Map(report.findings.map((finding) => [finding.name, finding.action]));
   assert.equal(actions.get("loading"), "use-observable");
   assert.equal(actions.get("slotLoading"), "review-state");
   assert.equal(actions.get("dynamicLoading"), "review-state");
@@ -2700,9 +2854,9 @@ test("resolves a defaulted intrinsic branch through a polymorphic event wrapper"
   assert.equal(actions.get("reassignedLoading"), "review-state");
 });
 
-test("proves memoized option commands through a resolved deferred child", async t => {
+test("proves memoized option commands through a resolved deferred child", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-option-command-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "useDeferredHandler.ts"),
     `
@@ -2714,7 +2868,7 @@ test("proves memoized option commands through a resolved deferred child", async 
         }, [callback]);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "ActionMenu.tsx"),
@@ -2731,7 +2885,7 @@ test("proves memoized option commands through a resolved deferred child", async 
         </section>;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "ImmediateMenu.tsx"),
@@ -2744,7 +2898,7 @@ test("proves memoized option commands through a resolved deferred child", async 
         return <section />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "SynchronousMenu.tsx"),
@@ -2754,7 +2908,7 @@ test("proves memoized option commands through a resolved deferred child", async 
         return <section />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "UnknownHookMenu.tsx"),
@@ -2766,7 +2920,7 @@ test("proves memoized option commands through a resolved deferred child", async 
         return <section />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2814,19 +2968,31 @@ test("proves memoized option commands through a resolved deferred child", async 
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "visible")?.action, "use-observable");
-  assert.equal(report.findings.find(finding => finding.name === "unsafeVisible")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "syncVisible")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "hookVisible")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "visible")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "unsafeVisible")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "syncVisible")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "hookVisible")).action,
+    "review-state",
+  );
 });
 
-test("isolates a resolved leaf updated outside a named React transition", async t => {
+test("isolates a resolved leaf updated outside a named React transition", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-named-transition-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "AvatarLeaf.tsx"),
     `
@@ -2834,7 +3000,7 @@ test("isolates a resolved leaf updated outside a named React transition", async 
         return <input value={url} onChange={event => onChange(event.target.value)} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2867,18 +3033,27 @@ test("isolates a resolved leaf updated outside a named React transition", async 
           <Registry task={task} /><button onClick={submit}>Save</button></main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "url")?.action, "use-observable");
-  assert.equal(report.findings.find(finding => finding.name === "busy")?.action, "review-state");
-  assert.equal(report.findings.find(finding => finding.name === "publishedUrl")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "url")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "busy")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "publishedUrl")).action,
+    "review-state",
+  );
 });
 
-test("keeps nested transition reads when the transition is not event-rooted", async t => {
+test("keeps nested transition reads when the transition is not event-rooted", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-effect-transition-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "AvatarLeaf.tsx"),
     `
@@ -2886,7 +3061,7 @@ test("keeps nested transition reads when the transition is not event-rooted", as
         return <input value={url} onChange={event => onChange(event.target.value)} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2907,11 +3082,14 @@ test("keeps nested transition reads when the transition is not event-rooted", as
           <Actions /><Preview /><AvatarLeaf url={url} onChange={setUrl} /></main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "url")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "url")).action,
+    "review-state",
+  );
 });
 
 test("abstains when the resolved child stores the prop in its own state", async () => {
@@ -2924,7 +3102,7 @@ test("abstains when the resolved child stores the prop in its own state", async 
         const [seen, setSeen] = useState(busy);
         return <span>{String(seen)}</span>;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -2938,12 +3116,12 @@ test("abstains when the resolved child stores the prop in its own state", async 
           <Actions /><Preview /><button onClick={() => setBusy(false)} /><button onClick={() => setBusy(true)} />
           <StatusLeaf busy={busy} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
 test("abstains when the resolved child forwards the prop to another component", async () => {
@@ -2955,9 +3133,9 @@ test("abstains when the resolved child forwards the prop to another component", 
       export function StatusLeaf({ busy }: { busy: boolean }) {
         return <Inner busy={busy} />;
       }
-    `
+    `,
   );
-  await writeFile(path.join(root, "Inner.tsx"), 'export const Inner = () => null;');
+  await writeFile(path.join(root, "Inner.tsx"), "export const Inner = () => null;");
   await writeFile(
     path.join(root, "Screen.tsx"),
     `
@@ -2970,17 +3148,17 @@ test("abstains when the resolved child forwards the prop to another component", 
           <Actions /><Preview /><button onClick={() => setBusy(false)} /><button onClick={() => setBusy(true)} />
           <StatusLeaf busy={busy} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
-test("isolates a compact transported leaf only with an independent sibling render cut", async t => {
+test("isolates a compact transported leaf only with an independent sibling render cut", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-compact-leaf-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "NativeMenu.tsx"),
     `
@@ -2989,7 +3167,7 @@ test("isolates a compact transported leaf only with an independent sibling rende
         return <NativeRoot expanded={expanded} onDismiss={onDismiss} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3044,21 +3222,21 @@ test("isolates a compact transported leaf only with an independent sibling rende
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const compact = report.findings.find(finding => finding.name === "expanded");
-  const cohesive = report.findings.find(finding => finding.name === "cohesiveOpen");
-  const coupled = report.findings.find(finding => finding.name === "coupledOpen");
-  const ordered = report.findings.find(finding => finding.name === "orderedOpen");
-  const forwarded = report.findings.find(finding => finding.name === "forwardedOpen");
-  assert.equal(compact?.action, "use-observable");
-  assert.match(compact?.message ?? "", /independent sibling render cut/);
-  assert.notEqual(cohesive?.action, "use-observable");
-  assert.notEqual(coupled?.action, "use-observable");
-  assert.notEqual(ordered?.action, "use-observable");
-  assert.notEqual(forwarded?.action, "use-observable");
+  const report = await analyzePath(root),
+    compact = report.findings.find((finding) => finding.name === "expanded"),
+    cohesive = report.findings.find((finding) => finding.name === "cohesiveOpen"),
+    coupled = report.findings.find((finding) => finding.name === "coupledOpen"),
+    ordered = report.findings.find((finding) => finding.name === "orderedOpen"),
+    forwarded = report.findings.find((finding) => finding.name === "forwardedOpen");
+  assert.equal(requireValue(compact).action, "use-observable");
+  assert.match(requireValue(compact).message ?? "", /independent sibling render cut/u);
+  assert.notEqual(requireValue(cohesive).action, "use-observable");
+  assert.notEqual(requireValue(coupled).action, "use-observable");
+  assert.notEqual(requireValue(ordered).action, "use-observable");
+  assert.notEqual(requireValue(forwarded).action, "use-observable");
 });
 
 test("abstains when the resolved child reads the prop inside effects or callbacks", async () => {
@@ -3071,7 +3249,7 @@ test("abstains when the resolved child reads the prop inside effects or callback
         useEffect(() => report(busy), [busy]);
         return <span>{String(busy)}</span>;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3085,12 +3263,12 @@ test("abstains when the resolved child reads the prop inside effects or callback
           <Actions /><Preview /><button onClick={() => setBusy(false)} /><button onClick={() => setBusy(true)} />
           <StatusLeaf busy={busy} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
 test("does not require child prop semantics for a call-site subscription wrapper", async () => {
@@ -3103,7 +3281,7 @@ test("does not require child prop semantics for a call-site subscription wrapper
         useEffect(() => report(open), [open]);
         return <aside />;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3116,17 +3294,17 @@ test("does not require child prop semantics for a call-site subscription wrapper
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><button onClick={() => setOpen(true)} /><Leaf open={open} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "open");
-  assert.equal(finding?.action, "use-observable");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "open");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
-test("proves direct source-component callback timing before replacing command-only state", async t => {
+test("proves direct source-component callback timing before replacing command-only state", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-source-callback-state-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Forms.tsx"),
     `
@@ -3143,7 +3321,7 @@ test("proves direct source-component callback timing before replacing command-on
         return null;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3175,24 +3353,24 @@ test("proves direct source-component callback timing before replacing command-on
         return <EffectForm validate={validate} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const states = new Map(
-    report.findings
-      .filter(finding => finding.hook === "useState")
-      .map(finding => [finding.name, finding.action])
-  );
+  const report = await analyzePath(root),
+    states = new Map(
+      report.findings
+        .filter((finding) => finding.hook === "useState")
+        .map((finding) => [finding.name, finding.action]),
+    );
   assert.equal(states.get("enabled"), "use-ref");
   assert.equal(states.get("eager"), "review-state");
   assert.equal(states.get("mixed"), "review-state");
   assert.equal(states.get("effect"), "review-state");
 });
 
-test("moves reset effects through source wrappers into Base UI event callbacks", async t => {
+test("moves reset effects through source wrappers into Base UI event callbacks", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-base-ui-reset-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Controls.tsx"),
     `
@@ -3217,7 +3395,7 @@ test("moves reset effects through source wrappers into Base UI event callbacks",
         return null;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3253,19 +3431,21 @@ test("moves reset effects through source wrappers into Base UI event callbacks",
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const effects = report.findings.filter(finding => finding.hook === "useEffect");
-  assert.equal(effects[0]?.action, "move-to-event");
-  assert.equal(effects[1]?.action, "move-to-event");
-  assert.equal(effects[2]?.action, "review-effect");
+  const report = await analyzePath(root),
+    effects = report.findings.filter((finding) => finding.hook === "useEffect");
+  assert.equal(requireValue(effects[0]).action, "move-to-event");
+  assert.equal(requireValue(effects[1]).action, "move-to-event");
+  assert.equal(requireValue(effects[2]).action, "review-effect");
 });
 
-test("isolates pure controlled projections owned by one source component call site", async t => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-controlled-callsite-projection-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+test("isolates pure controlled projections owned by one source component call site", async (testContext) => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "legend-doctor-controlled-callsite-projection-"),
+  );
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Details.tsx"),
     `
@@ -3280,7 +3460,7 @@ test("isolates pure controlled projections owned by one source component call si
         return <dialog open={open} data-resource={resourceId} onClose={() => onOpenChange(false)} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3307,13 +3487,13 @@ test("isolates pure controlled projections owned by one source component call si
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const report = await analyzePath(root);
-  const states = report.findings.filter(finding => finding.hook === "useState");
-  assert.equal(states[0]?.action, "use-observable");
-  assert.equal(states[1]?.action, "review-state");
+  const report = await analyzePath(root),
+    states = report.findings.filter((finding) => finding.hook === "useState");
+  assert.equal(requireValue(states[0]).action, "use-observable");
+  assert.equal(requireValue(states[1]).action, "review-state");
 });
 
 test("wraps a shared primitive locally without changing its API", async () => {
@@ -3321,7 +3501,7 @@ test("wraps a shared primitive locally without changing its API", async () => {
   await mkdir(path.join(root, "components", "ui"), { recursive: true });
   await writeFile(
     path.join(root, "components", "ui", "Dialog.tsx"),
-    'export function Dialog({ open }: { open: boolean }) { return open ? <aside /> : null; }'
+    "export function Dialog({ open }: { open: boolean }) { return open ? <aside /> : null; }",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3334,13 +3514,13 @@ test("wraps a shared primitive locally without changing its API", async () => {
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><button onClick={() => setOpen(true)} /><Dialog open={open} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "open");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /call-site leaf wrapper/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "open");
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /call-site leaf wrapper/u);
 });
 
 test("moves non-boolean controlled state into a stable local wrapper", async () => {
@@ -3356,25 +3536,25 @@ test("moves non-boolean controlled state into a stable local wrapper", async () 
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><Tabs value={tab} onValueChange={setTab} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "tab");
-  assert.equal(finding?.action, "move-state-down");
-  assert.match(finding?.message ?? "", /stable local wrapper/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "tab");
+  assert.equal(requireValue(finding).action, "move-state-down");
+  assert.match(requireValue(finding).message ?? "", /stable local wrapper/u);
 });
 
-test("isolates immediate controlled state from delayed repeated owner work", async t => {
+test("isolates immediate controlled state from delayed repeated owner work", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-delayed-controlled-leaf-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Input.tsx"),
     `
       export function Input({ value, onChange }: { value: string; onChange: (value: string) => void }) {
         return <input value={value} onChange={event => onChange(event.target.value)} />;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3396,18 +3576,18 @@ test("isolates immediate controlled state from delayed repeated owner work", asy
           {rows.map(row => <article key={row}>{row}</article>)}
         </main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "query");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /repeated render work/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "query");
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /repeated render work/u);
 });
 
-test("isolates a source-resolved search filter in one repeated producer slot", async t => {
+test("isolates a source-resolved search filter in one repeated producer slot", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-filtered-controlled-leaf-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "QuickSearch.tsx"),
     `
@@ -3419,7 +3599,7 @@ test("isolates a source-resolved search filter in one repeated producer slot", a
         return <input />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3554,14 +3734,12 @@ test("isolates a source-resolved search filter in one repeated producer slot", a
         return <Desktop><Header /><Toolbar /><Status /><Controls /><Summary /><Aside />{avatars}</Desktop>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
   const report = await analyzePath(root);
   assert.deepEqual(
-    report.findings
-      .filter(finding => finding.name === "query")
-      .map(finding => finding.action),
+    report.findings.filter((finding) => finding.name === "query").map((finding) => finding.action),
     [
       "use-observable",
       "review-state",
@@ -3572,20 +3750,20 @@ test("isolates a source-resolved search filter in one repeated producer slot", a
       "review-state",
       "review-state",
       "use-observable",
-    ]
+    ],
   );
 });
 
-test("keeps delayed controlled state when its immediate update is atomic with owner state", async t => {
+test("keeps delayed controlled state when its immediate update is atomic with owner state", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-delayed-controlled-atomic-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Input.tsx"),
     `
       export function Input({ value, onChange }: { value: string; onChange: (value: string) => void }) {
         return <input value={value} onChange={event => onChange(event.target.value)} />;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3605,17 +3783,17 @@ test("keeps delayed controlled state when its immediate update is atomic with ow
           {rows.map(row => <article key={row}>{row}</article>)}
         </main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "query");
-  assert.equal(finding?.action, "review-state");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "query");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
-test("does not count repeated work inside the leaf or a conditional sibling", async t => {
+test("does not count repeated work inside the leaf or a conditional sibling", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-repeated-inside-leaf-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Panel.tsx"),
     `
@@ -3623,7 +3801,7 @@ test("does not count repeated work inside the leaf or a conditional sibling", as
       export function Panel({ value, children }: { value: string; children: ReactNode }) {
         return <section data-value={value}>{children}</section>;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3640,19 +3818,19 @@ test("does not count repeated work inside the leaf or a conditional sibling", as
           {showRows ? rows.map(row => <aside key={row}>{row}</aside>) : null}
         </main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "query");
-  assert.equal(finding?.action, "review-state");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "query");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("does not create a second observable for state initialized from a hook result", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-hook-initializer-"));
   await writeFile(
     path.join(root, "Input.tsx"),
-    'export function Input({ value, onChange }: { value: string; onChange: (value: string) => void }) { return <input value={value} onChange={event => onChange(event.target.value)} />; }'
+    "export function Input({ value, onChange }: { value: string; onChange: (value: string) => void }) { return <input value={value} onChange={event => onChange(event.target.value)} />; }",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3666,12 +3844,12 @@ test("does not create a second observable for state initialized from a hook resu
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><Input value={name} onChange={setName} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "name");
-  assert.notEqual(finding?.action, "use-observable");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "name");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("allows repeated row commands when the value has one stable leaf consumer", async () => {
@@ -3681,7 +3859,7 @@ test("allows repeated row commands when the value has one stable leaf consumer",
     `
       export function Row({ onSelect }: { onSelect: (id: string) => void }) { return <button onClick={() => onSelect("x")} />; }
       export function Dialog({ selected }: { selected: string | null }) { return selected ? <aside /> : null; }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3695,19 +3873,19 @@ test("allows repeated row commands when the value has one stable leaf consumer",
           <Actions /><Preview />{rows.map(row => <Row key={row} onSelect={setSelected} />)}
           <Dialog selected={selected} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "selected");
-  assert.equal(finding?.action, "use-observable");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "selected");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("keeps observable ownership stable when its one leaf subscription mounts conditionally", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-contract-conditional-"));
   await writeFile(
     path.join(root, "StatusLeaf.tsx"),
-    'export function StatusLeaf({ busy, onRun }: { busy: boolean; onRun: () => void }) { return <button onClick={onRun}>{busy ? "Busy" : "Ready"}</button>; }'
+    'export function StatusLeaf({ busy, onRun }: { busy: boolean; onRun: () => void }) { return <button onClick={onRun}>{busy ? "Busy" : "Ready"}</button>; }',
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3721,19 +3899,19 @@ test("keeps observable ownership stable when its one leaf subscription mounts co
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview />{visible ? <StatusLeaf busy={busy} onRun={run} /> : null}</main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.equal(finding?.action, "use-observable");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("does not promote one imported-child state when its writes still invalidate the owner", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-contract-cluster-"));
   await writeFile(
     path.join(root, "DialogLeaf.tsx"),
-    'export function DialogLeaf({ open }: { open: boolean }) { return open ? <aside /> : null; }'
+    "export function DialogLeaf({ open }: { open: boolean }) { return open ? <aside /> : null; }",
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3749,19 +3927,19 @@ test("does not promote one imported-child state when its writes still invalidate
           <Actions /><Preview /><button onClick={() => show("a")} />
           <span>{selection}</span><DialogLeaf open={open} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "open");
-  assert.notEqual(finding?.action, "use-observable");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "open");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not promote imported-child state written by an effect", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-contract-effect-"));
   await writeFile(
     path.join(root, "StatusLeaf.tsx"),
-    'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{busy ? "Busy" : "Ready"}</span>; }'
+    'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{busy ? "Busy" : "Ready"}</span>; }',
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3775,19 +3953,19 @@ test("does not promote imported-child state written by an effect", async () => {
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><StatusLeaf busy={busy} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
 test("does not promote a leaf call site when commands share reactive mutation ownership", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-leaf-mutation-"));
   await writeFile(
     path.join(root, "StatusLeaf.tsx"),
-    'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{busy ? "Busy" : "Ready"}</span>; }'
+    'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{busy ? "Busy" : "Ready"}</span>; }',
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3802,17 +3980,20 @@ test("does not promote a leaf call site when commands share reactive mutation ow
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><button onClick={run} /><StatusLeaf busy={busy} /></main>;
       }
-    `
+    `,
   );
 
-  const report = await analyzePath(root);
-  const finding = report.findings.find(candidate => candidate.name === "busy");
-  assert.doesNotMatch(finding?.message ?? "", /child contract is verified/);
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
 test("does not promote a leaf call site inside an opaque render callback", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-render-callback-"));
-  await writeFile(path.join(root, "StatusLeaf.tsx"), 'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{String(busy)}</span>; }');
+  await writeFile(
+    path.join(root, "StatusLeaf.tsx"),
+    "export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{String(busy)}</span>; }",
+  );
   await writeFile(
     path.join(root, "Screen.tsx"),
     `
@@ -3825,15 +4006,16 @@ test("does not promote a leaf call site inside an opaque render callback", async
           <Actions /><Preview /><button onClick={() => setBusy(true)} />
           <VirtualList renderItem={() => <StatusLeaf busy={busy} />} /></main>;
       }
-    `
+    `,
   );
-  const finding = (await analyzePath(root)).findings.find(candidate => candidate.name === "busy");
-  assert.notEqual(finding?.action, "use-observable");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
-test("resolves event producers before isolating projections inside JSX child callbacks", async t => {
+test("resolves event producers before isolating projections inside JSX child callbacks", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-callback-projection-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Surfaces.tsx"),
     `
@@ -3844,7 +4026,7 @@ test("resolves event producers before isolating projections inside JSX child cal
         onHover();
         return <div>{children}</div>;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3859,17 +4041,26 @@ test("resolves event producers before isolating projections inside JSX child cal
           <Picker>{() => <EagerSurface onHover={() => setUnsafe(true)}><Icon fill={unsafe ? "green" : "gray"} /></EagerSurface>}</Picker>
         </main>;
       }
-    `
+    `,
   );
 
   const report = await analyzePath(root);
-  assert.equal(report.findings.find(finding => finding.name === "safe")?.action, "use-observable");
-  assert.equal(report.findings.find(finding => finding.name === "unsafe")?.action, "review-state");
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "safe")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(report.findings.find((finding) => finding.name === "unsafe")).action,
+    "review-state",
+  );
 });
 
 test("does not miss reactive mutation ownership through a hook result object", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-object-mutation-"));
-  await writeFile(path.join(root, "StatusLeaf.tsx"), 'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{String(busy)}</span>; }');
+  await writeFile(
+    path.join(root, "StatusLeaf.tsx"),
+    "export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{String(busy)}</span>; }",
+  );
   await writeFile(
     path.join(root, "Screen.tsx"),
     `
@@ -3883,15 +4074,19 @@ test("does not miss reactive mutation ownership through a hook result object", a
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><button onClick={run} /><StatusLeaf busy={busy} /></main>;
       }
-    `
+    `,
   );
-  const finding = (await analyzePath(root)).findings.find(candidate => candidate.name === "busy");
-  assert.notEqual(finding?.action, "use-observable");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "busy");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not put nullable callable state into a leaf observable", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-callable-leaf-"));
-  await writeFile(path.join(root, "Slot.tsx"), 'export function Slot({ value }: { value: (() => void) | null }) { return <button onClick={value ?? undefined} />; }');
+  await writeFile(
+    path.join(root, "Slot.tsx"),
+    "export function Slot({ value }: { value: (() => void) | null }) { return <button onClick={value ?? undefined} />; }",
+  );
   await writeFile(
     path.join(root, "Screen.tsx"),
     `
@@ -3903,15 +4098,16 @@ test("does not put nullable callable state into a leaf observable", async () => 
         return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
           <Actions /><Preview /><button onClick={() => setCallback(() => work)} /><Slot value={callback} /></main>;
       }
-    `
+    `,
   );
-  const finding = (await analyzePath(root)).findings.find(candidate => candidate.name === "callback");
-  assert.notEqual(finding?.action, "use-observable");
+  const report = await analyzePath(root),
+    finding = report.findings.find((candidate) => candidate.name === "callback");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
-test("requires source-proven deferred callbacks for one async status leaf", async t => {
+test("requires source-proven deferred callbacks for one async status leaf", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-async-event-contract-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Controls.tsx"),
     `
@@ -3922,7 +4118,7 @@ test("requires source-proven deferred callbacks for one async status leaf", asyn
         onRun();
         return <span>{String(loading)}</span>;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -3946,18 +4142,31 @@ test("requires source-proven deferred callbacks for one async status leaf", asyn
         const run = async () => { setOpaque(true); try { await save(); } finally { setOpaque(false); } };
         return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><History /><Aside /><Footer /><Actions /><Status /><OpaqueControl loading={opaque} onRun={run} /></main>;
       }
-    `
+    `,
   );
 
-  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
-  assert.equal(findings.get("deferred")?.action, "use-observable", findings.get("deferred")?.message);
-  assert.equal(findings.get("eager")?.action, "review-state", findings.get("eager")?.message);
-  assert.equal(findings.get("opaque")?.action, "review-state", findings.get("opaque")?.message);
+  const report = await analyzePath(root),
+    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
+  assert.equal(
+    requireValue(findings.get("deferred")).action,
+    "use-observable",
+    requireValue(findings.get("deferred")).message,
+  );
+  assert.equal(
+    requireValue(findings.get("eager")).action,
+    "review-state",
+    requireValue(findings.get("eager")).message,
+  );
+  assert.equal(
+    requireValue(findings.get("opaque")).action,
+    "review-state",
+    requireValue(findings.get("opaque")).message,
+  );
 });
 
-test("proves every async command path through source wrappers and inline event adapters", async t => {
+test("proves every async command path through source wrappers and inline event adapters", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-async-wrapper-stack-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Button.tsx"),
     `
@@ -3981,7 +4190,7 @@ test("proves every async command path through source wrappers and inline event a
       }) {
         return <div><Button {...props}>{children}</Button></div>;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "DeleteDialog.tsx"),
@@ -3993,7 +4202,7 @@ test("proves every async command path through source wrappers and inline event a
       }) {
         return <aside><Button disabled={deleting} onClick={onDelete} /></aside>;
       }
-    `
+    `,
   );
   await writeFile(
     path.join(root, "Screen.tsx"),
@@ -4074,37 +4283,46 @@ test("proves every async command path through source wrappers and inline event a
           <AlertButton asChild disabled={eagerAlertSaving} onClick={() => { void save(); }}>Save</AlertButton>
         </main>;
       }
-    `
+    `,
   );
 
-  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
-  assert.equal(findings.get("deleting")?.action, "use-observable", findings.get("deleting")?.message);
-  assert.equal(findings.get("saving")?.action, "use-observable", findings.get("saving")?.message);
+  const report = await analyzePath(root),
+    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
-    findings.get("alertSaving")?.action,
+    requireValue(findings.get("deleting")).action,
     "use-observable",
-    findings.get("alertSaving")?.message
+    requireValue(findings.get("deleting")).message,
   );
   assert.equal(
-    findings.get("eagerDeleting")?.action,
-    "review-state",
-    findings.get("eagerDeleting")?.message
+    requireValue(findings.get("saving")).action,
+    "use-observable",
+    requireValue(findings.get("saving")).message,
   );
   assert.equal(
-    findings.get("eagerSaving")?.action,
-    "review-state",
-    findings.get("eagerSaving")?.message
+    requireValue(findings.get("alertSaving")).action,
+    "use-observable",
+    requireValue(findings.get("alertSaving")).message,
   );
   assert.equal(
-    findings.get("eagerAlertSaving")?.action,
+    requireValue(findings.get("eagerDeleting")).action,
     "review-state",
-    findings.get("eagerAlertSaving")?.message
+    requireValue(findings.get("eagerDeleting")).message,
+  );
+  assert.equal(
+    requireValue(findings.get("eagerSaving")).action,
+    "review-state",
+    requireValue(findings.get("eagerSaving")).message,
+  );
+  assert.equal(
+    requireValue(findings.get("eagerAlertSaving")).action,
+    "review-state",
+    requireValue(findings.get("eagerAlertSaving")).message,
   );
 });
 
-test("traces a conditionally selected event callback through prop spreads", async t => {
+test("traces a conditionally selected event callback through prop spreads", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-conditional-event-callback-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Pressable.tsx"),
     `
@@ -4117,7 +4335,7 @@ test("traces a conditionally selected event callback through prop spreads", asyn
         return <Pressable onLongPress={onLongPress} {...props} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "IconButton.tsx"),
@@ -4130,7 +4348,7 @@ test("traces a conditionally selected event callback through prop spreads", asyn
         return <AppPressable disabled={loading} {...rest} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "ControlBar.tsx"),
@@ -4149,7 +4367,7 @@ test("traces a conditionally selected event callback through prop spreads", asyn
         return <IconButton loading={loading} onPress={primaryEnabled ? primary() : fallback} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screens.tsx"),
@@ -4189,25 +4407,26 @@ test("traces a conditionally selected event callback through prop spreads", asyn
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
+  const report = await analyzePath(root),
+    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
-    findings.get("preparing")?.action,
+    requireValue(findings.get("preparing")).action,
     "use-observable",
-    findings.get("preparing")?.message
+    requireValue(findings.get("preparing")).message,
   );
   assert.equal(
-    findings.get("eagerPreparing")?.action,
+    requireValue(findings.get("eagerPreparing")).action,
     "review-state",
-    findings.get("eagerPreparing")?.message
+    requireValue(findings.get("eagerPreparing")).message,
   );
 });
 
-test("proves Radix dropdown events through source wrappers without trusting lookalike packages", async t => {
+test("proves Radix dropdown events through source wrappers without trusting lookalike packages", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-radix-dropdown-events-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "MenuItems.tsx"),
     `
@@ -4225,7 +4444,7 @@ test("proves Radix dropdown events through source wrappers without trusting look
         return <LookalikeMenu.Item disabled={disabled} onClick={onClick} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "ShadowedMenuItem.tsx"),
@@ -4240,7 +4459,7 @@ test("proves Radix dropdown events through source wrappers without trusting look
         return <DropdownMenu.Item disabled={disabled} onClick={onClick} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screens.tsx"),
@@ -4297,35 +4516,36 @@ test("proves Radix dropdown events through source wrappers without trusting look
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
+  const report = await analyzePath(root),
+    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
-    findings.get("duplicating")?.action,
+    requireValue(findings.get("duplicating")).action,
     "use-observable",
-    findings.get("duplicating")?.message
+    requireValue(findings.get("duplicating")).message,
   );
   assert.equal(
-    findings.get("eagerDuplicating")?.action,
+    requireValue(findings.get("eagerDuplicating")).action,
     "review-state",
-    findings.get("eagerDuplicating")?.message
+    requireValue(findings.get("eagerDuplicating")).message,
   );
   assert.equal(
-    findings.get("lookalikeDuplicating")?.action,
+    requireValue(findings.get("lookalikeDuplicating")).action,
     "review-state",
-    findings.get("lookalikeDuplicating")?.message
+    requireValue(findings.get("lookalikeDuplicating")).message,
   );
   assert.equal(
-    findings.get("shadowedDuplicating")?.action,
+    requireValue(findings.get("shadowedDuplicating")).action,
     "review-state",
-    findings.get("shadowedDuplicating")?.message
+    requireValue(findings.get("shadowedDuplicating")).message,
   );
 });
 
-test("traces an async command through a child action array", async t => {
+test("traces an async command through a child action array", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-action-array-command-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Button.tsx"),
     `
@@ -4333,7 +4553,7 @@ test("traces an async command through a child action array", async t => {
         return <button onClick={onClick}>{String(loading)}</button>;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "ActionBar.tsx"),
@@ -4357,7 +4577,7 @@ test("traces an async command through a child action array", async t => {
         })}</nav>;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "ControlBar.tsx"),
@@ -4376,7 +4596,7 @@ test("traces an async command through a child action array", async t => {
         return <EscapingActionBar actions={actions} />;
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "Screens.tsx"),
@@ -4417,20 +4637,25 @@ test("traces an async command through a child action array", async t => {
         </main>;
       }
     `,
-    "utf8"
+    "utf8",
   );
 
-  const findings = new Map((await analyzePath(root)).findings.map(finding => [finding.name, finding]));
-  assert.equal(findings.get("saving")?.action, "use-observable", findings.get("saving")?.message);
+  const report = await analyzePath(root),
+    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
-    findings.get("eagerSaving")?.action,
-    "review-state",
-    findings.get("eagerSaving")?.message
+    requireValue(findings.get("saving")).action,
+    "use-observable",
+    requireValue(findings.get("saving")).message,
   );
   assert.equal(
-    findings.get("escapingSaving")?.action,
+    requireValue(findings.get("eagerSaving")).action,
     "review-state",
-    findings.get("escapingSaving")?.message
+    requireValue(findings.get("eagerSaving")).message,
+  );
+  assert.equal(
+    requireValue(findings.get("escapingSaving")).action,
+    "review-state",
+    requireValue(findings.get("escapingSaving")).message,
   );
 });
 
@@ -4495,28 +4720,40 @@ function styledSwitchWrapper(useCallbackCall: string): string {
   `;
 }
 
-test("proves async pending status through a React.useCallback adapter and a plain styled package host", async t => {
+test("proves async pending status through a React.useCallback adapter and a plain styled package host", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-styled-switch-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
-  await writeFile(path.join(root, "lookalike.ts"), "export const useCallback = (fn: unknown, deps: unknown) => fn;", "utf8");
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "lookalike.ts"),
+    "export const useCallback = (fn: unknown, deps: unknown) => fn;",
+    "utf8",
+  );
   await writeFile(path.join(root, "Switch.tsx"), styledSwitchWrapper("React.useCallback"), "utf8");
   await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
 
-  const report = await analyzePath(root);
-  const creating = report.findings.find(finding => finding.name === "creating");
-  assert.equal(creating?.action, "use-observable");
+  const report = await analyzePath(root),
+    creating = report.findings.find((finding) => finding.name === "creating");
+  assert.equal(requireValue(creating).action, "use-observable");
 });
 
-test("keeps async pending status under review behind a lookalike namespace useCallback", async t => {
+test("keeps async pending status under review behind a lookalike namespace useCallback", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-lookalike-callback-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
-  await writeFile(path.join(root, "lookalike.ts"), "export const useCallback = (fn: unknown, deps: unknown) => fn;", "utf8");
-  await writeFile(path.join(root, "Switch.tsx"), styledSwitchWrapper("Lookalike.useCallback"), "utf8");
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "lookalike.ts"),
+    "export const useCallback = (fn: unknown, deps: unknown) => fn;",
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, "Switch.tsx"),
+    styledSwitchWrapper("Lookalike.useCallback"),
+    "utf8",
+  );
   await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
 
-  const report = await analyzePath(root);
-  const creating = report.findings.find(finding => finding.name === "creating");
-  assert.equal(creating?.action, "review-state");
+  const report = await analyzePath(root),
+    creating = report.findings.find((finding) => finding.name === "creating");
+  assert.equal(requireValue(creating).action, "review-state");
 });
 
 function memoHandlerSwitchWrapper(handlerDeclaration: string): string {
@@ -4546,36 +4783,36 @@ function memoHandlerSwitchWrapper(handlerDeclaration: string): string {
   `;
 }
 
-test("proves async pending status through a concise React.useMemo handler factory", async t => {
+test("proves async pending status through a concise React.useMemo handler factory", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-memo-handler-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Switch.tsx"),
     memoHandlerSwitchWrapper(
-      "const handleCheckedChange = React.useMemo(() => (checkedState: boolean) => { onChange?.(checkedState); }, [onChange]);"
+      "const handleCheckedChange = React.useMemo(() => (checkedState: boolean) => { onChange?.(checkedState); }, [onChange]);",
     ),
-    "utf8"
+    "utf8",
   );
   await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
 
-  const report = await analyzePath(root);
-  const creating = report.findings.find(finding => finding.name === "creating");
-  assert.equal(creating?.action, "use-observable");
+  const report = await analyzePath(root),
+    creating = report.findings.find((finding) => finding.name === "creating");
+  assert.equal(requireValue(creating).action, "use-observable");
 });
 
-test("keeps async pending status under review behind a block-bodied useMemo handler factory", async t => {
+test("keeps async pending status under review behind a block-bodied useMemo handler factory", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-memo-block-handler-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
     path.join(root, "Switch.tsx"),
     memoHandlerSwitchWrapper(
-      "const handleCheckedChange = React.useMemo(() => { return (checkedState: boolean) => { onChange?.(checkedState); }; }, [onChange]);"
+      "const handleCheckedChange = React.useMemo(() => { return (checkedState: boolean) => { onChange?.(checkedState); }; }, [onChange]);",
     ),
-    "utf8"
+    "utf8",
   );
   await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
 
-  const report = await analyzePath(root);
-  const creating = report.findings.find(finding => finding.name === "creating");
-  assert.equal(creating?.action, "review-state");
+  const report = await analyzePath(root),
+    creating = report.findings.find((finding) => finding.name === "creating");
+  assert.equal(requireValue(creating).action, "review-state");
 });

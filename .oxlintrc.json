@@ -15,14 +15,13 @@
     "pedantic": "error",
     "perf": "error",
     "style": "error",
-    "restriction": "error"
+    "restriction": "error",
+    "nursery": "error"
   },
   "rules": {
-    // Unsatisfiable pair with promise/prefer-await-to-callbacks and prefer-await-to-then
-    "oxc/no-async-await": "off",
-    // Unsatisfiable pair with import/no-default-export; named exports win
-    "import/no-named-export": "off",
-    "import/prefer-default-export": "off",
+    "oxc/no-async-await": "error",
+    "import/no-named-export": "error",
+    "import/prefer-default-export": "error",
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
     "anti-slop/no-known-value-widening": "error",

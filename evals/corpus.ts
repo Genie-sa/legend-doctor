@@ -87,9 +87,7 @@ export const repositories = [
   {
     commit: "abeeaeba217ab3b5193b78c8d8d63c373b518ced",
     name: "excalidraw",
-    targets: [
-      { effects: 103, id: "excalidraw", root: "packages/excalidraw", states: 80 },
-    ],
+    targets: [{ effects: 103, id: "excalidraw", root: "packages/excalidraw", states: 80 }],
     url: "https://github.com/excalidraw/excalidraw.git",
   },
   {
@@ -1491,7 +1489,8 @@ export const goldCases = [
     hook: "useState",
     line: 57,
     name: "fileTopPosition",
-    rationale: "The layout event can update an owner-lifetime observable while one stable positioned-view leaf inside the existing screen render callback subscribes to the only rendered projection.",
+    rationale:
+      "The layout event can update an owner-lifetime observable while one stable positioned-view leaf inside the existing screen render callback subscribes to the only rendered projection.",
     target: "expensify-import-spreadsheet",
   },
   {
@@ -1500,7 +1499,8 @@ export const goldCases = [
     hook: "useState",
     line: 164,
     name: "popoverAnchorPosition",
-    rationale: "The existing effect and promise continuation can retain their timing while one stable popover leaf inside the screen render callback subscribes to the calculated anchor position.",
+    rationale:
+      "The existing effect and promise continuation can retain their timing while one stable popover leaf inside the screen render callback subscribes to the calculated anchor position.",
     target: "expensify-attachment-picker-menu",
   },
   {
@@ -1509,7 +1509,8 @@ export const goldCases = [
     hook: "useState",
     line: 227,
     name: "isReportActionActive",
-    rationale: "Both projections share one narrow frame, but the hover setters cross a platform-selected wrapper and prop spread before reaching their event and effect producers; keep the opportunity under review until that chain is proven.",
+    rationale:
+      "Both projections share one narrow frame, but the hover setters cross a platform-selected wrapper and prop spread before reaching their event and effect producers; keep the opportunity under review until that chain is proven.",
     target: "expensify-report-action-item",
   },
   {
@@ -1518,7 +1519,8 @@ export const goldCases = [
     hook: "useState",
     line: 93,
     name: "isHovered",
-    rationale: "The icon is a narrow consumer, but both hover setters are published through a runtime-selected component alias whose callback timing is unresolved; keep this opportunity under review.",
+    rationale:
+      "The icon is a narrow consumer, but both hover setters are published through a runtime-selected component alias whose callback timing is unresolved; keep this opportunity under review.",
     target: "expensify-receipt-empty-state",
   },
   {
@@ -1527,7 +1529,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 111,
     name: null,
-    rationale: "The ref guard makes this a once-per-owner load notification despite dependency changes; preserve its exact commit and Strict Mode behavior until a lifecycle replacement is proven equivalent.",
+    rationale:
+      "The ref guard makes this a once-per-owner load notification despite dependency changes; preserve its exact commit and Strict Mode behavior until a lifecycle replacement is proven equivalent.",
     target: "expensify-receipt-empty-state",
   },
   {
@@ -1536,7 +1539,8 @@ export const goldCases = [
     hook: "useState",
     line: 50,
     name: "layoutWidth",
-    rationale: "The deduplicated search branch is the only render consumer, so an owner-scoped observable can update one stable leaf without invalidating every playback control.",
+    rationale:
+      "The deduplicated search branch is the only render consumer, so an owner-scoped observable can update one stable leaf without invalidating every playback control.",
     target: "legend-music",
   },
   {
@@ -1545,7 +1549,8 @@ export const goldCases = [
     hook: "useState",
     line: 39,
     name: "layoutWidth",
-    rationale: "The deduplicated search branch is the only render consumer, so an owner-scoped observable can update one stable leaf without invalidating the playlist owner.",
+    rationale:
+      "The deduplicated search branch is the only render consumer, so an owner-scoped observable can update one stable leaf without invalidating the playlist owner.",
     target: "legend-music",
   },
   {
@@ -1554,7 +1559,8 @@ export const goldCases = [
     hook: "useState",
     line: 492,
     name: "isOpen",
-    rationale: "The React boolean is written only by a Legend reaction and mirrors an observable selector.",
+    rationale:
+      "The React boolean is written only by a Legend reaction and mirrors an observable selector.",
     target: "legend-music",
   },
   {
@@ -1599,7 +1605,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 54,
     name: null,
-    rationale: "The changing value is a direct useValue snapshot and the remaining dependency is a stable useObservable handle.",
+    rationale:
+      "The changing value is a direct useValue snapshot and the remaining dependency is a stable useObservable handle.",
     target: "legend-music",
   },
   {
@@ -1608,7 +1615,8 @@ export const goldCases = [
     hook: "useState",
     line: 21,
     name: "isSaving",
-    rationale: "The async guard renders transitively through canSave(), so replacing it with a ref would leave the Save button stale.",
+    rationale:
+      "The async guard renders transitively through canSave(), so replacing it with a ref would leave the Save button stale.",
     target: "legend-music",
   },
   {
@@ -1644,7 +1652,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 124,
     name: null,
-    rationale: "Every period, type, and member mutation resolves through local wrappers to imported Base UI value-change callbacks, so the page reset can join each mutation and delete the follow-up commit.",
+    rationale:
+      "Every period, type, and member mutation resolves through local wrappers to imported Base UI value-change callbacks, so the page reset can join each mutation and delete the follow-up commit.",
     target: "tree-map",
   },
   {
@@ -1680,7 +1689,8 @@ export const goldCases = [
     hook: "useState",
     line: 51,
     name: "isOnlineState",
-    rationale: "The state is fed by an external native subscription and may warrant a shared owner.",
+    rationale:
+      "The state is fed by an external native subscription and may warrant a shared owner.",
     target: "tree-wallet",
   },
   {
@@ -1815,7 +1825,8 @@ export const goldCases = [
     hook: "useState",
     line: 409,
     name: "isOpen",
-    rationale: "The value is captured by a Legend lifecycle callback; replacing React state with a ref has no proven render benefit and may change reaction invalidation timing.",
+    rationale:
+      "The value is captured by a Legend lifecycle callback; replacing React state with a ref has no proven render benefit and may change reaction invalidation timing.",
     target: "legend-music",
   },
   ...[
@@ -1852,7 +1863,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 100,
     name: null,
-    rationale: "The selection effect derives a NodeList from a committed list ref and scrolls the selected element after render; React owns that post-commit DOM timing.",
+    rationale:
+      "The selection effect derives a NodeList from a committed list ref and scrolls the selected element after render; React owns that post-commit DOM timing.",
     target: "tree-map",
   },
   {
@@ -1861,7 +1873,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 295,
     name: null,
-    rationale: "The hovered font row scrolls its committed button ref after render; the optional method chain does not escape the ref-owned DOM command.",
+    rationale:
+      "The hovered font row scrolls its committed button ref after render; the optional method chain does not escape the ref-owned DOM command.",
     target: "excalidraw",
   },
   {
@@ -1870,7 +1883,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 218,
     name: null,
-    rationale: "The effect aliases the committed CodeMirror view, reads its document, and dispatches the external value only after React commits.",
+    rationale:
+      "The effect aliases the committed CodeMirror view, reads its document, and dispatches the external value only after React commits.",
     target: "excalidraw",
   },
   {
@@ -1879,7 +1893,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 97,
     name: null,
-    rationale: "Navigation state pauses the committed animation instance after render through one optional ref receiver chain.",
+    rationale:
+      "Navigation state pauses the committed animation instance after render through one optional ref receiver chain.",
     target: "expensify-lottie",
   },
   {
@@ -1888,7 +1903,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 453,
     name: null,
-    rationale: "The mount effect guards and clears a timeout stored in a committed ref; its bare return and post-commit ordering stay in React.",
+    rationale:
+      "The mount effect guards and clears a timeout stored in a committed ref; its bare return and post-commit ordering stay in React.",
     target: "expensify-base-selection-list",
   },
   {
@@ -1897,7 +1913,8 @@ export const goldCases = [
     hook: "useState",
     line: 63,
     name: "value",
-    rationale: "EditableCell already owns one controlled Input and no sibling render work; another observable subscriber would add a boundary without narrowing the existing leaf render.",
+    rationale:
+      "EditableCell already owns one controlled Input and no sibling render work; another observable subscriber would add a boundary without narrowing the existing leaf render.",
     target: "tree-map",
   },
   {
@@ -1934,7 +1951,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The effect reacts only to a direct useValue mailbox and should observe its source after mount.",
+    rationale:
+      "The effect reacts only to a direct useValue mailbox and should observe its source after mount.",
     target: "memoria-src",
   })),
   {
@@ -1982,7 +2000,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The value feeds an owner calculation and must not be mistaken for setter-only state.",
+    rationale:
+      "The value feeds an owner calculation and must not be mistaken for setter-only state.",
     target: "tree-map",
   })),
   {
@@ -2009,9 +2028,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: file === "routes/(app)/_private/_map/enhancement-requests/index.tsx"
-      ? "Manual audit proves one immutable visible-ID filter feeds exactly one controlled selection bar while one stable-keyed row map reads membership; owner resets retain their existing co-write timing."
-      : "A local observable can retain ownership while moving subscriptions into the narrow row, modal, or panel consumers.",
+    rationale:
+      file === "routes/(app)/_private/_map/enhancement-requests/index.tsx"
+        ? "Manual audit proves one immutable visible-ID filter feeds exactly one controlled selection bar while one stable-keyed row map reads membership; owner resets retain their existing co-write timing."
+        : "A local observable can retain ownership while moving subscriptions into the narrow row, modal, or panel consumers.",
     target: "tree-map",
   })),
   {
@@ -2020,7 +2040,8 @@ export const goldCases = [
     hook: "useState",
     line: 28,
     name: "isGeneratingReport",
-    rationale: "Only the report action in CompaniesHeader renders this pending interval; the table and page content remain independent of it.",
+    rationale:
+      "Only the report action in CompaniesHeader renders this pending interval; the table and page content remain independent of it.",
     target: "tree-map",
   },
   {
@@ -2029,7 +2050,8 @@ export const goldCases = [
     hook: "useState",
     line: 39,
     name: "showReconnectButton",
-    rationale: "The reconnect flag is written once from a server-action callback and rendered only by the resolved ManageIntegration leaf, whose contract is verified as render-only.",
+    rationale:
+      "The reconnect flag is written once from a server-action callback and rendered only by the resolved ManageIntegration leaf, whose contract is verified as render-only.",
     target: "formbricks-google-sheet-wrapper",
   },
   {
@@ -2038,7 +2060,8 @@ export const goldCases = [
     hook: "useState",
     line: 35,
     name: "showReconnectButton",
-    rationale: "The Slack twin of the Google Sheets wrapper: one server-action write and a single resolved ManageIntegration leaf with a verified render-only contract.",
+    rationale:
+      "The Slack twin of the Google Sheets wrapper: one server-action write and a single resolved ManageIntegration leaf with a verified render-only contract.",
     target: "formbricks-slack-wrapper",
   },
   {
@@ -2047,7 +2070,8 @@ export const goldCases = [
     hook: "useState",
     line: 56,
     name: "open",
-    rationale: "The keyed expansion Set is queried per event group and can subscribe inside each stable row wrapper.",
+    rationale:
+      "The keyed expansion Set is queried per event group and can subscribe inside each stable row wrapper.",
     target: "tree-map",
   },
   ...[
@@ -2062,7 +2086,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One stable source-owned leaf receives the only rendered value, while independent commands can update an observable without invalidating the owner.",
+    rationale:
+      "One stable source-owned leaf receives the only rendered value, while independent commands can update an observable without invalidating the owner.",
     target: "tree-map",
   })),
   {
@@ -2071,7 +2096,8 @@ export const goldCases = [
     hook: "useState",
     line: 45,
     name: "editOpen",
-    rationale: "The open value and its pure nullable ID projection feed one stable SupplierDetailDialog call site; one leaf subscription can derive both props while the owner keeps lifetime and the open button stays command-only.",
+    rationale:
+      "The open value and its pure nullable ID projection feed one stable SupplierDetailDialog call site; one leaf subscription can derive both props while the owner keeps lifetime and the open button stays command-only.",
     target: "tree-map",
   },
   {
@@ -2090,7 +2116,8 @@ export const goldCases = [
     hook: "useState",
     line: 102,
     name: "showPublishLibraryDialog",
-    rationale: "The success transition atomically swaps this dialog flag with a sibling payload, so a per-flag observable would split one workflow transaction.",
+    rationale:
+      "The success transition atomically swaps this dialog flag with a sibling payload, so a per-flag observable would split one workflow transaction.",
     target: "excalidraw",
   },
   {
@@ -2099,7 +2126,8 @@ export const goldCases = [
     hook: "useState",
     line: 69,
     name: "isFilterOpen",
-    rationale: "The controlled FilterDropdown owns every value and setter use, so React state belongs in that extracted leaf.",
+    rationale:
+      "The controlled FilterDropdown owns every value and setter use, so React state belongs in that extracted leaf.",
     target: "tree-map",
   },
   {
@@ -2108,7 +2136,8 @@ export const goldCases = [
     hook: "useState",
     line: 42,
     name: "selected",
-    rationale: "The keyed selection Set should use row-local membership subscriptions plus a separate footer summary subscription.",
+    rationale:
+      "The keyed selection Set should use row-local membership subscriptions plus a separate footer summary subscription.",
     target: "memoria-src",
   },
   {
@@ -2117,7 +2146,8 @@ export const goldCases = [
     hook: "useState",
     line: 19,
     name: "name",
-    rationale: "The React value duplicates useWriterName, which is a one-hop useValue wrapper, and every write also updates that observable.",
+    rationale:
+      "The React value duplicates useWriterName, which is a one-hop useValue wrapper, and every write also updates that observable.",
     target: "memoria-src",
   },
   {
@@ -2126,7 +2156,8 @@ export const goldCases = [
     hook: "useState",
     line: 76,
     name: "bioExpanded",
-    rationale: "All reads and writes are dominated by a conditional biography subtree; stable observable ownership preserves lifetime while a leaf useValue subscription narrows invalidation.",
+    rationale:
+      "All reads and writes are dominated by a conditional biography subtree; stable observable ownership preserves lifetime while a leaf useValue subscription narrows invalidation.",
     target: "memoria-src",
   },
   ...[
@@ -2139,7 +2170,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A reusable selection hook should expose one observable model so rows and controls subscribe to narrow selectors.",
+    rationale:
+      "A reusable selection hook should expose one observable model so rows and controls subscribe to narrow selectors.",
     target: "memoria-src",
   })),
   {
@@ -2148,7 +2180,8 @@ export const goldCases = [
     hook: "useState",
     line: 36,
     name: "mounted",
-    rationale: "The Set records lifecycle premounting and is reconciled by an effect; it is not a user-selection model.",
+    rationale:
+      "The Set records lifecycle premounting and is reconciled by an effect; it is not a user-selection model.",
     target: "tree-wallet",
   },
   {
@@ -2157,7 +2190,8 @@ export const goldCases = [
     hook: "useState",
     line: 34,
     name: "isFocused",
-    rationale: "Two mutually exclusive component returns make aggregate JSX counts overstate the focus flag's active render cut; the compact editable branch stays under review.",
+    rationale:
+      "Two mutually exclusive component returns make aggregate JSX counts overstate the focus flag's active render cut; the compact editable branch stays under review.",
     target: "tree-wallet",
   },
   {
@@ -2166,7 +2200,8 @@ export const goldCases = [
     hook: "useState",
     line: 40,
     name: "failedMaskUrls",
-    rationale: "Failure membership controls root rendering in an already-small owner; it is not a row-local selection model.",
+    rationale:
+      "Failure membership controls root rendering in an already-small owner; it is not a row-local selection model.",
     target: "tree-map",
   },
   ...[
@@ -2179,7 +2214,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Every flag write surrounds a mutation hook whose own observable status already rerenders the owner, so converting this flag alone does not cut the render.",
+    rationale:
+      "Every flag write surrounds a mutation hook whose own observable status already rerenders the owner, so converting this flag alone does not cut the render.",
     target: "memoria-src",
   })),
   {
@@ -2188,7 +2224,8 @@ export const goldCases = [
     hook: "useState",
     line: 100,
     name: "connecting",
-    rationale: "Independent commands mutate the value while only one small descendant needs to subscribe.",
+    rationale:
+      "Independent commands mutate the value while only one small descendant needs to subscribe.",
     target: "memoria-src",
   },
   {
@@ -2197,7 +2234,8 @@ export const goldCases = [
     hook: "useState",
     line: 102,
     name: "firstRun",
-    rationale: "Stable choice rows subscribe by key, the action button subscribes to the selected mode, and the start command snapshots the latest choice without rerendering the screen owner.",
+    rationale:
+      "Stable choice rows subscribe by key, the action button subscribes to the selected mode, and the start command snapshots the latest choice without rerendering the screen owner.",
     target: "memoria-src",
   },
   ...[
@@ -2210,7 +2248,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A resolved child owns the only render read, while independent commands can update an observable without invalidating the large screen.",
+    rationale:
+      "A resolved child owns the only render read, while independent commands can update an observable without invalidating the large screen.",
     target: "memoria-src",
   })),
   ...[
@@ -2223,7 +2262,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A hot large owner can keep a stable handle while the exact row or drop surface subscribes.",
+    rationale:
+      "A hot large owner can keep a stable handle while the exact row or drop surface subscribes.",
     target: "legend-music",
   })),
   ...[
@@ -2257,7 +2297,8 @@ export const goldCases = [
     hook: "useState",
     line: 174,
     name: "previewUrl",
-    rationale: "Role changes reset the preview in the same React transition; moving only the preview to Legend would split that atomic update even though file completion writes it independently.",
+    rationale:
+      "Role changes reset the preview in the same React transition; moving only the preview to Legend would split that atomic update even though file completion writes it independently.",
     target: "tree-map",
   },
   ...[
@@ -2273,7 +2314,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One resolved domain child owns every render read, and no companion React write keeps the owner render alive.",
+    rationale:
+      "One resolved domain child owns every render read, and no companion React write keeps the owner render alive.",
     target: "tree-map",
   })),
   ...[
@@ -2295,7 +2337,8 @@ export const goldCases = [
     hook: "useState",
     line: 54,
     name: "photos",
-    rationale: "The test harness intentionally owns the controlled value; production render-boundary migrations do not apply.",
+    rationale:
+      "The test harness intentionally owns the controlled value; production render-boundary migrations do not apply.",
     target: "tree-map",
   },
   ...[
@@ -2307,7 +2350,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Converting this state alone does not eliminate the owner render or would push domain ownership into a shared primitive.",
+    rationale:
+      "Converting this state alone does not eliminate the owner render or would push domain ownership into a shared primitive.",
     target: "tree-map",
   })),
   ...[
@@ -2319,7 +2363,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The delete payload and visibility flag share one bounded dialog gate; the completion callback can preserve its post-close payload clear as a leaf write.",
+    rationale:
+      "The delete payload and visibility flag share one bounded dialog gate; the completion callback can preserve its post-close payload clear as a leaf write.",
     target: "tree-map",
   })),
   ...[
@@ -2339,7 +2384,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The complete co-written payload/visibility cluster should become one observable dialog model with leaf subscriptions.",
+    rationale:
+      "The complete co-written payload/visibility cluster should become one observable dialog model with leaf subscriptions.",
     target: "tree-map",
   })),
   {
@@ -2348,7 +2394,8 @@ export const goldCases = [
     hook: "useState",
     line: 45,
     name: "showDetails",
-    rationale: "ResultView owns the toggle and all reads; the parent reset coincides with unmounting that result subtree.",
+    rationale:
+      "ResultView owns the toggle and all reads; the parent reset coincides with unmounting that result subtree.",
     target: "memoria-src",
   },
   {
@@ -2357,7 +2404,8 @@ export const goldCases = [
     hook: "useState",
     line: 73,
     name: "calendarOpen",
-    rationale: "The Popover owns an independent onOpenChange path, so its leaf can subscribe without invalidating the timeline owner.",
+    rationale:
+      "The Popover owns an independent onOpenChange path, so its leaf can subscribe without invalidating the timeline owner.",
     target: "tree-map",
   },
   ...[
@@ -2371,7 +2419,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A broad owner can retain a stable observable while one exact call-site wrapper receives the unchanged value snapshot.",
+    rationale:
+      "A broad owner can retain a stable observable while one exact call-site wrapper receives the unchanged value snapshot.",
     target: "tree-map",
   })),
   {
@@ -2380,7 +2429,8 @@ export const goldCases = [
     hook: "useState",
     line: 47,
     name: "closeWarningOpen",
-    rationale: "The AlertDialog owns an independent visibility callback while parent reset commands retain observable ownership and their atomic ordering.",
+    rationale:
+      "The AlertDialog owns an independent visibility callback while parent reset commands retain observable ownership and their atomic ordering.",
     target: "tree-map",
   },
   ...[
@@ -2394,7 +2444,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The payload-opening transaction remains in the table owner, while the mounted modal has an independent visibility callback and is the only value subscriber.",
+    rationale:
+      "The payload-opening transaction remains in the table owner, while the mounted modal has an independent visibility callback and is the only value subscriber.",
     target: "tree-map",
   })),
   {
@@ -2403,7 +2454,8 @@ export const goldCases = [
     hook: "useState",
     line: 163,
     name: "mergeOpen",
-    rationale: "Merge visibility can open independently, but the selected-dialog handoff closes one React surface while opening this one; migrating only merge visibility would split that transition.",
+    rationale:
+      "Merge visibility can open independently, but the selected-dialog handoff closes one React surface while opening this one; migrating only merge visibility would split that transition.",
     target: "tree-map",
   },
   {
@@ -2412,7 +2464,8 @@ export const goldCases = [
     hook: "useState",
     line: 164,
     name: "selectedOpen",
-    rationale: "The selected dialog opens independently, and its only companion transition closes this surface before opening merge; a stable selected-dialog leaf can subscribe without exposing stale payload.",
+    rationale:
+      "The selected dialog opens independently, and its only companion transition closes this surface before opening merge; a stable selected-dialog leaf can subscribe without exposing stale payload.",
     target: "tree-map",
   },
   ...[
@@ -2424,7 +2477,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One non-repeated JSX child callback contains the only value leaf, while independent siblings prove an owner render cut and observable ownership preserves the lazy initializer lifetime.",
+    rationale:
+      "One non-repeated JSX child callback contains the only value leaf, while independent siblings prove an owner render cut and observable ownership preserves the lazy initializer lifetime.",
     target: "tree-map",
   })),
   ...[
@@ -2436,7 +2490,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One cohesive controlled leaf owns every value and setter use, so extracting that leaf gives React state the narrow boundary it needs.",
+    rationale:
+      "One cohesive controlled leaf owns every value and setter use, so extracting that leaf gives React state the narrow boundary it needs.",
     target: "tree-map",
   })),
   ...[
@@ -2448,7 +2503,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The menu owns every value and setter use, but alternate returns and conditional mounting require stable owner-lifetime observable ownership rather than moving React state down.",
+    rationale:
+      "The menu owns every value and setter use, but alternate returns and conditional mounting require stable owner-lifetime observable ownership rather than moving React state down.",
     target: "tree-map",
   })),
   {
@@ -2457,7 +2513,8 @@ export const goldCases = [
     hook: "useState",
     line: 59,
     name: "searchDraft",
-    rationale: "Every search draft update also navigates route state and rerenders the owner, so local observable conversion has no proven render cut.",
+    rationale:
+      "Every search draft update also navigates route state and rerenders the owner, so local observable conversion has no proven render cut.",
     target: "tree-map",
   },
   ...[
@@ -2474,7 +2531,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The one-shot deferred render gate keeps its exact scheduler and cleanup while an observable leaf subscription avoids invalidating the owner.",
+    rationale:
+      "The one-shot deferred render gate keeps its exact scheduler and cleanup while an observable leaf subscription avoids invalidating the owner.",
     target: "tree-wallet",
   })),
   {
@@ -2484,7 +2542,8 @@ export const goldCases = [
     hook: "useState",
     line: 62,
     name: "isSharing",
-    rationale: "The share command sets and clears exact async status while one stable footer Pressable consumes its pure enabled projection and conditional label; the share card and alert remain outside the leaf subscription.",
+    rationale:
+      "The share command sets and clears exact async status while one stable footer Pressable consumes its pure enabled projection and conditional label; the share card and alert remain outside the leaf subscription.",
     target: "tree-wallet",
   },
   {
@@ -2493,7 +2552,8 @@ export const goldCases = [
     hook: "useState",
     line: 75,
     name: "ready",
-    rationale: "The one-shot idle render gate keeps its exact scheduler and cleanup while an observable leaf subscription avoids invalidating the route owner.",
+    rationale:
+      "The one-shot idle render gate keeps its exact scheduler and cleanup while an observable leaf subscription avoids invalidating the route owner.",
     target: "memoria-src",
   },
   ...[["app/(private)/forest/tree/[id].tsx", 60, "renderPhase"]].map(([file, line, name]) => ({
@@ -2502,7 +2562,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Multi-phase or multi-sink scheduled state is not the one-shot deferred render-gate model.",
+    rationale:
+      "Multi-phase or multi-sink scheduled state is not the one-shot deferred render-gate model.",
     target: "tree-wallet",
   })),
   {
@@ -2511,7 +2572,8 @@ export const goldCases = [
     hook: "useState",
     line: 56,
     name: "openFaq",
-    rationale: "A stable keyed discriminator should use one observable owner and per-row equality subscriptions.",
+    rationale:
+      "A stable keyed discriminator should use one observable owner and per-row equality subscriptions.",
     target: "tree-map",
   },
   ...[
@@ -2530,7 +2592,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Pure render projections converge on one call-site wrapper, while an independent command path can update the observable without invalidating the owner.",
+    rationale:
+      "Pure render projections converge on one call-site wrapper, while an independent command path can update the observable without invalidating the owner.",
     target: "tree-map",
   })),
   ...[
@@ -2551,7 +2614,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A raw payload prop and its safe visibility projection converge on one always-mounted call site; a wrapper can subscribe without changing the child API.",
+    rationale:
+      "A raw payload prop and its safe visibility projection converge on one always-mounted call site; a wrapper can subscribe without changing the child API.",
     target: "tree-map",
   })),
   ...[
@@ -2564,7 +2628,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "An always-mounted subscriber wrapper can own the complete payload gate, derive call-free child props from the subscribed payload, and return null or the modal without rerendering the table-bearing owner.",
+    rationale:
+      "An always-mounted subscriber wrapper can own the complete payload gate, derive call-free child props from the subscribed payload, and return null or the modal without rerendering the table-bearing owner.",
     target: "tree-map",
   })),
   {
@@ -2573,7 +2638,8 @@ export const goldCases = [
     hook: "useState",
     line: 69,
     name: "feedback",
-    rationale: "Both optimistic and rollback writes target the same message ID, while each stable-keyed message row renders only its own verdict; keep command timing and subscribe to one dynamic observable entry per row.",
+    rationale:
+      "Both optimistic and rollback writes target the same message ID, while each stable-keyed message row renders only its own verdict; keep command timing and subscribe to one dynamic observable entry per row.",
     target: "tree-map",
   },
   ...[
@@ -2585,7 +2651,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The stable-keyed message editor opens with one atomic cursor-and-text assignment; controlled text writes stay in the active row, command reads use a snapshot, and null-only close commands preserve the hidden draft.",
+    rationale:
+      "The stable-keyed message editor opens with one atomic cursor-and-text assignment; controlled text writes stay in the active row, command reads use a snapshot, and null-only close commands preserve the hidden draft.",
     target: "tree-map",
   })),
   {
@@ -2594,7 +2661,8 @@ export const goldCases = [
     hook: "useState",
     line: 31,
     name: "isReviewDialogOpen",
-    rationale: "The setter callback escapes through a custom hook, preventing a proven independent render cut.",
+    rationale:
+      "The setter callback escapes through a custom hook, preventing a proven independent render cut.",
     target: "tree-map",
   },
   {
@@ -2603,7 +2671,8 @@ export const goldCases = [
     hook: "useState",
     line: 45,
     name: "rating",
-    rationale: "Rating writes are row-keyed commands; row equality, submit validity, and the submit snapshot can consume one owner-lifetime observable without rerendering the feedback screen.",
+    rationale:
+      "Rating writes are row-keyed commands; row equality, submit validity, and the submit snapshot can consume one owner-lifetime observable without rerendering the feedback screen.",
     target: "tree-wallet",
   },
   {
@@ -2612,7 +2681,8 @@ export const goldCases = [
     hook: "useState",
     line: 47,
     name: "isCommentFocused",
-    rationale: "Every read and setter command is confined to one stable strict comment-card subtree.",
+    rationale:
+      "Every read and setter command is confined to one stable strict comment-card subtree.",
     target: "tree-wallet",
   },
   {
@@ -2621,7 +2691,8 @@ export const goldCases = [
     hook: "useState",
     line: 28,
     name: "showPast",
-    rationale: "Every read and command is confined to one conditional subtree, so ownership stays stable and the extracted leaf subscribes.",
+    rationale:
+      "Every read and command is confined to one conditional subtree, so ownership stays stable and the extracted leaf subscribes.",
     target: "memoria-src",
   },
   {
@@ -2630,7 +2701,8 @@ export const goldCases = [
     hook: "useState",
     line: 29,
     name: "editing",
-    rationale: "The raw editing payload and its safe open/anchor projections converge on one always-mounted SessionSheet wrapper.",
+    rationale:
+      "The raw editing payload and its safe open/anchor projections converge on one always-mounted SessionSheet wrapper.",
     target: "memoria-src",
   },
   ...[
@@ -2643,7 +2715,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Every render projection converges on one SessionSheet call-site wrapper; commands mutate the stable observable and the unchanged child receives ordinary props.",
+    rationale:
+      "Every render projection converges on one SessionSheet call-site wrapper; commands mutate the stable observable and the unchanged child receives ordinary props.",
     target: "memoria-src",
   })),
   {
@@ -2652,7 +2725,8 @@ export const goldCases = [
     hook: "useState",
     line: 29,
     name: "isFocused",
-    rationale: "The focus flag renders only through one TextInput style projection, so a call-site observable wrapper avoids invalidating the screen.",
+    rationale:
+      "The focus flag renders only through one TextInput style projection, so a call-site observable wrapper avoids invalidating the screen.",
     target: "tree-wallet",
   },
   ...[
@@ -2666,7 +2740,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The empty-dependency effect performs module-global setup without cleanup or owner-local captures; useMount is an explicit once-only lifecycle choice.",
+    rationale:
+      "The empty-dependency effect performs module-global setup without cleanup or owner-local captures; useMount is an explicit once-only lifecycle choice.",
     target: "tree-wallet",
   })),
   ...[
@@ -2678,7 +2753,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The empty-dependency effect performs module-global startup setup without cleanup or owner-local captures.",
+    rationale:
+      "The empty-dependency effect performs module-global startup setup without cleanup or owner-local captures.",
     target: "memoria-app",
   })),
   ...[
@@ -2695,7 +2771,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "External, debounced, prop-lifecycle, or scheduled dependencies prevent a same-owner mutation-site reset.",
+    rationale:
+      "External, debounced, prop-lifecycle, or scheduled dependencies prevent a same-owner mutation-site reset.",
     target: target as string,
   })),
   {
@@ -2704,7 +2781,8 @@ export const goldCases = [
     hook: "useState",
     line: 24,
     name: "error",
-    rationale: "Image-error state already belongs to a two-element avatar leaf, so observable ownership cannot narrow rendering.",
+    rationale:
+      "Image-error state already belongs to a two-element avatar leaf, so observable ownership cannot narrow rendering.",
     target: "excalidraw",
   },
   {
@@ -2713,7 +2791,8 @@ export const goldCases = [
     hook: "useState",
     line: 56,
     name: "isLoading",
-    rationale: "Async click status controls one cohesive leaf button's class, disabled state, and spinner; the button itself must rerender.",
+    rationale:
+      "Async click status controls one cohesive leaf button's class, disabled state, and spinner; the button itself must rerender.",
     target: "excalidraw",
   },
   {
@@ -2722,7 +2801,8 @@ export const goldCases = [
     hook: "useState",
     line: 31,
     name: "innerValue",
-    rationale: "The editable local buffer is synchronized from a non-observable prop and owns validation and input behavior.",
+    rationale:
+      "The editable local buffer is synchronized from a non-observable prop and owns validation and input behavior.",
     target: "excalidraw",
   },
   {
@@ -2731,7 +2811,8 @@ export const goldCases = [
     hook: "useState",
     line: 80,
     name: "exportSelectionOnly",
-    rationale: "The value feeds owner-side export preparation as well as a Switch, so a leaf subscription does not remove owner work.",
+    rationale:
+      "The value feeds owner-side export preparation as well as a Switch, so a leaf subscription does not remove owner work.",
     target: "excalidraw",
   },
   {
@@ -2740,7 +2821,8 @@ export const goldCases = [
     hook: "useState",
     line: 232,
     name: "isSubmitting",
-    rationale: "A broad form only renders submit status in one action-button leaf while command paths own every write; the resolved DialogActionButton contract is verified as render-only.",
+    rationale:
+      "A broad form only renders submit status in one action-button leaf while command paths own every write; the resolved DialogActionButton contract is verified as render-only.",
     target: "excalidraw",
   },
   {
@@ -2772,7 +2854,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "Mixed external cleanup, focus timing, prop synchronization, or first-render restoration requires lifecycle review.",
+    rationale:
+      "Mixed external cleanup, focus timing, prop synchronization, or first-render restoration requires lifecycle review.",
     target: "excalidraw",
   })),
   ...[
@@ -2785,7 +2868,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The effect operates on a committed DOM ref for focus or focus restoration; preserve React post-commit ordering.",
+    rationale:
+      "The effect operates on a committed DOM ref for focus or focus restoration; preserve React post-commit ordering.",
     target: "excalidraw",
   })),
   ...[
@@ -2797,7 +2881,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The effect owns dependency-sensitive external cleanup rather than a mechanical Legend reaction.",
+    rationale:
+      "The effect owns dependency-sensitive external cleanup rather than a mechanical Legend reaction.",
     target: "excalidraw",
   })),
   ...[
@@ -2841,7 +2926,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The effect exactly mirrors a pure render value into a proven local ref after commit, preserving latest-value callback semantics.",
+    rationale:
+      "The effect exactly mirrors a pure render value into a proven local ref after commit, preserving latest-value callback semantics.",
     target: target as string,
   })),
   ...[
@@ -2852,7 +2938,12 @@ export const goldCases = [
     ["formbricks-select-plan-card", "select-plan-card.tsx", 43, "showHobbyConfirm"],
     ["formbricks-upload-contacts", "upload-contacts-button.tsx", 47, "open"],
     ["formbricks-webhook-settings", "webhook-settings-tab.tsx", 51, "isUpdatingWebhook"],
-    ["formbricks-organization-actions", "organization-actions.tsx", 71, "isLeaveOrganizationModalOpen"],
+    [
+      "formbricks-organization-actions",
+      "organization-actions.tsx",
+      71,
+      "isLeaveOrganizationModalOpen",
+    ],
     ["formbricks-survey-menu-bar", "survey-menu-bar.tsx", 73, "isSurveyPublishing"],
     ["formbricks-connect-integration", "index.tsx", 29, "isConnecting"],
     ["formbricks-date-picker", "index.tsx", 55, "isOpen"],
@@ -2863,7 +2954,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One stable JSX call site consumes the complete value while owner commands mutate it; a local subscriber can pass the same snapshot without requiring the child implementation or prop contract.",
+    rationale:
+      "One stable JSX call site consumes the complete value while owner commands mutate it; a local subscriber can pass the same snapshot without requiring the child implementation or prop contract.",
     target: target as string,
   })),
   {
@@ -2872,7 +2964,8 @@ export const goldCases = [
     hook: "useState",
     line: 199,
     name: "focused",
-    rationale: "The same owner creates merged callback refs for its inputs; isolating focus updates would change their detach and attach cadence.",
+    rationale:
+      "The same owner creates merged callback refs for its inputs; isolating focus updates would change their detach and attach cadence.",
     target: "outline-input",
   },
   ...[
@@ -2888,7 +2981,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "Editable draft, route, prop, or mixed React/observable synchronization requires causal ownership proof before replacement.",
+    rationale:
+      "Editable draft, route, prop, or mixed React/observable synchronization requires causal ownership proof before replacement.",
     target: target as string,
   })),
   {
@@ -2897,7 +2991,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 95,
     name: null,
-    rationale: "The effect performs post-mount DOM measurement and remains an external-system synchronization boundary.",
+    rationale:
+      "The effect performs post-mount DOM measurement and remains an external-system synchronization boundary.",
     target: "tree-map",
   },
   {
@@ -2906,7 +3001,8 @@ export const goldCases = [
     hook: "useState",
     line: 79,
     name: "isScrolledToBottom",
-    rationale: "The intrinsic scroll event computes one boolean and the state renders only two adjacent overlay gates; one stable leaf subscriber removes scroll-driven renders of the 57-element owner while preserving the measurement effect, event timing, and both conditional mounts.",
+    rationale:
+      "The intrinsic scroll event computes one boolean and the state renders only two adjacent overlay gates; one stable leaf subscriber removes scroll-driven renders of the 57-element owner while preserving the measurement effect, event timing, and both conditional mounts.",
     target: "tree-map",
   },
   {
@@ -2915,7 +3011,8 @@ export const goldCases = [
     hook: "useState",
     line: 78,
     name: "canScroll",
-    rationale: "The mount measurement writes one call-free boolean used only by the same two adjacent overlay gates; keep the committed-ref effect in React and subscribe with the existing scroll presentation leaf instead of rerendering the 57-element owner.",
+    rationale:
+      "The mount measurement writes one call-free boolean used only by the same two adjacent overlay gates; keep the committed-ref effect in React and subscribe with the existing scroll presentation leaf instead of rerendering the 57-element owner.",
     target: "tree-map",
   },
   {
@@ -2924,7 +3021,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 229,
     name: null,
-    rationale: "The effect snapshots a committed container ref into the virtualized grid boundary and must retain React post-commit timing.",
+    rationale:
+      "The effect snapshots a committed container ref into the virtualized grid boundary and must retain React post-commit timing.",
     target: "tree-map",
   },
   {
@@ -2933,7 +3031,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 82,
     name: null,
-    rationale: "The effect focuses an input only after React commits its conditional mount; an observable reaction cannot replace that commit ordering.",
+    rationale:
+      "The effect focuses an input only after React commits its conditional mount; an observable reaction cannot replace that commit ordering.",
     target: "legend-music",
   },
   {
@@ -2942,7 +3041,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 83,
     name: null,
-    rationale: "Scrolling the committed message container after content changes is an imperative post-commit integration and must remain a React effect.",
+    rationale:
+      "Scrolling the committed message container after content changes is an imperative post-commit integration and must remain a React effect.",
     target: "tree-map",
   },
   ...[
@@ -2954,7 +3054,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "Closing a recycled native swipeable through its committed ref is an imperative post-commit integration, not an observable reaction.",
+    rationale:
+      "Closing a recycled native swipeable through its committed ref is an imperative post-commit integration, not an observable reaction.",
     target: "memoria-src",
   })),
   {
@@ -2963,12 +3064,19 @@ export const goldCases = [
     hook: "useEffect",
     line: 36,
     name: null,
-    rationale: "Focus follows the committed color button as picker state changes, so React post-commit ordering is required.",
+    rationale:
+      "Focus follows the committed color button as picker state changes, so React post-commit ordering is required.",
     target: "excalidraw",
   },
   ...[
-    [229, "A newly inserted choice is focused through its committed button ref after the choices render."],
-    [236, "A newly created element is focused through its committed input ref after the element renders."],
+    [
+      229,
+      "A newly inserted choice is focused through its committed button ref after the choices render.",
+    ],
+    [
+      236,
+      "A newly created element is focused through its committed input ref after the element renders.",
+    ],
   ].map(([line, rationale]) => ({
     action: "keep-effect" as const,
     file: "multiple-choice-element-form.tsx",
@@ -2984,7 +3092,8 @@ export const goldCases = [
     hook: "useState",
     line: 58,
     name: "isInvalidValue",
-    rationale: "Every write repeats the current primitive, so React already bails out. This is dead-code cleanup without a proven render or lifecycle cost and stays non-actionable.",
+    rationale:
+      "Every write repeats the current primitive, so React already bails out. This is dead-code cleanup without a proven render or lifecycle cost and stays non-actionable.",
     target: "formbricks-multiple-choice",
   },
   {
@@ -2993,7 +3102,8 @@ export const goldCases = [
     hook: "useState",
     line: 50,
     name: "isInvalidValue",
-    rationale: "Every write repeats the current primitive, so React already bails out. This is dead-code cleanup without a proven render or lifecycle cost and stays non-actionable.",
+    rationale:
+      "Every write repeats the current primitive, so React already bails out. This is dead-code cleanup without a proven render or lifecycle cost and stays non-actionable.",
     target: "formbricks-ranking-element",
   },
   {
@@ -3002,7 +3112,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 133,
     name: null,
-    rationale: "Choice focus depends on the committed input after the ranking list changes, so the effect must retain React post-commit timing.",
+    rationale:
+      "Choice focus depends on the committed input after the ranking list changes, so the effect must retain React post-commit timing.",
     target: "formbricks-ranking-element",
   },
   {
@@ -3011,7 +3122,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 116,
     name: null,
-    rationale: "The hidden WebAuthn form can only be submitted through its ref after React commits the generated ceremony fields.",
+    rationale:
+      "The hidden WebAuthn form can only be submitted through its ref after React commits the generated ceremony fields.",
     target: "outline-passkey-provider",
   },
   {
@@ -3020,7 +3132,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 124,
     name: null,
-    rationale: "The desktop redirect effect mixes a mutable guard ref with environment checks and an authentication command, so ref syntax alone does not prove a pure committed-ref integration.",
+    rationale:
+      "The desktop redirect effect mixes a mutable guard ref with environment checks and an authentication command, so ref syntax alone does not prove a pure committed-ref integration.",
     target: "outline-passkey-provider",
   },
   ...[
@@ -3035,7 +3148,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One stable controlled child is the only subscriber while independent sibling UI proves that owner rerenders can be removed without changing the child API.",
+    rationale:
+      "One stable controlled child is the only subscriber while independent sibling UI proves that owner rerenders can be removed without changing the child API.",
     target: target as string,
   })),
   ...[
@@ -3049,14 +3163,19 @@ export const goldCases = [
     ["components/projects-management/add-land-modal.tsx", 22, "landId"],
     ["components/transfer-requests/reject-transfer-request-modal.tsx", 24, "reason"],
     ["components/tree-actions/transfer-to-project/transfer-to-new-project-page.tsx", 35, "name"],
-    ["components/tree-actions/transfer-to-project/transfer-to-new-project-page.tsx", 36, "description"],
+    [
+      "components/tree-actions/transfer-to-project/transfer-to-new-project-page.tsx",
+      36,
+      "description",
+    ],
   ].map(([file, line, name]) => ({
     action: "use-observable" as const,
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A direct controlled edit updates only this field while reset or submit commands preserve their existing transactions; stable owner observable state lets the input and bounded validation leaves subscribe without rerendering the broad form.",
+    rationale:
+      "A direct controlled edit updates only this field while reset or submit commands preserve their existing transactions; stable owner observable state lets the input and bounded validation leaves subscribe without rerendering the broad form.",
     target: "tree-map",
   })),
   ...[
@@ -3068,7 +3187,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The direct input edit is independent while submit or save reads remain event snapshots; an owner observable narrows keystroke invalidation to the controlled field and its complete validation leaf.",
+    rationale:
+      "The direct input edit is independent while submit or save reads remain event snapshots; an owner observable narrows keystroke invalidation to the controlled field and its complete validation leaf.",
     target: target as string,
   })),
   {
@@ -3077,7 +3197,8 @@ export const goldCases = [
     hook: "useState",
     line: 31,
     name: "isLoading",
-    rationale: "The true pending transition reaches its awaited create command before any other owner state changes, and only the submit button subscribes.",
+    rationale:
+      "The true pending transition reaches its awaited create command before any other owner state changes, and only the submit button subscribes.",
     target: "formbricks-create-team",
   },
   {
@@ -3086,7 +3207,8 @@ export const goldCases = [
     hook: "useState",
     line: 84,
     name: "isEditingFixed",
-    rationale: "Editing mode controls which field branch exists, so it remains workflow state rather than the independently editable value leaf.",
+    rationale:
+      "Editing mode controls which field branch exists, so it remains workflow state rather than the independently editable value leaf.",
     target: "formbricks-mapping-field",
   },
   ...[
@@ -3101,7 +3223,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One controlled leaf renders the field while an event-rooted named transition callback snapshots it for deferred save work; owner state changes stay outside the transition.",
+    rationale:
+      "One controlled leaf renders the field while an event-rooted named transition callback snapshots it for deferred save work; owner state changes stay outside the transition.",
     target: "tree-map",
   })),
   ...[
@@ -3115,7 +3238,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The five-element owner and its normalized min/max transaction provide no meaningful split; commit can co-write or swap the pair atomically.",
+    rationale:
+      "The five-element owner and its normalized min/max transaction provide no meaningful split; commit can co-write or swap the pair atomically.",
     target: "tree-map",
   })),
   ...[
@@ -3133,7 +3257,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Keep the React synchronization effect and its dependencies, but move the complete editable draft cluster to one observable model with leaf subscriptions and atomic effect assignment.",
+    rationale:
+      "Keep the React synchronization effect and its dependencies, but move the complete editable draft cluster to one observable model with leaf subscriptions and atomic effect assignment.",
     target: target as string,
   })),
   {
@@ -3142,7 +3267,8 @@ export const goldCases = [
     hook: "useState",
     line: 34,
     name: "category",
-    rationale: "Category is one member of a reset transaction with asset and unlock state, while asset owns a second object-URL effect and cleanup; migrating category alone is not a complete draft optimization.",
+    rationale:
+      "Category is one member of a reset transaction with asset and unlock state, while asset owns a second object-URL effect and cleanup; migrating category alone is not a complete draft optimization.",
     target: "tree-map",
   },
   {
@@ -3151,7 +3277,8 @@ export const goldCases = [
     hook: "useState",
     line: 243,
     name: "clonedLibItems",
-    rationale: "The editable list controls row cardinality and is captured before and after async preview generation; a generic observable snapshot rewrite could change command timing and must remain a whole-workflow review.",
+    rationale:
+      "The editable list controls row cardinality and is captured before and after async preview generation; a generic observable snapshot rewrite could change command timing and must remain a whole-workflow review.",
     target: "excalidraw",
   },
   ...[
@@ -3163,7 +3290,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The editable value feeds a memoized recipe consumed by a recording effect, so the owner must still update unless that downstream lifecycle is migrated too.",
+    rationale:
+      "The editable value feeds a memoized recipe consumed by a recording effect, so the owner must still update unless that downstream lifecycle is migrated too.",
     target: "memoria-src",
   })),
   {
@@ -3172,7 +3300,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 247,
     name: null,
-    rationale: "Keep the React synchronization phase; a future paired migration may replace only its React-state sink with an atomic observable draft assignment.",
+    rationale:
+      "Keep the React synchronization phase; a future paired migration may replace only its React-state sink with an atomic observable draft assignment.",
     target: "excalidraw",
   },
   ...[
@@ -3186,7 +3315,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The complete address draft is reseeded synchronously by one React effect and edited atomically through one form boundary; preserve the effect and subscribe in the form leaf.",
+    rationale:
+      "The complete address draft is reseeded synchronously by one React effect and edited atomically through one form boundary; preserve the effect and subscribe in the form leaf.",
     target: "expensify-address",
   })),
   {
@@ -3195,7 +3325,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 52,
     name: null,
-    rationale: "Preserve the guarded React synchronization phase and dependency timing while replacing only its grouped draft sink.",
+    rationale:
+      "Preserve the guarded React synchronization phase and dependency timing while replacing only its grouped draft sink.",
     target: "expensify-address",
   },
   ...[
@@ -3207,7 +3338,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The modal effect and input edit path update one complete text/error draft cluster; keep the effect and subscribe only in the editor/error subtree.",
+    rationale:
+      "The modal effect and input edit path update one complete text/error draft cluster; keep the effect and subscribe only in the editor/error subtree.",
     target: "formbricks-bulk-options",
   })),
   {
@@ -3216,7 +3348,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 86,
     name: null,
-    rationale: "The guarded prop synchronization must remain a React effect with the same dependencies and timing.",
+    rationale:
+      "The guarded prop synchronization must remain a React effect with the same dependencies and timing.",
     target: "formbricks-bulk-options",
   },
   ...[
@@ -3228,7 +3361,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The close effect resets one complete survey/link draft, while the generation command snapshots the selection before suspension and publishes the URL afterward; preserve the effect and subscribe only in the select, URL, and button leaves.",
+    rationale:
+      "The close effect resets one complete survey/link draft, while the generation command snapshots the selection before suspension and publishes the URL afterward; preserve the effect and subscribe only in the select, URL, and button leaves.",
     target: "formbricks-personal-link-modal",
   })),
   {
@@ -3237,7 +3371,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 59,
     name: null,
-    rationale: "Preserve the modal-close synchronization effect and its dependency timing while replacing only its two-state draft reset.",
+    rationale:
+      "Preserve the modal-close synchronization effect and its dependency timing while replacing only its two-state draft reset.",
     target: "formbricks-personal-link-modal",
   },
   {
@@ -3246,7 +3381,8 @@ export const goldCases = [
     hook: "useState",
     line: 51,
     name: "startPermissionsFlow",
-    rationale: "The disabled-services return makes its modal transition mutually exclusive with starting the permission flow; one stable child wrapper can subscribe without rerendering the GPS controls.",
+    rationale:
+      "The disabled-services return makes its modal transition mutually exclusive with starting the permission flow; one stable child wrapper can subscribe without rerendering the GPS controls.",
     target: "expensify-gps-permissions-flow",
   },
   {
@@ -3255,7 +3391,8 @@ export const goldCases = [
     hook: "useState",
     line: 182,
     name: "text",
-    rationale: "The prop-seeded text is an editable leaf draft; its event command forwards the same computed value to one debounced upstream update.",
+    rationale:
+      "The prop-seeded text is an editable leaf draft; its event command forwards the same computed value to one debounced upstream update.",
     target: "formbricks-element-input",
   },
   {
@@ -3264,7 +3401,8 @@ export const goldCases = [
     hook: "useState",
     line: 183,
     name: "showImageUploader",
-    rationale: "The toggle controls one bounded FileInput gate; an owner observable plus full-gate subscriber preserves the uploader's mount lifetime without rerendering the editor.",
+    rationale:
+      "The toggle controls one bounded FileInput gate; an owner observable plus full-gate subscriber preserves the uploader's mount lifetime without rerendering the editor.",
     target: "formbricks-element-input",
   },
   {
@@ -3273,7 +3411,8 @@ export const goldCases = [
     hook: "useState",
     line: 308,
     name: "internalFirstRender",
-    rationale: "The controlled/uncontrolled fallback crosses an external state contract and is not part of the synchronized text draft.",
+    rationale:
+      "The controlled/uncontrolled fallback crosses an external state contract and is not part of the synchronized text draft.",
     target: "formbricks-element-input",
   },
   {
@@ -3282,7 +3421,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 188,
     name: null,
-    rationale: "Preserve the React prop-to-draft synchronization phase; only the paired draft sink is a future migration candidate.",
+    rationale:
+      "Preserve the React prop-to-draft synchronization phase; only the paired draft sink is a future migration candidate.",
     target: "formbricks-element-input",
   },
   ...[
@@ -3298,7 +3438,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Every rendered read selects content inside one small stable boundary; keep observable ownership above the gate and replace the full expression with an always-mounted leaf subscriber.",
+    rationale:
+      "Every rendered read selects content inside one small stable boundary; keep observable ownership above the gate and replace the full expression with an always-mounted leaf subscriber.",
     target: "tree-map",
   })),
   {
@@ -3307,7 +3448,8 @@ export const goldCases = [
     hook: "useState",
     line: 18,
     name: "generatedPassword",
-    rationale: "The password payload gates one stable dialog-content branch and is atomically cleared with its nested feedback flag; keep both in one owner-lifetime observable model.",
+    rationale:
+      "The password payload gates one stable dialog-content branch and is atomically cleared with its nested feedback flag; keep both in one owner-lifetime observable model.",
     target: "tree-map",
   },
   {
@@ -3316,7 +3458,8 @@ export const goldCases = [
     hook: "useState",
     line: 19,
     name: "copied",
-    rationale: "The timed feedback renders only inside the password-gated branch and shares its close reset; batch that reset and subscribe in a nested button leaf.",
+    rationale:
+      "The timed feedback renders only inside the password-gated branch and shares its close reset; batch that reset and subscribe in a nested button leaf.",
     target: "tree-map",
   },
   {
@@ -3325,7 +3468,8 @@ export const goldCases = [
     hook: "useState",
     line: 19,
     name: "imageError",
-    rationale: "One immutable showImage projection gates only the AvatarImage; keep observable ownership above an always-mounted Avatar subscriber.",
+    rationale:
+      "One immutable showImage projection gates only the AvatarImage; keep observable ownership above an always-mounted Avatar subscriber.",
     target: "tree-map",
   },
   ...[
@@ -3339,9 +3483,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 20 || line === 120
-      ? "The same alias gates two disjoint image instances, so one bounded leaf subscription is not proven."
-      : "A unique immutable projection carries the state to one stable visual leaf without effects or companion React writes.",
+    rationale:
+      line === 20 || line === 120
+        ? "The same alias gates two disjoint image instances, so one bounded leaf subscription is not proven."
+        : "A unique immutable projection carries the state to one stable visual leaf without effects or companion React writes.",
     target: "tree-map",
   })),
   ...[
@@ -3354,7 +3499,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A tiny owner, multiple render sinks, companion carousel state, or mutation lifecycle prevents a proven isolated gate win.",
+    rationale:
+      "A tiny owner, multiple render sinks, companion carousel state, or mutation lifecycle prevents a proven isolated gate win.",
     target: "tree-map",
   })),
   {
@@ -3363,7 +3509,8 @@ export const goldCases = [
     hook: "useState",
     line: 80,
     name: "copied",
-    rationale: "The copy timer changes only one button-local presentation gate in a broad list row.",
+    rationale:
+      "The copy timer changes only one button-local presentation gate in a broad list row.",
     target: "outline-api-key",
   },
   ...[
@@ -3377,7 +3524,8 @@ export const goldCases = [
       hook: "useState" as const,
       line: line as number,
       name: name as string,
-      rationale: "A synchronized hover draft is produced by the grid but rendered only by the sibling preview; state-independent fallback work remains an ordinary owner snapshot.",
+      rationale:
+        "A synchronized hover draft is produced by the grid but rendered only by the sibling preview; state-independent fallback work remains an ordinary owner snapshot.",
       target: target as string,
     },
     {
@@ -3386,7 +3534,8 @@ export const goldCases = [
       hook: "useEffect" as const,
       line: effectLine as number,
       name: null,
-      rationale: "Preserve the React source-change synchronization effect and its dependency timing while isolating only its rendered state sink.",
+      rationale:
+        "Preserve the React source-change synchronization effect and its dependency timing while isolating only its rendered state sink.",
       target: target as string,
     },
   ]),
@@ -3399,7 +3548,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: "hasMoreBelow",
-    rationale: "The grid directly produces overflow state while only the stable sibling preview renders it, proving a narrow subscription cut.",
+    rationale:
+      "The grid directly produces overflow state while only the stable sibling preview renders it, proving a narrow subscription cut.",
     target: target as string,
   })),
   {
@@ -3408,7 +3558,8 @@ export const goldCases = [
     hook: "useState",
     line: 19,
     name: "activeMonth",
-    rationale: "Chart focus commands produce a cursor whose pure index projection is rendered only by the stable sibling labels subtree.",
+    rationale:
+      "Chart focus commands produce a cursor whose pure index projection is rendered only by the stable sibling labels subtree.",
     target: "tree-map",
   },
   {
@@ -3417,7 +3568,8 @@ export const goldCases = [
     hook: "useState",
     line: 23,
     name: "highlightedKey",
-    rationale: "The cursor enters an opaque chart-definition pipeline rather than a proven sibling presentation leaf, so owner invalidation remains required.",
+    rationale:
+      "The cursor enters an opaque chart-definition pipeline rather than a proven sibling presentation leaf, so owner invalidation remains required.",
     target: "tree-map",
   },
   {
@@ -3426,7 +3578,8 @@ export const goldCases = [
     hook: "useState",
     line: 31,
     name: "active",
-    rationale: "Keyboard and pointer commands update one stable row cursor; rows should subscribe by their derived item index while Enter reads one non-tracking snapshot.",
+    rationale:
+      "Keyboard and pointer commands update one stable row cursor; rows should subscribe by their derived item index while Enter reads one non-tracking snapshot.",
     target: "tree-map",
   },
   ...[
@@ -3438,7 +3591,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Each account row needs only its selected projection while one confirmation control consumes the selected payload; independent row commands should not invalidate the dialog owner.",
+    rationale:
+      "Each account row needs only its selected projection while one confirmation control consumes the selected payload; independent row commands should not invalidate the dialog owner.",
     target: "tree-map",
   })),
   {
@@ -3447,12 +3601,23 @@ export const goldCases = [
     hook: "useState",
     line: 27,
     name: "selectedId",
-    rationale: "Each challenge row needs only its selected boolean, the footer needs a separate non-null summary, and accept reads the latest id from an event command.",
+    rationale:
+      "Each challenge row needs only its selected boolean, the footer needs a separate non-null summary, and accept reads the latest id from an event command.",
     target: "tree-wallet",
   },
   ...[
-    ["components/forest/forest-lands.tsx", 63, "activeIndex", "The pager index feeds deferred screen-wide layout, derived trees, and a controlled pager rather than a bounded row selector."],
-    ["components/impact/card-detail/use-level-pager.ts", 21, "activeIndex", "The custom hook returns the index through a public contract and coordinates UI-thread pager commands, so local row ownership is not proven."],
+    [
+      "components/forest/forest-lands.tsx",
+      63,
+      "activeIndex",
+      "The pager index feeds deferred screen-wide layout, derived trees, and a controlled pager rather than a bounded row selector.",
+    ],
+    [
+      "components/impact/card-detail/use-level-pager.ts",
+      21,
+      "activeIndex",
+      "The custom hook returns the index through a public contract and coordinates UI-thread pager commands, so local row ownership is not proven.",
+    ],
   ].map(([file, line, name, rationale]) => ({
     action: "review-state" as const,
     file: file as string,
@@ -3468,7 +3633,8 @@ export const goldCases = [
     hook: "useState",
     line: 62,
     name: "selectedIndex",
-    rationale: "Stable suggestion rows need per-row equality selectors while keyboard commands read and update one owner-lifetime cursor without invalidating the editor.",
+    rationale:
+      "Stable suggestion rows need per-row equality selectors while keyboard commands read and update one owner-lifetime cursor without invalidating the editor.",
     target: "outline-link-editor",
   },
   {
@@ -3477,7 +3643,8 @@ export const goldCases = [
     hook: "useState",
     line: 216,
     name: "selectedIndex",
-    rationale: "The cursor participates in multiple effects, submenu state, scrolling, and result cardinality, so a row-only selector is not a complete migration.",
+    rationale:
+      "The cursor participates in multiple effects, submenu state, scrolling, and result cardinality, so a row-only selector is not a complete migration.",
     target: "outline-suggestions-menu",
   },
   {
@@ -3486,7 +3653,8 @@ export const goldCases = [
     hook: "useState",
     line: 30,
     name: "copied",
-    rationale: "The copy timer changes only the button content; an always-mounted button subscriber preserves the modal and form boundary.",
+    rationale:
+      "The copy timer changes only the button content; an always-mounted button subscriber preserves the modal and form boundary.",
     target: "formbricks-webhook-created",
   },
   {
@@ -3495,7 +3663,8 @@ export const goldCases = [
     hook: "useState",
     line: 59,
     name: "copied",
-    rationale: "The copy timer selects one button-local presentation while the forty-element settings owner remains unchanged.",
+    rationale:
+      "The copy timer selects one button-local presentation while the forty-element settings owner remains unchanged.",
     target: "formbricks-webhook-settings",
   },
   {
@@ -3504,7 +3673,8 @@ export const goldCases = [
     hook: "useState",
     line: 56,
     name: "hittingEndpoint",
-    rationale: "Endpoint testing starts one pending transition before suspension; the button leaf can subscribe while completion updates remain in the existing command.",
+    rationale:
+      "Endpoint testing starts one pending transition before suspension; the button leaf can subscribe while completion updates remain in the existing command.",
     target: "formbricks-webhook-settings",
   },
   {
@@ -3513,7 +3683,8 @@ export const goldCases = [
     hook: "useState",
     line: 52,
     name: "selectedTriggers",
-    rationale: "One resolved checkbox-group leaf owns the exact immutable membership toggle and every rendered read, while submit needs one non-tracking snapshot; trigger edits should not rerender the forty-element settings owner.",
+    rationale:
+      "One resolved checkbox-group leaf owns the exact immutable membership toggle and every rendered read, while submit needs one non-tracking snapshot; trigger edits should not rerender the forty-element settings owner.",
     target: "formbricks-webhook-settings",
   },
   {
@@ -3522,7 +3693,8 @@ export const goldCases = [
     hook: "useState",
     line: 343,
     name: "isHobbyDowngradeConfirmOpen",
-    rationale: "One always-mounted subscriber can replace the complete confirmation gate without rerendering the pricing table.",
+    rationale:
+      "One always-mounted subscriber can replace the complete confirmation gate without rerendering the pricing table.",
     target: "formbricks-pricing-table",
   },
   {
@@ -3544,7 +3716,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Async tag commands update one input presentation or merge-control gate without invalidating the rest of the row.",
+    rationale:
+      "Async tag commands update one input presentation or merge-control gate without invalidating the rest of the row.",
     target: "formbricks-single-tag",
   })),
   ...[
@@ -3556,7 +3729,8 @@ export const goldCases = [
     hook: hook as "useEffect" | "useState",
     line: line as number,
     name: name as string | null,
-    rationale: "The copied flag owns a self-dependent cleanup effect, so command-only gate isolation is not proven.",
+    rationale:
+      "The copied flag owns a self-dependent cleanup effect, so command-only gate isolation is not proven.",
     target: "formbricks-id-badge",
   })),
   {
@@ -3565,7 +3739,8 @@ export const goldCases = [
     hook: "useState",
     line: 115,
     name: "shouldShowTime",
-    rationale: "Layout measurement controls one time-display gate; an always-mounted subscriber avoids rerendering all video controls.",
+    rationale:
+      "Layout measurement controls one time-display gate; an always-mounted subscriber avoids rerendering all video controls.",
     target: "expensify-video-controls",
   },
   ...[
@@ -3577,7 +3752,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: "isPDSandFSGDownloadedTouched",
-    rationale: "Validation touches only one compound error gate; keep Onyx state external and subscribe in an always-mounted error wrapper.",
+    rationale:
+      "Validation touches only one compound error gate; keep Onyx state external and subscribe in an always-mounted error wrapper.",
     target: target as string,
   })),
   ...[
@@ -3591,7 +3767,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The complete cascading address draft is synchronized atomically and rendered through one AddressForm leaf; TypeScript-only prop casts do not change transport ownership.",
+    rationale:
+      "The complete cascading address draft is synchronized atomically and rendered through one AddressForm leaf; TypeScript-only prop casts do not change transport ownership.",
     target: "expensify-bank-address-step",
   })),
   {
@@ -3600,7 +3777,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 76,
     name: null,
-    rationale: "Preserve the guarded React address synchronization effect and its exact dependency timing; replace only its grouped state sink.",
+    rationale:
+      "Preserve the guarded React address synchronization effect and its exact dependency timing; replace only its grouped state sink.",
     target: "expensify-bank-address-step",
   },
   ...[
@@ -3612,7 +3790,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A direct call-free JSX event independently changes this leaf state even though separate workflow transitions co-write companion React state.",
+    rationale:
+      "A direct call-free JSX event independently changes this leaf state even though separate workflow transitions co-write companion React state.",
     target: target as string,
   })),
   {
@@ -3621,7 +3800,8 @@ export const goldCases = [
     hook: "useState",
     line: 57,
     name: "isModalVisible",
-    rationale: "One path reopens the decision modal while clearing its deferred force-close choice; migrating visibility alone could publish the reopened modal with the previous React snapshot.",
+    rationale:
+      "One path reopens the decision modal while clearing its deferred force-close choice; migrating visibility alone could publish the reopened modal with the previous React snapshot.",
     target: "expensify-domain-member",
   },
   {
@@ -3630,7 +3810,8 @@ export const goldCases = [
     hook: "useState",
     line: 54,
     name: "selectedDurationUnit",
-    rationale: "The selected unit participates in the page's duration transaction and has no independently isolated presentation leaf.",
+    rationale:
+      "The selected unit participates in the page's duration transaction and has no independently isolated presentation leaf.",
     target: "expensify-chronos",
   },
   {
@@ -3639,7 +3820,8 @@ export const goldCases = [
     hook: "useState",
     line: 58,
     name: "shouldForceCloseAccount",
-    rationale: "The command reads and later resets this decision snapshot across an awaited custom-modal flow; source does not prove a committed render before another invocation can observe the reset.",
+    rationale:
+      "The command reads and later resets this decision snapshot across an awaited custom-modal flow; source does not prove a committed render before another invocation can observe the reset.",
     target: "expensify-domain-member",
   },
   {
@@ -3648,7 +3830,8 @@ export const goldCases = [
     hook: "useState",
     line: 56,
     name: "isModalOpen",
-    rationale: "The edit modal lifetime is coupled to its selected integration payload, so an isolated flag migration is incomplete.",
+    rationale:
+      "The edit modal lifetime is coupled to its selected integration payload, so an isolated flag migration is incomplete.",
     target: "formbricks-manage-airtable",
   },
   {
@@ -3657,7 +3840,8 @@ export const goldCases = [
     hook: "useState",
     line: 140,
     name: "searchValue",
-    rationale: "Search text drives filtering and result ownership in the address-search owner, so a leaf subscription cannot remove its render work.",
+    rationale:
+      "Search text drives filtering and result ownership in the address-search owner, so a leaf subscription cannot remove its render work.",
     target: "expensify-address-search",
   },
   {
@@ -3666,7 +3850,8 @@ export const goldCases = [
     hook: "useState",
     line: 141,
     name: "locationErrorCode",
-    rationale: "Location errors are published with geolocation result and loading transitions; an independent dismiss path does not make the other writes safe to split across React and Legend ownership.",
+    rationale:
+      "Location errors are published with geolocation result and loading transitions; an independent dismiss path does not make the other writes safe to split across React and Legend ownership.",
     target: "expensify-address-search",
   },
   ...[
@@ -3679,9 +3864,10 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: line === 367
-      ? "The empty-dependency effect contains only unmount invalidation of the geolocation callback guard."
-      : "The effect owns paired child-presence setup and cleanup against a changing callback dependency.",
+    rationale:
+      line === 367
+        ? "The empty-dependency effect contains only unmount invalidation of the geolocation callback guard."
+        : "The effect owns paired child-presence setup and cleanup against a changing callback dependency.",
     target: "expensify-address-search",
   })),
   ...[
@@ -3694,9 +3880,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 38
-      ? "A direct remove event independently opens the one stable DeleteDialog leaf even though successful deletion also transitions form state."
-      : "The state participates in prop-to-form synchronization or async submission ownership and has no isolated leaf cut.",
+    rationale:
+      line === 38
+        ? "A direct remove event independently opens the one stable DeleteDialog leaf even though successful deletion also transitions form state."
+        : "The state participates in prop-to-form synchronization or async submission ownership and has no isolated leaf cut.",
     target: "formbricks-pretty-url",
   })),
   {
@@ -3705,7 +3892,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 55,
     name: null,
-    rationale: "The effect synchronizes both editable React state and react-hook-form state from a changing survey slug.",
+    rationale:
+      "The effect synchronizes both editable React state and react-hook-form state from a changing survey slug.",
     target: "formbricks-pretty-url",
   },
   ...[
@@ -3718,7 +3906,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The three layout measurements form one observable model whose derived visibility is consumed only by the ReceiptAlternativeMethods gate.",
+    rationale:
+      "The three layout measurements form one observable model whose derived visibility is consumed only by the ReceiptAlternativeMethods gate.",
     target: "expensify-camera-file-upload",
   })),
   {
@@ -3727,7 +3916,8 @@ export const goldCases = [
     hook: "useState",
     line: 63,
     name: "error",
-    rationale: "The immutable errorMessage projection is consumed only by FormAlertWithSubmitButton, isolating validation renders from the task page.",
+    rationale:
+      "The immutable errorMessage projection is consumed only by FormAlertWithSubmitButton, isolating validation renders from the task page.",
     target: "expensify-dynamic-task",
   },
   {
@@ -3736,7 +3926,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 78,
     name: null,
-    rationale: "The route task synchronization is one external command keyed by route state and remains a React effect.",
+    rationale:
+      "The route task synchronization is one external command keyed by route state and remains a React effect.",
     target: "expensify-dynamic-task",
   },
   ...[
@@ -3749,9 +3940,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 33
-      ? "The validation flag projects only into one card-name error leaf; the full gate can subscribe without rerendering the form."
-      : "The controlled toggle is the only live subscriber; the Next command can read its latest observable snapshot without rerendering the page.",
+    rationale:
+      line === 33
+        ? "The validation flag projects only into one card-name error leaf; the full gate can subscribe without rerendering the form."
+        : "The controlled toggle is the only live subscriber; the Next command can read its latest observable snapshot without rerendering the page.",
     target: "expensify-import-transactions",
   })),
   ...[
@@ -3767,9 +3959,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: (line as number) <= 50
-      ? "One controlled toggle owns the live value while form submission reads a non-tracking snapshot; isolating it avoids rerendering the domain form."
-      : "This toggle participates in conditional availability and companion workflow writes, so a standalone observable cut is not proven.",
+    rationale:
+      (line as number) <= 50
+        ? "One controlled toggle owns the live value while form submission reads a non-tracking snapshot; isolating it avoids rerendering the domain form."
+        : "This toggle participates in conditional availability and companion workflow writes, so a standalone observable cut is not proven.",
     target: "expensify-domain-group-create",
   })),
   {
@@ -3778,7 +3971,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 72,
     name: null,
-    rationale: "The effect has no setup work and only clears the preferred-policy resource on unmount.",
+    rationale:
+      "The effect has no setup work and only clears the preferred-policy resource on unmount.",
     target: "expensify-domain-group-create",
   },
   {
@@ -3787,7 +3981,8 @@ export const goldCases = [
     hook: "useState",
     line: 33,
     name: "selectedCountry",
-    rationale: "The country picker is the only live subscriber; the form submit command reads one latest snapshot without rerendering the surrounding form.",
+    rationale:
+      "The country picker is the only live subscriber; the form submit command reads one latest snapshot without rerendering the surrounding form.",
     target: "expensify-beneficial-owner-nationality",
   },
   ...[
@@ -3803,9 +3998,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: name === "name"
-      ? "The input and save-validation projection are separate proven leaves; subscribe both from one owner observable and keep submit reads non-tracking."
-      : "The inline controlled input is the only live subscriber; the save command can read a non-tracking snapshot without rerendering the full client form.",
+    rationale:
+      name === "name"
+        ? "The input and save-validation projection are separate proven leaves; subscribe both from one owner observable and keep submit reads non-tracking."
+        : "The inline controlled input is the only live subscriber; the save command can read a non-tracking snapshot without rerendering the full client form.",
     target: "tree-map",
   })),
   ...[
@@ -3817,7 +4013,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: "format",
-    rationale: "The format selector is the only live subscriber; report generation reads the latest format without invalidating the report owner.",
+    rationale:
+      "The format selector is the only live subscriber; report generation reads the latest format without invalidating the report owner.",
     target: "tree-map",
   })),
   {
@@ -3826,7 +4023,8 @@ export const goldCases = [
     hook: "useState",
     line: 19,
     name: "name",
-    rationale: "Typing only needs to update the input leaf; confirmation can read the latest snapshot without rerendering the dialog header and footer.",
+    rationale:
+      "Typing only needs to update the input leaf; confirmation can read the latest snapshot without rerendering the dialog header and footer.",
     target: "tree-map",
   },
   ...[
@@ -3838,9 +4036,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 103
-      ? "One owner-scoped observable and an always-mounted full-gate subscriber preserve the keyed delete-flow lifetime while avoiding overview rerenders."
-      : "The rules document payload drives several owner commands and render sites, so a single leaf subscription is not proven.",
+    rationale:
+      line === 103
+        ? "One owner-scoped observable and an always-mounted full-gate subscriber preserve the keyed delete-flow lifetime while avoiding overview rerenders."
+        : "The rules document payload drives several owner commands and render sites, so a single leaf subscription is not proven.",
     target: "expensify-workspace-overview",
   })),
   {
@@ -3849,7 +4048,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 280,
     name: null,
-    rationale: "This effect issues one committed-ref command when the external workspace signal changes and remains in React.",
+    rationale:
+      "This effect issues one committed-ref command when the external workspace signal changes and remains in React.",
     target: "expensify-workspace-overview",
   },
   ...[
@@ -3862,7 +4062,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: "isDownloadFailureModalVisible",
-    rationale: "A source-resolved deferred option command owns this failure flag and one stable DecisionModal is its only subscriber; converting the literal commands preserves callback timing while removing broad page rerenders.",
+    rationale:
+      "A source-resolved deferred option command owns this failure flag and one stable DecisionModal is its only subscriber; converting the literal commands preserves callback timing while removing broad page rerenders.",
     target: target as string,
   })),
   {
@@ -3871,7 +4072,8 @@ export const goldCases = [
     hook: "useState",
     line: 62,
     name: "isDownloadFailureModalVisible",
-    rationale: "A direct UI command owns this failure flag and one stable DecisionModal is its only subscriber.",
+    rationale:
+      "A direct UI command owns this failure flag and one stable DecisionModal is its only subscriber.",
     target: "expensify-import-tags-options",
   },
   {
@@ -3880,7 +4082,8 @@ export const goldCases = [
     hook: "useState",
     line: 63,
     name: "shouldRunPostUpgradeFlow",
-    rationale: "A focus lifecycle callback consumes this latch; React state currently republishes callback identity when the value changes.",
+    rationale:
+      "A focus lifecycle callback consumes this latch; React state currently republishes callback identity when the value changes.",
     target: "expensify-import-tags-options",
   },
   {
@@ -3889,7 +4092,8 @@ export const goldCases = [
     hook: "useState",
     line: 38,
     name: "description",
-    rationale: "The value and setter are already wholly owned by one compact input boundary, while form submission consumes form values rather than this state; adding an owner observable has no proven benefit.",
+    rationale:
+      "The value and setter are already wholly owned by one compact input boundary, while form submission consumes form values rather than this state; adding an owner observable has no proven benefit.",
     target: "expensify-workspace-description",
   },
   ...[
@@ -3901,9 +4105,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 177
-      ? "A direct string draft is rendered by one stable InputWrapper; isolate its high-frequency updates from the rest of the payment form."
-      : "The expiration draft snapshots external Onyx form state, so direct primitive initialization does not prove ownership.",
+    rationale:
+      line === 177
+        ? "A direct string draft is rendered by one stable InputWrapper; isolate its high-frequency updates from the rest of the payment form."
+        : "The expiration draft snapshots external Onyx form state, so direct primitive initialization does not prove ownership.",
     target: "expensify-payment-card",
   })),
   ...[
@@ -3915,9 +4120,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 42
-      ? "A true-initialized visibility value has one stable Modal consumer and independent close commands."
-      : "Expansion changes both icon presentation and skipped-employee list cardinality, so it is not a single leaf subscription.",
+    rationale:
+      line === 42
+        ? "A true-initialized visibility value has one stable Modal consumer and independent close commands."
+        : "Expansion changes both icon presentation and skipped-employee list cardinality, so it is not a single leaf subscription.",
     target: "expensify-hr-sync-results",
   })),
   {
@@ -3926,7 +4132,8 @@ export const goldCases = [
     hook: "useState",
     line: 61,
     name: "target",
-    rationale: "The transfer target renders only in the transfer controls and is read later by the save command; a stable leaf subscriber avoids invalidating the full management dialog.",
+    rationale:
+      "The transfer target renders only in the transfer controls and is read later by the save command; a stable leaf subscriber avoids invalidating the full management dialog.",
     target: "tree-map",
   },
   {
@@ -3935,7 +4142,8 @@ export const goldCases = [
     hook: "useState",
     line: 46,
     name: "pendingDelete",
-    rationale: "The nullable passkey target is rendered only by the confirmation dialog and read by its confirm event, so the passkey list need not rerender.",
+    rationale:
+      "The nullable passkey target is rendered only by the confirmation dialog and read by its confirm event, so the passkey list need not rerender.",
     target: "tree-map",
   },
   {
@@ -3944,7 +4152,8 @@ export const goldCases = [
     hook: "useState",
     line: 63,
     name: "pendingSessionId",
-    rationale: "The pending session identifier never renders and is consumed only when the native date-selection command fires.",
+    rationale:
+      "The pending session identifier never renders and is consumed only when the native date-selection command fires.",
     target: "memoria-src",
   },
   {
@@ -3953,7 +4162,8 @@ export const goldCases = [
     hook: "useState",
     line: 47,
     name: "chartElements",
-    rationale: "Rendered chart elements are produced by the layout effect and consumed only by the insert click command; they do not participate in React rendering.",
+    rationale:
+      "Rendered chart elements are produced by the layout effect and consumed only by the insert click command; they do not participate in React rendering.",
     target: "excalidraw",
   },
   {
@@ -3962,7 +4172,8 @@ export const goldCases = [
     hook: "useState",
     line: 42,
     name: "linkEdited",
-    rationale: "The flag is captured by a memoized confirmation callback that owns a keyboard-listener effect, so it is not command-only ref state.",
+    rationale:
+      "The flag is captured by a memoized confirmation callback that owns a keyboard-listener effect, so it is not command-only ref state.",
     target: "excalidraw",
   },
   {
@@ -3971,7 +4182,8 @@ export const goldCases = [
     hook: "useState",
     line: 58,
     name: "showSecret",
-    rationale: "Secret visibility affects only the password field and its toggle icon; the surrounding webhook editor should not rerender.",
+    rationale:
+      "Secret visibility affects only the password field and its toggle icon; the surrounding webhook editor should not rerender.",
     target: "formbricks-webhook-settings",
   },
   ...[
@@ -3983,9 +4195,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 90
-      ? "The chart-name error projects only into the name-field section and is cleared by that field's change event."
-      : "Loading, pending, and error fields are one async query workflow rather than an isolated presentation leaf.",
+    rationale:
+      line === 90
+        ? "The chart-name error projects only into the name-field section and is cleared by that field's change event."
+        : "Loading, pending, and error fields are one async query workflow rather than an isolated presentation leaf.",
     target: "formbricks-create-chart",
   })),
   {
@@ -3994,7 +4207,8 @@ export const goldCases = [
     hook: "useState",
     line: 102,
     name: "logicDeletionWarning",
-    rationale: "The deletion payload is rendered and consumed only by one confirmation modal while the large survey element editor remains independent.",
+    rationale:
+      "The deletion payload is rendered and consumed only by one confirmation modal while the large survey element editor remains independent.",
     target: "formbricks-elements-view",
   },
   ...[
@@ -4006,9 +4220,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 29
-      ? "The merge value is read only to calculate its own inert setter argument; neither the current nor assigned value escapes, renders, or affects the selection command."
-      : "Popover visibility owns the cohesive combobox boundary, so no smaller proven subscription exists.",
+    rationale:
+      line === 29
+        ? "The merge value is read only to calculate its own inert setter argument; neither the current nor assigned value escapes, renders, or affects the selection command."
+        : "Popover visibility owns the cohesive combobox boundary, so no smaller proven subscription exists.",
     target: "formbricks-merge-tags",
   })),
   {
@@ -4017,7 +4232,8 @@ export const goldCases = [
     hook: "useState",
     line: 39,
     name: "timer",
-    rationale: "The interval handle is written by long-press setup and read only by the release command; it never renders.",
+    rationale:
+      "The interval handle is written by long-press setup and read only by the release command; it never renders.",
     target: "expensify-big-number-pad",
   },
   {
@@ -4026,7 +4242,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 43,
     name: null,
-    rationale: "This effect keeps the latest numberPressed prop in an imperative ref and should retain React dependency timing.",
+    rationale:
+      "This effect keeps the latest numberPressed prop in an imperative ref and should retain React dependency timing.",
     target: "expensify-big-number-pad",
   },
   {
@@ -4035,7 +4252,8 @@ export const goldCases = [
     hook: "useState",
     line: 126,
     name: "isUsingKeyboardMovement",
-    rationale: "The value renders inside the list renderItem callback and also participates in focus callbacks; it is not command-only state.",
+    rationale:
+      "The value renders inside the list renderItem callback and also participates in focus callbacks; it is not command-only state.",
     target: "expensify-emoji-picker-menu",
   },
   ...[
@@ -4047,7 +4265,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Highlight state participates in focus callbacks and repeated emoji rendering in an owner with ref-driven focus management; a command-only ref migration is not proven.",
+    rationale:
+      "Highlight state participates in focus callbacks and repeated emoji rendering in an owner with ref-driven focus management; a command-only ref migration is not proven.",
     target: "expensify-emoji-picker-menu",
   })),
   {
@@ -4056,7 +4275,8 @@ export const goldCases = [
     hook: "useState",
     line: 50,
     name: "customField",
-    rationale: "The editable value renders in one InputWrapper and is read by the save event, isolating keystrokes from the page shell.",
+    rationale:
+      "The editable value renders in one InputWrapper and is read by the save event, isolating keystrokes from the page shell.",
     target: "expensify-workspace-custom-field",
   },
   ...[
@@ -4070,9 +4290,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 25
-      ? "The format value has one selector consumer and is otherwise read only by submit; it should use a stable owner observable and selector leaf."
-      : "The checkbox value renders in one input and is otherwise consumed only by the export submit command.",
+    rationale:
+      line === 25
+        ? "The format value has one selector consumer and is otherwise read only by submit; it should use a stable owner observable and selector leaf."
+        : "The checkbox value renders in one input and is otherwise consumed only by the export submit command.",
     target: "outline-export-dialog",
   })),
   ...[
@@ -4085,7 +4306,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The controlled value and its validation projection are distinct bounded leaves; ownership remains above any state-independent conditional branch.",
+    rationale:
+      "The controlled value and its validation projection are distinct bounded leaves; ownership remains above any state-independent conditional branch.",
     target: "tree-map",
   })),
   {
@@ -4094,7 +4316,8 @@ export const goldCases = [
     hook: "useState",
     line: 18,
     name: "body",
-    rationale: "Typing needs to update only the note input and Save validation leaf; the header and route shell remain independent.",
+    rationale:
+      "Typing needs to update only the note input and Save validation leaf; the header and route shell remain independent.",
     target: "memoria-src",
   },
   ...[
@@ -4106,9 +4329,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 21
-      ? "A strict input adapter, sibling submit validation, and independent form content prove a high-frequency leaf subscription cut."
-      : "Async submission status belongs to the cohesive submit workflow and is not part of the controlled input migration.",
+    rationale:
+      line === 21
+        ? "A strict input adapter, sibling submit validation, and independent form content prove a high-frequency leaf subscription cut."
+        : "Async submission status belongs to the cohesive submit workflow and is not part of the controlled input migration.",
     target: "outline-team-new",
   })),
   {
@@ -4117,7 +4341,8 @@ export const goldCases = [
     hook: "useState",
     line: 24,
     name: "name",
-    rationale: "The owner recomputes native form validity through a ref after each input update, so isolating the input would leave the Save button stale.",
+    rationale:
+      "The owner recomputes native form validity through a ref after each input update, so isolating the input would leave the Save button stale.",
     target: "outline-profile",
   },
   ...[
@@ -4132,11 +4357,12 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 26 || line === 28
-      ? "The option has one conditionally mounted Switch subscriber and is otherwise read only by the Copy event command."
-      : line === 27
-        ? "The exact async copying lifecycle renders only the stable Copy button's disabled prop and conditional label, so one leaf subscription removes duplicate-workflow renders without changing command timing."
-        : "The selected destination drives the explorer callback, footer summary, and submit availability rather than one controlled leaf.",
+    rationale:
+      line === 26 || line === 28
+        ? "The option has one conditionally mounted Switch subscriber and is otherwise read only by the Copy event command."
+        : line === 27
+          ? "The exact async copying lifecycle renders only the stable Copy button's disabled prop and conditional label, so one leaf subscription removes duplicate-workflow renders without changing command timing."
+          : "The selected destination drives the explorer callback, footer summary, and submit availability rather than one controlled leaf.",
     target: "outline-document-copy",
   })),
   ...[
@@ -4148,9 +4374,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 44
-      ? "The conditional custom-link input and Copy validation button can subscribe independently while the large link-management owner stays stable."
-      : "Encryption participates in link generation and form workflow state beyond one proven presentation boundary.",
+    rationale:
+      line === 44
+        ? "The conditional custom-link input and Copy validation button can subscribe independently while the large link-management owner stays stable."
+        : "Encryption participates in link generation and form workflow state beyond one proven presentation boundary.",
     target: "formbricks-anonymous-links",
   })),
   ...[
@@ -4162,9 +4389,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 51
-      ? "The quota toggle has one conditional checkbox subscriber and is otherwise read only by the delete event command."
-      : "Deletion status is owned by the asynchronous delete workflow rather than an independent controlled leaf.",
+    rationale:
+      line === 51
+        ? "The quota toggle has one conditional checkbox subscriber and is otherwise read only by the delete event command."
+        : "Deletion status is owned by the asynchronous delete workflow rather than an independent controlled leaf.",
     target: "formbricks-single-response",
   })),
   {
@@ -4173,7 +4401,8 @@ export const goldCases = [
     hook: "useState",
     line: 28,
     name: "isDeleting",
-    rationale: "The source-resolved delete command starts one pending interval before awaited work, and the stable organization modal can subscribe without rerendering the independent warning and launch surfaces.",
+    rationale:
+      "The source-resolved delete command starts one pending interval before awaited work, and the stable organization modal can subscribe without rerendering the independent warning and launch surfaces.",
     target: "formbricks-delete-organization",
   },
   {
@@ -4182,7 +4411,8 @@ export const goldCases = [
     hook: "useState",
     line: 106,
     name: "inputValue",
-    rationale: "The confirmation input is nested inside the same DeleteDialog boundary whose disabled prop consumes it, so no smaller independent owner cut is proven.",
+    rationale:
+      "The confirmation input is nested inside the same DeleteDialog boundary whose disabled prop consumes it, so no smaller independent owner cut is proven.",
     target: "formbricks-delete-organization",
   },
   ...[
@@ -4195,11 +4425,12 @@ export const goldCases = [
     hook: (name === null ? "useEffect" : "useState") as "useEffect" | "useState",
     line: line as number,
     name: name as string | null,
-    rationale: line === 144
-      ? "The conditional admin switch owns one presentation subscriber while confirmation reads its latest value as an event snapshot."
-      : line === 148
-        ? "The empty-dependency cleanup only clears the form draft on unmount."
-      : "The workspace-name character drives avatar presentation and form coordination beyond one controlled leaf.",
+    rationale:
+      line === 144
+        ? "The conditional admin switch owns one presentation subscriber while confirmation reads its latest value as an event snapshot."
+        : line === 148
+          ? "The empty-dependency cleanup only clears the form draft on unmount."
+          : "The workspace-name character drives avatar presentation and form coordination beyond one controlled leaf.",
     target: "expensify-workspace-confirmation",
   })),
   {
@@ -4208,7 +4439,8 @@ export const goldCases = [
     hook: "useState",
     line: 45,
     name: "name",
-    rationale: "The tax-name draft can keep owner-lifetime observable state while InputWrapper and submit validation subscribe below a state-independent not-found return.",
+    rationale:
+      "The tax-name draft can keep owner-lifetime observable state while InputWrapper and submit validation subscribe below a state-independent not-found return.",
     target: "expensify-tax-name",
   },
   ...[
@@ -4222,11 +4454,12 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 29
-      ? "Email typing has one input and submit-validation subscription boundary beneath provider-kind early returns; ownership must remain above those branches."
-      : line === 27
-        ? "Authentication state selects the provider workflow branch and therefore owns component mounting rather than one presentation leaf."
-        : "Submission status coordinates the asynchronous request, input availability, and submit button as one workflow.",
+    rationale:
+      line === 29
+        ? "Email typing has one input and submit-validation subscription boundary beneath provider-kind early returns; ownership must remain above those branches."
+        : line === 27
+          ? "Authentication state selects the provider workflow branch and therefore owns component mounting rather than one presentation leaf."
+          : "Submission status coordinates the asynchronous request, input availability, and submit button as one workflow.",
     target: "outline-authentication-provider",
   })),
   ...[
@@ -4241,13 +4474,14 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 43
-      ? "Permission has one selector subscription and a submit snapshot beneath a state-independent disabled return; observable ownership remains in DropToImport."
-      : line === 40
-        ? "The selected file drives the dropzone summary, submit availability, and asynchronous upload command rather than one bounded leaf."
-        : line === 41
-          ? "Importing status coordinates the spinner, dropzone, submit button, and asynchronous workflow."
-          : "Upload progress is owned by the asynchronous upload callback and submit presentation, so no independent state boundary is proven.",
+    rationale:
+      line === 43
+        ? "Permission has one selector subscription and a submit snapshot beneath a state-independent disabled return; observable ownership remains in DropToImport."
+        : line === 40
+          ? "The selected file drives the dropzone summary, submit availability, and asynchronous upload command rather than one bounded leaf."
+          : line === 41
+            ? "Importing status coordinates the spinner, dropzone, submit button, and asynchronous workflow."
+            : "Upload progress is owned by the asynchronous upload callback and submit presentation, so no independent state boundary is proven.",
     target: "outline-drop-to-import",
   })),
   ...[
@@ -4259,7 +4493,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The array is a selection model with repeated item membership, bounded summaries, and event-only payload reads; row and summary subscribers can replace the broad owner render without changing array semantics.",
+    rationale:
+      "The array is a selection model with repeated item membership, bounded summaries, and event-only payload reads; row and summary subscribers can replace the broad owner render without changing array semantics.",
     target: "tree-map",
   })),
   ...[
@@ -4296,7 +4531,8 @@ export const goldCases = [
     hook: "useState",
     line: 54,
     name: "selectedCurrencies",
-    rationale: "Selection currently shapes the complete list data passed through the search hook; membership syntax alone does not prove a smaller live subscriber.",
+    rationale:
+      "Selection currently shapes the complete list data passed through the search hook; membership syntax alone does not prove a smaller live subscriber.",
     target: "expensify-spend-rule-currencies",
   },
   {
@@ -4305,7 +4541,8 @@ export const goldCases = [
     hook: "useState",
     line: 106,
     name: "selectedCardIDs",
-    rationale: "A focus lifecycle reseeds the selection and the value drives the controlled SelectionList and save validation, so a row-only observable rewrite is incomplete.",
+    rationale:
+      "A focus lifecycle reseeds the selection and the value drives the controlled SelectionList and save validation, so a row-only observable rewrite is incomplete.",
     target: "expensify-spend-rule-cards",
   },
   ...[
@@ -4321,13 +4558,14 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: line === 113 || line === 114
-      ? "The undefined-initialized record cursor and visibility flag open together, stay mounted in one resolved drawer target, and must migrate as one observable model."
-      : line === 120
-      ? "Independent row toggles make this a real keyed selection model; row membership and toolbar summaries can subscribe separately while refresh commands reset it atomically."
-      : line === 106
-        ? "Records are the rendered list data and are replaced by refresh and pagination workflows, not a row-local selection model."
-        : "The true pending transition reaches chunk deletion before any other owner state changes, and only the delete dialog subscribes; preserve its existing finally boundary.",
+    rationale:
+      line === 113 || line === 114
+        ? "The undefined-initialized record cursor and visibility flag open together, stay mounted in one resolved drawer target, and must migrate as one observable model."
+        : line === 120
+          ? "Independent row toggles make this a real keyed selection model; row membership and toolbar summaries can subscribe separately while refresh commands reset it atomically."
+          : line === 106
+            ? "Records are the rendered list data and are replaced by refresh and pagination workflows, not a row-local selection model."
+            : "The true pending transition reaches chunk deletion before any other owner state changes, and only the delete dialog subscribes; preserve its existing finally boundary.",
     target: "formbricks-feedback-records",
   })),
   {
@@ -4336,7 +4574,8 @@ export const goldCases = [
     hook: "useState",
     line: 42,
     name: "selectedRunId",
-    rationale: "Row commands select one ID while a single drawer can subscribe, resolve the matching run from its ordinary prop snapshot, and avoid rerendering the table.",
+    rationale:
+      "Row commands select one ID while a single drawer can subscribe, resolve the matching run from its ordinary prop snapshot, and avoid rerendering the table.",
     target: "formbricks-workflow-runs",
   },
   ...[
@@ -4348,20 +4587,69 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: name === "openCreateQuotaConfirmationModal"
-      ? "The confirmation can open through its paired setter, while the only companion transaction closes it before handing off to the quota modal; one confirmation leaf can subscribe safely."
-      : "The add-key modal opens independently and one stable modal can subscribe without invalidating the API-key list owner.",
+    rationale:
+      name === "openCreateQuotaConfirmationModal"
+        ? "The confirmation can open through its paired setter, while the only companion transaction closes it before handing off to the quota modal; one confirmation leaf can subscribe safely."
+        : "The add-key modal opens independently and one stable modal can subscribe without invalidating the API-key list owner.",
     target: target as string,
   })),
   ...[
-    ["formbricks-chart-menu", "chart-dropdown-menu.tsx", 32, "isDeleteDialogOpen", "Opening the delete dialog also closes the dropdown; migrating visibility alone would expose the dialog before the React-owned dropdown commits closed."],
-    ["formbricks-dashboard-menu", "dashboard-dropdown-menu.tsx", 33, "isDeleteDialogOpen", "Opening the delete dialog also closes the dropdown; migrating visibility alone would split one atomic surface transition."],
-    ["formbricks-quotas-card", "quotas-card.tsx", 76, "isQuotaModalOpen", "Quota visibility opens with the active quota and response count and also switches from a sibling confirmation modal; migrate the complete workflow or keep it in React."],
-    ["formbricks-feedback-source-menu", "feedback-source-row-dropdown.tsx", 43, "isDeleteDialogOpen", "Opening the delete dialog also closes the source dropdown, so an isolated Legend write could render both surfaces open before React commits."],
-    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 74, "isDeleteKeyModalOpen", "The delete dialog opens only after selecting its active key; visibility alone could publish open with the previous key snapshot."],
-    ["formbricks-edit-api-keys", "edit-api-keys.tsx", 79, "viewPermissionsOpen", "Permission visibility and active-key selection form one transition, and the active key also controls the modal mount; preserve the React transaction until the complete model can migrate."],
-    ["formbricks-editor-card-menu", "editor-card-menu.tsx", 77, "logicWarningModal", "The warning opens after changing the pending element type; visibility alone could expose the warning with the previous type."],
-    ["formbricks-language-view", "language-view.tsx", 79, "translationModalOpen", "Translation visibility opens with a new language code whose derived label is still computed by the owner; an isolated observable would publish stale language props."],
+    [
+      "formbricks-chart-menu",
+      "chart-dropdown-menu.tsx",
+      32,
+      "isDeleteDialogOpen",
+      "Opening the delete dialog also closes the dropdown; migrating visibility alone would expose the dialog before the React-owned dropdown commits closed.",
+    ],
+    [
+      "formbricks-dashboard-menu",
+      "dashboard-dropdown-menu.tsx",
+      33,
+      "isDeleteDialogOpen",
+      "Opening the delete dialog also closes the dropdown; migrating visibility alone would split one atomic surface transition.",
+    ],
+    [
+      "formbricks-quotas-card",
+      "quotas-card.tsx",
+      76,
+      "isQuotaModalOpen",
+      "Quota visibility opens with the active quota and response count and also switches from a sibling confirmation modal; migrate the complete workflow or keep it in React.",
+    ],
+    [
+      "formbricks-feedback-source-menu",
+      "feedback-source-row-dropdown.tsx",
+      43,
+      "isDeleteDialogOpen",
+      "Opening the delete dialog also closes the source dropdown, so an isolated Legend write could render both surfaces open before React commits.",
+    ],
+    [
+      "formbricks-edit-api-keys",
+      "edit-api-keys.tsx",
+      74,
+      "isDeleteKeyModalOpen",
+      "The delete dialog opens only after selecting its active key; visibility alone could publish open with the previous key snapshot.",
+    ],
+    [
+      "formbricks-edit-api-keys",
+      "edit-api-keys.tsx",
+      79,
+      "viewPermissionsOpen",
+      "Permission visibility and active-key selection form one transition, and the active key also controls the modal mount; preserve the React transaction until the complete model can migrate.",
+    ],
+    [
+      "formbricks-editor-card-menu",
+      "editor-card-menu.tsx",
+      77,
+      "logicWarningModal",
+      "The warning opens after changing the pending element type; visibility alone could expose the warning with the previous type.",
+    ],
+    [
+      "formbricks-language-view",
+      "language-view.tsx",
+      79,
+      "translationModalOpen",
+      "Translation visibility opens with a new language code whose derived label is still computed by the owner; an isolated observable would publish stale language props.",
+    ],
   ].map(([target, file, line, name, rationale]) => ({
     action: "review-state" as const,
     file: file as string,
@@ -4387,7 +4675,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The first pending transition is an independent event-rooted write immediately before awaited work, and one stable status leaf can subscribe without changing the command, await, or later close/reset transitions.",
+    rationale:
+      "The first pending transition is an independent event-rooted write immediately before awaited work, and one stable status leaf can subscribe without changing the command, await, or later close/reset transitions.",
     target: target as string,
   })),
   ...[
@@ -4400,7 +4689,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One stable control or dialog owns the pending surface while independently rendered siblings prove a material owner cut; preserve the exact async start and completion boundaries.",
+    rationale:
+      "One stable control or dialog owns the pending surface while independently rendered siblings prove a material owner cut; preserve the exact async start and completion boundaries.",
     target: target as string,
   })),
   ...[
@@ -4414,9 +4704,10 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: target === "formbricks-dashboard-detail" && name === "isSaving"
-      ? "The save command is published through a source-resolved action array whose stable IconBar consumer defers every onClick; only DashboardControlBar subscribes while the dashboard owner stays stable."
-      : "Manual review proves this leaf update remains outside the component's React transition, but the conservative owner boundary abstains instead of building a partial transition call graph.",
+    rationale:
+      target === "formbricks-dashboard-detail" && name === "isSaving"
+        ? "The save command is published through a source-resolved action array whose stable IconBar consumer defers every onClick; only DashboardControlBar subscribes while the dashboard owner stays stable."
+        : "Manual review proves this leaf update remains outside the component's React transition, but the conservative owner boundary abstains instead of building a partial transition call graph.",
     target: target as string,
   })),
   {
@@ -4425,7 +4716,8 @@ export const goldCases = [
     hook: "useState",
     line: 30,
     name: "isExporting",
-    rationale: "The export button is the complete one-element owner, so replacing its cohesive React state cannot create a smaller subscription boundary.",
+    rationale:
+      "The export button is the complete one-element owner, so replacing its cohesive React state cannot create a smaller subscription boundary.",
     target: "outline-export-csv",
   },
   {
@@ -4434,7 +4726,8 @@ export const goldCases = [
     hook: "useState",
     line: 21,
     name: "isLoading",
-    rationale: "The exact SAML pending transaction renders through the complete button owner, so an observable cannot create a smaller subscription boundary.",
+    rationale:
+      "The exact SAML pending transaction renders through the complete button owner, so an observable cannot create a smaller subscription boundary.",
     target: "formbricks-saml-button",
   },
   {
@@ -4443,7 +4736,8 @@ export const goldCases = [
     hook: "useState",
     line: 33,
     name: "isDeleting",
-    rationale: "The source-resolved delete command reaches awaited work through the default intrinsic button branch, while the menu item and dialog are two non-repeated status leaves; separate subscribers remove the owner render without changing the later dialog close.",
+    rationale:
+      "The source-resolved delete command reaches awaited work through the default intrinsic button branch, while the menu item and dialog are two non-repeated status leaves; separate subscribers remove the owner render without changing the later dialog close.",
     target: "formbricks-chart-menu",
   },
   {
@@ -4452,7 +4746,8 @@ export const goldCases = [
     hook: "useState",
     line: 37,
     name: "isAddingToDashboard",
-    rationale: "Validation finishes before this pending transition, then one dashboard dialog can subscribe while the awaited add command and later dialog reset keep their current ordering.",
+    rationale:
+      "Validation finishes before this pending transition, then one dashboard dialog can subscribe while the awaited add command and later dialog reset keep their current ordering.",
     target: "formbricks-chart-menu",
   },
   {
@@ -4461,13 +4756,32 @@ export const goldCases = [
     hook: "useEffect",
     line: 43,
     name: null,
-    rationale: "Keep the cancellable dashboard-loading effect in React; it owns setup, asynchronous completion guards, and cleanup for changing inputs.",
+    rationale:
+      "Keep the cancellable dashboard-loading effect in React; it owns setup, asynchronous completion guards, and cleanup for changing inputs.",
     target: "formbricks-chart-menu",
   },
   ...[
-    ["formbricks-dashboard-menu", "dashboard-dropdown-menu.tsx", 36, "isDropDownOpen", "Menu visibility controls the complete dropdown interaction boundary rather than one asynchronous status leaf."],
-    ["formbricks-create-segment", "create-segment-modal.tsx", 56, "segment", "The segment draft drives validation, filter editing, and the create payload across the modal; one leaf subscription is incomplete."],
-    ["formbricks-feedback-source-menu", "feedback-source-row-dropdown.tsx", 44, "isDropDownOpen", "Dropdown visibility owns the complete menu interaction boundary and is not an async pending leaf."],
+    [
+      "formbricks-dashboard-menu",
+      "dashboard-dropdown-menu.tsx",
+      36,
+      "isDropDownOpen",
+      "Menu visibility controls the complete dropdown interaction boundary rather than one asynchronous status leaf.",
+    ],
+    [
+      "formbricks-create-segment",
+      "create-segment-modal.tsx",
+      56,
+      "segment",
+      "The segment draft drives validation, filter editing, and the create payload across the modal; one leaf subscription is incomplete.",
+    ],
+    [
+      "formbricks-feedback-source-menu",
+      "feedback-source-row-dropdown.tsx",
+      44,
+      "isDropDownOpen",
+      "Dropdown visibility owns the complete menu interaction boundary and is not an async pending leaf.",
+    ],
   ].map(([target, file, line, name, rationale]) => ({
     action: "review-state" as const,
     file: file as string,
@@ -4483,7 +4797,8 @@ export const goldCases = [
     hook: "useState",
     line: 46,
     name: "formData",
-    rationale: "The field split is promising, but the imported Input adapter does not expose a source-proven deferred callback contract through this target; keep the draft under review instead of trusting an onChange prop name.",
+    rationale:
+      "The field split is promising, but the imported Input adapter does not expose a source-proven deferred callback contract through this target; keep the draft under review instead of trusting an onChange prop name.",
     target: "formbricks-edit-attribute",
   },
   {
@@ -4492,7 +4807,8 @@ export const goldCases = [
     hook: "useState",
     line: 34,
     name: "menuOpen",
-    rationale: "The owner renders arbitrary widget content outside a conditionally mounted menu; keep the observable at widget lifetime and subscribe around the complete menu subtree so descendant close commands do not invalidate the widget body.",
+    rationale:
+      "The owner renders arbitrary widget content outside a conditionally mounted menu; keep the observable at widget lifetime and subscribe around the complete menu subtree so descendant close commands do not invalidate the widget body.",
     target: "formbricks-dashboard-widget",
   },
   {
@@ -4501,7 +4817,8 @@ export const goldCases = [
     hook: "useState",
     line: 50,
     name: "isSaving",
-    rationale: "After validation and route decisions, the pending write starts one awaited save command and only the stable save button needs its loading subscription.",
+    rationale:
+      "After validation and route decisions, the pending write starts one awaited save command and only the stable save button needs its loading subscription.",
     target: "expensify-gps-trip-edit",
   },
   {
@@ -4510,7 +4827,8 @@ export const goldCases = [
     hook: "useState",
     line: 52,
     name: "pendingTrim",
-    rationale: "The trim draft drives route geometry, distance calculations, slider presentation, and the save payload rather than one bounded status leaf.",
+    rationale:
+      "The trim draft drives route geometry, distance calculations, slider presentation, and the save payload rather than one bounded status leaf.",
     target: "expensify-gps-trip-edit",
   },
   {
@@ -4528,7 +4846,8 @@ export const goldCases = [
     hook: "useState",
     line: 59,
     name: "isResettingPassword",
-    rationale: "The event-rooted password reset flips this status immediately before awaited work, and only one stable button needs to subscribe while the form owner remains unchanged.",
+    rationale:
+      "The event-rooted password reset flips this status immediately before awaited work, and only one stable button needs to subscribe while the form owner remains unchanged.",
     target: "formbricks-profile-reset",
   },
   {
@@ -4537,7 +4856,8 @@ export const goldCases = [
     hook: "useState",
     line: 78,
     name: "isDeleting",
-    rationale: "The delete command owns a literal pending interval around one await; observable ownership stays above the prop-selected branch while its one button leaf subscribes.",
+    rationale:
+      "The delete command owns a literal pending interval around one await; observable ownership stays above the prop-selected branch while its one button leaf subscribes.",
     target: "formbricks-google-integration",
   },
   {
@@ -4546,16 +4866,18 @@ export const goldCases = [
     hook: "useState",
     line: 75,
     name: "isLinkingSheet",
-    rationale: "Linking performs validation and constructs integration data before multiple awaited operations, and reset co-writes the form draft, so the narrow pending-leaf proof does not apply.",
+    rationale:
+      "Linking performs validation and constructs integration data before multiple awaited operations, and reset co-writes the form draft, so the narrow pending-leaf proof does not apply.",
     target: "formbricks-google-integration",
   },
-  ...[99, 106].map(line => ({
+  ...[99, 106].map((line) => ({
     action: "review-effect" as const,
     file: "AddIntegrationModal.tsx",
     hook: "useEffect" as const,
     line,
     name: null,
-    rationale: "Keep this prop- and selection-driven form synchronization in React; no observable dependency proves an equivalent Legend reaction or event relocation.",
+    rationale:
+      "Keep this prop- and selection-driven form synchronization in React; no observable dependency proves an equivalent Legend reaction or event relocation.",
     target: "formbricks-google-integration",
   })),
   {
@@ -4564,7 +4886,8 @@ export const goldCases = [
     hook: "useState",
     line: 68,
     name: "isDeleting",
-    rationale: "The Notion delete command starts one literal pending interval immediately before its awaited server action, and only the delete button consumes the status.",
+    rationale:
+      "The Notion delete command starts one literal pending interval immediately before its awaited server action, and only the delete button consumes the status.",
     target: "formbricks-notion-integration",
   },
   {
@@ -4573,7 +4896,8 @@ export const goldCases = [
     hook: "useState",
     line: 69,
     name: "isLinkingDatabase",
-    rationale: "Database linking validates and constructs a multi-field integration payload before awaiting work, so the loading flag is part of the broader form workflow.",
+    rationale:
+      "Database linking validates and constructs a multi-field integration payload before awaiting work, so the loading flag is part of the broader form workflow.",
     target: "formbricks-notion-integration",
   },
   {
@@ -4582,7 +4906,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 160,
     name: null,
-    rationale: "Keep the selected-integration form synchronization in React; its source values are React inputs and no equivalent observable reaction is proven.",
+    rationale:
+      "Keep the selected-integration form synchronization in React; its source values are React inputs and no equivalent observable reaction is proven.",
     target: "formbricks-notion-integration",
   },
   {
@@ -4591,7 +4916,8 @@ export const goldCases = [
     hook: "useState",
     line: 63,
     name: "isDeleting",
-    rationale: "The Slack delete command starts one literal pending interval immediately before its awaited server action, and only the delete button consumes the status.",
+    rationale:
+      "The Slack delete command starts one literal pending interval immediately before its awaited server action, and only the delete button consumes the status.",
     target: "formbricks-slack-integration",
   },
   {
@@ -4600,16 +4926,18 @@ export const goldCases = [
     hook: "useState",
     line: 60,
     name: "isLinkingChannel",
-    rationale: "Channel linking validates several draft fields and mutates the integration payload before awaiting work, so this status is not an isolated leaf transition.",
+    rationale:
+      "Channel linking validates several draft fields and mutates the integration payload before awaiting work, so this status is not an isolated leaf transition.",
     target: "formbricks-slack-integration",
   },
-  ...[83, 92].map(line => ({
+  ...[83, 92].map((line) => ({
     action: "review-effect" as const,
     file: "AddChannelMappingModal.tsx",
     hook: "useEffect" as const,
     line,
     name: null,
-    rationale: "Keep this selection-driven form synchronization in React; no observable dependency proves equivalent reaction timing.",
+    rationale:
+      "Keep this selection-driven form synchronization in React; no observable dependency proves equivalent reaction timing.",
     target: "formbricks-slack-integration",
   })),
   ...[
@@ -4621,7 +4949,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "A literal pending transition starts immediately before one awaited segment command, and one stable button leaf can subscribe without invalidating the editor owner.",
+    rationale:
+      "A literal pending transition starts immediately before one awaited segment command, and one stable button leaf can subscribe without invalidating the editor owner.",
     target: "formbricks-segment-settings",
   })),
   {
@@ -4630,7 +4959,8 @@ export const goldCases = [
     hook: "useState",
     line: 42,
     name: "segment",
-    rationale: "The editable segment drives validation, filter cardinality, multiple fields, and update payloads across the owner rather than one status leaf.",
+    rationale:
+      "The editable segment drives validation, filter cardinality, multiple fields, and update payloads across the owner rather than one status leaf.",
     target: "formbricks-segment-settings",
   },
   ...[
@@ -4661,7 +4991,8 @@ export const goldCases = [
     hook: "useState",
     line: 63,
     name: "webhookSecret",
-    rationale: "The secret never renders; direct test and imported React Hook Form submit commands read it before any same-command write, while endpoint completion and modal reset own every mutation.",
+    rationale:
+      "The secret never renders; direct test and imported React Hook Form submit commands read it before any same-command write, while endpoint completion and modal reset own every mutation.",
     target: "formbricks-add-webhook",
   },
   {
@@ -4670,7 +5001,8 @@ export const goldCases = [
     hook: "useState",
     line: 57,
     name: "loading",
-    rationale: "A synchronous email-state write follows the Promise-chain start, so the owner rerenders before completion and the loading transition is not an isolated leaf update.",
+    rationale:
+      "A synchronous email-state write follows the Promise-chain start, so the owner rerenders before completion and the loading transition is not an isolated leaf update.",
     target: "expensify-company-card-work-email",
   },
   {
@@ -4679,7 +5011,8 @@ export const goldCases = [
     hook: "useState",
     line: 43,
     name: "isCreating",
-    rationale: "Validation can write the owner error state before creation begins, so converting only the pending flag cannot prove that the initial command render is isolated.",
+    rationale:
+      "Validation can write the owner error state before creation begins, so converting only the pending flag cannot prove that the initial command render is isolated.",
     target: "formbricks-create-attribute",
   },
   {
@@ -4688,7 +5021,8 @@ export const goldCases = [
     hook: "useState",
     line: 326,
     name: "isRetryingStripeSetup",
-    rationale: "Retry status brackets one awaited command reached through source-resolved alert and button wrappers; only the warning button subscribes, avoiding a rerender of the very large pricing owner.",
+    rationale:
+      "Retry status brackets one awaited command reached through source-resolved alert and button wrappers; only the warning button subscribes, avoiding a rerender of the very large pricing owner.",
     target: "formbricks-pricing-table",
   },
   {
@@ -4697,7 +5031,8 @@ export const goldCases = [
     hook: "useState",
     line: 126,
     name: "billingStatus",
-    rationale: "Billing status replaces a top-level banner and changes multiple controls, so it has no bounded subscriber leaf.",
+    rationale:
+      "Billing status replaces a top-level banner and changes multiple controls, so it has no bounded subscriber leaf.",
     target: "expensify-subscription-card",
   },
   {
@@ -4706,7 +5041,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 153,
     name: null,
-    rationale: "This effect reconciles external subscription inputs with a dismissible local override; preserve React synchronization timing.",
+    rationale:
+      "This effect reconciles external subscription inputs with a dismissible local override; preserve React synchronization timing.",
     target: "expensify-subscription-card",
   },
   {
@@ -4715,7 +5051,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 195,
     name: null,
-    rationale: "Authentication-link navigation is an external lifecycle command keyed by subscription status, not a Legend observable reaction.",
+    rationale:
+      "Authentication-link navigation is an external lifecycle command keyed by subscription status, not a Legend observable reaction.",
     target: "expensify-subscription-card",
   },
   {
@@ -4725,7 +5062,8 @@ export const goldCases = [
     hook: "useState",
     line: 56,
     name: "isReadingFile",
-    rationale: "One Promise-chain command owns the literal reading interval, and only the choose-file button needs to subscribe while the broader importer stays stable.",
+    rationale:
+      "One Promise-chain command owns the literal reading interval, and only the choose-file button needs to subscribe while the broader importer stays stable.",
     target: "expensify-import-spreadsheet",
   },
   {
@@ -4734,7 +5072,8 @@ export const goldCases = [
     hook: "useState",
     line: 54,
     name: "isImportingTags",
-    rationale: "A conditionally selected event command starts one pending interval before its first await, and only the footer button subscribes; close and reset behavior stays in the owner.",
+    rationale:
+      "A conditionally selected event command starts one pending interval before its first await, and only the footer button subscribes; close and reset behavior stays in the owner.",
     target: "expensify-import-multi-level-tags",
   },
   {
@@ -4743,7 +5082,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 59,
     name: null,
-    rationale: "This setup-only effect writes fixed imported configuration flags and captures no owner-local value; useMount is appropriate when suppressing development replay is intentional.",
+    rationale:
+      "This setup-only effect writes fixed imported configuration flags and captures no owner-local value; useMount is appropriate when suppressing development replay is intentional.",
     target: "expensify-import-multi-level-tags",
   },
   {
@@ -4752,7 +5092,8 @@ export const goldCases = [
     hook: "useState",
     line: 80,
     name: "loading",
-    rationale: "The source-resolved delete dialog invokes one awaited delete command, while separate dialog subscribers keep the forty-two-element menu owner outside both literal pending transitions.",
+    rationale:
+      "The source-resolved delete dialog invokes one awaited delete command, while separate dialog subscribers keep the forty-two-element menu owner outside both literal pending transitions.",
     target: "formbricks-survey-dropdown",
   },
   {
@@ -4761,7 +5102,8 @@ export const goldCases = [
     hook: "useState",
     line: 59,
     name: "isUploading",
-    rationale: "The file-input event owns the complete upload interval, and the two state-independent logo branches can subscribe separately without rerendering the forty-three-element sharing popover.",
+    rationale:
+      "The file-input event owns the complete upload interval, and the two state-independent logo branches can subscribe separately without rerendering the forty-three-element sharing popover.",
     target: "outline-share-settings",
   },
   {
@@ -4770,7 +5112,8 @@ export const goldCases = [
     hook: "useState",
     line: 92,
     name: "isDownloading",
-    rationale: "The pending button is stored in a filtered JSX action array and replayed through a keyed map; keep it under review until analysis proves that exact stored element can become the sole subscriber without changing list identity.",
+    rationale:
+      "The pending button is stored in a filtered JSX action array and replayed through a keyed map; keep it under review until analysis proves that exact stored element can become the sole subscriber without changing list identity.",
     target: "outline-editor-image",
   },
   {
@@ -4779,7 +5122,8 @@ export const goldCases = [
     hook: "useState",
     line: 35,
     name: "isDeleting",
-    rationale: "The delete command reaches an intrinsic button through DeleteDialog and a default-intrinsic polymorphic Button, while only the stable dialog leaf consumes the pending flag; analysis must prove that complete callback chain before enforcing the migration.",
+    rationale:
+      "The delete command reaches an intrinsic button through DeleteDialog and a default-intrinsic polymorphic Button, while only the stable dialog leaf consumes the pending flag; analysis must prove that complete callback chain before enforcing the migration.",
     target: "formbricks-delete-workspace",
   },
   {
@@ -4788,7 +5132,8 @@ export const goldCases = [
     hook: "useState",
     line: 34,
     name: "isArchiveDialogOpen",
-    rationale: "The visibility flag controls the dialog's conditional mount and closes in the async archive transaction; keep it under review until one grouped model proves mount identity and atomic completion.",
+    rationale:
+      "The visibility flag controls the dialog's conditional mount and closes in the async archive transaction; keep it under review until one grouped model proves mount identity and atomic completion.",
     target: "formbricks-archive-feedback-directory",
   },
   {
@@ -4797,7 +5142,8 @@ export const goldCases = [
     hook: "useState",
     line: 35,
     name: "isArchiving",
-    rationale: "The source-proven archive button starts the pending interval before awaited work, and two stable button leaves can subscribe while the trigger and dialog body remain outside them.",
+    rationale:
+      "The source-proven archive button starts the pending interval before awaited work, and two stable button leaves can subscribe while the trigger and dialog body remain outside them.",
     target: "formbricks-archive-feedback-directory",
   },
   {
@@ -4806,7 +5152,8 @@ export const goldCases = [
     hook: "useState",
     line: 49,
     name: "creating",
-    rationale: "The collection-share command resolves through the wrapper's React.useCallback adapter and the plain styled(RadixSwitch.Root) host to the imported @radix-ui/react-switch checked-change event, and only the stable switch leaf consumes the pending flag.",
+    rationale:
+      "The collection-share command resolves through the wrapper's React.useCallback adapter and the plain styled(RadixSwitch.Root) host to the imported @radix-ui/react-switch checked-change event, and only the stable switch leaf consumes the pending flag.",
     target: "outline-collection-public-access",
   },
   {
@@ -4815,7 +5162,8 @@ export const goldCases = [
     hook: "useState",
     line: 59,
     name: "creating",
-    rationale: "The document-share command resolves through the wrapper's React.useCallback adapter and the plain styled(RadixSwitch.Root) host to the imported @radix-ui/react-switch checked-change event, and only the stable switch leaf consumes the pending flag.",
+    rationale:
+      "The document-share command resolves through the wrapper's React.useCallback adapter and the plain styled(RadixSwitch.Root) host to the imported @radix-ui/react-switch checked-change event, and only the stable switch leaf consumes the pending flag.",
     target: "outline-document-public-access",
   },
   {
@@ -4825,7 +5173,8 @@ export const goldCases = [
     hook: "useState",
     line: 25,
     name: "isArchiving",
-    rationale: "The archive command reaches an intrinsic button through the local Button and ActionButton wrappers, and the archive button is the sole pending consumer; analysis must prove the full wrapper chain before enforcing the migration.",
+    rationale:
+      "The archive command reaches an intrinsic button through the local Button and ActionButton wrappers, and the archive button is the sole pending consumer; analysis must prove the full wrapper chain before enforcing the migration.",
     target: "outline-document-delete",
   },
   {
@@ -4835,7 +5184,8 @@ export const goldCases = [
     hook: "useState",
     line: 40,
     name: "isRegistering",
-    rationale: "The registration command reaches an intrinsic button through the local Button and ActionButton wrappers, while only the add-passkey action consumes its pending state; analysis must prove the full wrapper chain before enforcing the migration.",
+    rationale:
+      "The registration command reaches an intrinsic button through the local Button and ActionButton wrappers, while only the add-passkey action consumes its pending state; analysis must prove the full wrapper chain before enforcing the migration.",
     target: "outline-passkeys-settings",
   },
   {
@@ -4844,7 +5194,8 @@ export const goldCases = [
     hook: "useState",
     line: 82,
     name: "isMicrophonePreparing",
-    rationale: "The voice-mode command crosses ChatInputBottomRow's conditional event selection, IconButton, and two transparent rest-prop objects before reaching React Native Pressable; only the stable action leaf consumes the pending flag.",
+    rationale:
+      "The voice-mode command crosses ChatInputBottomRow's conditional event selection, IconButton, and two transparent rest-prop objects before reaching React Native Pressable; only the stable action leaf consumes the pending flag.",
     target: "open-webui-form-chat-input",
   },
   {
@@ -4853,7 +5204,8 @@ export const goldCases = [
     hook: "useState",
     line: 81,
     name: "isArchiving",
-    rationale: "The pending transition reaches the archive request before any other owner state changes, and only the archive confirmation button subscribes.",
+    rationale:
+      "The pending transition reaches the archive request before any other owner state changes, and only the archive confirmation button subscribes.",
     target: "formbricks-survey-dropdown",
   },
   ...[
@@ -4866,7 +5218,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "One menu item owns the complete pending surface while independent reservation details remain outside its subscriber, so link completion need not invalidate the trip screen.",
+    rationale:
+      "One menu item owns the complete pending surface while independent reservation details remain outside its subscriber, so link completion need not invalidate the trip screen.",
     target: "expensify-trip-details",
   })),
   {
@@ -4875,7 +5228,8 @@ export const goldCases = [
     hook: "useState",
     line: 47,
     name: "isDownloading",
-    rationale: "Download status belongs to a four-element statement screen and guards the command as well as its header action, so the React owner is already cohesive.",
+    rationale:
+      "Download status belongs to a four-element statement screen and guards the command as well as its header action, so the React owner is already cohesive.",
     target: "expensify-wallet-statement",
   },
   {
@@ -4884,7 +5238,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 59,
     name: null,
-    rationale: "Keep route validation and modal dismissal in a dependency-driven React effect; it is an external navigation command, not an observable reaction.",
+    rationale:
+      "Keep route validation and modal dismissal in a dependency-driven React effect; it is an external navigation command, not an observable reaction.",
     target: "expensify-wallet-statement",
   },
   {
@@ -4893,7 +5248,8 @@ export const goldCases = [
     hook: "useState",
     line: 73,
     name: "isLoading",
-    rationale: "Loading spans several onboarding branches, command guards, and the shared FormProvider, while completion mutates external onboarding state; one leaf subscription is incomplete.",
+    rationale:
+      "Loading spans several onboarding branches, command guards, and the shared FormProvider, while completion mutates external onboarding state; one leaf subscription is incomplete.",
     target: "expensify-onboarding-personal-details",
   },
   {
@@ -4902,12 +5258,21 @@ export const goldCases = [
     hook: "useEffect",
     line: 83,
     name: null,
-    rationale: "This empty-dependency setup only clears a module-owned onboarding error and captures no changing component value; useMount expresses the intended once-only setup.",
+    rationale:
+      "This empty-dependency setup only clears a module-owned onboarding error and captures no changing component value; useMount expresses the intended once-only setup.",
     target: "expensify-onboarding-personal-details",
   },
   ...[
-    [39, "animationFile", "The effect deliberately publishes a new animation source after commit; deriving the prop during render would change fallback and native animation lifecycle timing."],
-    [40, "isInteractionComplete", "The scheduled transition gate participates in the component's root fallback and owns cancellable post-transition timing, so this small animation boundary should remain under review."],
+    [
+      39,
+      "animationFile",
+      "The effect deliberately publishes a new animation source after commit; deriving the prop during render would change fallback and native animation lifecycle timing.",
+    ],
+    [
+      40,
+      "isInteractionComplete",
+      "The scheduled transition gate participates in the component's root fallback and owns cancellable post-transition timing, so this small animation boundary should remain under review.",
+    ],
   ].map(([line, name, rationale]) => ({
     action: "review-state" as const,
     file: "index.tsx",
@@ -4923,7 +5288,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 42,
     name: null,
-    rationale: "This prop-to-state effect intentionally changes the native animation source after commit; deleting it or replacing it with an observable reaction changes lifecycle timing.",
+    rationale:
+      "This prop-to-state effect intentionally changes the native animation source after commit; deleting it or replacing it with an observable reaction changes lifecycle timing.",
     target: "expensify-lottie",
   },
   {
@@ -4932,7 +5298,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 46,
     name: null,
-    rationale: "Keep the post-transition scheduler and its exact cancellation cleanup in one React lifecycle effect.",
+    rationale:
+      "Keep the post-transition scheduler and its exact cancellation cleanup in one React lifecycle effect.",
     target: "expensify-lottie",
   },
   {
@@ -4941,7 +5308,8 @@ export const goldCases = [
     hook: "useState",
     line: 49,
     name: "currentPlan",
-    rationale: "The selected plan rebuilds list item data and drives submit and navigation decisions across the page.",
+    rationale:
+      "The selected plan rebuilds list item data and drives submit and navigation decisions across the page.",
     target: "expensify-dynamic-plan-type",
   },
   {
@@ -4950,7 +5318,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 57,
     name: null,
-    rationale: "Loading the external workspace plan when policy identity changes belongs to React resource lifecycle ownership.",
+    rationale:
+      "Loading the external workspace plan when policy identity changes belongs to React resource lifecycle ownership.",
     target: "expensify-dynamic-plan-type",
   },
   {
@@ -4959,7 +5328,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 64,
     name: null,
-    rationale: "This effect seeds an editable plan selection from changing props; preserve its React synchronization timing.",
+    rationale:
+      "This effect seeds an editable plan selection from changing props; preserve its React synchronization timing.",
     target: "expensify-dynamic-plan-type",
   },
   {
@@ -4968,7 +5338,8 @@ export const goldCases = [
     hook: "useState",
     line: 62,
     name: "search",
-    rationale: "A one-hop trimmed alias feeds debounce and query hooks, so the owner must rerender when search changes.",
+    rationale:
+      "A one-hop trimmed alias feeds debounce and query hooks, so the owner must rerender when search changes.",
     target: "formbricks-filter-value",
   },
   {
@@ -4977,7 +5348,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 95,
     name: null,
-    rationale: "The effect resets the query draft when the combobox closes; preserve React dependency timing.",
+    rationale:
+      "The effect resets the query draft when the combobox closes; preserve React dependency timing.",
     target: "formbricks-filter-value",
   },
   {
@@ -4986,7 +5358,8 @@ export const goldCases = [
     hook: "useState",
     line: 83,
     name: "open",
-    rationale: "Open controls almost the entire cohesive Collapsible root, leaving no smaller subscriber boundary.",
+    rationale:
+      "Open controls almost the entire cohesive Collapsible root, leaving no smaller subscriber boundary.",
     target: "formbricks-recontact-options",
   },
   {
@@ -4995,7 +5368,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 134,
     name: null,
-    rationale: "The effect synchronizes the controlled card with changing survey type inputs and should remain in React.",
+    rationale:
+      "The effect synchronizes the controlled card with changing survey type inputs and should remain in React.",
     target: "formbricks-recontact-options",
   },
   {
@@ -5004,7 +5378,8 @@ export const goldCases = [
     hook: "useState",
     line: 40,
     name: "open",
-    rationale: "Open controls almost the entire cohesive Collapsible root, leaving no smaller subscriber boundary.",
+    rationale:
+      "Open controls almost the entire cohesive Collapsible root, leaving no smaller subscriber boundary.",
     target: "formbricks-when-to-send",
   },
   {
@@ -5013,7 +5388,8 @@ export const goldCases = [
     hook: "useState",
     line: 42,
     name: "isEditActionModalOpen",
-    rationale: "The edit visibility flag and persistent action payload open together and can subscribe inside one stable wrapper around the resolved dialog target.",
+    rationale:
+      "The edit visibility flag and persistent action payload open together and can subscribe inside one stable wrapper around the resolved dialog target.",
     target: "formbricks-when-to-send",
   },
   {
@@ -5022,7 +5398,8 @@ export const goldCases = [
     hook: "useState",
     line: 43,
     name: "editingActionClass",
-    rationale: "The payload controls one bounded dialog gate; moving the complete gate into an always-mounted leaf preserves the dialog's current open/close mount behavior.",
+    rationale:
+      "The payload controls one bounded dialog gate; moving the complete gate into an always-mounted leaf preserves the dialog's current open/close mount behavior.",
     target: "formbricks-when-to-send",
   },
   {
@@ -5031,7 +5408,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 150,
     name: null,
-    rationale: "The effect synchronizes card disclosure with changing survey inputs and should retain React timing.",
+    rationale:
+      "The effect synchronizes card disclosure with changing survey inputs and should retain React timing.",
     target: "formbricks-when-to-send",
   },
   {
@@ -5040,7 +5418,8 @@ export const goldCases = [
     hook: "useState",
     line: 40,
     name: "isDeleting",
-    rationale: "The true pending transition reaches chunk deletion before any other owner state changes, and only DeleteDialog subscribes; the existing finally block remains intact.",
+    rationale:
+      "The true pending transition reaches chunk deletion before any other owner state changes, and only DeleteDialog subscribes; the existing finally block remains intact.",
     target: "formbricks-selected-row-settings",
   },
   {
@@ -5049,7 +5428,8 @@ export const goldCases = [
     hook: "useState",
     line: 51,
     name: "decrementQuotas",
-    rationale: "The synchronized checkbox has a bounded leaf subscriber; the delete command should snapshot its value once before deferred work.",
+    rationale:
+      "The synchronized checkbox has a bounded leaf subscriber; the delete command should snapshot its value once before deferred work.",
     target: "formbricks-selected-row-settings",
   },
   {
@@ -5058,7 +5438,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 61,
     name: null,
-    rationale: "Preserve the React effect that reseeds the deletion option, changing only the observable draft sink.",
+    rationale:
+      "Preserve the React effect that reseeds the deletion option, changing only the observable draft sink.",
     target: "formbricks-selected-row-settings",
   },
   {
@@ -5067,7 +5448,8 @@ export const goldCases = [
     hook: "useState",
     line: 81,
     name: "activeTab",
-    rationale: "The tab chooses row presentation and mounted picker content inside an already cohesive picker boundary.",
+    rationale:
+      "The tab chooses row presentation and mounted picker content inside an already cohesive picker boundary.",
     target: "outline-icon-picker",
   },
   {
@@ -5076,7 +5458,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 170,
     name: null,
-    rationale: "The effect resets the controlled tab from changing default-tab input and should remain in React.",
+    rationale:
+      "The effect resets the controlled tab from changing default-tab input and should remain in React.",
     target: "outline-icon-picker",
   },
   {
@@ -5085,7 +5468,8 @@ export const goldCases = [
     hook: "useState",
     line: 377,
     name: "expanded",
-    rationale: "Expansion spans alternate child targets and a side-effectful disclosure updater in a compact owner, so no unique leaf is proven.",
+    rationale:
+      "Expansion spans alternate child targets and a side-effectful disclosure updater in a compact owner, so no unique leaf is proven.",
     target: "outline-starred-link",
   },
   {
@@ -5094,7 +5478,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 387,
     name: null,
-    rationale: "This effect synchronizes navigation context into disclosure state and should retain React timing.",
+    rationale:
+      "This effect synchronizes navigation context into disclosure state and should retain React timing.",
     target: "outline-starred-link",
   },
   {
@@ -5103,12 +5488,23 @@ export const goldCases = [
     hook: "useEffect",
     line: 408,
     name: null,
-    rationale: "Fetching an external document when its identity changes belongs to React resource lifecycle ownership.",
+    rationale:
+      "Fetching an external document when its identity changes belongs to React resource lifecycle ownership.",
     target: "outline-starred-link",
   },
   ...[
-    ["components/tree-search.tsx", 26, "selectedIndex", "Keyboard selection owns a scrolling effect and hotkey lifecycle, so a row selector alone is not a complete migration."],
-    ["components/tree-search.tsx", 27, "hoveredIndex", "Pointer hover is transactionally coupled to the effect-driven keyboard cursor; migrating one member alone does not prove an owner render cut."],
+    [
+      "components/tree-search.tsx",
+      26,
+      "selectedIndex",
+      "Keyboard selection owns a scrolling effect and hotkey lifecycle, so a row selector alone is not a complete migration.",
+    ],
+    [
+      "components/tree-search.tsx",
+      27,
+      "hoveredIndex",
+      "Pointer hover is transactionally coupled to the effect-driven keyboard cursor; migrating one member alone does not prove an owner render cut.",
+    ],
   ].map(([file, line, name, rationale]) => ({
     action: "review-state" as const,
     file: file as string,
@@ -5124,7 +5520,8 @@ export const goldCases = [
     hook: "useState",
     line: 45,
     name: "searchValue",
-    rationale: "Search changes the filtered row set and therefore still requires the owner to rebuild list data.",
+    rationale:
+      "Search changes the filtered row set and therefore still requires the owner to rebuild list data.",
     target: "expensify-agent-rule-suggestions",
   },
   {
@@ -5133,12 +5530,23 @@ export const goldCases = [
     hook: "useState",
     line: 46,
     name: "selectedSuggestionID",
-    rationale: "Stable suggestion rows can subscribe by ID while the footer resolves the selected suggestion in a separate leaf and the Next command snapshots it once.",
+    rationale:
+      "Stable suggestion rows can subscribe by ID while the footer resolves the selected suggestion in a separate leaf and the Next command snapshots it once.",
     target: "expensify-agent-rule-suggestions",
   },
   ...[
-    ["components/challenges/challenge-terms-step.tsx", 26, "duration", "The duration selector is already a compact cohesive owner, and its send command consumes the selected value."],
-    ["components/sheets/suggested-messages-sheet.tsx", 169, "selectedOccasion", "Changing the occasion replaces the message list data, so the owner must rebuild the rendered collection."],
+    [
+      "components/challenges/challenge-terms-step.tsx",
+      26,
+      "duration",
+      "The duration selector is already a compact cohesive owner, and its send command consumes the selected value.",
+    ],
+    [
+      "components/sheets/suggested-messages-sheet.tsx",
+      169,
+      "selectedOccasion",
+      "Changing the occasion replaces the message list data, so the owner must rebuild the rendered collection.",
+    ],
   ].map(([file, line, name, rationale]) => ({
     action: "review-state" as const,
     file: file as string,
@@ -5154,7 +5562,8 @@ export const goldCases = [
     hook: "useState",
     line: 70,
     name: "selectedItem",
-    rationale: "Selection rebuilds the options passed to the cohesive SelectionList owner; a row-only observable would not remove that required render.",
+    rationale:
+      "Selection rebuilds the options passed to the cohesive SelectionList owner; a row-only observable would not remove that required render.",
     target: "expensify-search-single-select",
   },
   {
@@ -5163,7 +5572,8 @@ export const goldCases = [
     hook: "useState",
     line: 62,
     name: "selectedItem",
-    rationale: "The selected sort value rebuilds the complete options model and is consumed by the Apply command inside the popup owner.",
+    rationale:
+      "The selected sort value rebuilds the complete options model and is consumed by the Apply command inside the popup owner.",
     target: "expensify-sort-popup",
   },
   {
@@ -5172,12 +5582,21 @@ export const goldCases = [
     hook: "useState",
     line: 54,
     name: "cardRuleID",
-    rationale: "Selection rebuilds list data and participates in validation, mutation payload, and navigation, so per-row equality is not a complete observable boundary.",
+    rationale:
+      "Selection rebuilds list data and participates in validation, mutation payload, and navigation, so per-row equality is not a complete observable boundary.",
     target: "expensify-spend-rule-selection",
   },
   ...[
-    [24, "highlightedIndex", "The cursor is synchronized from external preferred-tone state by a React effect, so a row-only selector would leave lifecycle ownership unresolved."],
-    [25, "isSkinToneListVisible", "Visibility selects the complete compact picker branch and is closed by external preferred-tone synchronization."],
+    [
+      24,
+      "highlightedIndex",
+      "The cursor is synchronized from external preferred-tone state by a React effect, so a row-only selector would leave lifecycle ownership unresolved.",
+    ],
+    [
+      25,
+      "isSkinToneListVisible",
+      "Visibility selects the complete compact picker branch and is closed by external preferred-tone synchronization.",
+    ],
   ].map(([line, name, rationale]) => ({
     action: "review-state" as const,
     file: "EmojiSkinToneList.tsx",
@@ -5188,8 +5607,14 @@ export const goldCases = [
     target: "expensify-emoji-skin-tone",
   })),
   ...[
-    [41, "The effect closes the picker when externally stored preferred tone changes; keep React dependency and commit timing."],
-    [51, "The effect synchronizes a local hover cursor from externally stored preferred tone and is not a Legend-only reaction."],
+    [
+      41,
+      "The effect closes the picker when externally stored preferred tone changes; keep React dependency and commit timing.",
+    ],
+    [
+      51,
+      "The effect synchronizes a local hover cursor from externally stored preferred tone and is not a Legend-only reaction.",
+    ],
   ].map(([line, rationale]) => ({
     action: "review-effect" as const,
     file: "EmojiSkinToneList.tsx",
@@ -5200,8 +5625,16 @@ export const goldCases = [
     target: "expensify-emoji-skin-tone",
   })),
   ...[
-    [45, "selectedCompanySize", "Selection rebuilds the SelectionList data model and participates in submit validation, so a row-only subscriber is incomplete."],
-    [46, "error", "Validation error is coupled to the selection transaction and rendered through the list footer rather than an independent leaf command."],
+    [
+      45,
+      "selectedCompanySize",
+      "Selection rebuilds the SelectionList data model and participates in submit validation, so a row-only subscriber is incomplete.",
+    ],
+    [
+      46,
+      "error",
+      "Validation error is coupled to the selection transaction and rendered through the list footer rather than an independent leaf command.",
+    ],
   ].map(([line, name, rationale]) => ({
     action: "review-state" as const,
     file: "BaseOnboardingEmployees.tsx",
@@ -5217,12 +5650,21 @@ export const goldCases = [
     hook: "useState",
     line: 44,
     name: "isFilterOpen",
-    rationale: "The filter value, toggle command, and descriptive open-change callback are confined to one stable FilterDropdown leaf.",
+    rationale:
+      "The filter value, toggle command, and descriptive open-change callback are confined to one stable FilterDropdown leaf.",
     target: "tree-map",
   },
   ...[
-    [31, "title", "The title and message share one form-validity projection, so separate per-field observable migrations would fragment one form model."],
-    [32, "message", "The title and message share one form-validity projection, so separate per-field observable migrations would fragment one form model."],
+    [
+      31,
+      "title",
+      "The title and message share one form-validity projection, so separate per-field observable migrations would fragment one form model.",
+    ],
+    [
+      32,
+      "message",
+      "The title and message share one form-validity projection, so separate per-field observable migrations would fragment one form model.",
+    ],
   ].map(([line, name, rationale]) => ({
     action: "review-state" as const,
     file: "app/(private)/forest/customize-gift.tsx",
@@ -5238,7 +5680,8 @@ export const goldCases = [
     hook: "useState",
     line: 33,
     name: "selectedCoverUrl",
-    rationale: "The cover selector is the only rendered consumer; the review command can snapshot the selected URL without rerendering the screen.",
+    rationale:
+      "The cover selector is the only rendered consumer; the review command can snapshot the selected URL without rerendering the screen.",
     target: "tree-wallet",
   },
   {
@@ -5247,7 +5690,8 @@ export const goldCases = [
     hook: "useState",
     line: 35,
     name: "date",
-    rationale: "DatePicker owns editing while the separate time-submit command snapshots the date, leaving the screen header and other picker independent.",
+    rationale:
+      "DatePicker owns editing while the separate time-submit command snapshots the date, leaving the screen header and other picker independent.",
     target: "expensify-debug-date-time",
   },
   {
@@ -5256,7 +5700,8 @@ export const goldCases = [
     hook: "useState",
     line: 34,
     name: "hasSMSMarketingConsent",
-    rationale: "The conditional checkbox is the only rendered consumer and the join command reads one consent snapshot without invalidating the form.",
+    rationale:
+      "The conditional checkbox is the only rendered consumer and the join command reads one consent snapshot without invalidating the form.",
     target: "expensify-signup-welcome",
   },
   {
@@ -5265,17 +5710,42 @@ export const goldCases = [
     hook: "useState",
     line: 41,
     name: "currentValue",
-    rationale: "The number form owns editing while the save command snapshots the value; header and navigation work stay outside the subscriber.",
+    rationale:
+      "The number form owns editing while the save command snapshots the value; header and navigation work stay outside the subscriber.",
     target: "expensify-create-tax-value",
   },
   ...[
-    ["formbricks-taxonomy-container", "topics-subtopics-container.tsx", 66, "viewMode", "TaxonomyDisplay"],
-    ["formbricks-workflow-email-form", "workflow-email-action-form.tsx", 75, "firstRender", "Editor"],
-    ["formbricks-workflows-list", "workflows-list-page.tsx", 57, "isStatusDropdownOpen", "WorkflowFilterDropdown"],
+    [
+      "formbricks-taxonomy-container",
+      "topics-subtopics-container.tsx",
+      66,
+      "viewMode",
+      "TaxonomyDisplay",
+    ],
+    [
+      "formbricks-workflow-email-form",
+      "workflow-email-action-form.tsx",
+      75,
+      "firstRender",
+      "Editor",
+    ],
+    [
+      "formbricks-workflows-list",
+      "workflows-list-page.tsx",
+      57,
+      "isStatusDropdownOpen",
+      "WorkflowFilterDropdown",
+    ],
     ["formbricks-survey-editor", "survey-editor.tsx", 101, "localStylingChanges", "StylingView"],
     ["formbricks-theme-styling", "theme-styling.tsx", 84, "formStylingOpen", "FormStylingSettings"],
     ["formbricks-theme-styling", "theme-styling.tsx", 85, "cardStylingOpen", "CardStylingSettings"],
-    ["formbricks-theme-styling", "theme-styling.tsx", 86, "backgroundStylingOpen", "BackgroundStylingCard"],
+    [
+      "formbricks-theme-styling",
+      "theme-styling.tsx",
+      86,
+      "backgroundStylingOpen",
+      "BackgroundStylingCard",
+    ],
     ["formbricks-delete-account", "DeleteAccount.tsx", 29, "isModalOpen", "DeleteAccountModal"],
   ].map(([target, file, line, name, consumer]) => ({
     action: "use-observable" as const,
@@ -5287,11 +5757,41 @@ export const goldCases = [
     target: target as string,
   })),
   ...[
-    ["formbricks-taxonomy-container", "topics-subtopics-container.tsx", 64, "directoryId", "Directory identity feeds query keys, derived scope, and the complete taxonomy owner."],
-    ["formbricks-workflow-email-form", "workflow-email-action-form.tsx", 80, "touchedFields", "Touched-field state drives validation across several fields and cannot be isolated into the editor call site."],
-    ["formbricks-workflows-list", "workflows-list-page.tsx", 53, "searchValue", "Search state drives debouncing, persistence, and list queries rather than one presentation leaf."],
-    ["formbricks-survey-editor", "survey-editor.tsx", 91, "localSurvey", "The local survey is the editor's central mutable model and controls hooks, branches, and many children."],
-    ["formbricks-theme-styling", "theme-styling.tsx", 80, "previewSurveyType", "Survey type feeds multiple styling and preview consumers, so a one-call-site migration would be incomplete."],
+    [
+      "formbricks-taxonomy-container",
+      "topics-subtopics-container.tsx",
+      64,
+      "directoryId",
+      "Directory identity feeds query keys, derived scope, and the complete taxonomy owner.",
+    ],
+    [
+      "formbricks-workflow-email-form",
+      "workflow-email-action-form.tsx",
+      80,
+      "touchedFields",
+      "Touched-field state drives validation across several fields and cannot be isolated into the editor call site.",
+    ],
+    [
+      "formbricks-workflows-list",
+      "workflows-list-page.tsx",
+      53,
+      "searchValue",
+      "Search state drives debouncing, persistence, and list queries rather than one presentation leaf.",
+    ],
+    [
+      "formbricks-survey-editor",
+      "survey-editor.tsx",
+      91,
+      "localSurvey",
+      "The local survey is the editor's central mutable model and controls hooks, branches, and many children.",
+    ],
+    [
+      "formbricks-theme-styling",
+      "theme-styling.tsx",
+      80,
+      "previewSurveyType",
+      "Survey type feeds multiple styling and preview consumers, so a one-call-site migration would be incomplete.",
+    ],
   ].map(([target, file, line, name, rationale]) => ({
     action: "review-state" as const,
     file: file as string,
@@ -5302,8 +5802,18 @@ export const goldCases = [
     target: target as string,
   })),
   ...[
-    ["formbricks-taxonomy-container", "topics-subtopics-container.tsx", 105, "Selection reconciliation follows changing tree data and the current selected node."],
-    ["formbricks-survey-editor", "survey-editor.tsx", 122, "Survey initialization coordinates several React states from a changing survey snapshot."],
+    [
+      "formbricks-taxonomy-container",
+      "topics-subtopics-container.tsx",
+      105,
+      "Selection reconciliation follows changing tree data and the current selected node.",
+    ],
+    [
+      "formbricks-survey-editor",
+      "survey-editor.tsx",
+      122,
+      "Survey initialization coordinates several React states from a changing survey snapshot.",
+    ],
   ].map(([target, file, line, rationale]) => ({
     action: "review-effect" as const,
     file: file as string,
@@ -5319,7 +5829,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 141,
     name: null,
-    rationale: "A terminal taxonomy run status invalidates the external query cache after React commits; the effect should remain dependency-driven React integration.",
+    rationale:
+      "A terminal taxonomy run status invalidates the external query cache after React commits; the effect should remain dependency-driven React integration.",
     target: "formbricks-taxonomy-container",
   },
   {
@@ -5328,7 +5839,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 131,
     name: null,
-    rationale: "A changed trigger survey intentionally clears incompatible editor content and marks its fields touched after commit.",
+    rationale:
+      "A changed trigger survey intentionally clears incompatible editor content and marks its fields touched after commit.",
     target: "formbricks-workflow-email-form",
   },
   {
@@ -5337,7 +5849,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 64,
     name: null,
-    rationale: "Mount hydration reads browser storage and seeds the complete React filter model; this is React lifecycle ownership.",
+    rationale:
+      "Mount hydration reads browser storage and seeds the complete React filter model; this is React lifecycle ownership.",
     target: "formbricks-workflows-list",
   },
   {
@@ -5346,7 +5859,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 80,
     name: null,
-    rationale: "Filter changes persist to browser storage after commit; this is a dependency-driven external sink, not a Legend reaction.",
+    rationale:
+      "Filter changes persist to browser storage after commit; this is a dependency-driven external sink, not a Legend reaction.",
     target: "formbricks-workflows-list",
   },
   {
@@ -5355,7 +5869,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 137,
     name: null,
-    rationale: "The effect installs and removes a document visibility listener whose callback refreshes external workspace data.",
+    rationale:
+      "The effect installs and removes a document visibility listener whose callback refreshes external workspace data.",
     target: "formbricks-survey-editor",
   },
   ...[
@@ -5368,15 +5883,46 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "Table controls issue open commands from broad and repeated surfaces, while one settings modal is the only value subscriber.",
+    rationale:
+      "Table controls issue open commands from broad and repeated surfaces, while one settings modal is the only value subscriber.",
     target: target as string,
   })),
   ...[
-    ["formbricks-survey-list", "survey-list.tsx", 155, "surveyFilters", "Filter state drives normalization, persistence, and list queries across the owner."],
-    ["formbricks-response-table", "ResponseTable.tsx", 86, "columnVisibility", "Visibility state is a controlled table model synchronized with storage and table rendering."],
-    ["formbricks-contacts-table", "contacts-table.tsx", 67, "columnVisibility", "Visibility state is a controlled table model synchronized with storage and table rendering."],
-    ["formbricks-attributes-table", "attributes-table.tsx", 49, "columnVisibility", "Visibility state is a controlled table model synchronized with storage and table rendering."],
-    ["formbricks-attributes-table", "attributes-table.tsx", 54, "searchValue", "Search state changes table derivation and filtering rather than one isolated presentation leaf."],
+    [
+      "formbricks-survey-list",
+      "survey-list.tsx",
+      155,
+      "surveyFilters",
+      "Filter state drives normalization, persistence, and list queries across the owner.",
+    ],
+    [
+      "formbricks-response-table",
+      "ResponseTable.tsx",
+      86,
+      "columnVisibility",
+      "Visibility state is a controlled table model synchronized with storage and table rendering.",
+    ],
+    [
+      "formbricks-contacts-table",
+      "contacts-table.tsx",
+      67,
+      "columnVisibility",
+      "Visibility state is a controlled table model synchronized with storage and table rendering.",
+    ],
+    [
+      "formbricks-attributes-table",
+      "attributes-table.tsx",
+      49,
+      "columnVisibility",
+      "Visibility state is a controlled table model synchronized with storage and table rendering.",
+    ],
+    [
+      "formbricks-attributes-table",
+      "attributes-table.tsx",
+      54,
+      "searchValue",
+      "Search state changes table derivation and filtering rather than one isolated presentation leaf.",
+    ],
   ].map(([target, file, line, name, rationale]) => ({
     action: "review-state" as const,
     file: file as string,
@@ -5399,16 +5945,47 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "React dependencies are intentionally persisted to browser storage after commit; this is not an observable reaction.",
+    rationale:
+      "React dependencies are intentionally persisted to browser storage after commit; this is not an observable reaction.",
     target: target as string,
   })),
   ...[
-    ["formbricks-survey-list", "survey-list.tsx", 159, "Storage hydration parses external data and reconciles the complete React filter model."],
-    ["formbricks-survey-list", "survey-list.tsx", 222, "Archived-filter reconciliation changes React list state from changing query results."],
-    ["formbricks-response-table", "ResponseTable.tsx", 170, "Storage hydration seeds several controlled table fields and must remain under causal review."],
-    ["formbricks-contacts-table", "contacts-table.tsx", 84, "Storage hydration seeds several controlled table fields and must remain under causal review."],
-    ["formbricks-attributes-table", "attributes-table.tsx", 84, "Storage hydration seeds several controlled table fields and must remain under causal review."],
-    ["formbricks-attributes-table", "attributes-table.tsx", 143, "Read-only data changes reconcile table visibility state rather than writing an external persistence sink."],
+    [
+      "formbricks-survey-list",
+      "survey-list.tsx",
+      159,
+      "Storage hydration parses external data and reconciles the complete React filter model.",
+    ],
+    [
+      "formbricks-survey-list",
+      "survey-list.tsx",
+      222,
+      "Archived-filter reconciliation changes React list state from changing query results.",
+    ],
+    [
+      "formbricks-response-table",
+      "ResponseTable.tsx",
+      170,
+      "Storage hydration seeds several controlled table fields and must remain under causal review.",
+    ],
+    [
+      "formbricks-contacts-table",
+      "contacts-table.tsx",
+      84,
+      "Storage hydration seeds several controlled table fields and must remain under causal review.",
+    ],
+    [
+      "formbricks-attributes-table",
+      "attributes-table.tsx",
+      84,
+      "Storage hydration seeds several controlled table fields and must remain under causal review.",
+    ],
+    [
+      "formbricks-attributes-table",
+      "attributes-table.tsx",
+      143,
+      "Read-only data changes reconcile table visibility state rather than writing an external persistence sink.",
+    ],
   ].map(([target, file, line, rationale]) => ({
     action: "review-effect" as const,
     file: file as string,
@@ -5419,10 +5996,25 @@ export const goldCases = [
     target: target as string,
   })),
   ...[
-    ["tree-map-page-tracker", "posthog-page-tracker.tsx", 19, "Page-view analytics follows external route and account identity."],
-    ["expensify-add-card-feed", "DynamicAddNewCardPage.tsx", 77, "Opening the external card-feed resource follows workspace policy identity."],
-    ["outline-documents-loader", "DocumentsLoader.tsx", 12, "Document loading follows the external collection and enabled inputs."],
-].map(([target, file, line, rationale]) => ({
+    [
+      "tree-map-page-tracker",
+      "posthog-page-tracker.tsx",
+      19,
+      "Page-view analytics follows external route and account identity.",
+    ],
+    [
+      "expensify-add-card-feed",
+      "DynamicAddNewCardPage.tsx",
+      77,
+      "Opening the external card-feed resource follows workspace policy identity.",
+    ],
+    [
+      "outline-documents-loader",
+      "DocumentsLoader.tsx",
+      12,
+      "Document loading follows the external collection and enabled inputs.",
+    ],
+  ].map(([target, file, line, rationale]) => ({
     action: "keep-effect" as const,
     file: file as string,
     hook: "useEffect" as const,
@@ -5432,8 +6024,16 @@ export const goldCases = [
     target: target as string,
   })),
   ...[
-    [48, "workspaces", "The asynchronous effect owns the workspace collection, which also drives options and submit error reporting."],
-    [49, "workspacesLoading", "The dependency-driven Promise chain swaps the complete modal body, not one event-owned presentation leaf."],
+    [
+      48,
+      "workspaces",
+      "The asynchronous effect owns the workspace collection, which also drives options and submit error reporting.",
+    ],
+    [
+      49,
+      "workspacesLoading",
+      "The dependency-driven Promise chain swaps the complete modal body, not one event-owned presentation leaf.",
+    ],
   ].map(([line, name, rationale]) => ({
     action: "review-state" as const,
     file: "copy-survey-modal.tsx",
@@ -5449,13 +6049,26 @@ export const goldCases = [
     hook: "useEffect",
     line: 56,
     name: null,
-    rationale: "The effect follows modal and workspace inputs, resets form state, loads data, and owns the Promise lifecycle.",
+    rationale:
+      "The effect follows modal and workspace inputs, resets form state, loads data, and owns the Promise lifecycle.",
     target: "formbricks-copy-survey-modal",
   },
   ...[
-    ["formbricks-enterprise-license-status", "EnterpriseLicenseStatus.tsx", 56, "isRechecking", "Button"],
+    [
+      "formbricks-enterprise-license-status",
+      "EnterpriseLicenseStatus.tsx",
+      56,
+      "isRechecking",
+      "Button",
+    ],
     ["formbricks-custom-filter", "CustomFilter.tsx", 141, "isDownloading", "PopoverTriggerButton"],
-    ["formbricks-selected-row-settings", "selected-row-settings.tsx", 41, "isDownloading", "DropdownMenuTrigger"],
+    [
+      "formbricks-selected-row-settings",
+      "selected-row-settings.tsx",
+      41,
+      "isDownloading",
+      "DropdownMenuTrigger",
+    ],
     ["outline-invite", "Invite.tsx", 36, "isSaving", "Button"],
   ].map(([target, file, line, name, leaf]) => ({
     action: "use-observable" as const,
@@ -5503,7 +6116,8 @@ export const goldCases = [
     hook: "useState",
     line: 55,
     name: "isLoading",
-    rationale: "The loading flag has one stable button consumer and an independently useful transition before awaited work; repeated idempotent writes and later external updates do not prevent the owner render cut.",
+    rationale:
+      "The loading flag has one stable button consumer and an independently useful transition before awaited work; repeated idempotent writes and later external updates do not prevent the owner render cut.",
     target: "formbricks-save-segment",
   },
   {
@@ -5512,7 +6126,8 @@ export const goldCases = [
     hook: "useState",
     line: 37,
     name: "invites",
-    rationale: "Invite state controls repeated row data and the async request payload, so no leaf-only subscription can replace the owner render.",
+    rationale:
+      "Invite state controls repeated row data and the async request payload, so no leaf-only subscription can replace the owner render.",
     target: "outline-invite",
   },
   {
@@ -5521,26 +6136,72 @@ export const goldCases = [
     hook: "useState",
     line: 49,
     name: "role",
-    rationale: "Role feeds the controlled selector, explanatory copy, and async request payload across the owner.",
+    rationale:
+      "Role feeds the controlled selector, explanatory copy, and async request payload across the owner.",
     target: "outline-invite",
   },
   ...[
-    ["tree-map", "components/tree-actions/enhance-image-page.tsx", 25, "promptOptions", "The prompt editor owns the controlled value while the independent tree-review component stays outside the subscription and the confirm command snapshots once."],
-    ["tree-wallet", "components/challenge-history/challenge-history-content.tsx", 23, "filter", "The tabs and history-list query boundary can subscribe independently while the sheet header stays outside selection updates."],
-    ["expensify-biometrics-test", "BiometricsTestToolRow.tsx", 25, "isMFARevokeLoading", "The revoke button is the only pending consumer and starts loading before the awaited credential command; the independent test button need not rerender."],
-    ["expensify-date-filter", "DateFilterContentPageWrapper.tsx", 16, "value", "The date editor owns value changes and the confirm command snapshots once, leaving its independent action button outside editing renders."],
-    ["formbricks-create-dashboard", "create-dashboard-button.tsx", 28, "isCreating", "Only the dashboard dialog renders pending status; the true transition precedes the awaited create command and the trigger stays independent."],
-    ["formbricks-delete-contact", "delete-contact-button.tsx", 26, "isDeletingPerson", "Only the delete dialog renders pending status; opening deletion starts independently before await while the trigger button stays outside the subscriber."],
-    ["formbricks-edit-membership-role", "edit-membership-role.tsx", 49, "loading", "The role button is the sole loading consumer and changes before the awaited membership command while the menu content remains independent."],
-    ["formbricks-taxonomy-tree", "taxonomy-tree.tsx", 232, "value", "The rename input and save-validity leaf subscribe to the editable value while the cancel action stays independent and save snapshots once."],
+    [
+      "tree-map",
+      "components/tree-actions/enhance-image-page.tsx",
+      25,
+      "promptOptions",
+      "The prompt editor owns the controlled value while the independent tree-review component stays outside the subscription and the confirm command snapshots once.",
+    ],
+    [
+      "tree-wallet",
+      "components/challenge-history/challenge-history-content.tsx",
+      23,
+      "filter",
+      "The tabs and history-list query boundary can subscribe independently while the sheet header stays outside selection updates.",
+    ],
+    [
+      "expensify-biometrics-test",
+      "BiometricsTestToolRow.tsx",
+      25,
+      "isMFARevokeLoading",
+      "The revoke button is the only pending consumer and starts loading before the awaited credential command; the independent test button need not rerender.",
+    ],
+    [
+      "expensify-date-filter",
+      "DateFilterContentPageWrapper.tsx",
+      16,
+      "value",
+      "The date editor owns value changes and the confirm command snapshots once, leaving its independent action button outside editing renders.",
+    ],
+    [
+      "formbricks-create-dashboard",
+      "create-dashboard-button.tsx",
+      28,
+      "isCreating",
+      "Only the dashboard dialog renders pending status; the true transition precedes the awaited create command and the trigger stays independent.",
+    ],
+    [
+      "formbricks-delete-contact",
+      "delete-contact-button.tsx",
+      26,
+      "isDeletingPerson",
+      "Only the delete dialog renders pending status; opening deletion starts independently before await while the trigger button stays outside the subscriber.",
+    ],
+    [
+      "formbricks-edit-membership-role",
+      "edit-membership-role.tsx",
+      49,
+      "loading",
+      "The role button is the sole loading consumer and changes before the awaited membership command while the menu content remains independent.",
+    ],
+    [
+      "formbricks-taxonomy-tree",
+      "taxonomy-tree.tsx",
+      232,
+      "value",
+      "The rename input and save-validity leaf subscribe to the editable value while the cancel action stays independent and save snapshots once.",
+    ],
   ].map(([target, file, line, name, rationale]) => ({
     action: "use-observable" as const,
-    ...(
-      target === "expensify-biometrics-test" ||
-      target === "formbricks-edit-membership-role"
-        ? { enforced: false as const }
-        : {}
-    ),
+    ...(target === "expensify-biometrics-test" || target === "formbricks-edit-membership-role"
+      ? { enforced: false as const }
+      : {}),
     file: file as string,
     hook: "useState" as const,
     line: line as number,
@@ -5554,19 +6215,83 @@ export const goldCases = [
     hook: "useState",
     line: 65,
     name: "inputValue",
-    rationale: "The immediate controlled input is the only query consumer; the existing timer closes over the event value and publishes separate delayed search state, so a leaf subscription skips rebuilding the repeated account rows without changing debounce timing.",
+    rationale:
+      "The immediate controlled input is the only query consumer; the existing timer closes over the event value and publishes separate delayed search state, so a leaf subscription skips rebuilding the repeated account rows without changing debounce timing.",
     target: "tree-map",
   },
   ...[
-    ["expensify-text-filter", "TextInputFilterContent.tsx", 38, "value", "review-state", "Text input drives validation and the confirm payload across the owner, so isolating its controlled prop would leave required owner computation."],
-    ["expensify-text-filter", "TextInputFilterContent.tsx", 39, "isNegated", "review-state", "An inline callback ref performs commit work in this owner, so isolating negation updates would change that ref callback's detach and attach cadence."],
-    ["expensify-date-filter", "DateFilterContentPageWrapper.tsx", 17, "selectedDateModifier", "keep-state", "The modifier controls both the date editor and confirm-button mount inside an already compact owner."],
-    ["formbricks-create-dashboard", "create-dashboard-button.tsx", 26, "isCreateDialogOpen", "review-state", "Dialog visibility and its trigger already form a compact workflow boundary; no smaller meaningful owner is proven."],
-    ["formbricks-create-dashboard", "create-dashboard-button.tsx", 27, "dashboardName", "review-state", "The name participates in validation, the create payload, and the complete dialog workflow rather than one presentation leaf."],
-    ["formbricks-delete-contact", "delete-contact-button.tsx", 25, "deleteDialogOpen", "review-state", "Dialog visibility is coupled to deletion completion inside a compact trigger-and-dialog workflow."],
-    ["formbricks-taxonomy-tree", "taxonomy-tree.tsx", 34, "expandedIds", "review-state", "Expansion changes repeated taxonomy branch cardinality and mount identity, so row-local presentation is not the complete update."],
-    ["formbricks-taxonomy-tree", "taxonomy-tree.tsx", 35, "renamingId", "review-state", "Rename identity switches repeated nodes between display and editor branches and must retain list ownership."],
-    ["formbricks-taxonomy-tree", "taxonomy-tree.tsx", 233, "isSaving", "review-state", "Saving coordinates the input, save and cancel controls, command guard, and async lifetime inside one cohesive editor."],
+    [
+      "expensify-text-filter",
+      "TextInputFilterContent.tsx",
+      38,
+      "value",
+      "review-state",
+      "Text input drives validation and the confirm payload across the owner, so isolating its controlled prop would leave required owner computation.",
+    ],
+    [
+      "expensify-text-filter",
+      "TextInputFilterContent.tsx",
+      39,
+      "isNegated",
+      "review-state",
+      "An inline callback ref performs commit work in this owner, so isolating negation updates would change that ref callback's detach and attach cadence.",
+    ],
+    [
+      "expensify-date-filter",
+      "DateFilterContentPageWrapper.tsx",
+      17,
+      "selectedDateModifier",
+      "keep-state",
+      "The modifier controls both the date editor and confirm-button mount inside an already compact owner.",
+    ],
+    [
+      "formbricks-create-dashboard",
+      "create-dashboard-button.tsx",
+      26,
+      "isCreateDialogOpen",
+      "review-state",
+      "Dialog visibility and its trigger already form a compact workflow boundary; no smaller meaningful owner is proven.",
+    ],
+    [
+      "formbricks-create-dashboard",
+      "create-dashboard-button.tsx",
+      27,
+      "dashboardName",
+      "review-state",
+      "The name participates in validation, the create payload, and the complete dialog workflow rather than one presentation leaf.",
+    ],
+    [
+      "formbricks-delete-contact",
+      "delete-contact-button.tsx",
+      25,
+      "deleteDialogOpen",
+      "review-state",
+      "Dialog visibility is coupled to deletion completion inside a compact trigger-and-dialog workflow.",
+    ],
+    [
+      "formbricks-taxonomy-tree",
+      "taxonomy-tree.tsx",
+      34,
+      "expandedIds",
+      "review-state",
+      "Expansion changes repeated taxonomy branch cardinality and mount identity, so row-local presentation is not the complete update.",
+    ],
+    [
+      "formbricks-taxonomy-tree",
+      "taxonomy-tree.tsx",
+      35,
+      "renamingId",
+      "review-state",
+      "Rename identity switches repeated nodes between display and editor branches and must retain list ownership.",
+    ],
+    [
+      "formbricks-taxonomy-tree",
+      "taxonomy-tree.tsx",
+      233,
+      "isSaving",
+      "review-state",
+      "Saving coordinates the input, save and cancel controls, command guard, and async lifetime inside one cohesive editor.",
+    ],
   ].map(([target, file, line, name, action, rationale]) => ({
     action: action as "keep-state" | "review-state",
     file: file as string,
@@ -5577,12 +6302,42 @@ export const goldCases = [
     target: target as string,
   })),
   ...[
-    ["tree-map", "components/map-view.tsx", 59, "Map camera synchronization is one external imperative command; its one nested helper only builds the command argument."],
-    ["tree-map", "components/profile-settings/credentials-section.tsx", 51, "Changing account data resets the external form model after commit; the nested helper only constructs the reset value."],
-    ["tree-wallet", "components/forest/tree-profile/tree-image-card.tsx", 32, "A React visibility prop drives one finite UI-thread animation command, which must retain React dependency timing."],
-    ["memoria-src", "ui/components/media/EpisodeRow.tsx", 202, "A React watched prop drives one finite UI-thread spring command, so the bridge remains a React effect."],
-    ["formbricks-follow-up-modal", "follow-up-modal.tsx", 293, "Opening with defaults resets one external form model; nested default-body construction is command argument preparation."],
-    ["expensify-opacity-view", "OpacityView.tsx", 57, "Changing React dimming props drive one finite UI-thread timing command and remain dependency-driven React integration."],
+    [
+      "tree-map",
+      "components/map-view.tsx",
+      59,
+      "Map camera synchronization is one external imperative command; its one nested helper only builds the command argument.",
+    ],
+    [
+      "tree-map",
+      "components/profile-settings/credentials-section.tsx",
+      51,
+      "Changing account data resets the external form model after commit; the nested helper only constructs the reset value.",
+    ],
+    [
+      "tree-wallet",
+      "components/forest/tree-profile/tree-image-card.tsx",
+      32,
+      "A React visibility prop drives one finite UI-thread animation command, which must retain React dependency timing.",
+    ],
+    [
+      "memoria-src",
+      "ui/components/media/EpisodeRow.tsx",
+      202,
+      "A React watched prop drives one finite UI-thread spring command, so the bridge remains a React effect.",
+    ],
+    [
+      "formbricks-follow-up-modal",
+      "follow-up-modal.tsx",
+      293,
+      "Opening with defaults resets one external form model; nested default-body construction is command argument preparation.",
+    ],
+    [
+      "expensify-opacity-view",
+      "OpacityView.tsx",
+      57,
+      "Changing React dimming props drive one finite UI-thread timing command and remain dependency-driven React integration.",
+    ],
   ].map(([target, file, line, rationale]) => ({
     action: "keep-effect" as const,
     file: file as string,
@@ -5598,7 +6353,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 120,
     name: null,
-    rationale: "Changed query results enqueue one external locale-healing command after commit; mapping only prepares its payload.",
+    rationale:
+      "Changed query results enqueue one external locale-healing command after commit; mapping only prepares its payload.",
     target: "memoria-src",
   },
   {
@@ -5607,7 +6363,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 90,
     name: null,
-    rationale: "A changed query error triggers one external toast command; translation only prepares its message argument.",
+    rationale:
+      "A changed query error triggers one external toast command; translation only prepares its message argument.",
     target: "outline-api-keys-page",
   },
   ...[
@@ -5634,7 +6391,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 33,
     name: null,
-    rationale: "The translated toast is nested in an asynchronous resource loader, so the effect owns more than one dependency-driven external command.",
+    rationale:
+      "The translated toast is nested in an asynchronous resource loader, so the effect owns more than one dependency-driven external command.",
     target: "outline-reactions-dialog",
   },
   {
@@ -5643,7 +6401,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 86,
     name: null,
-    rationale: "A route parameter drives one guarded observable filter write after React commits; React owns the route dependency timing.",
+    rationale:
+      "A route parameter drives one guarded observable filter write after React commits; React owns the route dependency timing.",
     target: "memoria-src",
   },
   {
@@ -5652,7 +6411,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 74,
     name: null,
-    rationale: "A changed report permission closes the external modal after an imported emptiness guard.",
+    rationale:
+      "A changed report permission closes the external modal after an imported emptiness guard.",
     target: "expensify-report-add-attachment",
   },
   {
@@ -5661,7 +6421,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 81,
     name: null,
-    rationale: "The effect calls an owner-local fetch callback, so its external command and dependency ownership are unresolved.",
+    rationale:
+      "The effect calls an owner-local fetch callback, so its external command and dependency ownership are unresolved.",
     target: "expensify-report-add-attachment",
   },
   {
@@ -5670,7 +6431,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 33,
     name: null,
-    rationale: "Membership in the changed exemption list drives one external navigation correction after commit.",
+    rationale:
+      "Membership in the changed exemption list drives one external navigation correction after commit.",
     target: "expensify-force-2fa",
   },
   {
@@ -5679,16 +6441,18 @@ export const goldCases = [
     hook: "useEffect",
     line: 64,
     name: null,
-    rationale: "The file loader owns effect-local success and failure callbacks that update React state, so it is not one guarded external command.",
+    rationale:
+      "The file loader owns effect-local success and failure callbacks that update React state, so it is not one guarded external command.",
     target: "expensify-new-chat-confirm",
   },
-  ...[26, 35].map(line => ({
+  ...[26, 35].map((line) => ({
     action: "keep-effect" as const,
     file: "ExpenseDefaultsSetter.tsx",
     hook: "useEffect" as const,
     line,
     name: null,
-    rationale: "React dependency changes intentionally synchronize one default across the current external transaction collection.",
+    rationale:
+      "React dependency changes intentionally synchronize one default across the current external transaction collection.",
     target: "expensify-expense-defaults",
   })),
   {
@@ -5697,7 +6461,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 674,
     name: null,
-    rationale: "Changed search inputs drive one guarded command on the committed list ref after React commits.",
+    rationale:
+      "Changed search inputs drive one guarded command on the committed list ref after React commits.",
     target: "expensify-search-autocomplete",
   },
   {
@@ -5706,7 +6471,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 269,
     name: null,
-    rationale: "A changed split path drives one external history replacement after path normalization.",
+    rationale:
+      "A changed split path drives one external history replacement after path normalization.",
     target: "outline-split-view",
   },
   {
@@ -5715,7 +6481,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 89,
     name: null,
-    rationale: "Changed collection identity drives one canonical history replacement after imported path construction.",
+    rationale:
+      "Changed collection identity drives one canonical history replacement after imported path construction.",
     target: "outline-collection",
   },
   {
@@ -5724,7 +6491,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 19,
     name: null,
-    rationale: "The committed route error is synchronized to Sentry when its React identity changes.",
+    rationale:
+      "The committed route error is synchronized to Sentry when its React identity changes.",
     target: "genie-courses",
   },
   {
@@ -5742,7 +6510,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 43,
     name: null,
-    rationale: "The effect owns hash listeners plus highlight timers and removes every registered resource.",
+    rationale:
+      "The effect owns hash listeners plus highlight timers and removes every registered resource.",
     target: "genie-courses",
   },
   {
@@ -5751,7 +6520,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 138,
     name: null,
-    rationale: "The adjacent ownership directive keeps this Query-backed mark-read mutation in React lifecycle timing.",
+    rationale:
+      "The adjacent ownership directive keeps this Query-backed mark-read mutation in React lifecycle timing.",
     target: "genie-courses",
   },
   {
@@ -5760,7 +6530,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 155,
     name: null,
-    rationale: "The adjacent ownership directive keeps third-party Tabby DOM initialization in React lifecycle timing.",
+    rationale:
+      "The adjacent ownership directive keeps third-party Tabby DOM initialization in React lifecycle timing.",
     target: "genie-courses",
   },
   {
@@ -5769,7 +6540,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 237,
     name: null,
-    rationale: "The effect configures the Tamara widget and guards stale asynchronous completion with React cleanup.",
+    rationale:
+      "The effect configures the Tamara widget and guards stale asynchronous completion with React cleanup.",
     target: "genie-courses",
   },
   {
@@ -5778,7 +6550,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 91,
     name: null,
-    rationale: "The effect owns external script loading and prevents stale promise completion from publishing.",
+    rationale:
+      "The effect owns external script loading and prevents stale promise completion from publishing.",
     target: "genie-courses",
   },
   {
@@ -5787,7 +6560,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 58,
     name: null,
-    rationale: "Browser return-URL reconciliation owns delayed Query invalidation timers and their cleanup.",
+    rationale:
+      "Browser return-URL reconciliation owns delayed Query invalidation timers and their cleanup.",
     target: "genie-courses",
   },
   {
@@ -5796,7 +6570,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 141,
     name: null,
-    rationale: "The adjacent ownership directive preserves React replay for guarded hydration persistence.",
+    rationale:
+      "The adjacent ownership directive preserves React replay for guarded hydration persistence.",
     target: "genie-courses",
   },
   {
@@ -5805,7 +6580,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 345,
     name: null,
-    rationale: "The effect owns the reduced-motion media-query listener and removes it at the React boundary.",
+    rationale:
+      "The effect owns the reduced-motion media-query listener and removes it at the React boundary.",
     target: "genie-courses",
   },
   {
@@ -5814,7 +6590,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 356,
     name: null,
-    rationale: "The translated terminal timer chain follows React dependencies and is cancelled during cleanup.",
+    rationale:
+      "The translated terminal timer chain follows React dependencies and is cancelled during cleanup.",
     target: "genie-courses",
   },
   {
@@ -5823,7 +6600,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 32,
     name: null,
-    rationale: "The effect owns an IntersectionObserver and disconnects the same observer during cleanup.",
+    rationale:
+      "The effect owns an IntersectionObserver and disconnects the same observer during cleanup.",
     target: "genie-courses",
   },
   {
@@ -5832,7 +6610,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 134,
     name: null,
-    rationale: "The effect owns an observer and animation frames and cancels both external resources.",
+    rationale:
+      "The effect owns an observer and animation frames and cancels both external resources.",
     target: "genie-courses",
   },
   {
@@ -5850,7 +6629,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 353,
     name: null,
-    rationale: "Unmount cleanup revokes component-owned blob preview URLs using a fresh imperative snapshot.",
+    rationale:
+      "Unmount cleanup revokes component-owned blob preview URLs using a fresh imperative snapshot.",
     target: "genie-courses",
   },
   {
@@ -5859,7 +6639,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 259,
     name: null,
-    rationale: "Scrolling the active row requires the target ref to be committed after React renders it.",
+    rationale:
+      "Scrolling the active row requires the target ref to be committed after React renders it.",
     target: "genie-courses",
   },
   {
@@ -5868,7 +6649,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 79,
     name: null,
-    rationale: "The adjacent ownership directive keeps lesson-token prefetch tied to React lesson props.",
+    rationale:
+      "The adjacent ownership directive keeps lesson-token prefetch tied to React lesson props.",
     target: "genie-courses",
   },
   {
@@ -5877,7 +6659,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 153,
     name: null,
-    rationale: "The adjacent ownership directive preserves the committed-DOM timing of the keyed lesson scroller reset.",
+    rationale:
+      "The adjacent ownership directive preserves the committed-DOM timing of the keyed lesson scroller reset.",
     target: "genie-courses",
   },
   {
@@ -5886,7 +6669,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 60,
     name: null,
-    rationale: "The effect owns interval and page listeners, removes them, and flushes final telemetry.",
+    rationale:
+      "The effect owns interval and page listeners, removes them, and flushes final telemetry.",
     target: "genie-courses",
   },
   {
@@ -5895,7 +6679,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 56,
     name: null,
-    rationale: "The adjacent ownership directive preserves the committed-DOM timing required by scrollIntoView.",
+    rationale:
+      "The adjacent ownership directive preserves the committed-DOM timing required by scrollIntoView.",
     target: "genie-courses",
   },
   {
@@ -5913,7 +6698,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 20,
     name: null,
-    rationale: "The adjacent ownership directive keeps session identity synchronization in React post-commit timing.",
+    rationale:
+      "The adjacent ownership directive keeps session identity synchronization in React post-commit timing.",
     target: "genie-courses",
   },
   {
@@ -5922,7 +6708,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 57,
     name: null,
-    rationale: "The adjacent ownership directive keeps adjacent-page prefetch tied to React page availability props.",
+    rationale:
+      "The adjacent ownership directive keeps adjacent-page prefetch tied to React page availability props.",
     target: "genie-courses",
   },
   {
@@ -5931,7 +6718,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 199,
     name: null,
-    rationale: "The Query-owned lesson is invalidated after Query reports that video processing is ready.",
+    rationale:
+      "The Query-owned lesson is invalidated after Query reports that video processing is ready.",
     target: "genie-courses",
   },
   {
@@ -5940,7 +6728,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 38,
     name: null,
-    rationale: "The adjacent ownership directive preserves React cleanup for the event-created clipboard timer.",
+    rationale:
+      "The adjacent ownership directive preserves React cleanup for the event-created clipboard timer.",
     target: "genie-courses",
   },
   {
@@ -5949,7 +6738,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 414,
     name: null,
-    rationale: "The adjacent ownership directive preserves each row's React-lifetime clipboard timer cleanup.",
+    rationale:
+      "The adjacent ownership directive preserves each row's React-lifetime clipboard timer cleanup.",
     target: "genie-courses",
   },
   {
@@ -5967,7 +6757,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 309,
     name: null,
-    rationale: "The adjacent ownership directive preserves React-lifetime invalidation of in-flight BNPL work.",
+    rationale:
+      "The adjacent ownership directive preserves React-lifetime invalidation of in-flight BNPL work.",
     target: "genie-courses",
   },
   {
@@ -5976,7 +6767,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 222,
     name: null,
-    rationale: "The calendar library's focused modifier can only be applied to a committed button ref.",
+    rationale:
+      "The calendar library's focused modifier can only be applied to a committed button ref.",
     target: "genie-courses",
   },
   {
@@ -5985,7 +6777,8 @@ export const goldCases = [
     hook: "useState",
     line: 68,
     name: "isValidateCodeFormVisible",
-    rationale: "The state is assigned only from an exact dependency path; the additional dependency can only repeat the same assignment.",
+    rationale:
+      "The state is assigned only from an exact dependency path; the additional dependency can only repeat the same assignment.",
     target: "expensify-contact-method-details",
   },
   {
@@ -5994,7 +6787,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 183,
     name: null,
-    rationale: "The effect only mirrors an exact dependency path into otherwise-derived React state.",
+    rationale:
+      "The effect only mirrors an exact dependency path into otherwise-derived React state.",
     target: "expensify-contact-method-details",
   },
   {
@@ -6003,7 +6797,8 @@ export const goldCases = [
     hook: "useState",
     line: 71,
     name: "isLinkSurvey",
-    rationale: "The state is assigned only from a transparent comparison of its exact effect dependency.",
+    rationale:
+      "The state is assigned only from a transparent comparison of its exact effect dependency.",
     target: "formbricks-survey-menu-bar",
   },
   {
@@ -6012,7 +6807,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 91,
     name: null,
-    rationale: "The effect only mirrors a transparent comparison of its exact dependency into React state.",
+    rationale:
+      "The effect only mirrors a transparent comparison of its exact dependency into React state.",
     target: "formbricks-survey-menu-bar",
   },
   ...[
@@ -6025,7 +6821,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The empty-dependency effect returns an existing cleanup function without running setup work.",
+    rationale:
+      "The empty-dependency effect returns an existing cleanup function without running setup work.",
     target: target as string,
   })),
   {
@@ -6034,7 +6831,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 223,
     name: null,
-    rationale: "The returned call starts an interval and produces its disposer, so React must retain the paired setup and cleanup.",
+    rationale:
+      "The returned call starts an interval and produces its disposer, so React must retain the paired setup and cleanup.",
     target: "expensify-root-lifecycle",
   },
   ...[
@@ -6046,7 +6844,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The returned call performs mount-time form cleanup and returns no disposer; it is not an unmount callback value.",
+    rationale:
+      "The returned call performs mount-time form cleanup and returns no disposer; it is not an unmount callback value.",
     target: target as string,
   })),
   {
@@ -6055,7 +6854,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 39,
     name: null,
-    rationale: "The resolved callback starts Promise work that updates local peer state without a cleanup or stale-result proof, so its causal ownership remains under review.",
+    rationale:
+      "The resolved callback starts Promise work that updates local peer state without a cleanup or stale-result proof, so its causal ownership remains under review.",
     target: "memoria-src",
   },
   {
@@ -6064,7 +6864,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 173,
     name: null,
-    rationale: "The resolved callback performs guarded imperative map geometry work; resolving its binding does not prove a safer lifecycle replacement.",
+    rationale:
+      "The resolved callback performs guarded imperative map geometry work; resolving its binding does not prove a safer lifecycle replacement.",
     target: "expensify-map-reset-boundaries",
   },
   {
@@ -6073,7 +6874,8 @@ export const goldCases = [
     hook: "useState",
     line: 79,
     name: "userInteractedWithMap",
-    rationale: "React effects consume a callback that closes over this flag, so a ref-only rewrite would stop callback-identity invalidation.",
+    rationale:
+      "React effects consume a callback that closes over this flag, so a ref-only rewrite would stop callback-identity invalidation.",
     target: "expensify-map-reset-boundaries",
   },
   {
@@ -6082,7 +6884,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 58,
     name: null,
-    rationale: "The function-declaration callback is shared with focus lifecycle and mutates external selection state, so it remains an explicit review boundary.",
+    rationale:
+      "The function-declaration callback is shared with focus lifecycle and mutates external selection state, so it remains an explicit review boundary.",
     target: "expensify-search-page-setup",
   },
   {
@@ -6091,7 +6894,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 68,
     name: null,
-    rationale: "The uniquely resolved local callback clears an external report integration from React focus dependencies and is also reused by the app-focus event.",
+    rationale:
+      "The uniquely resolved local callback clears an external report integration from React focus dependencies and is also reused by the app-focus event.",
     target: "expensify-report-lifecycle",
   },
   {
@@ -6100,7 +6904,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 27,
     name: null,
-    rationale: "The uniquely resolved React useCallback reads a committed scroll ref and notifies after content-size commits, so React post-commit ordering is required.",
+    rationale:
+      "The uniquely resolved React useCallback reads a committed scroll ref and notifies after content-size commits, so React post-commit ordering is required.",
     target: "outline-icon-grid",
   },
   {
@@ -6109,7 +6914,8 @@ export const goldCases = [
     hook: "useState",
     line: 36,
     name: "comboboxOpen",
-    rationale: "The field owner performs category queries and option derivation while only the combobox renders this independently commanded open state.",
+    rationale:
+      "The field owner performs category queries and option derivation while only the combobox renders this independently commanded open state.",
     target: "hoalu-app",
   },
   {
@@ -6118,7 +6924,8 @@ export const goldCases = [
     hook: "useState",
     line: 46,
     name: "dialogOpen",
-    rationale: "Every value and setter use belongs to the stable Dialog subtree, so that extracted leaf can retain cohesive React ownership.",
+    rationale:
+      "Every value and setter use belongs to the stable Dialog subtree, so that extracted leaf can retain cohesive React ownership.",
     target: "hoalu-app",
   },
   ...[
@@ -6131,7 +6938,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: "comboboxOpen",
-    rationale: "Opening the controlled combobox should update its stable leaf without rerunning the field owner, query hooks, or option derivation.",
+    rationale:
+      "Opening the controlled combobox should update its stable leaf without rerunning the field owner, query hooks, or option derivation.",
     target: "hoalu-app",
   })),
   {
@@ -6140,7 +6948,8 @@ export const goldCases = [
     hook: "useState",
     line: 89,
     name: "isDragging",
-    rationale: "Drag events update only the stable drop-zone presentation, so an owner observable and leaf subscription avoid rebuilding the scanner and queue UI.",
+    rationale:
+      "Drag events update only the stable drop-zone presentation, so an owner observable and leaf subscription avoid rebuilding the scanner and queue UI.",
     target: "hoalu-app",
   },
   {
@@ -6150,7 +6959,8 @@ export const goldCases = [
     hook: "useState",
     line: 90,
     name: "isEncoding",
-    rationale: "Encoding starts before awaited file work and clears in finally, while one stable queue button renders the flag through a pure disabled projection; a leaf subscription removes the pre-await scanner render without moving the pending-files gate or async boundary.",
+    rationale:
+      "Encoding starts before awaited file work and clears in finally, while one stable queue button renders the flag through a pure disabled projection; a leaf subscription removes the pre-await scanner render without moving the pending-files gate or async boundary.",
     target: "hoalu-app",
   },
   {
@@ -6159,7 +6969,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 129,
     name: null,
-    rationale: "The empty-dependency effect performs no setup and only revokes object URLs from a stable ref during teardown.",
+    rationale:
+      "The empty-dependency effect performs no setup and only revokes object URLs from a stable ref during teardown.",
     target: "hoalu-app",
   },
   ...[
@@ -6171,7 +6982,8 @@ export const goldCases = [
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The empty-dependency setup invokes stable module initialization and has no cleanup or render-time capture.",
+    rationale:
+      "The empty-dependency setup invokes stable module initialization and has no cleanup or render-time capture.",
     target: "hoalu-app",
   })),
   {
@@ -6180,7 +6992,8 @@ export const goldCases = [
     hook: "useState",
     line: 21,
     name: "i",
-    rationale: "The interval-owned frame cursor is the animation hook's returned value and requires timer and owner-lifetime reasoning before changing its state model.",
+    rationale:
+      "The interval-owned frame cursor is the animation hook's returned value and requires timer and owner-lifetime reasoning before changing its state model.",
     target: "hoalu-app",
   },
   {
@@ -6189,7 +7002,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 22,
     name: null,
-    rationale: "The effect owns a dependency-sensitive interval and its paired cleanup, so React must retain the lifecycle.",
+    rationale:
+      "The effect owns a dependency-sensitive interval and its paired cleanup, so React must retain the lifecycle.",
     target: "hoalu-app",
   },
   {
@@ -6198,7 +7012,8 @@ export const goldCases = [
     hook: "useState",
     line: 10,
     name: "copied",
-    rationale: "The short feedback timer updates several parts of an already-small input control, so no material narrower boundary is proven.",
+    rationale:
+      "The short feedback timer updates several parts of an already-small input control, so no material narrower boundary is proven.",
     target: "hoalu-app",
   },
   {
@@ -6207,7 +7022,8 @@ export const goldCases = [
     hook: "useState",
     line: 13,
     name: "isOpen",
-    rationale: "The visibility value and every close command already belong to the one root Popover subtree, so another subscriber would rebuild the same cohesive render boundary.",
+    rationale:
+      "The visibility value and every close command already belong to the one root Popover subtree, so another subscriber would rebuild the same cohesive render boundary.",
     target: "hoalu-app",
   },
   {
@@ -6216,7 +7032,8 @@ export const goldCases = [
     hook: "useState",
     line: 16,
     name: "month",
-    rationale: "The calendar's editable month is synchronized from a changing controlled value and remains coupled to the cohesive date-picker boundary.",
+    rationale:
+      "The calendar's editable month is synchronized from a changing controlled value and remains coupled to the cohesive date-picker boundary.",
     target: "hoalu-app",
   },
   {
@@ -6225,7 +7042,8 @@ export const goldCases = [
     hook: "useEffect",
     line: 18,
     name: null,
-    rationale: "The effect synchronizes an editable calendar cursor from a controlled prop; no Legend observable source or event relocation is proven.",
+    rationale:
+      "The effect synchronizes an editable calendar cursor from a controlled prop; no Legend observable source or event relocation is proven.",
     target: "hoalu-app",
   },
   {
@@ -6234,7 +7052,8 @@ export const goldCases = [
     hook: "useState",
     line: 85,
     name: "isRendered",
-    rationale: "The post-mount latch never renders; only the selection-change event reads it, so a ref removes the mount-effect rerender without changing lifecycle timing.",
+    rationale:
+      "The post-mount latch never renders; only the selection-change event reads it, so a ref removes the mount-effect rerender without changing lifecycle timing.",
     target: "expensify-composer-lifecycle-state",
   },
   {
@@ -6243,7 +7062,8 @@ export const goldCases = [
     hook: "useState",
     line: 65,
     name: "isIdle",
-    rationale: "The value re-arms a focused-screen reaction through callback identity; replacing it with a ref alone would stop the focus effect from reacting to an idle transition.",
+    rationale:
+      "The value re-arms a focused-screen reaction through callback identity; replacing it with a ref alone would stop the focus effect from reacting to an idle transition.",
     target: "expensify-map-lifecycle-state",
   },
   {
@@ -6252,7 +7072,8 @@ export const goldCases = [
     hook: "useState",
     line: 68,
     name: "userInteractedWithMap",
-    rationale: "React and focus effects consume a callback that closes over this flag, so a ref-only rewrite would stop callback-identity invalidation.",
+    rationale:
+      "React and focus effects consume a callback that closes over this flag, so a ref-only rewrite would stop callback-identity invalidation.",
     target: "expensify-map-lifecycle-state",
   },
   {
@@ -6261,16 +7082,18 @@ export const goldCases = [
     hook: "useState",
     line: 89,
     name: "cachedItemIndex",
-    rationale: "The cached index participates in synchronous render-time list reconstruction and is only safe to remove as part of the coupled optimistic-item state model.",
+    rationale:
+      "The cached index participates in synchronous render-time list reconstruction and is only safe to remove as part of the coupled optimistic-item state model.",
     target: "expensify-stable-optimistic-state",
   },
-  ...([13, 14] as const).map(line => ({
+  ...([13, 14] as const).map((line) => ({
     action: "use-ref" as const,
     file: "useReviewDuplicatesNavigation.tsx",
     hook: "useState" as const,
     line,
     name: line === 13 ? "nextScreen" : "prevScreen",
-    rationale: "The effect-derived route cursor never renders and is consumed only by returned navigation commands; a ref is valid once the returned callback boundary is proven.",
+    rationale:
+      "The effect-derived route cursor never renders and is consumed only by returned navigation commands; a ref is valid once the returned callback boundary is proven.",
     target: "expensify-review-duplicates-state",
   })),
   {
@@ -6279,7 +7102,8 @@ export const goldCases = [
     hook: "useState",
     line: 48,
     name: "duplicatedWorkspaceAvatar",
-    rationale: "The asynchronously loaded file never renders and is consumed only by the eventual confirm command; conversion requires proving the memoized confirmation callback chain.",
+    rationale:
+      "The asynchronously loaded file never renders and is consumed only by the eventual confirm command; conversion requires proving the memoized confirmation callback chain.",
     target: "expensify-workspace-duplicate-features-state",
   },
   {
@@ -6288,7 +7112,8 @@ export const goldCases = [
     hook: "useState",
     line: 93,
     name: "shouldEnableValidation",
-    rationale: "Source resolution proves the form invokes validation from a child effect as well as commands; a ref could replace the effect's render-captured latch snapshot with a newer mutable value.",
+    rationale:
+      "Source resolution proves the form invokes validation from a child effect as well as commands; a ref could replace the effect's render-captured latch snapshot with a newer mutable value.",
     target: "expensify-workspace-new-room-state",
   },
   {
@@ -6297,7 +7122,8 @@ export const goldCases = [
     hook: "useState",
     line: 46,
     name: "isValidatingFiles",
-    rationale: "The returned validation command reads this reentrancy guard before writing it; a ref would expose the first synchronous call's write to a second call before React commits a new render snapshot.",
+    rationale:
+      "The returned validation command reads this reentrancy guard before writing it; a ref would expose the first synchronous call's write to a second call before React commits a new render snapshot.",
     target: "expensify-files-validation-state",
   },
   {
@@ -6306,7 +7132,8 @@ export const goldCases = [
     hook: "useState",
     line: 46,
     name: "isCustomMode",
-    rationale: "The synchronized mode is read by an immediately invoked render computation that controls the selected value and custom-range mount.",
+    rationale:
+      "The synchronized mode is read by an immediately invoked render computation that controls the selected value and custom-range mount.",
     target: "formbricks-dashboard-date-filter-state",
   },
   {
@@ -6315,7 +7142,8 @@ export const goldCases = [
     hook: "useState",
     line: 198,
     name: "maxResults",
-    rationale: "The pagination cursor is consumed throughout an immediately invoked render-time option builder, so updates must invalidate the hook owner.",
+    rationale:
+      "The pagination cursor is consumed throughout an immediately invoked render-time option builder, so updates must invalidate the hook owner.",
     target: "expensify-search-selector-render-state",
   },
   {
@@ -6324,7 +7152,8 @@ export const goldCases = [
     hook: "useState",
     line: 24,
     name: "validatedUrl",
-    rationale: "The validated URL never renders directly and is consumed only by the submit event; the separately rendered status already owns validation feedback.",
+    rationale:
+      "The validated URL never renders directly and is consumed only by the submit event; the separately rendered status already owns validation feedback.",
     target: "outline-switch-host-state",
   },
   {
@@ -6333,7 +7162,8 @@ export const goldCases = [
     hook: "useState",
     line: 121,
     name: "itemsToHighlight",
-    rationale: "Highlight membership renders inside the list's renderItem callback; an owner-lifetime observable with per-row membership subscribers can avoid rebuilding the full selection list, but this requires an explicit rendered-callback boundary proof.",
+    rationale:
+      "Highlight membership renders inside the list's renderItem callback; an owner-lifetime observable with per-row membership subscribers can avoid rebuilding the full selection list, but this requires an explicit rendered-callback boundary proof.",
     target: "expensify-base-selection-list",
   },
   {
@@ -6342,7 +7172,8 @@ export const goldCases = [
     hook: "useState",
     line: 16,
     name: "minutes",
-    rationale: "The timer counter never renders, but a correct ref migration must snapshot the old value before applying the functional update so the following reload threshold keeps React's render-snapshot timing.",
+    rationale:
+      "The timer counter never renders, but a correct ref migration must snapshot the old value before applying the functional update so the following reload threshold keeps React's render-snapshot timing.",
     target: "outline-auto-refresh",
   },
   {
@@ -6351,7 +7182,8 @@ export const goldCases = [
     hook: "useState",
     line: 27,
     name: "attachmentErrors",
-    rationale: "The hook publishes a state-reading getter to render consumers; React state is the notification mechanism that refreshes that getter.",
+    rationale:
+      "The hook publishes a state-reading getter to render consumers; React state is the notification mechanism that refreshes that getter.",
     target: "expensify-attachment-errors",
   },
   {
@@ -6360,7 +7192,8 @@ export const goldCases = [
     hook: "useState",
     line: 35,
     name: "attachmentLoaded",
-    rationale: "A Context value publishes a getter over this state, so replacing it with a ref would stop Provider updates from reaching render consumers.",
+    rationale:
+      "A Context value publishes a getter over this state, so replacing it with a ref would stop Provider updates from reaching render consumers.",
     target: "expensify-attachment-state-provider",
   },
   {
@@ -6369,16 +7202,18 @@ export const goldCases = [
     hook: "useState",
     line: 117,
     name: "reportRHPWidthHints",
-    rationale: "A Context action getter exposes this state to downstream lifecycle consumers; local ref conversion cannot preserve publication semantics.",
+    rationale:
+      "A Context action getter exposes this state to downstream lifecycle consumers; local ref conversion cannot preserve publication semantics.",
     target: "expensify-wide-rhp",
   },
-  ...([114, 117] as const).map(line => ({
+  ...([114, 117] as const).map((line) => ({
     action: "review-state" as const,
     file: "PopoverReportActionContextMenu.tsx",
     hook: "useState" as const,
     line,
     name: line === 114 ? "composerToRefocusOnClose" : "isContextMenuOpening",
-    rationale: "useImperativeHandle exposes a raw state snapshot; a ref-only conversion would leave that public snapshot stale unless the API also changes.",
+    rationale:
+      "useImperativeHandle exposes a raw state snapshot; a ref-only conversion would leave that public snapshot stale unless the API also changes.",
     target: "expensify-context-menu",
   })),
   {
@@ -6387,16 +7222,20 @@ export const goldCases = [
     hook: "useState",
     line: 31,
     name: "statusBarStyle",
-    rationale: "The style is a previous-command snapshot inside one effect-owned memoized callback; a ref preserves the comparison while removing only the state-driven callback refresh and listener churn.",
+    rationale:
+      "The style is a previous-command snapshot inside one effect-owned memoized callback; a ref preserves the comparison while removing only the state-driven callback refresh and listener churn.",
     target: "expensify-custom-status-bar",
   },
-  ...([47, 48, 49, 50, 51] as const).map(line => ({
+  ...([47, 48, 49, 50, 51] as const).map((line) => ({
     action: "use-ref" as const,
     file: "index.tsx",
     hook: "useState" as const,
     line,
-    name: ["isMouseDown", "initialScrollLeft", "initialScrollTop", "initialX", "initialY"][line - 47]!,
-    rationale: "This pointer snapshot can become latest-value ref storage only with a stable-listener rewrite that preserves current effect registration cadence.",
+    name: ["isMouseDown", "initialScrollLeft", "initialScrollTop", "initialX", "initialY"][
+      line - 47
+    ]!,
+    rationale:
+      "This pointer snapshot can become latest-value ref storage only with a stable-listener rewrite that preserves current effect registration cadence.",
     target: "expensify-image-view",
   })),
   ...[
@@ -6408,7 +7247,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: "The command snapshot never renders, and source resolution proves its custom-hook getter is refreshed through a ref and invoked only from effect-registered navigation commands.",
+    rationale:
+      "The command snapshot never renders, and source resolution proves its custom-hook getter is refreshed through a ref and invoked only from effect-registered navigation commands.",
     target: target as string,
   })),
   ...[
@@ -6433,12 +7273,7 @@ export const goldCases = [
     ["tree-wallet", "components/onboarding/news-step.tsx", 30, "buttonReady"],
     ["tree-wallet", "components/onboarding/news-step.tsx", 31, "svgReady"],
     ["legend-music", "components/dnd/DraggableItem.tsx", 64, "fadeOg"],
-    [
-      "open-webui-search-archived-chats",
-      "component.tsx",
-      37,
-      "isFocused",
-    ],
+    ["open-webui-search-archived-chats", "component.tsx", 37, "isFocused"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
     file: file as string,
@@ -6465,7 +7300,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: [40, 41, 44][index]!,
     name,
-    rationale: "The avatar crop payload, open flag, and first-open latch form one atomic persistent-dialog model; one stable gated subscriber preserves lazy mounting while avatar chrome stays outside crop transitions.",
+    rationale:
+      "The avatar crop payload, open flag, and first-open latch form one atomic persistent-dialog model; one stable gated subscriber preserves lazy mounting while avatar chrome stays outside crop transitions.",
     target: "tree-map",
   })),
   {
@@ -6474,7 +7310,8 @@ export const goldCases = [
     hook: "useState",
     line: 25,
     name: "hasOpenedStudio",
-    rationale: "The first-open latch gates the same lazy studio whose nullable company payload owns visibility; atomic observable opens preserve tracking order, null-only closes preserve the mounted exit surface, and the report list stays outside studio transitions.",
+    rationale:
+      "The first-open latch gates the same lazy studio whose nullable company payload owns visibility; atomic observable opens preserve tracking order, null-only closes preserve the mounted exit surface, and the report list stays outside studio transitions.",
     target: "tree-map",
   },
   {
@@ -6483,19 +7320,21 @@ export const goldCases = [
     hook: "useState",
     line: 46,
     name: "newFields",
-    rationale: "Each new-species property has an independent controlled edit command; property subscribers and one validation leaf keep the source list, warning, and dialog shell outside keystroke renders while merge snapshots the complete draft once.",
+    rationale:
+      "Each new-species property has an independent controlled edit command; property subscribers and one validation leaf keep the source list, warning, and dialog shell outside keystroke renders while merge snapshots the complete draft once.",
     target: "tree-map",
   },
   ...[
     "components/tree-certificate/landscape-certificate.tsx",
     "components/tree-certificate/portrait-certificate.tsx",
-  ].map(file => ({
+  ].map((file) => ({
     action: "use-observable" as const,
     file,
     hook: "useState" as const,
     line: file.includes("landscape") ? 28 : 27,
     name: "scale",
-    rationale: "The React Native layout event changes one pure style prop on one stable host surface; a reactive native component can update that prop without rebuilding the 25-element certificate owner.",
+    rationale:
+      "The React Native layout event changes one pure style prop on one stable host surface; a reactive native component can update that prop without rebuilding the 25-element certificate owner.",
     target: "tree-wallet",
   })),
   {
@@ -6504,7 +7343,8 @@ export const goldCases = [
     hook: "useState",
     line: 34,
     name: "isFocused",
-    rationale: "The React Native focus events change one pure style prop on the unlinked branch's stable root View; an owner-lifetime observable and reactive native prop preserve the linked alternate return while avoiding the thirteen-element owner render.",
+    rationale:
+      "The React Native focus events change one pure style prop on the unlinked branch's stable root View; an owner-lifetime observable and reactive native prop preserve the linked alternate return while avoiding the thirteen-element owner render.",
     target: "tree-wallet",
   },
   {
@@ -6513,7 +7353,8 @@ export const goldCases = [
     hook: "useState",
     line: 35,
     name: "isHovered",
-    rationale: "The React Native hover events change one data prop on the stable root View; a reactive native component can update that prop without rebuilding the twelve-element playback owner.",
+    rationale:
+      "The React Native hover events change one data prop on the stable root View; a reactive native component can update that prop without rebuilding the twelve-element playback owner.",
     target: "legend-music",
   },
   {
@@ -6522,7 +7363,8 @@ export const goldCases = [
     hook: "useState",
     line: 80,
     name: "elapsed",
-    rationale: "The preserved interval writes only presentation time; stable keyed stage rows and the progress leaf can subscribe without rebuilding the generation shell five times per second.",
+    rationale:
+      "The preserved interval writes only presentation time; stable keyed stage rows and the progress leaf can subscribe without rebuilding the generation shell five times per second.",
     target: "tree-map",
   },
   ...["showLevelInfoPopup", "numberOfLevelTrees"].map((name, index) => ({
@@ -6531,7 +7373,8 @@ export const goldCases = [
     hook: "useState" as const,
     line: 35 + index,
     name,
-    rationale: "The selected level and popup visibility open together and feed one stable source-resolved popup; one observable model preserves the atomic open while keeping the thirty-one-element card outside popup updates.",
+    rationale:
+      "The selected level and popup visibility open together and feed one stable source-resolved popup; one observable model preserves the atomic open while keeping the thirty-one-element card outside popup updates.",
     target: "tree-wallet-vite-user-card",
   })),
 ] as const satisfies readonly GoldHookCase[];
@@ -6541,70 +7384,80 @@ export const goldStateGroups = [
     file: "UserCard.tsx",
     line: 35,
     members: ["showLevelInfoPopup", "numberOfLevelTrees"],
-    rationale: "The literal level payload and visibility flag are one persistent popup model; assign both atomically on open, keep close as a leaf write, and subscribe only around the stable LevelInfoPopup call site.",
+    rationale:
+      "The literal level payload and visibility flag are one persistent popup model; assign both atomically on open, keep close as a leaf write, and subscribe only around the stable LevelInfoPopup call site.",
     target: "tree-wallet-vite-user-card",
   },
   {
     file: "components/avatar-update.tsx",
     line: 40,
     members: ["selectedFile", "isCropModalOpen", "cropModalReady"],
-    rationale: "The crop payload, visibility, and monotonic first-open latch must migrate as one observable dialog model so open and close transitions remain atomic and the lazy modal stays mounted after first use.",
+    rationale:
+      "The crop payload, visibility, and monotonic first-open latch must migrate as one observable dialog model so open and close transitions remain atomic and the lazy modal stays mounted after first use.",
     target: "tree-map",
   },
   {
     file: "components/reports/progress-report-panel.tsx",
     line: 23,
     members: ["studioCompany", "hasOpenedStudio"],
-    rationale: "The nullable studio payload and monotonic first-open latch are one persistent lazy-dialog model; opening publishes both atomically while closing clears only the payload so exit rendering remains mounted.",
+    rationale:
+      "The nullable studio payload and monotonic first-open latch are one persistent lazy-dialog model; opening publishes both atomically while closing clears only the payload so exit rendering remains mounted.",
     target: "tree-map",
   },
   {
     file: "components/cockpit/ai-rail.tsx",
     line: 66,
     members: ["editingId", "editText"],
-    rationale: "The keyed inline editor must migrate as one observable draft so opening assigns the cursor and text atomically while typing and null-only closes update only their leaf fields.",
+    rationale:
+      "The keyed inline editor must migrate as one observable draft so opening assigns the cursor and text atomically while typing and null-only closes update only their leaf fields.",
     target: "tree-map",
   },
   {
     file: "components/account-management/reset-password-dialog.tsx",
     line: 18,
     members: ["generatedPassword", "copied"],
-    rationale: "The payload-gated password content and its nested timed feedback share one close reset; preserve that transition as one batched observable model.",
+    rationale:
+      "The payload-gated password content and its nested timed feedback share one close reset; preserve that transition as one batched observable model.",
     target: "tree-map",
   },
   {
     file: "components/companies/companies-grid-view-container.tsx",
     line: 26,
     members: ["isSelectionMode", "selectedCompanyIds"],
-    rationale: "Selection mode and its ID collection enter and cancel together; keep those transitions atomic while row toggles update only the collection leaf.",
+    rationale:
+      "Selection mode and its ID collection enter and cancel together; keep those transitions atomic while row toggles update only the collection leaf.",
     target: "tree-map",
   },
   {
     file: "components/MediaLibrary/Sidebar.tsx",
     line: 65,
     members: ["tempPlaylistId", "tempPlaylistName"],
-    rationale: "The temporary playlist cursor and editable name open and reset as one atomic draft while controlled text edits update only the name leaf.",
+    rationale:
+      "The temporary playlist cursor and editable name open and reset as one atomic draft while controlled text edits update only the name leaf.",
     target: "legend-music",
   },
   {
     file: "components/MediaLibrary/Sidebar.tsx",
     line: 68,
     members: ["editingPlaylistId", "editingPlaylistName"],
-    rationale: "The rename cursor and editable name open and reset as one atomic draft while controlled text edits update only the name leaf.",
+    rationale:
+      "The rename cursor and editable name open and reset as one atomic draft while controlled text edits update only the name leaf.",
     target: "legend-music",
   },
   {
     file: "index.tsx",
     line: 47,
     members: ["isMouseDown", "initialScrollLeft", "initialScrollTop", "initialX", "initialY"],
-    rationale: "The pointer-down command writes one listener-only snapshot group; migrate every member together so that event removes one owner render and listener callbacks keep one current ref model.",
+    rationale:
+      "The pointer-down command writes one listener-only snapshot group; migrate every member together so that event removes one owner render and listener callbacks keep one current ref model.",
     target: "expensify-image-view",
   },
   {
     file: "components/gift-trees/reschedule-batch-modal.tsx",
     line: 32,
     members: ["date", "time"],
-    rationale: "Date and time are one effect-synchronized picker draft and must migrate atomically.",
+    rationale:
+      "Date and time are one effect-synchronized picker draft and must migrate atomically.",
     target: "tree-map",
   },
   {
@@ -6632,14 +7485,16 @@ export const goldStateGroups = [
     file: "AddressStep.tsx",
     line: 71,
     members: ["currentCountry", "state", "city", "zipcode"],
-    rationale: "TypeScript casts are transport-only; the cascading address fields remain one atomic draft at the AddressForm boundary.",
+    rationale:
+      "TypeScript casts are transport-only; the cascading address fields remain one atomic draft at the AddressForm boundary.",
     target: "expensify-bank-address-step",
   },
   {
     file: "FileUpload.tsx",
     line: 41,
     members: ["containerHeight", "uploadViewHeight", "altMethodsHeight"],
-    rationale: "All three measurements drive one derived visibility decision and should produce one observable layout model.",
+    rationale:
+      "All three measurements drive one derived visibility decision and should produce one observable layout model.",
     target: "expensify-camera-file-upload",
   },
   {
@@ -6653,28 +7508,32 @@ export const goldStateGroups = [
     file: "generate-personal-link-modal.tsx",
     line: 55,
     members: ["selectedSurveyId", "generatedUrl"],
-    rationale: "Selection and generated URL share one modal-close reset but retain their command snapshot across the async generation boundary.",
+    rationale:
+      "Selection and generated URL share one modal-close reset but retain their command snapshot across the async generation boundary.",
     target: "formbricks-personal-link-modal",
   },
   {
     file: "components/account-management/accounts-section.tsx",
     line: 185,
     members: ["linkTarget", "linkOpen"],
-    rationale: "The target/open pair is one dialog lifecycle and should produce one grouped instruction.",
+    rationale:
+      "The target/open pair is one dialog lifecycle and should produce one grouped instruction.",
     target: "tree-map",
   },
   {
     file: "when-to-send-card.tsx",
     line: 42,
     members: ["isEditActionModalOpen", "editingActionClass"],
-    rationale: "The persistent edit payload and visibility flag form one atomic dialog model behind one bounded payload gate.",
+    rationale:
+      "The persistent edit payload and visibility flag form one atomic dialog model behind one bounded payload gate.",
     target: "formbricks-when-to-send",
   },
   {
     file: "feedback-records-table.tsx",
     line: 113,
     members: ["drawerRecordId", "isDrawerOpen"],
-    rationale: "The undefined-initialized record cursor and visibility flag form one always-mounted drawer model.",
+    rationale:
+      "The undefined-initialized record cursor and visibility flag form one always-mounted drawer model.",
     target: "formbricks-feedback-records",
   },
   {
@@ -6695,101 +7554,115 @@ export const goldStateGroups = [
       "isDetailsOpen",
       "isAddAttachmentsOpen",
     ],
-    rationale: "One action dispatcher selects a request and exactly one dialog kind; emit one discriminated observable model.",
+    rationale:
+      "One action dispatcher selects a request and exactly one dialog kind; emit one discriminated observable model.",
     target: "tree-map",
   },
   {
     file: "components/operations/deliveries-table.tsx",
     line: 43,
     members: ["signatureModalOpen", "selectedDeliveryId"],
-    rationale: "The signature payload and open flag form one persistent modal model behind a bounded logical-and gate.",
+    rationale:
+      "The signature payload and open flag form one persistent modal model behind a bounded logical-and gate.",
     target: "tree-map",
   },
   {
     file: "components/operations/deliveries-table.tsx",
     line: 45,
     members: ["alertModalOpen", "selectedDeliveryForAlert"],
-    rationale: "The alert payload and open flag form one modal model whose completion callback clears the payload after close.",
+    rationale:
+      "The alert payload and open flag form one modal model whose completion callback clears the payload after close.",
     target: "tree-map",
   },
   {
     file: "components/operations/landowners-table.tsx",
     line: 87,
     members: ["landownerToDelete", "deleteDialogOpen"],
-    rationale: "The delete payload and open flag form one bounded dialog model while close completion retains its separate payload-clear timing.",
+    rationale:
+      "The delete payload and open flag form one bounded dialog model while close completion retains its separate payload-clear timing.",
     target: "tree-map",
   },
   {
     file: "routes/(app)/_private/_map/gift-trees/scheduled-history/index.tsx",
     line: 29,
     members: null,
-    rationale: "Payload-derived child props contain unresolved calculations, so the full render cut is not proven.",
+    rationale:
+      "Payload-derived child props contain unresolved calculations, so the full render cut is not proven.",
     target: "tree-map",
   },
 ] as const satisfies readonly GoldStateGroupCase[];
 
 export const goldPracticeCases = [
-  ...([79, 80] as const).map(line => ({
+  ...([79, 80] as const).map((line) => ({
     action: "replace-legacy-use-value" as const,
     file: "component.tsx",
     line,
-    rationale: "Legend State documents useValue as the supported replacement for the legacy useSelector hook, with the observable argument unchanged.",
+    rationale:
+      "Legend State documents useValue as the supported replacement for the legacy useSelector hook, with the observable argument unchanged.",
     target: "open-webui-form-chat-input",
   })),
   {
     action: "batch-observable-writes",
     file: "use-attached-files.ts",
     line: 39,
-    rationale: "Resetting files and images is one attachment transaction across two observable roots.",
+    rationale:
+      "Resetting files and images is one attachment transaction across two observable roots.",
     target: "open-webui-attached-files",
   },
   {
     action: "batch-observable-writes",
     file: "apps/web/src/features/shell/command-palette/command-palette.tsx",
     line: 112,
-    rationale: "Query text and active-row reset are one command-palette transition and must publish atomically.",
+    rationale:
+      "Query text and active-row reset are one command-palette transition and must publish atomically.",
     target: "genie-courses",
   },
   {
     action: "toggle-observable",
     file: "apps/web/src/features/player/comments-section.tsx",
     line: 205,
-    rationale: "The updater is exactly the negation of the current component-local observable boolean.",
+    rationale:
+      "The updater is exactly the negation of the current component-local observable boolean.",
     target: "genie-courses",
   },
   {
     action: "toggle-observable",
     file: "apps/web/src/routes/_admin/admin/feedback.tsx",
     line: 356,
-    rationale: "The command flips one proven observable boolean using an untracked read of the same static path.",
+    rationale:
+      "The command flips one proven observable boolean using an untracked read of the same static path.",
     target: "genie-courses",
   },
   {
     action: "toggle-observable",
     file: "apps/web/src/routes/_admin/admin/feedback.tsx",
     line: 604,
-    rationale: "The command flips one proven observable boolean using an untracked read of the same static path.",
+    rationale:
+      "The command flips one proven observable boolean using an untracked read of the same static path.",
     target: "genie-courses",
   },
   {
     action: "replace-legacy-use-value",
     file: "legend-kit/react-native/windowDimensions.tsx",
     line: 40,
-    rationale: "Legend State documents useValue as the supported replacement for the legacy useSelector hook, with the observable argument unchanged.",
+    rationale:
+      "Legend State documents useValue as the supported replacement for the legacy useSelector hook, with the observable argument unchanged.",
     target: "legend-music",
   },
   {
     action: "use-peek-for-snapshot",
     file: "feature/discover/pages/DiscoverFiltersScreen.tsx",
     line: 39,
-    rationale: "The React state initializer takes one non-reactive snapshot of the committed filter store.",
+    rationale:
+      "The React state initializer takes one non-reactive snapshot of the committed filter store.",
     target: "memoria-src",
   },
   {
     action: "use-peek-for-snapshot",
     file: "feature/discover/pages/DiscoverScreen.tsx",
     line: 120,
-    rationale: "The genre-chip event reads the current store value to build one command payload; it is not a reactive selector.",
+    rationale:
+      "The genre-chip event reads the current store value to build one command payload; it is not a reactive selector.",
     target: "memoria-src",
   },
   {
@@ -6803,7 +7676,8 @@ export const goldPracticeCases = [
     action: "use-peek-for-snapshot",
     file: "feature/library/pages/LibraryFiltersScreen.tsx",
     line: 77,
-    rationale: "The React state initializer clones one non-reactive snapshot of the committed library filters.",
+    rationale:
+      "The React state initializer clones one non-reactive snapshot of the committed library filters.",
     target: "memoria-src",
   },
   {
@@ -6845,105 +7719,120 @@ export const goldPracticeCases = [
     action: "batch-observable-writes",
     file: "backend/utils/jobQueue.ts",
     line: 64,
-    rationale: "Queued and active counts are one queue snapshot; batching preserves sequential property evaluation.",
+    rationale:
+      "Queued and active counts are one queue snapshot; batching preserves sequential property evaluation.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 270,
-    rationale: "The selector only unwraps the proven seeds observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven seeds observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/ratings/ratingOverlayStore.ts",
     line: 29,
-    rationale: "The selector reads one dynamically keyed observable leaf, and the explicitly typed key parameter is immutable for that hook render.",
+    rationale:
+      "The selector reads one dynamically keyed observable leaf, and the explicitly typed key parameter is immutable for that hook render.",
     target: "memoria-src",
   },
   {
     action: "narrow-observable-write",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 115,
-    rationale: "The aggregate patch changes one season entry, so writing that keyed child avoids cloning and replacing the complete patch map.",
+    rationale:
+      "The aggregate patch changes one season entry, so writing that keyed child avoids cloning and replacing the complete patch map.",
     target: "memoria-src",
   },
   {
     action: "narrow-observable-write",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 123,
-    rationale: "Dropping one event changes one keyed record entry and does not require replacing the complete event map.",
+    rationale:
+      "Dropping one event changes one keyed record entry and does not require replacing the complete event map.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 272,
-    rationale: "The selector only unwraps the proven aggregate-patches observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven aggregate-patches observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 273,
-    rationale: "The selector only unwraps the proven dropped-events observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven dropped-events observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 395,
-    rationale: "The selector only unwraps the proven seeds observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven seeds observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 426,
-    rationale: "The selector only unwraps the proven seeds observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven seeds observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/mediaDetailLive.ts",
     line: 504,
-    rationale: "The selector only unwraps the proven dropped-events observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven dropped-events observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/userMediaStore.ts",
     line: 55,
-    rationale: "The selector only unwraps the proven user-media observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven user-media observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
     action: "narrow-observable-write",
     file: "backend/api/library/userMediaStore.ts",
     line: 74,
-    rationale: "An optimistic patch replaces one media entry; the synced observable supports a keyed child write without cloning the full shared map.",
+    rationale:
+      "An optimistic patch replaces one media entry; the synced observable supports a keyed child write without cloning the full shared map.",
     target: "memoria-src",
   },
   {
     action: "narrow-observable-write",
     file: "backend/api/library/userMediaStore.ts",
     line: 147,
-    rationale: "Seeding one media row is a keyed child update, so the complete user-media map should not be cloned and replaced.",
+    rationale:
+      "Seeding one media row is a keyed child update, so the complete user-media map should not be cloned and replaced.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/api/library/userMediaStore.ts",
     line: 61,
-    rationale: "The selector only unwraps the proven user-media observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven user-media observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
     action: "pass-observable-to-use-value",
     file: "backend/state/asyncStore.ts",
     line: 43,
-    rationale: "The selector only unwraps the proven async-store observable, so it can be passed directly.",
+    rationale:
+      "The selector only unwraps the proven async-store observable, so it can be passed directly.",
     target: "memoria-src",
   },
   {
@@ -6957,21 +7846,24 @@ export const goldPracticeCases = [
     action: "use-peek-for-snapshot",
     file: "components/NativeSidebar.tsx",
     line: 53,
-    rationale: "The React effect compares one current observable snapshot before synchronizing the local selection handle.",
+    rationale:
+      "The React effect compares one current observable snapshot before synchronizing the local selection handle.",
     target: "legend-music",
   },
   {
     action: "use-peek-for-snapshot",
     file: "components/TitleBar.tsx",
     line: 31,
-    rationale: "The hover event checks the current preference without creating a Legend dependency.",
+    rationale:
+      "The hover event checks the current preference without creating a Legend dependency.",
     target: "legend-music",
   },
   {
     action: "use-peek-for-snapshot",
     file: "components/TitleBar.tsx",
     line: 39,
-    rationale: "The hover-leave event checks the current preference without creating a Legend dependency.",
+    rationale:
+      "The hover-leave event checks the current preference without creating a Legend dependency.",
     target: "legend-music",
   },
   {
@@ -7020,7 +7912,8 @@ export const goldPracticeCases = [
     action: "batch-observable-writes",
     file: "systems/LibraryState.ts",
     line: 317,
-    rationale: "Tracks, artists, and albums are one normalized library snapshot; batching preserves sequential helper evaluation.",
+    rationale:
+      "Tracks, artists, and albums are one normalized library snapshot; batching preserves sequential helper evaluation.",
     target: "legend-music",
   },
   {
@@ -7069,14 +7962,16 @@ export const goldPracticeCases = [
     action: "batch-observable-writes",
     file: "components/LocalAudioPlayer.tsx",
     line: 1112,
-    rationale: "A successful load publishes duration, loading, and error fields together while preserving property evaluation order.",
+    rationale:
+      "A successful load publishes duration, loading, and error fields together while preserving property evaluation order.",
     target: "legend-music",
   },
   {
     action: "batch-observable-writes",
     file: "components/LocalAudioPlayer.tsx",
     line: 1123,
-    rationale: "A native load error publishes error, loading, and playback fields together while preserving property evaluation order.",
+    rationale:
+      "A native load error publishes error, loading, and playback fields together while preserving property evaluation order.",
     target: "legend-music",
   },
   {
@@ -7097,7 +7992,8 @@ export const goldPracticeCases = [
     action: "batch-observable-writes",
     file: "systems/LibraryState.ts",
     line: 395,
-    rationale: "Restoring a library snapshot publishes four fields together while preserving sequential helper evaluation.",
+    rationale:
+      "Restoring a library snapshot publishes four fields together while preserving sequential helper evaluation.",
     target: "legend-music",
   },
   {
@@ -7118,14 +8014,16 @@ export const goldPracticeCases = [
     action: "batch-observable-writes",
     file: "systems/LocalMusicState.ts",
     line: 866,
-    rationale: "Scan completion publishes track total and progress together while preserving sequential property evaluation.",
+    rationale:
+      "Scan completion publishes track total and progress together while preserving sequential property evaluation.",
     target: "legend-music",
   },
   {
     action: "batch-observable-writes",
     file: "systems/LocalMusicState.ts",
     line: 893,
-    rationale: "The scan result includes an updater function, so batch preserves its evaluation semantics.",
+    rationale:
+      "The scan result includes an updater function, so batch preserves its evaluation semantics.",
     target: "legend-music",
   },
   {
@@ -7146,135 +8044,152 @@ export const goldPracticeCases = [
     action: "pass-observable-to-use-value",
     file: "components/TrackItem.tsx",
     line: 62,
-    rationale: "The selector only unwraps one proven accent-color observable, so the observable can be passed directly.",
+    rationale:
+      "The selector only unwraps one proven accent-color observable, so the observable can be passed directly.",
     target: "legend-music",
   },
   {
     action: "pass-observable-to-use-value",
     file: "components/MediaLibrary/TrackList.tsx",
     line: 438,
-    rationale: "The selector only unwraps one proven accent-color observable, so the observable can be passed directly.",
+    rationale:
+      "The selector only unwraps one proven accent-color observable, so the observable can be passed directly.",
     target: "legend-music",
   },
   {
     action: "use-peek-for-snapshot",
     file: "legend-kit/react-native/windowDimensions.tsx",
     line: 30,
-    rationale: "The source-proven HookToObservable contract invokes getValue only from a React layout effect, so the settings check needs a non-tracking snapshot.",
+    rationale:
+      "The source-proven HookToObservable contract invokes getValue only from a React layout effect, so the settings check needs a non-tracking snapshot.",
     target: "legend-music",
   },
   {
     action: "use-peek-for-snapshot",
     file: "components/ResizablePanels.tsx",
     line: 285,
-    rationale: "The imported Legend useMount callback is a non-tracking lifecycle effect, so the initial panel-size read needs a snapshot rather than a reactive dependency.",
+    rationale:
+      "The imported Legend useMount callback is a non-tracking lifecycle effect, so the initial panel-size read needs a snapshot rather than a reactive dependency.",
     target: "legend-music",
   },
   {
     action: "narrow-use-value-subscription",
     file: "components/PlaybackControls.tsx",
     line: 47,
-    rationale: "Playback controls read only library tracks, so sibling library fields should not invalidate the component.",
+    rationale:
+      "Playback controls read only library tracks, so sibling library fields should not invalidate the component.",
     target: "legend-music",
   },
   {
     action: "narrow-use-value-subscription",
     file: "components/PlaylistSelector.tsx",
     line: 36,
-    rationale: "The selector reads only library tracks, making the child observable the exact subscription boundary.",
+    rationale:
+      "The selector reads only library tracks, making the child observable the exact subscription boundary.",
     target: "legend-music",
   },
   {
     action: "narrow-use-value-subscription",
     file: "components/SkiaText.tsx",
     line: 53,
-    rationale: "The component destructures only width, so it can subscribe directly to the width child observable.",
+    rationale:
+      "The component destructures only width, so it can subscribe directly to the width child observable.",
     target: "legend-music",
   },
   {
     action: "use-peek-for-snapshot",
     file: "components/DropdownMenu.tsx",
     line: 422,
-    rationale: "The direct observable onChange listener reads the latest dropdown flag as a snapshot and does not establish another tracked dependency.",
+    rationale:
+      "The direct observable onChange listener reads the latest dropdown flag as a snapshot and does not establish another tracked dependency.",
     target: "legend-music",
   },
   {
     action: "use-peek-for-snapshot",
     file: "systems/LocalMusicState.ts",
     line: 1334,
-    rationale: "The library-path onChange listener snapshots the independent scanning flag before deciding whether to start a scan.",
+    rationale:
+      "The library-path onChange listener snapshots the independent scanning flag before deciding whether to start a scan.",
     target: "legend-music",
   },
-  ...[145, 146, 155, 156].map(
-    (line): GoldPracticeCase => ({
-      action: "use-peek-for-snapshot",
-      file: "components/PlaybackTimelineSlider.tsx",
-      line,
-      rationale: "The hover command reads the latest disabled flag without creating a reactive dependency.",
-      target: "legend-music",
-    }),
-  ),
+  ...[145, 146, 155, 156].map((line): GoldPracticeCase => ({
+    action: "use-peek-for-snapshot",
+    file: "components/PlaybackTimelineSlider.tsx",
+    line,
+    rationale:
+      "The hover command reads the latest disabled flag without creating a reactive dependency.",
+    target: "legend-music",
+  })),
   {
     action: "batch-observable-writes",
     file: "systems/LocalMusicState.ts",
     line: 139,
-    rationale: "Clearing cached tracks publishes the scan timestamp, track list, and both counters as one transaction.",
+    rationale:
+      "Clearing cached tracks publishes the scan timestamp, track list, and both counters as one transaction.",
     target: "legend-music",
   },
   {
     action: "batch-observable-writes",
     file: "systems/LocalMusicState.ts",
     line: 972,
-    rationale: "Scan completion publishes tracks, timestamp, and progress totals together while preserving value evaluation order.",
+    rationale:
+      "Scan completion publishes tracks, timestamp, and progress totals together while preserving value evaluation order.",
     target: "legend-music",
   },
   {
     action: "narrow-use-value-subscription",
     file: "theme/ThemeProvider.tsx",
     line: 40,
-    rationale: "The provider reads only customColors.dark, so sibling color updates should not invalidate it.",
+    rationale:
+      "The provider reads only customColors.dark, so sibling color updates should not invalidate it.",
     target: "legend-music",
   },
   {
     action: "batch-observable-writes",
     file: "atoms/filters.ts",
     line: 94,
-    rationale: "The selected date-range mode and its custom range form one computed snapshot and must publish as one transaction.",
+    rationale:
+      "The selected date-range mode and its custom range form one computed snapshot and must publish as one transaction.",
     target: "hoalu-app",
   },
   {
     action: "narrow-use-value-subscription",
     file: "components/categories/category-actions.tsx",
     line: 136,
-    rationale: "The edit form reads only the selected category id, so name-only updates must not invalidate its query and form owner.",
+    rationale:
+      "The edit form reads only the selected category id, so name-only updates must not invalidate its query and form owner.",
     target: "hoalu-app",
   },
   {
     action: "narrow-use-value-subscription",
     file: "components/categories/category-table.tsx",
     line: 44,
-    rationale: "The table selection surface reads only the selected category id; the name belongs to the separate detail leaf.",
+    rationale:
+      "The table selection surface reads only the selected category id; the name belongs to the separate detail leaf.",
     target: "hoalu-app",
   },
   {
     action: "narrow-use-value-subscription",
     file: "components/charts/dashboard-date-filter.tsx",
     line: 110,
-    rationale: "The group-by effect reads only the optional custom range, so changes to the selected range mode should not invalidate this control.",
+    rationale:
+      "The group-by effect reads only the optional custom range, so changes to the selected range mode should not invalidate this control.",
     target: "hoalu-app",
   },
   {
     action: "narrow-use-value-subscription",
     file: "components/receipt/scan-queue-review-dialog.tsx",
     line: 83,
-    rationale: "The review dialog reads only the optional scan job id, so unrelated dialog metadata should not invalidate its editor and queries.",
+    rationale:
+      "The review dialog reads only the optional scan job id, so unrelated dialog metadata should not invalidate its editor and queries.",
     target: "hoalu-app",
   },
   {
     action: "move-use-value-down",
     file: "components/expenses/expense-filter-dropdown.tsx",
     line: 67,
-    rationale: "The transaction kind is rendered only by the category panel's conditional child slot, so an always-mounted wrapper can retain the subscription while preventing kind changes from rebuilding the full filter dropdown.",
+    rationale:
+      "The transaction kind is rendered only by the category panel's conditional child slot, so an always-mounted wrapper can retain the subscription while preventing kind changes from rebuilding the full filter dropdown.",
     target: "hoalu-app",
   },
   ...[
@@ -7296,112 +8211,128 @@ export const goldPracticeCases = [
     action: "narrow-use-value-subscription",
     file: "components/events/event-actions.tsx",
     line: 147,
-    rationale: "The edit dialog uses only the optional event id to select its record, so unrelated dialog data should not invalidate its query owner.",
+    rationale:
+      "The edit dialog uses only the optional event id to select its record, so unrelated dialog data should not invalidate its query owner.",
     target: "hoalu-app",
   },
   {
     action: "batch-observable-writes",
     file: "hooks/use-auth.ts",
     line: 31,
-    rationale: "Sign-out resets the expense and income drafts as one user-visible transition before navigation.",
+    rationale:
+      "Sign-out resets the expense and income drafts as one user-visible transition before navigation.",
     target: "hoalu-app",
   },
   {
     action: "move-use-value-into-child",
     file: "components/providers/workspace-action-provider.tsx",
     line: 32,
-    rationale: "The provider unwraps commandPaletteOpen$ only to transport its value into one stable source-resolved CommandPalette child; subscribing in that existing child removes the provider render while preserving the child's render and lifetime.",
+    rationale:
+      "The provider unwraps commandPaletteOpen$ only to transport its value into one stable source-resolved CommandPalette child; subscribing in that existing child removes the provider render while preserving the child's render and lifetime.",
     target: "hoalu-app",
   },
   {
     action: "move-use-value-down",
     file: "components/PlaybackArea.tsx",
     line: 29,
-    rationale: "Playback toggles update only the one-icon play surface; subscribing there avoids rerendering the twelve-element playback owner.",
+    rationale:
+      "Playback toggles update only the one-icon play surface; subscribing there avoids rerendering the twelve-element playback owner.",
     target: "legend-music",
   },
   {
     action: "move-use-value-down",
     file: "components/PlaybackArea.tsx",
     line: 31,
-    rationale: "Thumbnail invalidation is consumed only by AlbumArt, so its leaf wrapper can update without rerendering playback controls and metadata.",
+    rationale:
+      "Thumbnail invalidation is consumed only by AlbumArt, so its leaf wrapper can update without rerendering playback controls and metadata.",
     target: "legend-music",
   },
   {
     action: "move-use-value-down",
     file: "settings/GeneralSettings.tsx",
     line: 14,
-    rationale: "The enabled flag is transported only to HotkeyCapture inside a stable one-element leaf of the twenty-element settings owner.",
+    rationale:
+      "The enabled flag is transported only to HotkeyCapture inside a stable one-element leaf of the twenty-element settings owner.",
     target: "legend-music",
   },
   {
     action: "move-use-value-down",
     file: "settings/GeneralSettings.tsx",
     line: 15,
-    rationale: "The hotkey value is transported only to HotkeyCapture, so updates need not rerender unrelated settings sections.",
+    rationale:
+      "The hotkey value is transported only to HotkeyCapture, so updates need not rerender unrelated settings sections.",
     target: "legend-music",
   },
   {
     action: "move-use-value-down",
     file: "visualizer/VisualizerWindow.tsx",
     line: 13,
-    rationale: "Playback state controls only the two-element stopped overlay, so an always-mounted wrapper can subscribe without rebuilding the visualizer and control panel.",
+    rationale:
+      "Playback state controls only the two-element stopped overlay, so an always-mounted wrapper can subscribe without rebuilding the visualizer and control panel.",
     target: "legend-music",
   },
   {
     action: "move-use-value-down",
     file: "apps/web/src/features/lessons/sortable-lesson-list.tsx",
     line: 130,
-    rationale: "The confirmation flag is rendered only by one stable AlertDialog subtree; opening it should not rebuild the sortable lesson row.",
+    rationale:
+      "The confirmation flag is rendered only by one stable AlertDialog subtree; opening it should not rebuild the sortable lesson row.",
     target: "genie-courses",
   },
   {
     action: "move-use-value-down",
     file: "apps/web/src/features/quiz/quiz-import-dialog.tsx",
     line: 210,
-    rationale: "The replacement confirmation flag belongs to one stable AlertDialog leaf and need not invalidate the sixty-three-element import form.",
+    rationale:
+      "The replacement confirmation flag belongs to one stable AlertDialog leaf and need not invalidate the sixty-three-element import form.",
     target: "genie-courses",
   },
   {
     action: "move-use-value-down",
     file: "apps/web/src/routes/_admin/admin/invites/index.tsx",
     line: 411,
-    rationale: "Clipboard feedback changes only one stable button subtree, so its timer should not rerender the surrounding invite row.",
+    rationale:
+      "Clipboard feedback changes only one stable button subtree, so its timer should not rerender the surrounding invite row.",
     target: "genie-courses",
   },
   {
     action: "split-use-value-leaves",
     file: "feature/settings/pages/DataScreen.tsx",
     line: 57,
-    rationale: "The row reads status, processed, total, and failed through static leaf paths, so progress ticks should not publish through the whole-object subscription.",
+    rationale:
+      "The row reads status, processed, total, and failed through static leaf paths, so progress ticks should not publish through the whole-object subscription.",
     target: "memoria-src",
   },
   {
     action: "split-use-value-leaves",
     file: "feature/settings/pages/SpotlightScreen.tsx",
     line: 18,
-    rationale: "Indexing status and lastIndexedAt change independently and every read is a static leaf path.",
+    rationale:
+      "Indexing status and lastIndexedAt change independently and every read is a static leaf path.",
     target: "memoria-src",
   },
   {
     action: "split-use-value-leaves",
     file: "components/JumpSearchMenuDropdown.tsx",
     line: 42,
-    rationale: "The dropdown consumes only library.albums and library.artists, so unrelated library fields should not invalidate it.",
+    rationale:
+      "The dropdown consumes only library.albums and library.artists, so unrelated library fields should not invalidate it.",
     target: "legend-music",
   },
   {
     action: "split-use-value-leaves",
     file: "settings/LibrarySettings.tsx",
     line: 30,
-    rationale: "Scan progress fields update at a different cadence than tracks and isScanning, and every read is a static leaf path.",
+    rationale:
+      "Scan progress fields update at a different cadence than tracks and isScanning, and every read is a static leaf path.",
     target: "legend-music",
   },
   {
     action: "split-use-value-leaves",
     file: "apps/web/src/features/quiz/quiz-builder.tsx",
     line: 89,
-    rationale: "The editor draft reads kind, questionId, and initialValue leaves while sibling editor fields change during editing.",
+    rationale:
+      "The editor draft reads kind, questionId, and initialValue leaves while sibling editor fields change during editing.",
     target: "genie-courses",
   },
 ] as const satisfies readonly GoldPracticeCase[];

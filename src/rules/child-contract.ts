@@ -36,47 +36,54 @@ export interface ChildComponentSource {
 }
 
 export interface CallbackContractSourceResolver {
-  contextReaderHooks(file: string, contextName: string): ReadonlyMap<string, ReadonlySet<string>>;
-  deferredCallbackHooks(file: string): ReadonlyMap<string, ReadonlySet<number>>;
-  frameworkEventComponent(file: string, name: string): boolean;
-  hookCallbackIsDeferred(file: string, name: string, argumentIndex: number): boolean;
-  resolveComponent(file: string, name: string): ChildComponentSource | null;
-  resolveHook(file: string, name: string): ChildComponentSource | null;
-  sourceFile(file: string): ts.SourceFile | null;
+  contextReaderHooks: (
+    file: string,
+    contextName: string,
+  ) => ReadonlyMap<string, ReadonlySet<string>>;
+  deferredCallbackHooks: (file: string) => ReadonlyMap<string, ReadonlySet<number>>;
+  frameworkEventComponent: (file: string, name: string) => boolean;
+  hookCallbackIsDeferred: (file: string, name: string, argumentIndex: number) => boolean;
+  resolveComponent: (file: string, name: string) => ChildComponentSource | null;
+  resolveHook: (file: string, name: string) => ChildComponentSource | null;
+  sourceFile: (file: string) => ts.SourceFile | null;
 }
 
 export interface ChildContractResolver {
-  componentArrayItemCallbackIsDeferred(
+  componentArrayItemCallbackIsDeferred: (
     componentName: string,
     propName: string,
     callbackProperty: string,
-  ): boolean;
-  callbackRegistrationIsDeferred(
+  ) => boolean;
+  callbackRegistrationIsDeferred: (
     ownerBinding: string,
     method: string,
     argumentIndex: number,
-  ): boolean;
-  callbackPropertyIsDeferred(hookName: string, argumentIndex: number, property: string): boolean;
-  hookStateHasKeyedRowConsumer(
+  ) => boolean;
+  callbackPropertyIsDeferred: (
+    hookName: string,
+    argumentIndex: number,
+    property: string,
+  ) => boolean;
+  hookStateHasKeyedRowConsumer: (
     hookName: string,
     stateProperty: string,
     setterProperty: string,
-  ): boolean;
-  componentPropCallbackIsDeferred(
+  ) => boolean;
+  componentPropCallbackIsDeferred: (
     componentName: string,
     propName: string,
     callbackProperty: string,
-  ): boolean;
-  componentCallbackPropIsDeferred(componentName: string, propName: string): boolean;
-  componentCallbackPropIsDeferredAtInvocation(
+  ) => boolean;
+  componentCallbackPropIsDeferred: (componentName: string, propName: string) => boolean;
+  componentCallbackPropIsDeferredAtInvocation: (
     componentName: string,
     propName: string,
     invocation: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
-  ): boolean;
-  componentCallbackPropRunsOnlyInReactEffect(componentName: string, propName: string): boolean;
-  frameworkEventComponent(componentName: string): boolean;
-  pureProjectionBindings(): ReadonlySet<string>;
-  resolveComponent(name: string): ChildComponentSource | null;
+  ) => boolean;
+  componentCallbackPropRunsOnlyInReactEffect: (componentName: string, propName: string) => boolean;
+  frameworkEventComponent: (componentName: string) => boolean;
+  pureProjectionBindings: () => ReadonlySet<string>;
+  resolveComponent: (name: string) => ChildComponentSource | null;
 }
 
 const MAX_TRACKED_NAMES = 8,
@@ -107,8 +114,8 @@ export function propIsLeafRenderConsumer(source: ChildComponentSource, propName:
     return false;
   }
 
-  let safe = true,
-    renderReads = 0;
+  let renderReads = 0,
+    safe = true;
   const tracked = new Set([bound.text]);
   visit(source.owner.body, (node) => {
     if (!safe || !ts.isIdentifier(node) || !tracked.has(node.text)) {
@@ -283,7 +290,7 @@ export function propDefersArrayItemCallback(
   source: ChildComponentSource,
   propName: string,
   callbackProp: string,
-  resolver?: CallbackContractSourceResolver,
+  resolver: CallbackContractSourceResolver | undefined,
 ): boolean {
   const bound = boundPropIdentifier(source.owner, propName);
   if (!bound || !source.owner.body) {
@@ -295,24 +302,25 @@ export function propDefersArrayItemCallback(
 
   const arrayNames = new Set([bound.text]);
   let addedAlias = true;
+  const collectAlias = (node: ts.Node): void => {
+    if (
+      !ts.isVariableDeclaration(node) ||
+      !ts.isIdentifier(node.name) ||
+      !node.initializer ||
+      arrayNames.has(node.name.text) ||
+      !ts.isVariableDeclarationList(node.parent) ||
+      (node.parent.flags & ts.NodeFlags.Const) === 0 ||
+      bindingDeclarationCount(source.owner, node.name.text) !== 1 ||
+      !isFilteredArrayAlias(node.initializer, arrayNames)
+    ) {
+      return;
+    }
+    arrayNames.add(node.name.text);
+    addedAlias = true;
+  };
   while (addedAlias && arrayNames.size < MAX_TRACKED_NAMES) {
     addedAlias = false;
-    visit(source.owner.body, (node) => {
-      if (
-        !ts.isVariableDeclaration(node) ||
-        !ts.isIdentifier(node.name) ||
-        !node.initializer ||
-        arrayNames.has(node.name.text) ||
-        !ts.isVariableDeclarationList(node.parent) ||
-        (node.parent.flags & ts.NodeFlags.Const) === 0 ||
-        bindingDeclarationCount(source.owner, node.name.text) !== 1 ||
-        !isFilteredArrayAlias(node.initializer, arrayNames)
-      ) {
-        return;
-      }
-      arrayNames.add(node.name.text);
-      addedAlias = true;
-    });
+    visit(source.owner.body, collectAlias);
   }
   if (!arrayBindingsStayWithinTrackedConsumers(source, arrayNames)) {
     return false;
@@ -414,7 +422,7 @@ export function propDefersArrayItemCallback(
     }
     const prop = attribute.name.getText(),
       target = jsxOwnerTarget(attribute);
-    if (!/^on[A-Z]/.test(prop) || !target) {
+    if (!/^on[A-Z]/u.test(prop) || !target) {
       safe = false;
       return;
     }
@@ -449,7 +457,7 @@ function spreadCallbackIsOverridden(spread: ts.SpreadAssignment, callbackProp: s
   }
   const following = object.properties.slice(object.properties.indexOf(spread) + 1);
   return (
-    !following.some(ts.isSpreadAssignment) &&
+    !following.some((property) => ts.isSpreadAssignment(property)) &&
     following.some(
       (property) =>
         !ts.isSpreadAssignment(property) && propertyName(property.name) === callbackProp,
@@ -840,7 +848,7 @@ function callbackPathExpressionIsDeferred(
   ) {
     if (
       path.length === 0 &&
-      /^on[A-Z]/.test(attribute.name.getText()) &&
+      /^on[A-Z]/u.test(attribute.name.getText()) &&
       jsxOwnerIsDeferredEventTarget(attribute, source)
     ) {
       return true;
@@ -849,7 +857,7 @@ function callbackPathExpressionIsDeferred(
     if (
       path.length === 0 &&
       target &&
-      /^on[A-Z]/.test(attribute.name.getText()) &&
+      /^on[A-Z]/u.test(attribute.name.getText()) &&
       resolver.frameworkEventComponent(source.file, target)
     ) {
       return true;
@@ -878,7 +886,7 @@ function callbackPathExpressionIsDeferred(
     if (
       target &&
       path.length === 1 &&
-      /^on[A-Z]/.test(path[0] ?? "") &&
+      /^on[A-Z]/u.test(path[0] ?? "") &&
       (jsxOwnerIsDeferredEventTarget(spread, source) ||
         resolver.frameworkEventComponent(source.file, target))
     ) {
@@ -1195,7 +1203,7 @@ function returnedCallbackPath(
     return null;
   }
   const index = object.properties.findIndex((member) => nodeWithin(value, member)),
-    member = index !== -1 ? object.properties[index] : null;
+    member = index === -1 ? null : object.properties[index];
   if (!member) {
     return null;
   }
@@ -1394,24 +1402,28 @@ function jsxOwnerOpening(
 function jsxOwnerIsIntrinsic(attribute: ts.JsxAttribute | ts.JsxSpreadAttribute): boolean {
   const opening = jsxOwnerOpening(attribute);
   return (
-    opening !== null && ts.isIdentifier(opening.tagName) && /^[a-z]/.test(opening.tagName.text)
+    opening !== null && ts.isIdentifier(opening.tagName) && /^[a-z]/u.test(opening.tagName.text)
   );
 }
 
 function atJsxInvocation(
   source: ChildComponentSource,
   attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
-  invocationOwner?: ChildComponentSource,
+  invocationOwner: ChildComponentSource | undefined,
 ): ChildComponentSource {
   const invocation = jsxOwnerOpening(attribute);
-  return invocation
-    ? { ...source, invocation, ...(invocationOwner ? { invocationOwner } : {}) }
-    : source;
+  if (!invocation) {
+    return source;
+  }
+  if (!invocationOwner) {
+    return { ...source, invocation };
+  }
+  return { ...source, invocation, invocationOwner };
 }
 
 function jsxOwnerIsDeferredEventTarget(
   attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
-  source?: ChildComponentSource,
+  source: ChildComponentSource | undefined,
 ): boolean {
   if (jsxOwnerIsIntrinsic(attribute)) {
     return true;
@@ -1451,7 +1463,7 @@ function jsxOwnerIsDeferredEventTarget(
     return false;
   }
   const target = unwrapTransparentExpression(selected);
-  return ts.isStringLiteralLike(target) && /^[a-z]/.test(target.text);
+  return ts.isStringLiteralLike(target) && /^[a-z]/u.test(target.text);
 }
 
 function booleanPropAtInvocation(
@@ -1691,8 +1703,8 @@ function memoizedContextPublication(
     return null;
   }
   const bindingName = declaration.name.text;
-  let references = 0,
-    contextName: string | null = null,
+  let contextName: string | null = null,
+    references = 0,
     safe = true;
   visit(owner.body, (node) => {
     if (
@@ -1883,8 +1895,8 @@ function callbackInvocationIsDeferred(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   owner: ChildComponentSource["owner"],
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
-  source?: ChildComponentSource,
-  resolver?: CallbackContractSourceResolver,
+  source: ChildComponentSource | undefined,
+  resolver: CallbackContractSourceResolver | undefined,
   visited: ReadonlySet<string> = new Set(),
   depth = 0,
   seenCallbacks: ReadonlySet<number> = new Set(),
@@ -1932,7 +1944,7 @@ function callbackInvocationIsDeferred(
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     if (
       attribute &&
-      /^on[A-Z]/.test(attribute.name.getText()) &&
+      /^on[A-Z]/u.test(attribute.name.getText()) &&
       jsxAttributeCarriesCallbackIdentity(attribute, node)
     ) {
       if (jsxOwnerIsDeferredEventTarget(attribute, source)) {
@@ -2024,7 +2036,7 @@ function callbackIsDeferredByJsx(
     attribute = findAncestorUntil(expression, ts.isJsxAttribute, source.owner);
   if (
     !attribute ||
-    !/^on[A-Z]/.test(attribute.name.getText()) ||
+    !/^on[A-Z]/u.test(attribute.name.getText()) ||
     !jsxAttributeCarriesCallbackIdentity(attribute, expression)
   ) {
     return false;
@@ -2107,7 +2119,7 @@ function callResultIsDeferredEvent(
   const attribute = findAncestorUntil(result, ts.isJsxAttribute, source.owner);
   if (
     !attribute ||
-    !/^on[A-Z]/.test(attribute.name.getText()) ||
+    !/^on[A-Z]/u.test(attribute.name.getText()) ||
     !jsxAttributeDirectlyCarries(attribute, result)
   ) {
     return false;
@@ -2549,7 +2561,7 @@ function isCustomJsxTag(attribute: ts.JsxAttribute): boolean {
     return true;
   }
   const tag = element.tagName.getText();
-  return /^[A-Z]/.test(tag) || tag.includes(".");
+  return /^[A-Z]/u.test(tag) || tag.includes(".");
 }
 
 function isJsxNode(

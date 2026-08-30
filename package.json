@@ -12,8 +12,8 @@
     "eval": "npm run build && node dist/evals/run.js",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "oxlint --deny-warnings",
+    "lint:fix": "oxlint --fix --deny-warnings",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

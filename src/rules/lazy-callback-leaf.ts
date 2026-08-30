@@ -1,17 +1,17 @@
 import ts from "typescript";
 
 import { nearestNestedFunction, nodeWithin, visit } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import {
   hasIndependentRenderCutWitness,
   nearestRepeatedRenderCall,
   stateMayHoldCallable,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export interface LazyCallbackLeafProofs {
-  hasUnstableSubtreeLifetime(node: ts.JsxElement, boundary: ts.Node): boolean;
-  uniqueReturnedExpression(owner: RuntimeFunctionLike): ts.Expression | null;
+  hasUnstableSubtreeLifetime: (node: ts.JsxElement, boundary: ts.Node) => boolean;
+  uniqueReturnedExpression: (owner: RuntimeFunctionLike) => ts.Expression | null;
 }
 
 export interface LazyCallbackLeaf {

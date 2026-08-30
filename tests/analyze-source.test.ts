@@ -4,6 +4,11 @@ import test from "node:test";
 import { analyzeSource } from "../src/analyze-source.js";
 import { agentFindings } from "../src/format.js";
 
+const requireValue = <Value>(value: Value | undefined): Value => {
+  assert.ok(value);
+  return value;
+};
+
 function actions(source: string): string[] {
   return analyzeSource(source, "fixture.tsx").map((finding) => finding.action);
 }
@@ -35,8 +40,11 @@ test("isolates direct controlled child state when a sibling proves an owner rend
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /non-tracking reads in submit or commit commands/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(
+    requireValue(finding).message ?? "",
+    /non-tracking reads in submit or commit commands/u,
+  );
 });
 
 test("isolates property-local object draft edits without splitting coupled commands", () => {
@@ -103,13 +111,16 @@ test("isolates property-local object draft edits without splitting coupled comma
     "fixture.tsx",
   );
 
-  assert.equal(findings.find((finding) => finding.name === "draft")?.action, "use-observable");
-  assert.match(
-    findings.find((finding) => finding.name === "draft")?.message ?? "",
-    /property leaf/,
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "draft")).action,
+    "use-observable",
   );
-  for (const finding of findings.filter((finding) => finding.name === "draft").slice(1)) {
-    assert.doesNotMatch(finding.message, /object draft/);
+  assert.match(
+    requireValue(findings.find((finding) => finding.name === "draft")).message ?? "",
+    /property leaf/u,
+  );
+  for (const draftFinding of findings.filter((candidate) => candidate.name === "draft").slice(1)) {
+    assert.doesNotMatch(draftFinding.message, /object draft/u);
   }
 });
 
@@ -151,8 +162,8 @@ test("isolates an exact controlled array membership toggle", () => {
   `,
     "fixture.tsx",
   ).filter((finding) => finding.name === "selected");
-  assert.equal(findings[0]?.action, "use-observable");
-  assert.notEqual(findings[1]?.action, "use-observable");
+  assert.equal(requireValue(findings[0]).action, "use-observable");
+  assert.notEqual(requireValue(findings[1]).action, "use-observable");
 });
 
 test("recognizes standard boolean controlled-child callbacks", () => {
@@ -174,7 +185,7 @@ test("recognizes standard boolean controlled-child callbacks", () => {
     `,
       "fixture.tsx",
     );
-    assert.equal(finding?.action, "use-observable", callback);
+    assert.equal(requireValue(finding).action, "use-observable", callback);
   }
 });
 
@@ -197,7 +208,7 @@ test("recognizes descriptive value-transition callbacks on controlled leaves", (
     `,
       "fixture.tsx",
     );
-    assert.equal(finding?.action, "use-observable", callback);
+    assert.equal(requireValue(finding).action, "use-observable", callback);
   }
 });
 
@@ -217,7 +228,7 @@ test("moves call-site-owned custom controlled state into that leaf", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "move-state-down");
+  assert.equal(requireValue(finding).action, "move-state-down");
 });
 
 test("keeps controlled state already owned by one cohesive leaf", () => {
@@ -241,8 +252,8 @@ test("keeps controlled state already owned by one cohesive leaf", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(findings[0]?.action, "keep-state");
-  assert.equal(findings[1]?.action, "move-state-down");
+  assert.equal(requireValue(findings[0]).action, "keep-state");
+  assert.equal(requireValue(findings[1]).action, "move-state-down");
 });
 
 test("keeps call-site-owned state above a conditionally mounted controlled leaf", () => {
@@ -264,8 +275,8 @@ test("keeps call-site-owned state above a conditionally mounted controlled leaf"
     `,
       "fixture.tsx",
     );
-    assert.equal(finding?.action, "use-observable");
-    assert.match(finding?.message ?? "", /keep ownership at this owner/i);
+    assert.equal(requireValue(finding).action, "use-observable");
+    assert.match(requireValue(finding).message ?? "", /keep ownership at this owner/iu);
   }
 });
 
@@ -287,8 +298,8 @@ test("keeps controlled menu ownership above descendant close commands", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /keep ownership at this owner/i);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /keep ownership at this owner/iu);
 });
 
 test("does not isolate call-site-owned state when it controls the child mount", () => {
@@ -307,7 +318,7 @@ test("does not isolate call-site-owned state when it controls the child mount", 
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not isolate call-site-owned state in repeated controlled leaves", () => {
@@ -326,7 +337,7 @@ test("does not isolate call-site-owned state in repeated controlled leaves", () 
   `,
     "fixture.tsx",
   );
-  assert.doesNotMatch(finding?.message ?? "", /branch-local `Menu` call site/);
+  assert.doesNotMatch(requireValue(finding).message ?? "", /branch-local `Menu` call site/u);
 });
 
 test("does not treat an arbitrary setter prop as call-site-owned state", () => {
@@ -350,7 +361,7 @@ test("does not treat an arbitrary setter prop as call-site-owned state", () => {
         "fixture.tsx",
       );
       assert.notEqual(
-        finding?.action,
+        requireValue(finding).action,
         conditional ? "use-observable" : "move-state-down",
         `${callback}/${conditional}`,
       );
@@ -376,7 +387,7 @@ test("recognizes explicit setter props as value-transition APIs", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("does not split custom controlled fields that share one validation projection", () => {
@@ -419,7 +430,7 @@ test("does not treat arbitrary callback props as controlled value transitions", 
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable", callback);
+    assert.notEqual(requireValue(finding).action, "use-observable", callback);
   }
 });
 
@@ -441,7 +452,7 @@ test("isolates a direct inline controlled-input setter", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("isolates a controlled input and its complete sibling validation projection", () => {
@@ -463,8 +474,8 @@ test("isolates a controlled input and its complete sibling validation projection
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /derive validation from the subscribed value/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /derive validation from the subscribed value/u);
 });
 
 test("allows one pure validation alias shared with an event command", () => {
@@ -487,7 +498,7 @@ test("allows one pure validation alias shared with an event command", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("resolves a strict controlled-input setter adapter", () => {
@@ -510,7 +521,7 @@ test("resolves a strict controlled-input setter adapter", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("keeps controlled ownership above a state-independent conditional field", () => {
@@ -532,8 +543,8 @@ test("keeps controlled ownership above a state-independent conditional field", (
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /owner-scoped observable/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /owner-scoped observable/u);
 });
 
 test("keeps controlled ownership above state-independent early returns", () => {
@@ -555,8 +566,8 @@ test("keeps controlled ownership above state-independent early returns", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /controlled state/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /controlled state/u);
 });
 
 test("isolates a controlled leaf in one of several prop-selected returns", () => {
@@ -575,7 +586,7 @@ test("isolates a controlled leaf in one of several prop-selected returns", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("does not use a stored controlled JSX value as a branch callsite", () => {
@@ -593,7 +604,7 @@ test("does not use a stored controlled JSX value as a branch callsite", () => {
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not call a state-controlled early return a controlled leaf", () => {
@@ -611,7 +622,7 @@ test("does not call a state-controlled early return a controlled leaf", () => {
   `,
     "fixture.tsx",
   );
-  assert.doesNotMatch(finding?.message ?? "", /Replace controlled state/);
+  assert.doesNotMatch(requireValue(finding).message ?? "", /Replace controlled state/u);
 });
 
 test("does not split one controlled value across alternate return branches", () => {
@@ -629,7 +640,7 @@ test("does not split one controlled value across alternate return branches", () 
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not isolate incomplete or nested validation projections", () => {
@@ -654,7 +665,7 @@ test("does not isolate incomplete or nested validation projections", () => {
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable", body);
+    assert.notEqual(requireValue(finding).action, "use-observable", body);
   }
 });
 
@@ -680,7 +691,7 @@ test("does not resolve a controlled setter adapter with additional work", () => 
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("keeps owner rerenders when controlled input validity is read through a ref", () => {
@@ -706,7 +717,7 @@ test("keeps owner rerenders when controlled input validity is read through a ref
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not trace multi-hop validation aliases or repeated validation broadcasts", () => {
@@ -729,7 +740,7 @@ test("does not trace multi-hop validation aliases or repeated validation broadca
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable", rendered);
+    assert.notEqual(requireValue(finding).action, "use-observable", rendered);
   }
 });
 
@@ -756,7 +767,7 @@ test("does not isolate inline controlled setters with extra or scheduled work", 
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -772,7 +783,7 @@ test("keeps a controlled child without an independent render-cut witness", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "keep-state");
+  assert.equal(requireValue(finding).action, "keep-state");
 });
 
 test("uses independent host siblings as a controlled render-cut witness", () => {
@@ -792,7 +803,7 @@ test("uses independent host siblings as a controlled render-cut witness", () => 
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("uses an unresolved JSX component sibling as a controlled render-cut witness", () => {
@@ -812,7 +823,7 @@ test("uses an unresolved JSX component sibling as a controlled render-cut witnes
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("does not treat a Fragment as an independent component boundary", () => {
@@ -832,7 +843,7 @@ test("does not treat a Fragment as an independent component boundary", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("treats a local helper invoked by a JSX event as a deferred command", () => {
@@ -852,7 +863,7 @@ test("treats a local helper invoked by a JSX event as a deferred command", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("does not split a controlled state transaction across independent migrations", () => {
@@ -894,8 +905,8 @@ test("isolates a controlled edit path even when a separate reset co-writes sibli
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /controlled state/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /controlled state/u);
 });
 
 test("does not call a multi-command input callback an independent controlled edit", () => {
@@ -915,11 +926,11 @@ test("does not call a multi-command input callback an independent controlled edi
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("does not use dead JSX or a controlled-child ancestor as a render-cut witness", () => {
-  const dead = analyzeSource(
+  const [dead] = analyzeSource(
     `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
@@ -931,10 +942,10 @@ test("does not use dead JSX or a controlled-child ancestor as a render-cut witne
     }
   `,
     "fixture.tsx",
-  )[0];
-  assert.notEqual(dead?.action, "use-observable");
+  );
+  assert.notEqual(requireValue(dead).action, "use-observable");
 
-  const ancestor = analyzeSource(
+  const [ancestor] = analyzeSource(
     `
     import { useState } from "react";
     function FormShell(_props: unknown) { return null; }
@@ -945,8 +956,8 @@ test("does not use dead JSX or a controlled-child ancestor as a render-cut witne
     }
   `,
     "fixture.tsx",
-  )[0];
-  assert.notEqual(ancestor?.action, "use-observable");
+  );
+  assert.notEqual(requireValue(ancestor).action, "use-observable");
 });
 
 test("does not isolate controlled state with a render-phase setter", () => {
@@ -963,7 +974,7 @@ test("does not isolate controlled state with a render-phase setter", () => {
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not isolate controlled state read by an effect-like lifecycle hook", () => {
@@ -981,8 +992,14 @@ test("does not isolate controlled state read by an effect-like lifecycle hook", 
   `,
       "fixture.tsx",
     )[0];
-  assert.notEqual(source("useLayoutEffect", "useLayoutEffect")?.action, "use-observable");
-  assert.notEqual(source("useInsertionEffect as useInsert", "useInsert")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(source("useLayoutEffect", "useLayoutEffect")).action,
+    "use-observable",
+  );
+  assert.notEqual(
+    requireValue(source("useInsertionEffect as useInsert", "useInsert")).action,
+    "use-observable",
+  );
 });
 
 test("tracks state reads and writes through React lifecycle callback bindings", () => {
@@ -1032,18 +1049,19 @@ test("tracks state reads and writes through React lifecycle callback bindings", 
     stateFor = (owner: string) =>
       findings.find(
         (finding) =>
-          finding.hook === "useState" && finding.evidence[0]?.startsWith(`owner: ${owner},`),
+          finding.hook === "useState" &&
+          requireValue(finding.evidence[0]).startsWith(`owner: ${owner},`),
       );
 
-  assert.equal(stateFor("InlineLayout")?.action, "review-state");
-  assert.match(stateFor("InlineLayout")?.evidence[1] ?? "", /effects 1/);
-  assert.match(stateFor("InlineLayout")?.evidence[2] ?? "", /effect writes 1/);
-  assert.equal(stateFor("MemoizedLayout")?.action, "review-state");
-  assert.match(stateFor("MemoizedLayout")?.evidence[2] ?? "", /effect writes 1/);
-  assert.equal(stateFor("AliasedInsertion")?.action, "review-state");
-  assert.match(stateFor("AliasedInsertion")?.evidence[1] ?? "", /effects 1/);
-  assert.equal(stateFor("NamedEffect")?.action, "review-state");
-  assert.match(stateFor("NamedEffect")?.evidence[2] ?? "", /effect writes 1/);
+  assert.equal(requireValue(stateFor("InlineLayout")).action, "review-state");
+  assert.match(requireValue(stateFor("InlineLayout")).evidence[1] ?? "", /effects 1/u);
+  assert.match(requireValue(stateFor("InlineLayout")).evidence[2] ?? "", /effect writes 1/u);
+  assert.equal(requireValue(stateFor("MemoizedLayout")).action, "review-state");
+  assert.match(requireValue(stateFor("MemoizedLayout")).evidence[2] ?? "", /effect writes 1/u);
+  assert.equal(requireValue(stateFor("AliasedInsertion")).action, "review-state");
+  assert.match(requireValue(stateFor("AliasedInsertion")).evidence[1] ?? "", /effects 1/u);
+  assert.equal(requireValue(stateFor("NamedEffect")).action, "review-state");
+  assert.match(requireValue(stateFor("NamedEffect")).evidence[2] ?? "", /effect writes 1/u);
   assert.equal(findings.filter((finding) => finding.hook === "useEffect").length, 1);
 });
 
@@ -1177,8 +1195,14 @@ test("isolates only state proven outside direct inline React transitions", () =>
     "fixture.tsx",
   );
 
-  assert.equal(findings.find((finding) => finding.name === "visible")?.action, "use-observable");
-  assert.equal(findings.find((finding) => finding.name === "busy")?.action, "review-state");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "visible")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "busy")).action,
+    "review-state",
+  );
 });
 
 test("preserves mutable React state when its owner has an every-commit effect", () => {
@@ -1202,7 +1226,10 @@ test("preserves mutable React state when its owner has an every-commit effect", 
     `,
       "fixture.tsx",
     );
-    assert.equal(findings.find((finding) => finding.name === "visible")?.action, "review-state");
+    assert.equal(
+      requireValue(findings.find((finding) => finding.name === "visible")).action,
+      "review-state",
+    );
   }
 
   const explicitUndefined = analyzeSource(
@@ -1221,7 +1248,7 @@ test("preserves mutable React state when its owner has an every-commit effect", 
     "fixture.tsx",
   );
   assert.equal(
-    explicitUndefined.find((finding) => finding.name === "visible")?.action,
+    requireValue(explicitUndefined.find((finding) => finding.name === "visible")).action,
     "review-state",
   );
 
@@ -1239,7 +1266,10 @@ test("preserves mutable React state when its owner has an every-commit effect", 
   `,
     "fixture.tsx",
   );
-  assert.equal(explicitNull.find((finding) => finding.name === "visible")?.action, "review-state");
+  assert.equal(
+    requireValue(explicitNull.find((finding) => finding.name === "visible")).action,
+    "review-state",
+  );
 });
 
 test("preserves mutable React state when its owner uses an inline callback ref", () => {
@@ -1258,7 +1288,10 @@ test("preserves mutable React state when its owner uses an inline callback ref",
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "visible")?.action, "review-state");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "visible")).action,
+    "review-state",
+  );
 });
 
 test("uses an owner-level boundary for fresh refs while allowing stable memoized refs", () => {
@@ -1373,7 +1406,10 @@ test("does not call a nonliteral dependency array an every-commit effect", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "visible")?.action, "use-observable");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "visible")).action,
+    "use-observable",
+  );
 });
 
 test("does not trust shadowed React effect bindings", () => {
@@ -1391,7 +1427,10 @@ test("does not trust shadowed React effect bindings", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "visible")?.action, "use-observable");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "visible")).action,
+    "use-observable",
+  );
   assert.equal(findings.filter((finding) => finding.hook === "useEffect").length, 0);
 
   const unrelatedNestedShadow = analyzeSource(
@@ -1410,7 +1449,7 @@ test("does not trust shadowed React effect bindings", () => {
     "fixture.tsx",
   );
   assert.equal(
-    unrelatedNestedShadow.find((finding) => finding.name === "visible")?.action,
+    requireValue(unrelatedNestedShadow.find((finding) => finding.name === "visible")).action,
     "review-state",
   );
 });
@@ -1435,7 +1474,7 @@ test("does not isolate controlled state captured by timers or subscriptions", ()
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -1453,7 +1492,7 @@ test("does not change stale useCallback snapshot semantics", () => {
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("migrates a complete effect-synchronized draft while preserving the effect", () => {
@@ -1475,7 +1514,10 @@ test("migrates a complete effect-synchronized draft while preserving the effect"
     findings.map((finding) => finding.action),
     ["use-observable", "review-effect"],
   );
-  assert.match(findings[0]?.message ?? "", /preserve the React synchronization effect/);
+  assert.match(
+    requireValue(findings[0]).message ?? "",
+    /preserve the React synchronization effect/u,
+  );
 });
 
 test("preserves lazy draft initialization as a once-only snapshot", () => {
@@ -1494,9 +1536,9 @@ test("preserves lazy draft initialization as a once-only snapshot", () => {
       "fixture.tsx",
     ),
     state = findings.find((finding) => finding.hook === "useState");
-  assert.equal(state?.action, "use-observable");
-  assert.match(state?.message ?? "", /once-only owner snapshot/);
-  assert.match(state?.message ?? "", /not pass it to Legend as a computed/);
+  assert.equal(requireValue(state).action, "use-observable");
+  assert.match(requireValue(state).message ?? "", /once-only owner snapshot/u);
+  assert.match(requireValue(state).message ?? "", /not pass it to Legend as a computed/u);
 });
 
 test("keeps a synchronized local draft beside its value-forwarding upstream command", () => {
@@ -1520,8 +1562,14 @@ test("keeps a synchronized local draft beside its value-forwarding upstream comm
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "name")?.action, "use-observable");
-  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "review-effect");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "name")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
+    "review-effect",
+  );
 });
 
 test("does not call unrelated or stateful work a synchronized draft forwarding command", () => {
@@ -1549,7 +1597,7 @@ test("does not call unrelated or stateful work a synchronized draft forwarding c
       "fixture.tsx",
     );
     assert.notEqual(
-      findings.find((finding) => finding.name === "name")?.action,
+      requireValue(findings.find((finding) => finding.name === "name")).action,
       "use-observable",
       edit,
     );
@@ -1583,9 +1631,9 @@ test("groups every state written by one synchronization effect", () => {
     states.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(states[0]?.group?.members, ["city", "zip"]);
-  assert.equal(states[0]?.group?.primary, true);
-  assert.equal(states[1]?.group?.primary, false);
+  assert.deepEqual(requireValue(requireValue(states[0]).group).members, ["city", "zip"]);
+  assert.equal(requireValue(requireValue(states[0]).group).primary, true);
+  assert.equal(requireValue(requireValue(states[1]).group).primary, false);
 });
 
 test("groups branch-complete drafts edited through a direct host callback", () => {
@@ -1619,7 +1667,7 @@ test("groups branch-complete drafts edited through a direct host callback", () =
     states.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(states[0]?.group?.members, ["name", "color"]);
+  assert.deepEqual(requireValue(requireValue(states[0]).group).members, ["name", "color"]);
 });
 
 test("treats TypeScript-only JSX wrappers as direct draft transport", () => {
@@ -1663,7 +1711,12 @@ test("treats TypeScript-only JSX wrappers as direct draft transport", () => {
     states.map((finding) => finding.action),
     ["use-observable", "use-observable", "use-observable", "use-observable"],
   );
-  assert.deepEqual(states[0]?.group?.members, ["country", "city", "region", "zip"]);
+  assert.deepEqual(requireValue(requireValue(states[0]).group).members, [
+    "country",
+    "city",
+    "region",
+    "zip",
+  ]);
 });
 
 test("isolates an effect-synchronized preview from its sibling producer", () => {
@@ -1684,11 +1737,17 @@ test("isolates an effect-synchronized preview from its sibling producer", () => 
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "active")?.action, "use-observable");
-  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "review-effect");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "active")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
+    "review-effect",
+  );
   assert.match(
-    findings.find((finding) => finding.name === "active")?.message ?? "",
-    /sibling.*Preview/i,
+    requireValue(findings.find((finding) => finding.name === "active")).message ?? "",
+    /sibling.*Preview/iu,
   );
 });
 
@@ -1710,8 +1769,11 @@ test("keeps opaque fallback work in the owner as a sibling preview snapshot", ()
       "fixture.tsx",
     ),
     state = findings.find((finding) => finding.name === "active");
-  assert.equal(state?.action, "use-observable");
-  assert.match(state?.message ?? "", /state-independent fallback inputs as ordinary snapshots/);
+  assert.equal(requireValue(state).action, "use-observable");
+  assert.match(
+    requireValue(state).message ?? "",
+    /state-independent fallback inputs as ordinary snapshots/u,
+  );
 });
 
 test("does not isolate a fallback expression that reads the state twice", () => {
@@ -1729,7 +1791,7 @@ test("does not isolate a fallback expression that reads the state twice", () => 
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("isolates a chart cursor in a stable sibling labels subtree", () => {
@@ -1748,8 +1810,8 @@ test("isolates a chart cursor in a stable sibling labels subtree", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /sibling.*<div>/i);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /sibling.*<div>/iu);
 });
 
 test("isolates direct setter transport from its sibling value consumer", () => {
@@ -1767,8 +1829,8 @@ test("isolates direct setter transport from its sibling value consumer", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /sibling.*Preview/i);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /sibling.*Preview/iu);
 });
 
 test("requires one stable producer and one complete sibling consumer", () => {
@@ -1790,7 +1852,7 @@ test("requires one stable producer and one complete sibling consumer", () => {
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -1807,7 +1869,7 @@ test("does not isolate a sibling preview when its alias also drives owner work",
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not call a producer command-only when it also invokes owner work", () => {
@@ -1829,7 +1891,7 @@ test("does not call a producer command-only when it also invokes owner work", ()
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("uses a strict local JSX cut for a compact synchronized draft", () => {
@@ -1857,7 +1919,7 @@ test("uses a strict local JSX cut for a compact synchronized draft", () => {
     states.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(states[0]?.group?.members, ["value", "error"]);
+  assert.deepEqual(requireValue(requireValue(states[0]).group).members, ["value", "error"]);
 });
 
 test("does not use owner line count as proof of a synchronized draft cut", () => {
@@ -1873,7 +1935,10 @@ test("does not use owner line count as proof of a synchronized draft cut", () =>
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "value")).action,
+    "use-observable",
+  );
 });
 
 test("requires a synchronized draft's one call site to contain every render read", () => {
@@ -1888,7 +1953,10 @@ test("requires a synchronized draft's one call site to contain every render read
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "value")).action,
+    "use-observable",
+  );
 });
 
 test("does not change a synchronized draft's stale deferred snapshot", () => {
@@ -1906,7 +1974,10 @@ test("does not change a synchronized draft's stale deferred snapshot", () => {
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "value")).action,
+    "use-observable",
+  );
 });
 
 test("rejects reset mirrors, hook-fed owner work, and edit commands with external work", () => {
@@ -1934,7 +2005,7 @@ test("rejects reset mirrors, hook-fed owner work, and edit commands with externa
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -1953,7 +2024,10 @@ test("keeps a synchronized draft when a one-hop projection feeds a hook", () => 
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "query")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "query")).action,
+    "use-observable",
+  );
 });
 
 test("does not use broad JSX count as proof of a synchronized draft render cut", () => {
@@ -1971,7 +2045,10 @@ test("does not use broad JSX count as proof of a synchronized draft render cut",
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "open")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "open")).action,
+    "use-observable",
+  );
 });
 
 test("keeps a keyed one-hop render alias inside a synchronized draft", () => {
@@ -1991,7 +2068,10 @@ test("keeps a keyed one-hop render alias inside a synchronized draft", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "active")?.action, "use-observable");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "active")).action,
+    "use-observable",
+  );
 });
 
 test("preserves one command snapshot for a synchronized draft read by deferred work", () => {
@@ -2012,8 +2092,8 @@ test("preserves one command snapshot for a synchronized draft read by deferred w
       "fixture.tsx",
     ),
     state = findings.find((finding) => finding.name === "decrement");
-  assert.equal(state?.action, "use-observable");
-  assert.match(state?.message ?? "", /snapshot once at command entry/);
+  assert.equal(requireValue(state).action, "use-observable");
+  assert.match(requireValue(state).message ?? "", /snapshot once at command entry/u);
 });
 
 test("accepts a literal reset effect when a controlled input proves independent editing", () => {
@@ -2028,7 +2108,10 @@ test("accepts a literal reset effect when a controlled input proves independent 
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "value")?.action, "use-observable");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "value")).action,
+    "use-observable",
+  );
 });
 
 test("does not treat an opaque setter prop as a draft edit path", () => {
@@ -2044,7 +2127,10 @@ test("does not treat an opaque setter prop as a draft edit path", () => {
     `,
       "fixture.tsx",
     );
-    assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
+    assert.notEqual(
+      requireValue(findings.find((finding) => finding.name === "value")).action,
+      "use-observable",
+    );
   }
 });
 
@@ -2062,7 +2148,10 @@ test("keeps owner rerenders when a memoized draft projection feeds another lifec
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "value")).action,
+    "use-observable",
+  );
 });
 
 test("rejects draft reads and dead member edits that do not originate in UI events", () => {
@@ -2081,8 +2170,14 @@ test("rejects draft reads and dead member edits that do not originate in UI even
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "first")?.action, "use-observable");
-  assert.notEqual(findings.find((finding) => finding.name === "second")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "first")).action,
+    "use-observable",
+  );
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "second")).action,
+    "use-observable",
+  );
 });
 
 test("rejects partial, asynchronous, cleanup, and derived effect sinks", () => {
@@ -2106,7 +2201,10 @@ test("rejects partial, asynchronous, cleanup, and derived effect sinks", () => {
     `,
         "fixture.tsx",
       );
-    assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
+    assert.notEqual(
+      requireValue(findings.find((finding) => finding.name === "value")).action,
+      "use-observable",
+    );
   }
 });
 
@@ -2122,7 +2220,7 @@ test("does not mistake a JSX callback invocation for an owner render read", () =
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-ref");
+  assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
 test("traces local callable state reads invoked before JSX", () => {
@@ -2138,7 +2236,7 @@ test("traces local callable state reads invoked before JSX", () => {
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-ref");
+  assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
 test("flags direct render state in a non-trivial owner as Legend-first", () => {
@@ -2152,9 +2250,9 @@ test("flags direct render state in a non-trivial owner as Legend-first", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
-  assert.equal(finding?.disposition, "candidate");
-  assert.match(finding?.message ?? "", /Legend-first restructuring candidate/);
+  assert.equal(requireValue(finding).action, "review-state");
+  assert.equal(requireValue(finding).disposition, "candidate");
+  assert.match(requireValue(finding).message ?? "", /Legend-first restructuring candidate/u);
 });
 
 test("reports competing observable subscriptions as evidence for direct render state", () => {
@@ -2171,11 +2269,11 @@ test("reports competing observable subscriptions as evidence for direct render s
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
-  assert.match(finding?.message ?? "", /Legend-first restructuring candidate/);
+  assert.equal(requireValue(finding).action, "review-state");
+  assert.match(requireValue(finding).message ?? "", /Legend-first restructuring candidate/u);
   assert.match(
-    finding?.message ?? "",
-    /also re-renders through an existing observable subscription; isolate this state only if it updates less often/,
+    requireValue(finding).message ?? "",
+    /also re-renders through an existing observable subscription; isolate this state only if it updates less often/u,
   );
 });
 
@@ -2194,8 +2292,8 @@ test("reports multiple legacy-hook subscriptions as competing evidence", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
-  assert.match(finding?.message ?? "", /2 existing observable subscriptions/);
+  assert.equal(requireValue(finding).action, "review-state");
+  assert.match(requireValue(finding).message ?? "", /2 existing observable subscriptions/u);
 });
 
 test("moves direct state into its strict stable JSX subtree", () => {
@@ -2213,8 +2311,8 @@ test("moves direct state into its strict stable JSX subtree", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "move-state-down");
-  assert.match(finding?.message ?? "", /every read and command is confined/);
+  assert.equal(requireValue(finding).action, "move-state-down");
+  assert.match(requireValue(finding).message ?? "", /every read and command is confined/u);
 });
 
 test("keeps ownership stable and extracts a conditional subscription subtree", () => {
@@ -2232,8 +2330,8 @@ test("keeps ownership stable and extracts a conditional subscription subtree", (
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /preserves conditional mount lifetime/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /preserves conditional mount lifetime/u);
 });
 
 test("isolates presentation gates whose branches contain ordinary render calls", () => {
@@ -2256,8 +2354,8 @@ test("isolates presentation gates whose branches contain ordinary render calls",
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /full state-controlled render expression/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /full state-controlled render expression/u);
 });
 
 test("isolates a presentation gate rendered by one local JSX factory", () => {
@@ -2277,8 +2375,8 @@ test("isolates a presentation gate rendered by one local JSX factory", () => {
     }
   `,
     finding = analyzeSource(source, "fixture.tsx").find((candidate) => candidate.name === "open");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /full state-controlled render expression/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /full state-controlled render expression/u);
 
   for (const unsafe of [
     source.replace("const renderDialog =", "let renderDialog ="),
@@ -2294,7 +2392,7 @@ test("isolates a presentation gate rendered by one local JSX factory", () => {
     ),
   ]) {
     const candidate = analyzeSource(unsafe, "fixture.tsx").find((result) => result.name === "open");
-    assert.notEqual(candidate?.action, "use-observable");
+    assert.notEqual(requireValue(candidate).action, "use-observable");
   }
 });
 
@@ -2316,8 +2414,8 @@ test("isolates a small logical JSX gate without moving its owner lifetime", () =
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /always-mounted leaf subscriber/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /always-mounted leaf subscriber/u);
 });
 
 test("isolates a leaf reached through one immutable render projection", () => {
@@ -2335,8 +2433,8 @@ test("isolates a leaf reached through one immutable render projection", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /full state-controlled render expression/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /full state-controlled render expression/u);
 });
 
 test("isolates a bounded pure projection in one uniquely selected repeated branch", () => {
@@ -2365,8 +2463,8 @@ test("isolates a bounded pure projection in one uniquely selected repeated branc
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "layoutWidth");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /uniquely selected branch/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /uniquely selected branch/u);
 });
 
 test("requires every proof for a uniquely selected repeated projection", () => {
@@ -2433,7 +2531,7 @@ test("requires every proof for a uniquely selected repeated projection", () => {
     const finding = analyzeSource(candidate, "fixture.tsx").find(
       (result) => result.name === "layoutWidth",
     );
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -2578,7 +2676,7 @@ test("keeps observable ownership across early-return and keyed subtree lifetimes
   `,
     "fixture.tsx",
   );
-  assert.equal(earlyReturn?.action, "use-observable");
+  assert.equal(requireValue(earlyReturn).action, "use-observable");
 
   const [keyed] = analyzeSource(
     `
@@ -2593,7 +2691,7 @@ test("keeps observable ownership across early-return and keyed subtree lifetimes
   `,
     "fixture.tsx",
   );
-  assert.equal(keyed?.action, "use-observable");
+  assert.equal(requireValue(keyed).action, "use-observable");
 });
 
 test("does not isolate direct state whose reads span the owner", () => {
@@ -2611,7 +2709,7 @@ test("does not isolate direct state whose reads span the owner", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("groups multiple direct states confined to the same JSX subtree", () => {
@@ -2639,7 +2737,7 @@ test("groups multiple direct states confined to the same JSX subtree", () => {
     grouped.map((finding) => finding.action),
     ["move-state-down", "move-state-down"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["query", "expanded"]);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, ["query", "expanded"]);
   assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 });
 
@@ -2668,7 +2766,7 @@ test("keeps observable ownership when a subtree cluster mixes direct and project
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["query", "selected"]);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, ["query", "selected"]);
 });
 
 test("does not let a direct state pull an escaped projection into its subtree cluster", () => {
@@ -2693,8 +2791,8 @@ test("does not let a direct state pull an escaped projection into its subtree cl
       "fixture.tsx",
     ),
     selected = findings.find((finding) => finding.name === "selected");
-  assert.equal(selected?.action, "review-state");
-  assert.equal(selected?.group, undefined);
+  assert.equal(requireValue(selected).action, "review-state");
+  assert.equal(requireValue(selected).group, undefined);
 });
 
 test("does not let a direct state pull a reactive-mutation projection into its subtree cluster", () => {
@@ -2724,8 +2822,8 @@ test("does not let a direct state pull a reactive-mutation projection into its s
       "fixture.tsx",
     ),
     selected = findings.find((finding) => finding.name === "selected");
-  assert.equal(selected?.action, "review-state");
-  assert.equal(selected?.group, undefined);
+  assert.equal(requireValue(selected).action, "review-state");
+  assert.equal(requireValue(selected).group, undefined);
 });
 
 test("places pure JSX prop projections in a call-site subscriber wrapper", () => {
@@ -2744,8 +2842,8 @@ test("places pure JSX prop projections in a call-site subscriber wrapper", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /leave the child API unchanged/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /leave the child API unchanged/u);
 });
 
 test("keeps raw state transport and its projection in one stable call-site wrapper", () => {
@@ -2762,8 +2860,8 @@ test("keeps raw state transport and its projection in one stable call-site wrapp
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /leave the child API unchanged/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /leave the child API unchanged/u);
 });
 
 test("keeps mixed transport ownership above a state-controlled call-site gate", () => {
@@ -2780,8 +2878,8 @@ test("keeps mixed transport ownership above a state-controlled call-site gate", 
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /full state-controlled render expression/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /full state-controlled render expression/u);
 });
 
 test("does not transport a whole mixed state value into every repeated row subscriber", () => {
@@ -2797,7 +2895,7 @@ test("does not transport a whole mixed state value into every repeated row subsc
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not put callable React state into a mixed observable transport", () => {
@@ -2821,7 +2919,7 @@ test("does not put callable React state into a mixed observable transport", () =
     `,
         "fixture.tsx",
       );
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -2866,8 +2964,8 @@ test("keeps callable React state out of projection and sibling leaf rules", () =
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable", state.declaration);
-    assert.notEqual(finding?.action, "move-state-down", state.declaration);
+    assert.notEqual(requireValue(finding).action, "use-observable", state.declaration);
+    assert.notEqual(requireValue(finding).action, "move-state-down", state.declaration);
   }
 });
 
@@ -2888,7 +2986,7 @@ test("does not mistake ordinary local state aliases for callable state", () => {
     `,
       "fixture.tsx",
     );
-    assert.equal(finding?.action, "use-observable", alias);
+    assert.equal(requireValue(finding).action, "use-observable", alias);
   }
 });
 
@@ -2916,8 +3014,8 @@ test("resolves callable aliases in the nearest lexical scope", () => {
     finding = findings.find(
       (candidate) => candidate.name === "value" && candidate.location.line > 8,
     );
-  assert.notEqual(finding?.action, "use-observable");
-  assert.notEqual(finding?.action, "move-state-down");
+  assert.notEqual(requireValue(finding).action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "move-state-down");
 });
 
 test("isolates direct primitive state at one stable call-site leaf", () => {
@@ -3031,8 +3129,8 @@ test("does not mistake unresolved boundaries for proof of leaf ownership", () =>
     } else {
       // The dirty+visible pair is one atomic workflow: the grouped observable-model
       // Instruction migrates both members together instead of splitting the transaction.
-      assert.equal(atomic?.action, "use-observable");
-      assert.match(atomic?.message ?? "", /one owner-lifetime observable model/);
+      assert.equal(requireValue(atomic).action, "use-observable");
+      assert.match(requireValue(atomic).message ?? "", /one owner-lifetime observable model/u);
     }
   }
 });
@@ -3055,7 +3153,7 @@ test("reviews a literal boolean leaf commanded by memoized event options", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("does not treat lifecycle options passed to an unknown hook as JSX events", () => {
@@ -3077,7 +3175,7 @@ test("does not treat lifecycle options passed to an unknown hook as JSX events",
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("does not treat event options wrapped by a JSX-time registrar as direct events", () => {
@@ -3095,7 +3193,7 @@ test("does not treat event options wrapped by a JSX-time registrar as direct eve
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("requires literal leaf setters to be event-rooted and independently useful", () => {
@@ -3167,8 +3265,8 @@ test("isolates an async pending flag at one stable leaf without changing its com
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /async completion boundary/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /async completion boundary/u);
 });
 
 test("keeps async status label projections inside the same subscribed leaf", () => {
@@ -3190,8 +3288,8 @@ test("keeps async status label projections inside the same subscribed leaf", () 
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /stable pending-control call site/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /stable pending-control call site/u);
 });
 
 test("isolates a direct async status projection in one stable call site", () => {
@@ -3213,9 +3311,9 @@ test("isolates a direct async status projection in one stable call site", () => 
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "encoding");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /async pending flag/);
-  assert.match(finding?.message ?? "", /pending-control call site/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /async pending flag/u);
+  assert.match(requireValue(finding).message ?? "", /pending-control call site/u);
 });
 
 test("keeps a pure conditional status label inside the direct async leaf", () => {
@@ -3265,10 +3363,10 @@ test("keeps a pure conditional status label inside the direct async leaf", () =>
   `,
     "fixture.tsx",
   ).filter((candidate) => candidate.name === "copying");
-  assert.equal(findings[0]?.action, "use-observable");
-  assert.match(findings[0]?.message ?? "", /async pending flag/);
-  assert.notEqual(findings[1]?.action, "use-observable");
-  assert.notEqual(findings[2]?.action, "use-observable");
+  assert.equal(requireValue(findings[0]).action, "use-observable");
+  assert.match(requireValue(findings[0]).message ?? "", /async pending flag/u);
+  assert.notEqual(requireValue(findings[1]).action, "use-observable");
+  assert.notEqual(requireValue(findings[2]).action, "use-observable");
 });
 
 test("requires one pure non-gating call site for a direct async status projection", () => {
@@ -3295,7 +3393,7 @@ test("requires one pure non-gating call site for a direct async status projectio
     `,
       "fixture.tsx",
     );
-    assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+    assert.doesNotMatch(requireValue(finding).message ?? "", /async pending flag/u);
   }
 });
 
@@ -3351,7 +3449,7 @@ test("traces an async pending command through an event-rooted submit helper", ()
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("traces async pending state through a direct JSX event adapter", () => {
@@ -3426,8 +3524,8 @@ test("traces an async pending helper through a proven React Hook Form event adap
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /async completion boundary/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /async completion boundary/u);
 });
 
 test("does not treat deferred or non-event callback adapters as event roots", () => {
@@ -3471,7 +3569,7 @@ test("does not treat deferred or non-event callback adapters as event roots", ()
     "fixture.tsx",
   ).filter((finding) => finding.name === "saving");
   for (const finding of findings) {
-    assert.doesNotMatch(finding.message, /async pending flag/);
+    assert.doesNotMatch(finding.message, /async pending flag/u);
   }
 });
 
@@ -3494,8 +3592,8 @@ test("isolates a Promise-chain status rendered through one reachable JSX callbac
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /async completion boundary/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /async completion boundary/u);
 });
 
 test("requires a Promise-chain leaf alias to be live, unique, and non-repeated", () => {
@@ -3518,7 +3616,7 @@ test("requires a Promise-chain leaf alias to be live, unique, and non-repeated",
     `,
       "fixture.tsx",
     );
-    assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+    assert.doesNotMatch(requireValue(finding).message ?? "", /async pending flag/u);
   }
 });
 
@@ -3549,7 +3647,7 @@ test("does not flatten timers or unrelated Promise continuations into one async 
     "fixture.tsx",
   );
   for (const finding of findings.filter((candidate) => candidate.name === "reading")) {
-    assert.doesNotMatch(finding.message, /async pending flag/);
+    assert.doesNotMatch(finding.message, /async pending flag/u);
   }
 });
 
@@ -3573,8 +3671,8 @@ test("isolates async status after non-mutating validation guards", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /async completion boundary/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /async completion boundary/u);
 });
 
 test("isolates async status after bounded synchronous command preparation", () => {
@@ -3597,8 +3695,8 @@ test("isolates async status after bounded synchronous command preparation", () =
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /async completion boundary/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /async completion boundary/u);
 });
 
 test("allows an event-rooted reset-only helper beside one async activation", () => {
@@ -3620,7 +3718,7 @@ test("allows an event-rooted reset-only helper beside one async activation", () 
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("recognizes an async command selected by a JSX event conditional", () => {
@@ -3642,8 +3740,8 @@ test("recognizes an async command selected by a JSX event conditional", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /async completion boundary/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /async completion boundary/u);
 });
 
 test("does not treat a callback used as an event condition as the selected handler", () => {
@@ -3665,7 +3763,7 @@ test("does not treat a callback used as an event condition as the selected handl
   `,
     "fixture.tsx",
   );
-  assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+  assert.doesNotMatch(requireValue(finding).message ?? "", /async pending flag/u);
 });
 
 test("does not hide a synchronous companion write inside a Promise-chain argument", () => {
@@ -3690,7 +3788,7 @@ test("does not hide a synchronous companion write inside a Promise-chain argumen
   `,
     "fixture.tsx",
   );
-  assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+  assert.doesNotMatch(requireValue(finding).message ?? "", /async pending flag/u);
 });
 
 test("does not isolate a Promise-chain status before later synchronous owner work", () => {
@@ -3716,7 +3814,7 @@ test("does not isolate a Promise-chain status before later synchronous owner wor
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "saving");
-  assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+  assert.doesNotMatch(requireValue(finding).message ?? "", /async pending flag/u);
 });
 
 test("does not isolate prepared async status when owner state can update before suspension", () => {
@@ -3755,7 +3853,7 @@ test("does not isolate prepared async status when owner state can update before 
     "fixture.tsx",
   );
   for (const finding of findings.filter((candidate) => candidate.name === "saving")) {
-    assert.doesNotMatch(finding.message, /async pending flag/);
+    assert.doesNotMatch(finding.message, /async pending flag/u);
   }
 });
 
@@ -3792,7 +3890,7 @@ test("does not cross an early exit or scheduled reset to prove async status", ()
     "fixture.tsx",
   );
   for (const finding of findings.filter((candidate) => candidate.name === "saving")) {
-    assert.doesNotMatch(finding.message, /async pending flag/);
+    assert.doesNotMatch(finding.message, /async pending flag/u);
   }
 });
 
@@ -3813,8 +3911,8 @@ test("keeps async status ownership above a state-independent conditional leaf", 
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /async completion boundary/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /async completion boundary/u);
 });
 
 test("does not isolate async status when another owner update starts the command", () => {
@@ -3839,7 +3937,10 @@ test("does not isolate async status when another owner update starts the command
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "saving")?.action, "use-observable");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "saving")).action,
+    "use-observable",
+  );
 });
 
 test("does not isolate async status owned by a reactive mutation", () => {
@@ -3898,7 +3999,7 @@ test("keeps a proven independent UI transition beside a reactive mutation path",
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("does not isolate async status from a scheduled callback or nonliteral write", () => {
@@ -3920,7 +4021,7 @@ test("does not isolate async status from a scheduled callback or nonliteral writ
     `,
       "fixture.tsx",
     );
-    assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
+    assert.doesNotMatch(requireValue(finding).message ?? "", /async pending flag/u);
   }
 });
 
@@ -3945,9 +4046,9 @@ test("isolates broad async status fanout but keeps a cohesive form in React", ()
       "fixture.tsx",
     ),
     saving = findings.filter((candidate) => candidate.name === "saving");
-  assert.notEqual(saving[0]?.action, "use-observable");
-  assert.equal(saving[1]?.action, "use-observable");
-  assert.match(saving[1]?.message ?? "", /two stable status call sites/);
+  assert.notEqual(requireValue(saving[0]).action, "use-observable");
+  assert.equal(requireValue(saving[1]).action, "use-observable");
+  assert.match(requireValue(saving[1]).message ?? "", /two stable status call sites/u);
 });
 
 test("keeps exact async status in React when the owner is already the status leaf", () => {
@@ -3965,8 +4066,8 @@ test("keeps exact async status in React when the owner is already the status lea
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "keep-state");
-  assert.match(finding?.message ?? "", /cohesive owner boundary/);
+  assert.equal(requireValue(finding).action, "keep-state");
+  assert.match(requireValue(finding).message ?? "", /cohesive owner boundary/u);
 });
 
 test("keeps delayed async status in its cohesive button owner", () => {
@@ -3991,8 +4092,8 @@ test("keeps delayed async status in its cohesive button owner", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "keep-state");
-  assert.match(finding?.message ?? "", /delays the pending transition/);
+  assert.equal(requireValue(finding).action, "keep-state");
+  assert.match(requireValue(finding).message ?? "", /delays the pending transition/u);
 });
 
 test("keeps unsafe delayed pending shapes under review", () => {
@@ -4016,7 +4117,7 @@ test("keeps unsafe delayed pending shapes under review", () => {
     `,
       "fixture.tsx",
     );
-    assert.equal(finding?.action, "review-state");
+    assert.equal(requireValue(finding).action, "review-state");
   }
 });
 
@@ -4037,8 +4138,8 @@ test("isolates async status in a compact owner with an independent render cut", 
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /independent owner content/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /independent owner content/u);
 });
 
 test("does not treat a lazy or indirect initializer as a direct primitive", () => {
@@ -4057,7 +4158,10 @@ test("does not treat a lazy or indirect initializer as a direct primitive", () =
     "fixture.tsx",
   );
   for (const name of ["lazy", "indirect"]) {
-    assert.notEqual(findings.find((finding) => finding.name === name)?.action, "use-observable");
+    assert.notEqual(
+      requireValue(findings.find((finding) => finding.name === name)).action,
+      "use-observable",
+    );
   }
 });
 
@@ -4077,7 +4181,7 @@ test("does not wrap projections that span sibling call sites", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("does not promote a projection whose every write shares a reactive mutation lifecycle", () => {
@@ -4101,7 +4205,7 @@ test("does not promote a projection whose every write shares a reactive mutation
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("isolates an exact keyed record entry in a stable repeated row", () => {
@@ -4137,9 +4241,9 @@ test("isolates an exact keyed record entry in a stable repeated row", () => {
     "fixture.tsx",
   ).find((candidate) => candidate.name === "feedback");
 
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /dynamic entry/);
-  assert.deepEqual(finding?.stateModel, {
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /dynamic entry/u);
+  assert.deepEqual(requireValue(finding).stateModel, {
     ownership: "local-observable",
     subscription: "leaf-use-value",
   });
@@ -4228,7 +4332,7 @@ test("keeps ambiguous keyed record entries conservative", () => {
     `,
       "fixture.tsx",
     ).find((candidate) => candidate.name === "feedback");
-    assert.doesNotMatch(finding?.message ?? "", /dynamic entry/, variant.label);
+    assert.doesNotMatch(requireValue(finding).message ?? "", /dynamic entry/u, variant.label);
   }
 });
 
@@ -4247,7 +4351,7 @@ test("does not promote a projection when its setter callback escapes through a c
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("does not treat a namespace hook callback as an event command", () => {
@@ -4265,7 +4369,7 @@ test("does not treat a namespace hook callback as an event command", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("keeps React state when the component is already a tiny render leaf", () => {
@@ -4279,8 +4383,8 @@ test("keeps React state when the component is already a tiny render leaf", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "keep-state");
-  assert.equal(finding?.disposition, "keep");
+  assert.equal(requireValue(finding).action, "keep-state");
+  assert.equal(requireValue(finding).disposition, "keep");
 });
 
 test("does not issue production state migrations for test harnesses", () => {
@@ -4295,8 +4399,8 @@ test("does not issue production state migrations for test harnesses", () => {
   `,
     "Subject.test.tsx",
   );
-  assert.equal(finding?.action, "keep-state");
-  assert.equal(finding?.disposition, "keep");
+  assert.equal(requireValue(finding).action, "keep-state");
+  assert.equal(requireValue(finding).disposition, "keep");
 });
 
 test("does not issue production effect migrations for test harnesses", () => {
@@ -4310,8 +4414,8 @@ test("does not issue production effect migrations for test harnesses", () => {
   `,
     "Subject.test.tsx",
   );
-  assert.equal(finding?.action, "keep-effect");
-  assert.equal(finding?.disposition, "keep");
+  assert.equal(requireValue(finding).action, "keep-effect");
+  assert.equal(requireValue(finding).disposition, "keep");
 });
 
 test("does not delete derived state inside a test harness", () => {
@@ -4412,8 +4516,8 @@ test("moves branch-local state down when every outside reset provably unmounts t
       "fixture.tsx",
     ),
     finding = findings.find((candidate) => candidate.name === "showDetails");
-  assert.equal(finding?.action, "move-state-down");
-  assert.match(finding?.message ?? "", /resets it only when that branch unmounts/);
+  assert.equal(requireValue(finding).action, "move-state-down");
+  assert.match(requireValue(finding).message ?? "", /resets it only when that branch unmounts/u);
 });
 
 test("does not move branch-local state when an outside reset can leave the branch mounted", () => {
@@ -4446,7 +4550,7 @@ test("does not move branch-local state when an outside reset can leave the branc
         "fixture.tsx",
       ),
       finding = findings.find((candidate) => candidate.name === "showDetails");
-    assert.notEqual(finding?.action, "move-state-down", reset);
+    assert.notEqual(requireValue(finding).action, "move-state-down", reset);
   }
 });
 
@@ -4485,8 +4589,14 @@ test("keeps a coupled parent opener atomic despite a child visibility callback",
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "open")?.action, "review-state");
-  assert.equal(findings.find((finding) => finding.name === "target")?.action, "review-state");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "open")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "target")).action,
+    "review-state",
+  );
 });
 
 test("isolates visibility when companion writes occur only while closing", () => {
@@ -4505,8 +4615,14 @@ test("isolates visibility when companion writes occur only while closing", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "open")?.action, "use-observable");
-  assert.equal(findings.find((finding) => finding.name === "draft")?.action, "review-state");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "open")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "draft")).action,
+    "review-state",
+  );
 
   const nonVisibility = analyzeSource(
     `
@@ -4524,8 +4640,14 @@ test("isolates visibility when companion writes occur only while closing", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(nonVisibility.find((finding) => finding.name === "active")?.action, "review-state");
-  assert.equal(nonVisibility.find((finding) => finding.name === "draft")?.action, "review-state");
+  assert.equal(
+    requireValue(nonVisibility.find((finding) => finding.name === "active")).action,
+    "review-state",
+  );
+  assert.equal(
+    requireValue(nonVisibility.find((finding) => finding.name === "draft")).action,
+    "review-state",
+  );
 });
 
 test("proves a controlled boolean forwards only guarded close companions", () => {
@@ -4548,8 +4670,14 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
   `,
     "fixture.tsx",
   );
-  assert.equal(safe.find((finding) => finding.name === "open")?.action, "use-observable");
-  assert.equal(safe.find((finding) => finding.name === "draft")?.action, "review-state");
+  assert.equal(
+    requireValue(safe.find((finding) => finding.name === "open")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(safe.find((finding) => finding.name === "draft")).action,
+    "review-state",
+  );
 
   for (const unsafeChange of [
     `if (nextOpen) setDraft("next"); setOpen(nextOpen);`,
@@ -4572,12 +4700,12 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
       "fixture.tsx",
     );
     assert.equal(
-      unsafe.find((finding) => finding.name === "open")?.action,
+      requireValue(unsafe.find((finding) => finding.name === "open")).action,
       "review-state",
       unsafeChange,
     );
     assert.equal(
-      unsafe.find((finding) => finding.name === "draft")?.action,
+      requireValue(unsafe.find((finding) => finding.name === "draft")).action,
       "review-state",
       unsafeChange,
     );
@@ -4603,7 +4731,7 @@ test("does not put a subscriber inside its own false visibility gate", () => {
       "fixture.tsx",
     ),
     open = findings.find((finding) => finding.name === "open");
-  assert.equal(open?.action, "review-state");
+  assert.equal(requireValue(open).action, "review-state");
 });
 
 test("does not treat arbitrary direct setter props as independent child commands", () => {
@@ -4624,7 +4752,10 @@ test("does not treat arbitrary direct setter props as independent child commands
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "open")?.action, "review-state");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "open")).action,
+    "review-state",
+  );
 });
 
 test("does not infer an independent write through a helper-hidden companion update", () => {
@@ -4688,8 +4819,8 @@ test("isolates an independently opened leaf while preserving coupled workflow tr
     ),
     open = findings.find((finding) => finding.name === "open"),
     selection = findings.find((finding) => finding.name === "selection");
-  assert.equal(open?.action, "use-observable");
-  assert.equal(selection?.action, "review-state");
+  assert.equal(requireValue(open).action, "use-observable");
+  assert.equal(requireValue(selection).action, "review-state");
 });
 
 test("does not move an inline controlled callback that co-writes owner state", () => {
@@ -4762,10 +4893,10 @@ test("isolates a lazy-initialized value inside one stable JSX child callback", (
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /created exactly once/);
-  assert.match(finding?.message ?? "", /do not turn the initializer into a computed/);
-  assert.match(finding?.message ?? "", /ImageField/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /created exactly once/u);
+  assert.match(requireValue(finding).message ?? "", /do not turn the initializer into a computed/u);
+  assert.match(requireValue(finding).message ?? "", /ImageField/u);
 });
 
 test("keeps lazy callback transport without one stable independent leaf cut", () => {
@@ -4790,7 +4921,7 @@ test("keeps lazy callback transport without one stable independent leaf cut", ()
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable", body);
+    assert.notEqual(requireValue(finding).action, "use-observable", body);
   }
 });
 
@@ -4812,7 +4943,7 @@ test("does not put a lazy callable value into a nested observable leaf", () => {
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("keeps a lazy callback leaf when its write command also invalidates the owner", () => {
@@ -4840,7 +4971,7 @@ test("keeps a lazy callback leaf when its write command also invalidates the own
       "fixture.tsx",
     ),
     preview = findings.find((finding) => finding.name === "preview");
-  assert.notEqual(preview?.action, "use-observable");
+  assert.notEqual(requireValue(preview).action, "use-observable");
 });
 
 test("does not promote broad transported state when every write also invalidates the owner", () => {
@@ -4864,7 +4995,10 @@ test("does not promote broad transported state when every write also invalidates
   `,
       "fixture.tsx",
     );
-  assert.equal(findings.find((finding) => finding.name === "value")?.action, "review-state");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "value")).action,
+    "review-state",
+  );
 });
 
 test("does not split a broad transported preview from a companion React transition", () => {
@@ -4892,7 +5026,10 @@ test("does not split a broad transported preview from a companion React transiti
   `,
       "fixture.tsx",
     );
-  assert.equal(findings.find((finding) => finding.name === "preview")?.action, "review-state");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "preview")).action,
+    "review-state",
+  );
 });
 
 test("does not move controlled state through a stored JSX value", () => {
@@ -4956,8 +5093,8 @@ test("isolates a narrow projection inside a JSX child render callback", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /leaf subscriber/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /leaf subscriber/u);
 });
 
 test("does not trust an unresolved event producer inside a JSX child render callback", () => {
@@ -4975,7 +5112,7 @@ test("does not trust an unresolved event producer inside a JSX child render call
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("does not isolate a key projection inside a JSX child render callback", () => {
@@ -4993,7 +5130,7 @@ test("does not isolate a key projection inside a JSX child render callback", () 
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("requires repeated projections to depend on a stable row key", () => {
@@ -5036,8 +5173,8 @@ test("allows a keyed row projection to read the current key in its click command
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /per-item/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /per-item/u);
 });
 
 test("does not move direct state when every write shares a mutation lifecycle", () => {
@@ -5124,7 +5261,7 @@ test("groups a co-written dialog payload and visibility flag into one observable
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["target", "open"]);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, ["target", "open"]);
   assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 });
 
@@ -5152,8 +5289,8 @@ test("groups a persistent dialog model behind one bounded payload gate", () => {
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["target", "open"]);
-  assert.match(grouped[0]?.message ?? "", /stable leaf wrapper/);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, ["target", "open"]);
+  assert.match(requireValue(grouped[0]).message ?? "", /stable leaf wrapper/u);
 
   const fanout = analyzeSource(
     `
@@ -5202,8 +5339,12 @@ test("groups a persistent dialog payload, visibility, and monotonic mount latch"
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["target", "open", "ready"]);
-  assert.match(grouped[0]?.message ?? "", /persistent dialog state/);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, [
+    "target",
+    "open",
+    "ready",
+  ]);
+  assert.match(requireValue(grouped[0]).message ?? "", /persistent dialog state/u);
 
   const resetting = analyzeSource(source("setReady(false);"), "fixture.tsx");
   assert.equal(resetting.filter((finding) => finding.group).length, 0);
@@ -5232,7 +5373,7 @@ test("groups one bounded logical-and dialog gate without merging payload fanout"
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["open", "target"]);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, ["open", "target"]);
 
   const fanout = analyzeSource(source("{target && <Preview item={target} />}"), "fixture.tsx");
   assert.equal(fanout.filter((finding) => finding.group).length, 0);
@@ -5297,7 +5438,7 @@ test("groups an undefined-initialized dialog payload without accepting opaque in
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["target", "open"]);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, ["target", "open"]);
 
   const opaque = analyzeSource(source("loadInitialTarget()"), "fixture.tsx");
   assert.equal(opaque.filter((finding) => finding.group).length, 0);
@@ -5508,9 +5649,9 @@ test("groups a payload-gated timed feedback flag without widening its subscriber
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["password", "copied"]);
-  assert.match(grouped[0]?.message ?? "", /batch/);
-  assert.match(grouped[0]?.message ?? "", /nested feedback leaf/);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, ["password", "copied"]);
+  assert.match(requireValue(grouped[0]).message ?? "", /batch/u);
+  assert.match(requireValue(grouped[0]).message ?? "", /nested feedback leaf/u);
   assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 });
 
@@ -5647,28 +5788,27 @@ test("groups a co-written cursor and editable name into one observable draft", (
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["draftId", "draftName"]);
-  assert.match(grouped[0]?.message ?? "", /atomic/i);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, ["draftId", "draftName"]);
+  assert.match(requireValue(grouped[0]).message ?? "", /atomic/iu);
   assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 
   const closeOnly = analyzeSource(
-    source("const close = () => setDraftId(null);", "<button onClick={close}>Close</button>"),
-    "fixture.tsx",
-  );
-  assert.deepEqual(closeOnly.find((finding) => finding.name === "draftId")?.group?.members, [
-    "draftId",
-    "draftName",
-  ]);
+      source("const close = () => setDraftId(null);", "<button onClick={close}>Close</button>"),
+      "fixture.tsx",
+    ),
+    closeOnlyFinding = requireValue(closeOnly.find((finding) => finding.name === "draftId"));
+  assert.deepEqual(requireValue(closeOnlyFinding.group).members, ["draftId", "draftName"]);
 
   const staleDraft = analyzeSource(
-    source(
-      "const switchWithoutDraft = () => setDraftId(items[0]!.id);",
-      "<button onClick={switchWithoutDraft}>Switch</button>",
+      source(
+        "const switchWithoutDraft = () => setDraftId(items[0]!.id);",
+        "<button onClick={switchWithoutDraft}>Switch</button>",
+      ),
+      "fixture.tsx",
     ),
-    "fixture.tsx",
-  );
+    staleDraftFinding = requireValue(staleDraft.find((finding) => finding.name === "draftId"));
   assert.notEqual(
-    staleDraft.find((finding) => finding.name === "draftId")?.group?.members.join(","),
+    staleDraftFinding.group && staleDraftFinding.group.members.join(","),
     "draftId,draftName",
   );
 });
@@ -5706,16 +5846,20 @@ test("groups selection mode with its independently editable ID collection", () =
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.deepEqual(grouped[0]?.group?.members, ["selectionMode", "selectedIds"]);
-  assert.match(grouped[0]?.message ?? "", /atomic/i);
+  assert.deepEqual(requireValue(requireValue(grouped[0]).group).members, [
+    "selectionMode",
+    "selectedIds",
+  ]);
+  assert.match(requireValue(grouped[0]).message ?? "", /atomic/iu);
   assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 
   const unsafe = analyzeSource(
-    source("const suspend = () => setSelectionMode(false);"),
-    "fixture.tsx",
-  );
+      source("const suspend = () => setSelectionMode(false);"),
+      "fixture.tsx",
+    ),
+    unsafeFinding = requireValue(unsafe.find((finding) => finding.name === "selectionMode"));
   assert.notEqual(
-    unsafe.find((finding) => finding.name === "selectionMode")?.group?.members.join(","),
+    unsafeFinding.group && unsafeFinding.group.members.join(","),
     "selectionMode,selectedIds",
   );
 });
@@ -5748,9 +5892,12 @@ test("does not merge mutually exclusive switch branches into one state cluster",
   `,
       "fixture.tsx",
     ),
-    primary = findings.find((finding) => finding.group?.primary);
-  assert.deepEqual(primary?.group?.members, ["linkTarget", "linkOpen"]);
-  assert.equal(findings.find((finding) => finding.name === "editTarget")?.group, undefined);
+    primary = findings.find((finding) => finding.group && finding.group.primary);
+  assert.deepEqual(requireValue(requireValue(primary).group).members, ["linkTarget", "linkOpen"]);
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "editTarget")).group,
+    undefined,
+  );
 });
 
 test("reviews fanout to multiple leaves without assuming Legend is faster", () => {
@@ -5884,7 +6031,10 @@ test("does not confuse a sibling state setter with an external subscription", ()
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "keep-effect");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
+    "keep-effect",
+  );
 });
 
 test("does not let a sibling setter suppress a module-global mount candidate", () => {
@@ -5903,7 +6053,10 @@ test("does not let a sibling setter suppress a module-global mount candidate", (
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "use-mount");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
+    "use-mount",
+  );
 });
 
 test("does not call a resettable state value derived", () => {
@@ -5999,7 +6152,7 @@ test("does not move reset effects whose initializer evaluation is not stable", (
       "fixture.tsx",
     );
     assert.equal(
-      findings.find((finding) => finding.hook === "useEffect")?.action,
+      requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
       "review-effect",
       reset,
     );
@@ -6179,9 +6332,9 @@ test("preserves React lifecycle timing when command-only state becomes a ref", (
       "fixture.tsx",
     ),
     state = findings.find((finding) => finding.hook === "useState");
-  assert.equal(state?.action, "use-ref");
-  assert.match(state?.message ?? "", /preserve any existing React lifecycle hook/i);
-  assert.match(state?.evidence[2] ?? "", /effect writes 2/);
+  assert.equal(requireValue(state).action, "use-ref");
+  assert.match(requireValue(state).message ?? "", /preserve any existing React lifecycle hook/iu);
+  assert.match(requireValue(state).evidence[2] ?? "", /effect writes 2/u);
 });
 
 test("uses a ref for command state read through imported React Hook Form", () => {
@@ -6210,8 +6363,8 @@ test("uses a ref for command state read through imported React Hook Form", () =>
   `,
     "fixture.tsx",
   ).filter((finding) => finding.name === "secret");
-  assert.equal(findings[0]?.action, "use-ref");
-  assert.notEqual(findings[1]?.action, "use-ref");
+  assert.equal(requireValue(findings[0]).action, "use-ref");
+  assert.notEqual(requireValue(findings[1]).action, "use-ref");
 });
 
 test("isolates effect-written presentation state in a leaf subscriber", () => {
@@ -6234,9 +6387,9 @@ test("isolates effect-written presentation state in a leaf subscriber", () => {
     "fixture.tsx",
   );
 
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /preserve the React effect/i);
-  assert.match(finding?.message ?? "", /leaf subscriber/i);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /preserve the React effect/iu);
+  assert.match(requireValue(finding).message ?? "", /leaf subscriber/iu);
 });
 
 test("isolates presentation state written by an effect-owned memoized command", () => {
@@ -6259,14 +6412,14 @@ test("isolates presentation state written by an effect-owned memoized command", 
     }
   `,
     [finding] = analyzeSource(source(""), "fixture.tsx");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /memoized command/i);
-  assert.match(finding?.message ?? "", /effect and cleanup/i);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /memoized command/iu);
+  assert.match(requireValue(finding).message ?? "", /effect and cleanup/iu);
 
   const escaped = analyzeSource(source("onUpdate={updateDimensions}"), "fixture.tsx").find(
     (candidate) => candidate.name === "dimensions",
   );
-  assert.notEqual(escaped?.action, "use-observable");
+  assert.notEqual(requireValue(escaped).action, "use-observable");
 });
 
 test("requires a material five-element cut in a compact effect-written owner", () => {
@@ -6284,10 +6437,10 @@ test("requires a material five-element cut in a compact effect-written owner", (
     ).find((candidate) => candidate.name === "visible");
 
   assert.equal(
-    analyze("<Header /><Nav /><Summary /><Filters /><Footer />")?.action,
+    requireValue(analyze("<Header /><Nav /><Summary /><Filters /><Footer />")).action,
     "use-observable",
   );
-  assert.notEqual(analyze("<Header /><Nav /><Footer />")?.action, "use-observable");
+  assert.notEqual(requireValue(analyze("<Header /><Nav /><Footer />")).action, "use-observable");
 });
 
 test("accepts an effect-written projection through the imported clsx package", () => {
@@ -6310,7 +6463,7 @@ test("accepts an effect-written projection through the imported clsx package", (
     "fixture.tsx",
   );
 
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 
   const [shadowed] = analyzeSource(
     `
@@ -6328,7 +6481,7 @@ test("accepts an effect-written projection through the imported clsx package", (
   `,
     "fixture.tsx",
   );
-  assert.notEqual(shadowed?.action, "use-observable");
+  assert.notEqual(requireValue(shadowed).action, "use-observable");
 });
 
 test("combines effect-written presentation state projected through two const aliases", () => {
@@ -6355,8 +6508,8 @@ test("combines effect-written presentation state projected through two const ali
     "fixture.tsx",
   );
 
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /<ScrollView>/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /<ScrollView>/u);
 
   const unkeyed = analyzeSource(
     `
@@ -6374,7 +6527,7 @@ test("combines effect-written presentation state projected through two const ali
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "items");
-  assert.notEqual(unkeyed?.action, "use-observable");
+  assert.notEqual(requireValue(unkeyed).action, "use-observable");
 });
 
 test("keeps unsafe effect-written presentation state under review", () => {
@@ -6398,7 +6551,7 @@ test("keeps unsafe effect-written presentation state under review", () => {
         "fixture.tsx",
       ),
       elapsed = findings.find((finding) => finding.name === "elapsed");
-    assert.notEqual(elapsed?.action, "use-observable", body);
+    assert.notEqual(requireValue(elapsed).action, "use-observable", body);
   }
 
   const opaqueGate = analyzeSource(
@@ -6415,7 +6568,7 @@ test("keeps unsafe effect-written presentation state under review", () => {
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "visible");
-  assert.notEqual(opaqueGate?.action, "use-observable");
+  assert.notEqual(requireValue(opaqueGate).action, "use-observable");
 });
 
 test("does not move lifecycle-written rendered or self-read state into a ref", () => {
@@ -6431,7 +6584,7 @@ test("does not move lifecycle-written rendered or self-read state into a ref", (
   `,
     "fixture.tsx",
   ).find((finding) => finding.hook === "useState");
-  assert.notEqual(rendered?.action, "use-ref");
+  assert.notEqual(requireValue(rendered).action, "use-ref");
 
   const selfRead = analyzeSource(
     `
@@ -6445,7 +6598,7 @@ test("does not move lifecycle-written rendered or self-read state into a ref", (
   `,
     "fixture.tsx",
   ).find((finding) => finding.hook === "useState");
-  assert.notEqual(selfRead?.action, "use-ref");
+  assert.notEqual(requireValue(selfRead).action, "use-ref");
 });
 
 test("does not call lifecycle or render-callback state command-only", () => {
@@ -6461,7 +6614,7 @@ test("does not call lifecycle or render-callback state command-only", () => {
     `,
     "fixture.tsx",
   ).find((finding) => finding.hook === "useState");
-  assert.equal(listener?.action, "review-state");
+  assert.equal(requireValue(listener).action, "review-state");
 
   const renderCallback = analyzeSource(
     `
@@ -6477,7 +6630,7 @@ test("does not call lifecycle or render-callback state command-only", () => {
     `,
     "fixture.tsx",
   ).find((finding) => finding.hook === "useState");
-  assert.notEqual(renderCallback?.action, "use-ref");
+  assert.notEqual(requireValue(renderCallback).action, "use-ref");
 });
 
 test("replaces a self-refreshing effect-owned command snapshot with a ref", () => {
@@ -6502,14 +6655,15 @@ test("replaces a self-refreshing effect-owned command snapshot with a ref", () =
     }
   `,
     [finding] = analyzeSource(source("", ""), "fixture.tsx");
-  assert.equal(finding?.action, "use-ref");
-  assert.match(finding?.message ?? "", /listener/i);
-  assert.match(finding?.message ?? "", /dependency/i);
+  assert.equal(requireValue(finding).action, "use-ref");
+  assert.match(requireValue(finding).message ?? "", /listener/iu);
+  assert.match(requireValue(finding).message ?? "", /dependency/iu);
 
   for (const unsafe of [source("onUpdate={update}", ""), source("", "report(previous);")]) {
     assert.notEqual(
-      analyzeSource(unsafe, "fixture.tsx").find((candidate) => candidate.name === "previous")
-        ?.action,
+      requireValue(
+        analyzeSource(unsafe, "fixture.tsx").find((candidate) => candidate.name === "previous"),
+      ).action,
       "use-ref",
     );
   }
@@ -6546,7 +6700,7 @@ test("groups listener-only pointer snapshots into one ref migration", () => {
     ["use-ref", "use-ref", "use-ref"],
   );
   assert.deepEqual(
-    findings.map((finding) => finding.group?.members),
+    findings.map((finding) => requireValue(finding.group).members),
     [
       ["pressed", "originX", "originY"],
       ["pressed", "originX", "originY"],
@@ -6554,7 +6708,7 @@ test("groups listener-only pointer snapshots into one ref migration", () => {
     ],
   );
   assert.deepEqual(
-    findings.map((finding) => finding.group?.primary),
+    findings.map((finding) => requireValue(finding.group).primary),
     [true, false, false],
   );
 });
@@ -6645,8 +6799,8 @@ test("counts immediately invoked render computations as render reads", () => {
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
-  assert.match(finding?.evidence[1] ?? "", /reads: render 1/);
+  assert.notEqual(requireValue(finding).action, "use-ref");
+  assert.match(requireValue(finding).evidence[1] ?? "", /reads: render 1/u);
 });
 
 test("does not call custom-hook reactions or returned commands event-rooted", () => {
@@ -6662,7 +6816,7 @@ test("does not call custom-hook reactions or returned commands event-rooted", ()
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(focusReaction?.action, "use-ref");
+  assert.notEqual(requireValue(focusReaction).action, "use-ref");
 
   const returnedCommand = analyzeSource(
     `
@@ -6676,7 +6830,7 @@ test("does not call custom-hook reactions or returned commands event-rooted", ()
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(returnedCommand?.action, "use-ref");
+  assert.notEqual(requireValue(returnedCommand).action, "use-ref");
 });
 
 test("uses a ref for an effect-written cursor read only by one returned switch command", () => {
@@ -6705,7 +6859,7 @@ test("uses a ref for an effect-written cursor read only by one returned switch c
   `,
     "fixture.ts",
   );
-  assert.equal(findings.find((finding) => finding.name === "next")?.action, "use-ref");
+  assert.equal(requireValue(findings.find((finding) => finding.name === "next")).action, "use-ref");
 });
 
 test("uses a ref for a returned switch command with one exact guarded fallback", () => {
@@ -6735,7 +6889,7 @@ test("uses a ref for a returned switch command with one exact guarded fallback",
   `,
     "fixture.ts",
   );
-  assert.equal(finding?.action, "use-ref");
+  assert.equal(requireValue(finding).action, "use-ref");
 });
 
 test("keeps returned switch fallbacks with unsafe guards or branch work conservative", () => {
@@ -6762,7 +6916,7 @@ test("keeps returned switch fallbacks with unsafe guards or branch work conserva
     `,
       "fixture.ts",
     );
-    assert.notEqual(finding?.action, "use-ref", fallback);
+    assert.notEqual(requireValue(finding).action, "use-ref", fallback);
   }
 });
 
@@ -6785,7 +6939,7 @@ test("keeps returned switch cursors with extra reads or non-command branches con
     `,
       "fixture.ts",
     ).find((candidate) => candidate.name === "next");
-    assert.notEqual(finding?.action, "use-ref", command);
+    assert.notEqual(requireValue(finding).action, "use-ref", command);
   }
 });
 
@@ -6804,7 +6958,7 @@ test("does not replace state exposed through a returned getter callback", () => 
   `,
     "fixture.ts",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
+  assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
 test("does not replace state that refreshes a context getter", () => {
@@ -6824,7 +6978,7 @@ test("does not replace state that refreshes a context getter", () => {
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
+  assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
 test("does not replace state snapshots exposed through a React imperative handle", () => {
@@ -6842,7 +6996,7 @@ test("does not replace state snapshots exposed through a React imperative handle
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
+  assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
 test("does not replace state that invalidates a React effect through a callback", () => {
@@ -6860,8 +7014,8 @@ test("does not replace state that invalidates a React effect through a callback"
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
-  assert.match(finding?.evidence[1] ?? "", /effects [1-9]/);
+  assert.notEqual(requireValue(finding).action, "use-ref");
+  assert.match(requireValue(finding).evidence[1] ?? "", /effects [1-9]/u);
 });
 
 test("does not replace state captured by an unresolved lifecycle hook", () => {
@@ -6879,7 +7033,7 @@ test("does not replace state captured by an unresolved lifecycle hook", () => {
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
+  assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
 test("does not call a value shared by an event and an effect-owned callback command-only", () => {
@@ -6898,7 +7052,7 @@ test("does not call a value shared by an event and an effect-owned callback comm
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
+  assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
 test("counts state read by a transported render callback as rendered", () => {
@@ -6916,8 +7070,8 @@ test("counts state read by a transported render callback as rendered", () => {
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
-  assert.match(finding?.evidence[1] ?? "", /reads: render 1/);
+  assert.notEqual(requireValue(finding).action, "use-ref");
+  assert.match(requireValue(finding).evidence[1] ?? "", /reads: render 1/u);
 });
 
 test("does not replace functional-updater state when commands observe its render snapshot", () => {
@@ -6934,7 +7088,7 @@ test("does not replace functional-updater state when commands observe its render
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "use-ref");
+  assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
 test("does not replace a command snapshot written before a later read", () => {
@@ -6951,8 +7105,14 @@ test("does not replace a command snapshot written before a later read", () => {
   `,
     "fixture.tsx",
   );
-  assert.notEqual(findings.find((finding) => finding.name === "selection")?.action, "use-ref");
-  assert.equal(findings.find((finding) => finding.name === "draft")?.action, "use-ref");
+  assert.notEqual(
+    requireValue(findings.find((finding) => finding.name === "selection")).action,
+    "use-ref",
+  );
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "draft")).action,
+    "use-ref",
+  );
 });
 
 test("keeps the ref recommendation when a functional updater has no later snapshot read", () => {
@@ -6968,8 +7128,11 @@ test("keeps the ref recommendation when a functional updater has no later snapsh
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.equal(finding?.action, "use-ref");
-  assert.match(finding?.message ?? "", /functional updaters against the current handle value/i);
+  assert.equal(requireValue(finding).action, "use-ref");
+  assert.match(
+    requireValue(finding).message ?? "",
+    /functional updaters against the current handle value/iu,
+  );
 });
 
 test("keeps invariant same-value state non-actionable", () => {
@@ -7002,15 +7165,15 @@ test("deletes state whose only reads calculate inert arguments for its own sette
     "fixture.tsx",
   );
   assert.equal(
-    findings.find((finding) => finding.name === "choice")?.action,
+    requireValue(findings.find((finding) => finding.name === "choice")).action,
     "delete-unused-state",
   );
   assert.notEqual(
-    findings.find((finding) => finding.name === "called")?.action,
+    requireValue(findings.find((finding) => finding.name === "called")).action,
     "delete-unused-state",
   );
   assert.notEqual(
-    findings.find((finding) => finding.name === "published")?.action,
+    requireValue(findings.find((finding) => finding.name === "published")).action,
     "delete-unused-state",
   );
 });
@@ -7028,7 +7191,7 @@ test("deletes setter-only state written by an effect when arguments are discarda
     "fixture.tsx",
   );
   assert.equal(
-    findings.find((finding) => finding.name === "_failed")?.action,
+    requireValue(findings.find((finding) => finding.name === "_failed")).action,
     "delete-unused-state",
   );
 });
@@ -7060,8 +7223,8 @@ test("preserves property evaluation while deleting otherwise unused state", () =
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.equal(finding?.action, "delete-unused-state");
-  assert.match(finding?.message ?? "", /evaluation.*preserved/i);
+  assert.equal(requireValue(finding).action, "delete-unused-state");
+  assert.match(requireValue(finding).message ?? "", /evaluation.*preserved/iu);
 });
 
 test("does not delete unused state when removing its initializer would erase evaluation", () => {
@@ -7075,7 +7238,7 @@ test("does not delete unused state when removing its initializer would erase eva
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.hook === "useState");
-  assert.notEqual(finding?.action, "delete-unused-state");
+  assert.notEqual(requireValue(finding).action, "delete-unused-state");
 });
 
 test("does not delete setter-only state when an updater consumes the previous value", () => {
@@ -7123,8 +7286,8 @@ test("traces a state-backed local callable when JSX invokes it synchronously", (
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "review-state");
-  assert.match(finding?.evidence.join(" ") ?? "", /reads: render 1/);
+  assert.equal(requireValue(finding).action, "review-state");
+  assert.match(requireValue(finding).evidence.join(" ") ?? "", /reads: render 1/u);
 });
 
 test("separates observable ownership from leaf subscription placement", () => {
@@ -7133,14 +7296,14 @@ test("separates observable ownership from leaf subscription placement", () => {
     import { useState } from "react";
     function Row() { return null; }
     export function LargeOwner({ rows }: { rows: string[] }) {
-      ${Array.from({ length: 145 }, (_, index) => `const padding${index} = ${index};`).join("\n")}
+      ${Array.from({ length: 145 }, (_unusedValue, index) => `const padding${index} = ${index};`).join("\n")}
       const [selected, setSelected] = useState<string | null>(null);
       return rows.map(id => <Row selected={selected} onSelect={setSelected} />);
     }
   `,
     "fixture.tsx",
   );
-  assert.deepEqual(finding?.stateModel, {
+  assert.deepEqual(requireValue(finding).stateModel, {
     ownership: "local-observable",
     subscription: "leaf-use-value",
   });
@@ -7162,8 +7325,8 @@ test("moves a scalar row cursor into stable per-row equality selectors", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /scalar row-selection/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /scalar row-selection/u);
 });
 
 test("recognizes an index cursor and a one-hop row presentation alias", () => {
@@ -7183,7 +7346,7 @@ test("recognizes an index cursor and a one-hop row presentation alias", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("does not mistake a nullish row prop projection for a row mount gate", () => {
@@ -7205,7 +7368,7 @@ test("does not mistake a nullish row prop projection for a row mount gate", () =
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("allows a row-only event path when a separate reset co-writes companion state", () => {
@@ -7226,7 +7389,7 @@ test("allows a row-only event path when a separate reset co-writes companion sta
     "fixture.tsx",
   );
   assert.equal(
-    findings.find((finding) => finding.name === "selectedIndex")?.action,
+    requireValue(findings.find((finding) => finding.name === "selectedIndex")).action,
     "use-observable",
   );
 });
@@ -7249,7 +7412,7 @@ test("requires scalar selectors to depend on a stable repeated item key", () => 
     `,
       "fixture.tsx",
     ).find((candidate) => candidate.name === "selectedId");
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -7267,7 +7430,7 @@ test("does not put a scalar selector inside its own row mount gate", () => {
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("keeps scalar selection that has effects, broadcast row reads, or no independent write", () => {
@@ -7296,7 +7459,7 @@ test("keeps scalar selection that has effects, broadcast row reads, or no indepe
     `,
       "fixture.tsx",
     ).find((candidate) => candidate.name === "selectedId");
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -7318,8 +7481,8 @@ test("isolates row selection and a selected-item footer into separate subscriber
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "selectedId");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /footer or detail/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /footer or detail/u);
 });
 
 test("isolates a row-selected id and its non-null footer summary", () => {
@@ -7340,7 +7503,7 @@ test("isolates a row-selected id and its non-null footer summary", () => {
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "selectedId");
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("isolates a repeated row command and one selected-item detail leaf", () => {
@@ -7360,7 +7523,7 @@ test("isolates a repeated row command and one selected-item detail leaf", () => 
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "selectedId");
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("isolates an object selection payload across keyed rows and one footer", () => {
@@ -7381,7 +7544,7 @@ test("isolates an object selection payload across keyed rows and one footer", ()
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "selected");
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("keeps keyed selection whose secondary reads span the owner", () => {
@@ -7401,7 +7564,7 @@ test("keeps keyed selection whose secondary reads span the owner", () => {
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "selectedId");
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("keeps scalar selection that changes list shape or lacks an item-keyed producer", () => {
@@ -7432,7 +7595,7 @@ test("keeps scalar selection that changes list shape or lacks an item-keyed prod
     `,
       "fixture.tsx",
     ).find((candidate) => candidate.name === "selectedId");
-    assert.equal(finding?.action, "review-state");
+    assert.equal(requireValue(finding).action, "review-state");
   }
 });
 
@@ -7452,7 +7615,7 @@ test("accepts a memoized event command whose binding matches its JSX prop name",
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "selectedIndex");
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("keeps a row cursor whose callback is stale or also owns external lifecycle", () => {
@@ -7476,7 +7639,7 @@ test("keeps a row cursor whose callback is stale or also owns external lifecycle
     `,
       "fixture.tsx",
     ).find((candidate) => candidate.name === "selectedIndex");
-    assert.equal(finding?.action, "review-state");
+    assert.equal(requireValue(finding).action, "review-state");
   }
 });
 
@@ -7498,8 +7661,8 @@ test("moves keyed collection membership into repeated row subscriptions", () => 
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /per-row/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /per-row/u);
 });
 
 test("isolates keyed selection with select-all and partial-selection summaries", () => {
@@ -7526,7 +7689,7 @@ test("isolates keyed selection with select-all and partial-selection summaries",
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "selected");
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("uses keyed collection behavior rather than state names", () => {
@@ -7544,8 +7707,8 @@ test("uses keyed collection behavior rather than state names", () => {
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "failures");
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /per-row/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /per-row/u);
 });
 
 test("rejects lifecycle and mount-control collections without name heuristics", () => {
@@ -7572,7 +7735,7 @@ test("rejects lifecycle and mount-control collections without name heuristics", 
   );
   for (const name of ["mounted", "failed"]) {
     assert.notEqual(
-      findings.find((candidate) => candidate.name === name)?.action,
+      requireValue(findings.find((candidate) => candidate.name === name)).action,
       "use-observable",
     );
   }
@@ -7593,7 +7756,7 @@ test("keeps keyed selection when summary membership controls row mounting", () =
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "selected");
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("requires a synchronous event-rooted collection update without hidden React work", () => {
@@ -7622,7 +7785,7 @@ test("requires a synchronous event-rooted collection update without hidden React
     `,
       "fixture.tsx",
     ).find((candidate) => candidate.name === "selected");
-    assert.equal(finding?.action, "review-state");
+    assert.equal(requireValue(finding).action, "review-state");
   }
 });
 
@@ -7646,8 +7809,8 @@ test("recognizes an array selection normalized by one immutable local Set", () =
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
-  assert.match(finding?.message ?? "", /per-row/);
+  assert.equal(requireValue(finding).action, "use-observable");
+  assert.match(requireValue(finding).message ?? "", /per-row/u);
 });
 
 test("requires an immutable non-escaping Set normalization for array selection", () => {
@@ -7667,7 +7830,7 @@ test("requires an immutable non-escaping Set normalization for array selection",
     const finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selectedIds",
     );
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -7686,7 +7849,7 @@ test("does not move array selection when a summary alias controls repeated mount
     finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selectedIds",
     );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("recognizes keyed collection membership in a JSX renderItem callback", () => {
@@ -7706,7 +7869,7 @@ test("recognizes keyed collection membership in a JSX renderItem callback", () =
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("isolates an imperative nullable collection inside a keyed renderItem leaf", () => {
@@ -7731,7 +7894,7 @@ test("isolates an imperative nullable collection inside a keyed renderItem leaf"
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "highlighted");
-  assert.equal(positive?.action, "use-observable");
+  assert.equal(requireValue(positive).action, "use-observable");
 
   for (const [renderItem, keyExtractor, expose, extra = ""] of [
     [
@@ -7778,7 +7941,7 @@ test("isolates an imperative nullable collection inside a keyed renderItem leaf"
     `,
       "fixture.tsx",
     ).find((candidate) => candidate.name === "highlighted");
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 
   const shadowedHandle = analyzeSource(
@@ -7799,7 +7962,7 @@ test("isolates an imperative nullable collection inside a keyed renderItem leaf"
   `,
     "fixture.tsx",
   ).find((candidate) => candidate.name === "highlighted");
-  assert.notEqual(shadowedHandle?.action, "use-observable");
+  assert.notEqual(requireValue(shadowedHandle).action, "use-observable");
 });
 
 test("ignores callback dependency references when proving a keyed event command", () => {
@@ -7827,7 +7990,7 @@ test("ignores callback dependency references when proving a keyed event command"
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("keeps filtered array selection as review without a general cross-value proof", () => {
@@ -7845,7 +8008,7 @@ test("keeps filtered array selection as review without a general cross-value pro
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("isolates filtered keyed selection with one controlled summary leaf", () => {
@@ -7871,7 +8034,7 @@ test("isolates filtered keyed selection with one controlled summary leaf", () =>
     finding = analyzeSource(source, "fixture.tsx").find(
       (candidate) => candidate.name === "selectedIds",
     );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("requires a filtered keyed selection to have one exact controlled summary leaf", () => {
@@ -7903,7 +8066,7 @@ test("requires a filtered keyed selection to have one exact controlled summary l
       finding = analyzeSource(source, "fixture.tsx").find(
         (candidate) => candidate.name === "selectedIds",
       );
-    assert.notEqual(finding?.action, "use-observable", use);
+    assert.notEqual(requireValue(finding).action, "use-observable", use);
   }
 });
 
@@ -7933,7 +8096,7 @@ test("requires the filtered selection membership source to remain read-only", ()
       finding = analyzeSource(source, "fixture.tsx").find(
         (candidate) => candidate.name === "selectedIds",
       );
-    assert.notEqual(finding?.action, "use-observable", mutation);
+    assert.notEqual(requireValue(finding).action, "use-observable", mutation);
   }
 });
 
@@ -7959,7 +8122,7 @@ test("does not infer filtered selection from a shadowed Set constructor", () => 
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("isolates keyed array membership with one filtered selection summary leaf", () => {
@@ -7981,7 +8144,7 @@ test("isolates keyed array membership with one filtered selection summary leaf",
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-observable");
+  assert.equal(requireValue(finding).action, "use-observable");
 });
 
 test("keeps filtered selection summaries with split, unstable, or command consumers conservative", () => {
@@ -8010,7 +8173,7 @@ test("keeps filtered selection summaries with split, unstable, or command consum
     `,
       "fixture.tsx",
     );
-    assert.notEqual(finding?.action, "use-observable", summary);
+    assert.notEqual(requireValue(finding).action, "use-observable", summary);
   }
 });
 
@@ -8028,7 +8191,7 @@ test("does not call array filtering that changes row membership a keyed leaf sel
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not trace an arbitrary filtered array into keyed membership", () => {
@@ -8045,7 +8208,7 @@ test("does not trace an arbitrary filtered array into keyed membership", () => {
     finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selectedIds",
     );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not move a derived keyed alias read by an effect", () => {
@@ -8061,7 +8224,7 @@ test("does not move a derived keyed alias read by an effect", () => {
     finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selected",
     );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("requires derived membership to use the repeated row key", () => {
@@ -8076,7 +8239,7 @@ test("requires derived membership to use the repeated row key", () => {
     finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selected",
     );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("requires a stable item-derived key for mapped membership", () => {
@@ -8091,7 +8254,7 @@ test("requires a stable item-derived key for mapped membership", () => {
     finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selected",
     );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not treat render-prop reads as selection commands", () => {
@@ -8107,7 +8270,7 @@ test("does not treat render-prop reads as selection commands", () => {
     finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selected",
     );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("requires immutable aliases and a stable filter membership source", () => {
@@ -8129,7 +8292,7 @@ test("requires immutable aliases and a stable filter membership source", () => {
     const finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selectedIds",
     );
-    assert.notEqual(finding?.action, "use-observable");
+    assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
 
@@ -8147,7 +8310,7 @@ test("does not place a collection summary subscription inside every row", () => 
     finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selected",
     );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not move lifecycle membership that controls whether a row exists", () => {
@@ -8166,7 +8329,7 @@ test("does not move lifecycle membership that controls whether a row exists", ()
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("does not bypass keyed mount-control checks through a local boolean alias", () => {
@@ -8186,7 +8349,7 @@ test("does not bypass keyed mount-control checks through a local boolean alias",
   `,
     "fixture.tsx",
   );
-  assert.notEqual(finding?.action, "use-observable");
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("converts a custom-hook selection cluster into one observable model", () => {
@@ -8209,7 +8372,9 @@ test("converts a custom-hook selection cluster into one observable model", () =>
     findings.map((finding) => finding.action),
     ["use-observable", "use-observable"],
   );
-  assert.ok(findings.every((finding) => finding.stateModel?.ownership === "local-observable"));
+  assert.ok(
+    findings.every((finding) => requireValue(finding.stateModel).ownership === "local-observable"),
+  );
 });
 
 test("does not call an ordinary custom-hook Set resource a selection model without a setter", () => {
@@ -8223,7 +8388,7 @@ test("does not call an ordinary custom-hook Set resource a selection model witho
   `,
     "fixture.ts",
   );
-  assert.equal(finding?.action, "keep-state");
+  assert.equal(requireValue(finding).action, "keep-state");
 });
 
 test("does not call custom-hook lifecycle bookkeeping a selection model", () => {
@@ -8238,7 +8403,7 @@ test("does not call custom-hook lifecycle bookkeeping a selection model", () => 
   `,
     "fixture.ts",
   );
-  assert.equal(finding?.action, "review-state");
+  assert.equal(requireValue(finding).action, "review-state");
 });
 
 test("inventories nonstandard React useState bindings as review", () => {
@@ -8285,8 +8450,14 @@ test("moves a one-shot deferred reveal sink to an observable leaf without replac
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "ready")?.action, "use-observable");
-  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "keep-effect");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "ready")).action,
+    "use-observable",
+  );
+  assert.equal(
+    requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
+    "keep-effect",
+  );
 });
 
 test("recognizes a one-shot render gate that returns a unique const JSX alias", () => {
@@ -8306,7 +8477,10 @@ test("recognizes a one-shot render gate that returns a unique const JSX alias", 
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "ready")?.action, "use-observable");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.name === "ready")).action,
+    "use-observable",
+  );
 });
 
 test("does not treat a nested function JSX return as the owner's render gate", () => {
@@ -8423,7 +8597,10 @@ test("scopes Legend hook provenance to the owning function", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "review-effect");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
+    "review-effect",
+  );
 });
 
 test("rejects same-owner shadowed Legend hook provenance", () => {
@@ -8440,7 +8617,10 @@ test("rejects same-owner shadowed Legend hook provenance", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "review-effect");
+  assert.equal(
+    requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
+    "review-effect",
+  );
 });
 
 test("reviews setup-only empty effects because useMount changes Strict Mode semantics", () => {
@@ -8770,7 +8950,7 @@ test("keeps dependency-driven browser-storage persistence in React", () => {
     effects.map((finding) => finding.action),
     ["keep-effect"],
   );
-  assert.match(effects[0]?.message ?? "", /browser storage/i);
+  assert.match(requireValue(effects[0]).message ?? "", /browser storage/iu);
 });
 
 test("does not call storage hydration, scheduling, arbitrary work, or observable reactions persistence", () => {
@@ -8823,7 +9003,7 @@ test("does not call storage hydration, scheduling, arbitrary work, or observable
       "review-effect",
     ],
   );
-  assert.doesNotMatch(effects[7]?.message ?? "", /browser storage/i);
+  assert.doesNotMatch(requireValue(effects[7]).message ?? "", /browser storage/iu);
 });
 
 test("reviews local-state, helper, scheduled, multi-command, collection, and subscription effects", () => {
@@ -8885,9 +9065,9 @@ test("honors an adjacent directive that keeps lifecycle ownership in React", () 
     `,
       "fixture.tsx",
     );
-    assert.equal(finding?.action, "keep-effect");
-    assert.equal(finding?.confidence, "certain");
-    assert.match(finding?.message ?? "", /ownership directive/);
+    assert.equal(requireValue(finding).action, "keep-effect");
+    assert.equal(requireValue(finding).confidence, "certain");
+    assert.match(requireValue(finding).message ?? "", /ownership directive/u);
   }
 });
 
@@ -8929,7 +9109,7 @@ test("does not apply a detached or unrelated React effect comment", () => {
     `,
   ]) {
     const [finding] = analyzeSource(source, "fixture.tsx");
-    assert.equal(finding?.action, "use-unmount");
+    assert.equal(requireValue(finding).action, "use-unmount");
   }
 });
 
@@ -9024,7 +9204,7 @@ test("keeps exact latest-value ref mirrors in React post-commit timing", () => {
     ["keep-effect", "keep-effect", "keep-effect"],
   );
   for (const finding of findings) {
-    assert.match(finding.message, /committed ref/i);
+    assert.match(finding.message, /committed ref/iu);
   }
 });
 
@@ -9122,7 +9302,7 @@ test("keeps exact committed previous-value guards in React post-commit timing", 
     ],
   );
   for (const finding of effects.slice(0, 2)) {
-    assert.match(finding.message, /committed ref/i);
+    assert.match(finding.message, /committed ref/iu);
   }
 });
 
@@ -9260,8 +9440,8 @@ test("suggests useMount only for module-global setup without owner-local capture
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-mount");
-  assert.equal(finding?.disposition, "candidate");
+  assert.equal(requireValue(finding).action, "use-mount");
+  assert.equal(requireValue(finding).disposition, "candidate");
 
   assert.deepEqual(
     actions(`
@@ -9287,8 +9467,8 @@ test("keeps conditional useUnmount advice as a candidate", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "use-unmount");
-  assert.equal(finding?.disposition, "candidate");
+  assert.equal(requireValue(finding).action, "use-unmount");
+  assert.equal(requireValue(finding).disposition, "candidate");
 });
 
 test("does not call returned setup work a teardown-only effect", () => {

@@ -6,8 +6,8 @@ import {
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import { visit } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { EffectCandidate } from "../analyze-source.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export function isDependencyDrivenBrowserStorageEffect(effect: EffectCandidate): boolean {
   const { callback, dependencies, owner } = effect;
@@ -104,7 +104,7 @@ function isBrowserStorageMutation(call: ts.CallExpression, owner: RuntimeFunctio
   const callee = call.expression;
   return (
     ts.isPropertyAccessExpression(callee) &&
-    /^(?:clear|removeItem|setItem)$/.test(callee.name.text) &&
+    /^(?:clear|removeItem|setItem)$/u.test(callee.name.text) &&
     isBrowserStorageExpression(callee.expression, owner)
   );
 }
@@ -116,20 +116,20 @@ function isBrowserStorageExpression(
   const value = unwrapTransparentExpression(expression);
   if (ts.isIdentifier(value)) {
     return (
-      /^(?:localStorage|sessionStorage)$/.test(value.text) &&
+      /^(?:localStorage|sessionStorage)$/u.test(value.text) &&
       bindingDeclarationCount(runtimeOwner, value.text) === 0
     );
   }
   if (
     !ts.isPropertyAccessExpression(value) ||
-    !/^(?:localStorage|sessionStorage)$/.test(value.name.text)
+    !/^(?:localStorage|sessionStorage)$/u.test(value.name.text)
   ) {
     return false;
   }
   const qualifier = unwrapTransparentExpression(value.expression);
   if (ts.isIdentifier(qualifier)) {
     return (
-      /^(?:globalThis|window)$/.test(qualifier.text) &&
+      /^(?:globalThis|window)$/u.test(qualifier.text) &&
       bindingDeclarationCount(runtimeOwner, qualifier.text) === 0
     );
   }

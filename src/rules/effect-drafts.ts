@@ -15,7 +15,6 @@ import {
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "../analyze-source.js";
 import { callbackHasCleanup } from "./effects.js";
 import {
@@ -33,6 +32,7 @@ import {
   stateMayHoldCallable,
   uniqueVariableDeclaration,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export interface EffectDraftScope {
   bySetter: ReadonlyMap<string, StateCandidate>;
@@ -65,24 +65,24 @@ interface DirectReturnCallSite {
  * names or path-specific exceptions while avoiding duplicate AST algorithms.
  */
 export interface EffectDraftProofs {
-  directUniqueReturnCallSite(
+  directUniqueReturnCallSite: (
     usage: StateUsage,
     owner: RuntimeFunctionLike,
-  ): DirectReturnCallSite | null;
-  hasIndependentRenderCutWitness(
+  ) => DirectReturnCallSite | null;
+  hasIndependentRenderCutWitness: (
     returned: ts.Expression,
     excluded: readonly ts.Node[],
     localComponents: ReadonlySet<string>,
     sourceComponents: ReadonlySet<string>,
-  ): boolean;
-  isCustomHookOwner(owner: RuntimeFunctionLike): boolean;
-  nearestMutationFunction(node: ts.Node, owner: RuntimeFunctionLike): RuntimeFunctionLike;
-  setterMutationsCanCooccur(
+  ) => boolean;
+  isCustomHookOwner: (owner: RuntimeFunctionLike) => boolean;
+  nearestMutationFunction: (node: ts.Node, owner: RuntimeFunctionLike) => RuntimeFunctionLike;
+  setterMutationsCanCooccur: (
     left: ts.CallExpression,
     right: ts.CallExpression,
     region: RuntimeFunctionLike,
-  ): boolean;
-  uniqueReturnedExpression(owner: RuntimeFunctionLike): ts.Expression | null;
+  ) => boolean;
+  uniqueReturnedExpression: (owner: RuntimeFunctionLike) => ts.Expression | null;
 }
 
 export function findEffectSynchronizedDrafts(
@@ -134,7 +134,7 @@ export function findEffectSynchronizedDrafts(
       complete = members.every((state) => {
         const usage = usageByState.get(state);
         return (
-          !!usage &&
+          usage !== undefined &&
           stateIsWrittenOnlyByEffect(usage, effect, effects) &&
           usage.setterReferences > usage.effectWrites &&
           usage.effectReads === 0 &&
@@ -144,7 +144,7 @@ export function findEffectSynchronizedDrafts(
           !usage.escaped &&
           !stateMayHoldCallable(state) &&
           editProofs.get(state)?.reachable === true &&
-          !stateControlsHookOrRepeatedShape(state)
+          !stateControlsHookOrRepeatedBoundary(state)
         );
       });
     if (
@@ -165,7 +165,7 @@ export function findEffectSynchronizedDrafts(
     }
 
     synchronizedEffects.add(effect);
-    const ordered = [...members].sort(
+    const ordered = [...members].toSorted(
       (left, right) => left.call.getStart() - right.call.getStart(),
     );
     if (ordered.length === 1) {
@@ -173,7 +173,7 @@ export function findEffectSynchronizedDrafts(
       continue;
     }
     const names = ordered.map((state) => state.valueName),
-      initialization = ordered.some(hasLazyStateInitializer)
+      initialization = ordered.some((state) => hasLazyStateInitializer(state))
         ? " Preserve every lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
         : "",
       cluster: EffectDraftCluster = {
@@ -192,7 +192,15 @@ export function findEffectSynchronizedDrafts(
 
 export function hasLazyStateInitializer(state: StateCandidate): boolean {
   const initializer = state.call.arguments[0];
-  return !!initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer));
+  return (
+    initializer !== undefined &&
+    (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+  );
+}
+
+interface DraftEditProof {
+  readonly independent: boolean;
+  readonly reachable: boolean;
 }
 
 function draftEditProof(
@@ -201,7 +209,7 @@ function draftEditProof(
   effect: EffectCandidate,
   ownerSetters: ReadonlySet<string>,
   proofs: EffectDraftProofs,
-): { independent: boolean; reachable: boolean } {
+): DraftEditProof {
   if (!usage) {
     return { independent: false, reachable: false };
   }
@@ -284,7 +292,7 @@ function hasDirectJsxEventSetter(state: StateCandidate): boolean {
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
     if (
       attribute &&
-      /^(?:onChange|onChangeText|onSelect|onValueChange|onCheckedChange)$/.test(
+      /^(?:onChange|onChangeText|onSelect|onValueChange|onCheckedChange)$/u.test(
         attribute.name.getText(),
       ) &&
       isDirectJsxAttributeExpression(attribute, node)
@@ -416,7 +424,7 @@ function synchronousDraftSetters(
   return callback.body.statements.every(validStatement) ? [...members] : null;
 }
 
-function stateControlsHookOrRepeatedShape(state: StateCandidate): boolean {
+function stateControlsHookOrRepeatedBoundary(state: StateCandidate): boolean {
   let unsafe = false;
   visit(state.owner.body, (node) => {
     if (
@@ -429,7 +437,7 @@ function stateControlsHookOrRepeatedShape(state: StateCandidate): boolean {
     ) {
       return;
     }
-    if (referenceControlsHookOrRepeatedShape(node, state.owner)) {
+    if (referenceControlsHookOrRepeatedBoundary(node, state.owner)) {
       unsafe = true;
       return;
     }
@@ -452,7 +460,7 @@ function stateControlsHookOrRepeatedShape(state: StateCandidate): boolean {
         reference !== declaration.name &&
         !isDeclarationName(reference) &&
         !isNonValueIdentifier(reference) &&
-        referenceControlsHookOrRepeatedShape(reference, state.owner)
+        referenceControlsHookOrRepeatedBoundary(reference, state.owner)
       ) {
         unsafe = true;
       }
@@ -461,7 +469,7 @@ function stateControlsHookOrRepeatedShape(state: StateCandidate): boolean {
   return unsafe;
 }
 
-function referenceControlsHookOrRepeatedShape(
+function referenceControlsHookOrRepeatedBoundary(
   reference: ts.Identifier,
   owner: RuntimeFunctionLike,
 ): boolean {
@@ -614,7 +622,7 @@ function hookResultFeedsLifecycle(call: ts.CallExpression, owner: RuntimeFunctio
 
 function isHookCallOtherThan(call: ts.CallExpression, allowed: ReadonlySet<string>): boolean {
   const name = hookCallName(call);
-  return name !== null && /^use[A-Z0-9]/.test(name) && !allowed.has(name);
+  return name !== null && /^use[A-Z0-9]/u.test(name) && !allowed.has(name);
 }
 
 function hasExternalCompanionWrites(
@@ -661,7 +669,7 @@ function expressionControlsRepeatedItems(node: ts.Node, repeated: ts.CallExpress
   const receiver = ts.isPropertyAccessExpression(repeated.expression)
     ? repeated.expression.expression
     : null;
-  return !!receiver && nodeWithin(node, receiver);
+  return receiver !== null && nodeWithin(node, receiver);
 }
 
 function hasDraftRenderCut(

@@ -24,7 +24,6 @@ import {
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import { isImportedHookCall } from "../imports.js";
 import type {
   ClassifiedEffect,
@@ -34,6 +33,7 @@ import type {
 } from "../analyze-source.js";
 import { isDependencyDrivenBrowserStorageEffect } from "./browser-storage-effect.js";
 import type { ChildContractResolver } from "./child-contract.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export function classifyEffect(
   effect: EffectCandidate,
@@ -268,14 +268,14 @@ function hasReactEffectOwnershipDirective(effect: EffectCandidate): boolean {
     return false;
   }
   const gap = sourceFile.text.slice(comment.end, statement.getStart(sourceFile));
-  if (/\r?\n[\t ]*\r?\n/.test(gap)) {
+  if (/\r?\n[\t ]*\r?\n/u.test(gap)) {
     return false;
   }
   const body = sourceFile.text
     .slice(comment.pos, comment.end)
-    .replace(/^\s*\/[/*]+\s*/, "")
-    .replace(/\*\/\s*$/, "");
-  return /^(?:react-effect-allow\b|legend-doctor\s+keep-react-effect\b)/.test(body);
+    .replace(/^\s*\/[/*]+\s*/u, "")
+    .replace(/\*\/\s*$/u, "");
+  return /^(?:react-effect-allow\b|legend-doctor\s+keep-react-effect\b)/u.test(body);
 }
 
 function isCommittedPropRefSnapshot(
@@ -349,18 +349,16 @@ function isDependencyDrivenExternalCommandEffect(
   }
 
   let readsLocalStateOrObservableSnapshot = false;
-  for (const dependency of dependencies.elements) {
-    visit(dependency, (node) => {
-      if (
-        ts.isIdentifier(node) &&
-        (stateByValue.has(node.text) ||
-          useValueBindings.has(node.text) ||
-          useObservableBindings.has(node.text))
-      ) {
-        readsLocalStateOrObservableSnapshot = true;
-      }
-    });
-  }
+  visit(dependencies, (node) => {
+    if (
+      ts.isIdentifier(node) &&
+      (stateByValue.has(node.text) ||
+        useValueBindings.has(node.text) ||
+        useObservableBindings.has(node.text))
+    ) {
+      readsLocalStateOrObservableSnapshot = true;
+    }
+  });
   if (readsLocalStateOrObservableSnapshot) {
     return false;
   }
@@ -427,7 +425,7 @@ function isDependencyDrivenExternalCommandEffect(
   if (ts.isIdentifier(callee)) {
     return (
       bindingDeclarationCount(owner, callee.text) === 0 &&
-      !/^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|queueMicrotask)$/.test(
+      !/^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|queueMicrotask)$/u.test(
         callee.text,
       )
     );
@@ -459,7 +457,7 @@ function isDependencyEffectSupportCall(
 
   if (
     ts.isPropertyAccessExpression(call.expression) &&
-    /^(?:endsWith|includes|indexOf|lastIndexOf|startsWith)$/.test(call.expression.name.text)
+    /^(?:endsWith|includes|indexOf|lastIndexOf|startsWith)$/u.test(call.expression.name.text)
   ) {
     return true;
   }
@@ -636,7 +634,7 @@ function containsFunctionLike(node: ts.Node, allowed: ReadonlySet<ts.Node> = new
 function isCallbackDrivenCall(call: ts.CallExpression): boolean {
   return (
     ts.isPropertyAccessExpression(call.expression) &&
-    /^(?:addEventListener|every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/.test(
+    /^(?:addEventListener|every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/u.test(
       call.expression.name.text,
     )
   );
@@ -964,7 +962,9 @@ function callbackIsCommittedRefIntegration(
     },
     statementsAreRefIntegration = (statements: readonly ts.Statement[]): boolean => {
       const inheritedBindings = new Set(derivedBindings),
-        safe = statements.length > 0 && statements.every(statementIsRefIntegration);
+        safe =
+          statements.length > 0 &&
+          statements.every((statement) => statementIsRefIntegration(statement));
       derivedBindings.clear();
       for (const binding of inheritedBindings) {
         derivedBindings.add(binding);
@@ -1080,7 +1080,7 @@ function isSetupOnlyMountCandidate(
           ? callee.name.text
           : "";
     if (
-      /^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|addEventListener|subscribe)$/.test(
+      /^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|addEventListener|subscribe)$/u.test(
         name,
       )
     ) {
@@ -1186,10 +1186,12 @@ function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
   if (call.expression === expression) {
     return true;
   }
+  // SAFETY: Every transparent wrapper admitted above is an Expression, so the
+  // The callback node remains an Expression when it appears in call.arguments.
   return (
     call.arguments.includes(expression as ts.Expression) &&
     ts.isPropertyAccessExpression(call.expression) &&
-    /^(?:every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/.test(
+    /^(?:every|filter|find|findIndex|flatMap|forEach|map|reduce|reduceRight|some)$/u.test(
       call.expression.name.text,
     ) &&
     hasSynchronousArrayReceiver(call.expression.expression)
@@ -1508,7 +1510,7 @@ function soleDirectSetterCall(
   stateBySetter: ReadonlyMap<string, StateCandidate>,
 ): (ts.CallExpression & { expression: ts.Identifier }) | null {
   const expression = ts.isBlock(callback.body)
-    ? (() => {
+    ? ((): ts.Expression | null => {
         const statement = callback.body.statements[0];
         return callback.body.statements.length === 1 &&
           statement &&
@@ -1526,6 +1528,8 @@ function soleDirectSetterCall(
   ) {
     return null;
   }
+  // SAFETY: The guards prove both the CallExpression and Identifier parts of
+  // They establish the intersection returned to callers.
   return expression as ts.CallExpression & { expression: ts.Identifier };
 }
 
@@ -1600,12 +1604,12 @@ function jsxAttributeHasProvenEventContract(
     return false;
   }
   const propName = attribute.name.getText();
-  if (!isValueTransitionProp(propName) && !/^on[A-Z]/.test(propName)) {
+  if (!isValueTransitionProp(propName) && !/^on[A-Z]/u.test(propName)) {
     return false;
   }
   const target = opening.tagName.getText();
   return (
-    /^[a-z]/.test(target) ||
+    /^[a-z]/u.test(target) ||
     childContracts?.frameworkEventComponent(target) === true ||
     childContracts?.componentCallbackPropIsDeferred(target, propName) === true
   );
@@ -1652,10 +1656,10 @@ export function callbackHasCleanup(
 function isSubscriptionCall(call: ts.CallExpression): boolean {
   const callee = call.expression;
   if (ts.isIdentifier(callee)) {
-    return /^(?:subscribe|listen|observe|register)/.test(callee.text);
+    return /^(?:subscribe|listen|observe|register)/u.test(callee.text);
   }
   if (ts.isPropertyAccessExpression(callee)) {
-    return /^(?:subscribe|listen|observe|register|addListener|on[A-Z])/.test(callee.name.text);
+    return /^(?:subscribe|listen|observe|register|addListener|on[A-Z])/u.test(callee.name.text);
   }
   return false;
 }

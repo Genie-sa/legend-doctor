@@ -1,6 +1,6 @@
 import ts from "typescript";
 
-export interface AnalysisDiagnostic {
+interface AnalysisDiagnostic {
   readonly category: "error" | "message" | "suggestion" | "warning";
   readonly code: number;
   readonly file: string;
@@ -18,33 +18,32 @@ interface SourceFileWithParseDiagnostics extends ts.SourceFile {
  * include the property in its public declaration. Keep that version-sensitive
  * access isolated here so the cached AST remains the single parse authority.
  */
-export function parserDiagnosticsOf(sourceFile: ts.SourceFile): readonly AnalysisDiagnostic[] {
-  if (!("parseDiagnostics" in sourceFile)) {
-    throw new Error("The installed TypeScript parser does not expose parser diagnostics");
-  }
-  return [...(sourceFile as SourceFileWithParseDiagnostics).parseDiagnostics].map((diagnostic) => ({
-    category: diagnosticCategory(diagnostic.category),
-    code: diagnostic.code,
-    file: sourceFile.fileName,
-    length: diagnostic.length ?? null,
-    message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-    start: diagnostic.start ?? null,
-  }));
-}
-
-function diagnosticCategory(category: ts.DiagnosticCategory): AnalysisDiagnostic["category"] {
-  switch (category) {
-    case ts.DiagnosticCategory.Error: {
+const diagnosticCategory = (category: ts.DiagnosticCategory): AnalysisDiagnostic["category"] => {
+    if (category === ts.DiagnosticCategory.Error) {
       return "error";
     }
-    case ts.DiagnosticCategory.Warning: {
+    if (category === ts.DiagnosticCategory.Warning) {
       return "warning";
     }
-    case ts.DiagnosticCategory.Suggestion: {
+    if (category === ts.DiagnosticCategory.Suggestion) {
       return "suggestion";
     }
-    default: {
-      return "message";
+    return "message";
+  },
+  parserDiagnosticsOf = (sourceFile: ts.SourceFile): readonly AnalysisDiagnostic[] => {
+    if (!Object.hasOwn(sourceFile, "parseDiagnostics")) {
+      throw new Error("The installed TypeScript parser does not expose parser diagnostics");
     }
-  }
-}
+    // SAFETY: Object.hasOwn above establishes the TypeScript 5.9 parser-diagnostics property.
+    const sourceWithDiagnostics = sourceFile as SourceFileWithParseDiagnostics;
+    return [...sourceWithDiagnostics.parseDiagnostics].map((diagnostic) => ({
+      category: diagnosticCategory(diagnostic.category),
+      code: diagnostic.code,
+      file: sourceFile.fileName,
+      length: diagnostic.length ?? null,
+      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+      start: diagnostic.start ?? null,
+    }));
+  };
+
+export { type AnalysisDiagnostic, parserDiagnosticsOf };

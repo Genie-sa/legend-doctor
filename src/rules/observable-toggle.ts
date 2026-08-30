@@ -77,7 +77,7 @@ function isSamePathPeekNegation(argument: ts.Expression, target: ts.Expression):
   const read = unwrapTransparentExpression(argument.operand);
   if (
     !ts.isCallExpression(read) ||
-    read.arguments.length !== 0 ||
+    read.arguments.length > 0 ||
     (read.typeArguments?.length ?? 0) > 0 ||
     read.questionDotToken ||
     !ts.isPropertyAccessExpression(read.expression) ||

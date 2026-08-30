@@ -27,8 +27,8 @@ export interface HookImports {
   useValue: ReadonlySet<string>;
 }
 
-const REACT_MODULE = "react",
-  LEGEND_REACT_MODULE = "@legendapp/state/react";
+const LEGEND_REACT_MODULE = "@legendapp/state/react",
+  REACT_MODULE = "react";
 
 export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   const batch = new Set<string>(),

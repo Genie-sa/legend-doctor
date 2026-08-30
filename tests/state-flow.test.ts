@@ -6,6 +6,13 @@ import ts from "typescript";
 import { isRuntimeFunctionLike, visit } from "../src/ast.js";
 import { StateFlowIndex } from "../src/state-flow.js";
 
+const requireValue = <Value>(value: Value | undefined): Value => {
+    assert.ok(value);
+    return value;
+  },
+  requireCall = (calls: ReadonlyMap<string, ts.CallExpression>, name: string): ts.CallExpression =>
+    requireValue(calls.get(name));
+
 function functionAndCalls(source: string): {
   calls: Map<string, ts.CallExpression>;
   fn: ts.FunctionDeclaration;
@@ -18,7 +25,7 @@ function functionAndCalls(source: string): {
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      /^set[A-Z]/.test(node.expression.text)
+      /^set[A-Z]/u.test(node.expression.text)
     ) {
       calls.set(node.expression.text, node);
     }
@@ -36,8 +43,8 @@ test("proves sequential state writes can execute together", () => {
   assert.deepEqual(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "proven",
   );
@@ -53,8 +60,8 @@ test("disproves state writes in opposite conditional branches", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "disproven",
   );
@@ -73,8 +80,8 @@ test("disproves writes separated by a terminating guard", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "disproven",
   );
@@ -92,8 +99,8 @@ test("proves writes under the same structural branch", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "proven",
   );
@@ -109,8 +116,8 @@ test("does not prove a conditional write against a different control surface", (
   assert.deepEqual(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "unknown",
   );
@@ -126,8 +133,8 @@ test("proves an unconditional write that dominates a following branch write", ()
   assert.deepEqual(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "proven",
   );
@@ -143,8 +150,8 @@ test("returns unknown for unsupported control flow instead of assuming absence",
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "unknown",
   );
@@ -160,8 +167,8 @@ test("does not turn correlated guards into a co-execution proof", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "unknown",
   );
@@ -180,8 +187,8 @@ test("does not prove a shared branch that an earlier guard makes unreachable", (
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "unknown",
   );
@@ -197,8 +204,8 @@ test("disproves co-execution with a call in a constant-false branch", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "disproven",
   );
@@ -215,8 +222,8 @@ test("distinguishes same-invocation ordering from a synchronous transaction", ()
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "disproven",
   );
@@ -232,8 +239,8 @@ test("does not include calls from nested runtime functions", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setName")!,
-      calls.get("setOpen")!,
+      requireCall(calls, "setName"),
+      requireCall(calls, "setOpen"),
     ),
     "unknown",
   );
@@ -251,8 +258,8 @@ test("does not mistake a locally disabled branch for proven coexecution", () => 
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setFirst")!,
-      calls.get("setSecond")!,
+      requireCall(calls, "setFirst"),
+      requireCall(calls, "setSecond"),
     ),
     "unknown",
   );
@@ -273,8 +280,8 @@ test("treats switch fallthrough as unknown instead of mutually exclusive", () =>
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setFirst")!,
-      calls.get("setSecond")!,
+      requireCall(calls, "setFirst"),
+      requireCall(calls, "setSecond"),
     ),
     "unknown",
   );
@@ -299,8 +306,8 @@ test("respects constant short-circuit branches", () => {
     assert.equal(
       new StateFlowIndex().proveSynchronousCoexecution(
         fn,
-        calls.get("setFirst")!,
-        calls.get("setSecond")!,
+        requireCall(calls, "setFirst"),
+        requireCall(calls, "setSecond"),
       ),
       "disproven",
     );
@@ -318,8 +325,8 @@ test("does not treat a shadowed undefined identifier as a nullish constant", () 
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setFirst")!,
-      calls.get("setSecond")!,
+      requireCall(calls, "setFirst"),
+      requireCall(calls, "setSecond"),
     ),
     "unknown",
   );
@@ -335,8 +342,8 @@ test("treats a dynamic short-circuit RHS as a controlled write", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       after.fn,
-      after.calls.get("setFirst")!,
-      after.calls.get("setSecond")!,
+      requireCall(after.calls, "setFirst"),
+      requireCall(after.calls, "setSecond"),
     ),
     "unknown",
   );
@@ -350,8 +357,8 @@ test("treats a dynamic short-circuit RHS as a controlled write", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       before.fn,
-      before.calls.get("setFirst")!,
-      before.calls.get("setSecond")!,
+      requireCall(before.calls, "setFirst"),
+      requireCall(before.calls, "setSecond"),
     ),
     "proven",
   );
@@ -369,8 +376,8 @@ test("does not join writes across a generator suspension", () => {
   assert.equal(
     new StateFlowIndex().proveSynchronousCoexecution(
       fn,
-      calls.get("setFirst")!,
-      calls.get("setSecond")!,
+      requireCall(calls, "setFirst"),
+      requireCall(calls, "setSecond"),
     ),
     "disproven",
   );

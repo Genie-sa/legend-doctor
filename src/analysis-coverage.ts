@@ -92,7 +92,7 @@ function requireNonBlank(value: string, field: string): string {
 function normalizeTarget(target: AnalysisCoverageTarget): AnalysisCoverageTarget {
   const file = requireNonBlank(target.file, "coverage target file");
   if (target.kind === "file") {
-    return { kind: "file", file };
+    return { file, kind: "file" };
   }
   if (target.kind !== "function") {
     throw new TypeError("coverage target kind must be file or function");
@@ -208,13 +208,13 @@ export class AnalysisCoverageLedger {
       entries: [...this.#entries.values()]
         .sort((left, right) => compareTargets(left.target, right.target))
         .map((entry) => ({
-          target: { ...entry.target },
           stages: {
             parser: normalizeOutcome("parser", entry.stages.parser),
             lowering: normalizeOutcome("lowering", entry.stages.lowering),
             semantic: normalizeOutcome("semantic", entry.stages.semantic),
             detector: normalizeOutcome("detector", entry.stages.detector),
           },
+          target: { ...entry.target },
         })),
       schemaVersion: 1,
     };

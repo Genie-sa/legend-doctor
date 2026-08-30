@@ -331,8 +331,8 @@ function analyzeParsedSource(
     }
   });
 
-  const { lifecycleRegions } = reactCommit;
-  const directEffectCalls = new Set(reactCommit.effectCalls),
+  const { lifecycleRegions } = reactCommit,
+    directEffectCalls = new Set(reactCommit.effectCalls),
     directEffectCallbacks = new Set<RuntimeFunctionLike>(
       effects.flatMap((effect) => (effect.callback ? [effect.callback] : [])),
     ),
@@ -371,7 +371,7 @@ function analyzeParsedSource(
             usage.effectReads === 0 &&
             usage.effectWrites === 0 &&
             usage.setterCallNodes.length >= 2 &&
-            (usage.localRenderReads > 0 || usage.valueTransportSites.size >= 1)))
+            (usage.localRenderReads > 0 || usage.valueTransportSites.size > 0)))
       );
     });
     if (needsDeferredCallbackProof) {
@@ -1222,8 +1222,8 @@ function stateBindingIdentifiers(state: StateCandidate): readonly ts.Identifier[
   }
 
   const ordered: ts.Identifier[] = [];
-  let valueIndex = 0,
-    setterIndex = 0;
+  let setterIndex = 0,
+    valueIndex = 0;
   while (valueIndex < values.length && setterIndex < setters.length) {
     const value = values[valueIndex]!,
       setter = setters[setterIndex]!;
@@ -1771,7 +1771,7 @@ function shareUniqueOwnerReturn(
   owner: RuntimeFunctionLike,
 ): boolean {
   const returned = uniqueReturnedExpression(owner);
-  return !!returned && nodeWithin(left, returned) && nodeWithin(right, returned);
+  return returned !== null && nodeWithin(left, returned) && nodeWithin(right, returned);
 }
 
 function findObservableStateClusters(
@@ -1981,8 +1981,8 @@ function normalizeObservableSelectionClusterMembers(
     edits = selectionMutations.filter((mutation) => !callSetsEmptyArray(mutation));
   if (
     modeMutations.length < 2 ||
-    resets.length < 1 ||
-    edits.length < 1 ||
+    resets.length === 0 ||
+    edits.length === 0 ||
     !modeMutations.some((mutation) => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)) ||
     !modeMutations.some((mutation) => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) ||
     edits.some((mutation) => !setterCallUsesPreviousValue(mutation.call))
@@ -2075,9 +2075,9 @@ function normalizeObservableTextDraftClusterMembers(
     );
   if (
     cursorMutations.length < 2 ||
-    draftMutations.length < 1 ||
-    cursorClears.length < 1 ||
-    cursorOpens.length < 1
+    draftMutations.length === 0 ||
+    cursorClears.length === 0 ||
+    cursorOpens.length === 0
   ) {
     return null;
   }
@@ -2136,15 +2136,15 @@ function callsAreAdjacentDraftWrites(left: ts.CallExpression, right: ts.CallExpr
   ) {
     return false;
   }
-  const { parent } = leftStatement;
-  const statements =
-    ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent)
-      ? parent.statements
-      : null;
-  return (
-    !!statements &&
-    Math.abs(statements.indexOf(leftStatement) - statements.indexOf(rightStatement)) === 1
-  );
+  const { parent } = leftStatement,
+    statements =
+      ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent)
+        ? parent.statements
+        : null;
+  if (statements === null) {
+    return false;
+  }
+  return Math.abs(statements.indexOf(leftStatement) - statements.indexOf(rightStatement)) === 1;
 }
 
 function hasEmptyStringStateInitializer(state: StateCandidate): boolean {
@@ -2522,9 +2522,10 @@ function isDirectBranchInteractionWrite(
 ): boolean {
   const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner),
     callback = nearestMutationFunction(call, state.owner);
+  if (attribute === null || state.setterName === null) {
+    return false;
+  }
   return (
-    !!state.setterName &&
-    !!attribute &&
     /^on[A-Z]/.test(attribute.name.getText()) &&
     attribute.parent.parent === opening &&
     callback !== state.owner &&
@@ -3110,7 +3111,7 @@ function normalizeObservableDialogClusterMembers(
     flags = members.filter((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
   if (
     payloads.length !== 1 ||
-    flags.length < 1 ||
+    flags.length === 0 ||
     payloads.length + flags.length !== members.length
   ) {
     return null;
@@ -3254,7 +3255,7 @@ function normalizePersistentScalarDialogClusterMembers(
     payloadUsage.valueTargets.size !== 1 ||
     flagUsage.valueTargets.size !== 1 ||
     [...payloadUsage.valueTargets][0] !== [...flagUsage.valueTargets][0] ||
-    payloadUsage.setterTransportSites.size !== 0 ||
+    payloadUsage.setterTransportSites.size > 0 ||
     payloadUsage.setterReferences !== payloadUsage.setterCalls ||
     flagUsage.setterTransportSites.size !== 1 ||
     flagUsage.setterReferences !== flagUsage.setterCalls + 1
@@ -3564,12 +3565,17 @@ function feedbackHasTimedReset(
   return resets.some((reset) => {
     const timer = findAncestorUntil(
       reset.call,
-      (node): node is ts.CallExpression =>
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === "setTimeout" &&
-        !!node.arguments[0] &&
-        nodeWithin(reset.call, node.arguments[0]),
+      (node): node is ts.CallExpression => {
+        if (
+          !ts.isCallExpression(node) ||
+          !ts.isIdentifier(node.expression) ||
+          node.expression.text !== "setTimeout"
+        ) {
+          return false;
+        }
+        const [callback] = node.arguments;
+        return callback !== undefined && nodeWithin(reset.call, callback);
+      },
       owner,
     );
     if (!timer) {
@@ -3949,7 +3955,7 @@ function findLegendValueMirrors(
       !source ||
       !hookCall ||
       !ts.isCallExpression(hookCall) ||
-      hookCall.arguments.length !== 0 ||
+      hookCall.arguments.length > 0 ||
       !ts.isIdentifier(hookCall.expression)
     ) {
       continue;
@@ -3980,8 +3986,8 @@ function sourceBindingOnlySeedsState(
   }
   const binding = source.name,
     initial = state.call.arguments[0];
-  let safe = true,
-    references = 0;
+  let references = 0,
+    safe = true;
   visit(state.owner.body, (node) => {
     if (
       !safe ||
@@ -4015,20 +4021,24 @@ function hasAdjacentBridgeWrite(
   ) {
     return false;
   }
-  const { statements } = statement.parent;
-  const index = statements.indexOf(statement);
+  const { statements } = statement.parent,
+    index = statements.indexOf(statement);
   return [statements[index - 1], statements[index + 1]].some((candidate) => {
     if (!candidate || !ts.isExpressionStatement(candidate)) {
       return false;
     }
     const expression = unwrapTransparentExpression(candidate.expression);
+    if (!ts.isCallExpression(expression) || expression.arguments.length !== 1) {
+      return false;
+    }
+    const [argument] = expression.arguments,
+      [setterArgument] = setterCall.arguments;
     return (
-      ts.isCallExpression(expression) &&
-      expression.arguments.length === 1 &&
-      !!expression.arguments[0] &&
+      argument !== undefined &&
+      setterArgument !== undefined &&
       ts.isIdentifier(expression.expression) &&
       writers.has(expression.expression.text) &&
-      expression.arguments[0].getText() === setterCall.arguments[0]!.getText()
+      argument.getText() === setterArgument.getText()
     );
   });
 }
@@ -4801,13 +4811,15 @@ function classifyState(
     !usage.escaped &&
     !stateMayHoldCallable(state) &&
     !callSiteIsKeyed(stableOwnerLevelCallSite(usage, state.owner)) &&
-    usage.setterCallNodes.every(
-      (call) =>
+    usage.setterCallNodes.every((call) => {
+      const [argument] = call.arguments;
+      return (
         call.arguments.length === 1 &&
-        !!call.arguments[0] &&
-        (call.arguments[0].kind === ts.SyntaxKind.TrueKeyword ||
-          call.arguments[0].kind === ts.SyntaxKind.FalseKeyword),
-    )
+        argument !== undefined &&
+        (argument.kind === ts.SyntaxKind.TrueKeyword ||
+          argument.kind === ts.SyntaxKind.FalseKeyword)
+      );
+    })
   ) {
     const [target] = [...usage.jsxTargets],
       propNames = target ? usage.valueProps.get(target) : undefined,
@@ -4845,7 +4857,7 @@ function controlledFilterLeafCut(
     usage.setterCalls !== 0 ||
     usage.setterTransportSites.size !== 1 ||
     usage.setterTargets.size !== 1 ||
-    usage.valueTransportSites.size !== 0 ||
+    usage.valueTransportSites.size > 0 ||
     usage.effectReads !== 0 ||
     usage.effectWrites !== 0 ||
     usage.deferredReads !== 0 ||
@@ -4975,7 +4987,7 @@ function exactStringFilter(
   const lowerCall = unwrapTransparentExpression(includesCall.expression.expression);
   if (
     !ts.isCallExpression(lowerCall) ||
-    lowerCall.arguments.length !== 0 ||
+    lowerCall.arguments.length > 0 ||
     !ts.isPropertyAccessExpression(lowerCall.expression) ||
     lowerCall.expression.name.text !== "toLowerCase"
   ) {
@@ -5193,7 +5205,7 @@ function renderCollectionWorkOutside(
       callee.questionDotToken === undefined &&
       (RENDER_COLLECTION_WORK_METHODS.has(callee.name.text) ||
         (callee.name.text === "from" &&
-          !!receiver &&
+          receiver !== null &&
           ts.isIdentifier(receiver) &&
           receiver.text === "Array"))
     ) {
@@ -5251,16 +5263,16 @@ function isReadOnlyFilteredResultReference(
     return false;
   }
   if (access.name.text === "length") {
-    return !!findAncestorUntil(access, isJsxNode, owner);
+    return Boolean(findAncestorUntil(access, isJsxNode, owner));
   }
   if (access.name.text !== "map" || !ts.isCallExpression(access.parent)) {
     return false;
   }
   const callback = access.parent.arguments[0];
   return (
-    !!callback &&
+    callback !== undefined &&
     (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
-    !!findAncestorUntil(access, isJsxNode, owner)
+    Boolean(findAncestorUntil(access, isJsxNode, owner))
   );
 }
 
@@ -5370,7 +5382,7 @@ function scheduledSetterIsExact(callback: ts.ArrowFunction, setter: ts.CallExpre
   const statement = callback.body.statements[0];
   return (
     callback.body.statements.length === 1 &&
-    !!statement &&
+    statement !== undefined &&
     ts.isExpressionStatement(statement) &&
     unwrapTransparentExpression(statement.expression) === setter
   );
@@ -5734,7 +5746,7 @@ function hasInlineInteractionSetter(
   usage: StateUsage,
   isInteractionProp: (name: string) => boolean = isControlledInteractionProp,
 ): boolean {
-  if (!state.setterName || usage.setterCalls === 0 || usage.setterTransportSites.size !== 0) {
+  if (!state.setterName || usage.setterCalls === 0 || usage.setterTransportSites.size > 0) {
     return false;
   }
   return usage.setterCallNodes.some((call) => {
@@ -5781,7 +5793,7 @@ function hasInteractionSetterAdapter(
     usage.setterReferences !== 1 ||
     usage.setterCalls !== 1 ||
     usage.setterCallNodes.length !== 1 ||
-    usage.setterTransportSites.size !== 0
+    usage.setterTransportSites.size > 0
   ) {
     return false;
   }
@@ -6801,8 +6813,9 @@ function moduleConstIsEvaluationInert(sourceFile: ts.SourceFile, name: string): 
       }
     }
   }
+  const [match] = matches;
   return (
-    matches.length === 1 && !!matches[0]!.initializer && isEvaluationInert(matches[0]!.initializer)
+    match !== undefined && match.initializer !== undefined && isEvaluationInert(match.initializer)
   );
 }
 
@@ -6865,7 +6878,7 @@ function isSafeEffectPresentationReference(node: ts.Node, owner: RuntimeFunction
   }
   const callback = repeated.arguments[0];
   return (
-    !!callback &&
+    callback !== undefined &&
     (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
     repeatedRenderHasStableItemKey(callback)
   );
@@ -6882,13 +6895,13 @@ function isKeyedRepeatedProjection(nodes: readonly ts.Node[], owner: RuntimeFunc
     return false;
   }
   const binding = callback.parameters[0]?.name;
-  return (
-    !!binding &&
-    nodes.every((node) => {
-      const expression = jsxProjectionExpression(node, owner);
-      return !!expression && expressionDependsOnBinding(expression, binding, callback);
-    })
-  );
+  if (binding === undefined) {
+    return false;
+  }
+  return nodes.every((node) => {
+    const expression = jsxProjectionExpression(node, owner);
+    return expression !== null && expressionDependsOnBinding(expression, binding, callback);
+  });
 }
 
 function jsxProjectionExpression(
@@ -6932,7 +6945,7 @@ function isSafeMixedProjectionTransport(
     target = [...usage.valueTargets][0];
   if (
     usage.valueTransportSites.size !== 1 ||
-    usage.setterTransportSites.size !== 0 ||
+    usage.setterTransportSites.size > 0 ||
     usage.valueTargets.size !== 1 ||
     usage.repeatedTransport ||
     !hasStateInitializer(state, ts.SyntaxKind.NullKeyword) ||
@@ -6945,7 +6958,7 @@ function isSafeMixedProjectionTransport(
   }
   const props = usage.valueProps.get(target);
   return (
-    !!props &&
+    props !== undefined &&
     props.size > 0 &&
     [...props].every((prop) => !/^(?:children|key|ref|render|on[A-Z])/.test(prop))
   );
@@ -7080,8 +7093,8 @@ function isSourceProvenMemoizedOptionCommand(
     return false;
   }
 
-  let memoCall: ts.CallExpression | null = null,
-    callbackProp: string | null = null;
+  let callbackProp: string | null = null,
+    memoCall: ts.CallExpression | null = null;
   for (const setter of deferredSetters) {
     const containingMemo = findAncestorUntil(
         setter,
@@ -7126,10 +7139,10 @@ function isSourceProvenMemoizedOptionCommand(
   }
   const memoBinding = declaration.name.text;
 
-  let target: string | null = null,
-    propName: string | null = null,
-    transportCount = 0,
-    safe = true;
+  let propName: string | null = null,
+    safe = true,
+    target: string | null = null,
+    transportCount = 0;
   visit(state.owner.body, (node) => {
     if (
       !safe ||
@@ -7652,7 +7665,7 @@ function isEffectOwnedReturnedKeyedCursor(
     return false;
   }
   return (
-    !!state.setterName &&
+    state.setterName !== null &&
     childContracts.hookStateHasKeyedRowConsumer(hookName, state.valueName, state.setterName)
   );
 }
@@ -7675,8 +7688,8 @@ function returnsStateAndSetter(state: StateCandidate): boolean {
   if (!state.owner.body || !state.setterName) {
     return false;
   }
-  let returns = 0,
-    matched = false;
+  let matched = false,
+    returns = 0;
   visitSkippingNestedRuntimeFunctions(state.owner.body, (node) => {
     if (!ts.isReturnStatement(node) || !node.expression) {
       return;
@@ -7766,12 +7779,16 @@ function effectCursorReadsAreDeferred(
     [...nestedReadEffects].every((effect) => {
       const callback = effect.arguments[0],
         dependencies = effect.arguments[1];
+      if (
+        callback === undefined ||
+        (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
+        dependencies === undefined ||
+        !ts.isArrayLiteralExpression(dependencies)
+      ) {
+        return false;
+      }
       return (
-        !!callback &&
-        (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
         callbackHasCleanup(callback, EMPTY_STATE_CANDIDATES) &&
-        !!dependencies &&
-        ts.isArrayLiteralExpression(dependencies) &&
         dependencies.elements.some((element) => {
           const value = unwrapTransparentExpression(element);
           return ts.isIdentifier(value) && value.text === state.valueName;

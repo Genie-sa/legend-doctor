@@ -623,14 +623,16 @@ export function buildSourceIndexFromFiles(
     componentsFor: (file) => new Set(resolvedFor(file, "component").keys()),
     contextReaderHooksFor,
     deferredCallbackHooksFor: (file) => {
-      const hooks = new Map<string, ReadonlySet<number>>();
-      const normalized = normalizeFile(file);
+      const hooks = new Map<string, ReadonlySet<number>>(),
+        normalized = normalizeFile(file);
       for (const [localName, parameters] of records.get(normalized)?.deferredCallbackHooks ?? []) {
         hooks.set(localName, parameters);
       }
       for (const [localName, symbol] of resolvedFor(file, "deferred-callback-hook")) {
         const parameters = records.get(symbol.file)?.deferredCallbackHooks.get(symbol.localName);
-        if (parameters) hooks.set(localName, parameters);
+        if (parameters) {
+          hooks.set(localName, parameters);
+        }
       }
       return hooks;
     },
@@ -638,15 +640,21 @@ export function buildSourceIndexFromFiles(
       const registrations = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
       for (const [localName, symbol] of resolvedFor(file, "deferred-callback-owner")) {
         const methods = records.get(symbol.file)?.deferredCallbackOwners.get(symbol.localName);
-        if (methods) registrations.set(localName, methods);
+        if (methods) {
+          registrations.set(localName, methods);
+        }
       }
       return registrations;
     },
     frameworkEventComponentFor: (file, name) => {
-      const rootName = name.split(".", 1)[0] ?? name;
-      const record = records.get(normalizeFile(file));
-      if (record?.shadowedImports.has(rootName)) return false;
-      if (record?.frameworkEventComponents.has(rootName)) return true;
+      const rootName = name.split(".", 1)[0] ?? name,
+        record = records.get(normalizeFile(file));
+      if (record?.shadowedImports.has(rootName)) {
+        return false;
+      }
+      if (record?.frameworkEventComponents.has(rootName)) {
+        return true;
+      }
       const binding = record?.imports.get(rootName);
       return (
         (binding !== undefined && isFrameworkEventModuleSpecifier(binding.moduleSpecifier)) ||
@@ -661,11 +669,13 @@ export function buildSourceIndexFromFiles(
       return resolvedFor(normalized, "hook").get(name) ?? null;
     },
     legendValueBridgesFor: (file) => {
-      const bridges = new Map<string, ReadonlySet<string>>();
-      const writers = resolvedFor(file, "legend-value-writer");
+      const bridges = new Map<string, ReadonlySet<string>>(),
+        writers = resolvedFor(file, "legend-value-writer");
       for (const [hookName, hook] of resolvedFor(file, "legend-value-hook")) {
         const observable = records.get(hook.file)?.legendValueHooks.get(hook.localName);
-        if (!observable) continue;
+        if (!observable) {
+          continue;
+        }
         const matches = new Set<string>();
         for (const [writerName, writer] of writers) {
           if (
@@ -675,7 +685,9 @@ export function buildSourceIndexFromFiles(
             matches.add(writerName);
           }
         }
-        if (matches.size > 0) bridges.set(hookName, matches);
+        if (matches.size > 0) {
+          bridges.set(hookName, matches);
+        }
       }
       return bridges;
     },
@@ -684,25 +696,37 @@ export function buildSourceIndexFromFiles(
       const keys = new Map<string, ReadonlySet<string>>();
       for (const [localName, symbol] of resolvedFor(file, "observable")) {
         const observableKeys = records.get(symbol.file)?.observableKeys.get(symbol.localName);
-        if (observableKeys) keys.set(localName, observableKeys);
+        if (observableKeys) {
+          keys.set(localName, observableKeys);
+        }
       }
       return keys;
     },
     observablePathsFor: (file) => {
-      const paths = new Set<string>();
-      const normalized = normalizeFile(file);
+      const paths = new Set<string>(),
+        normalized = normalizeFile(file);
       for (const [localName, members] of records.get(normalized)?.observableMemberDeclarations ??
         []) {
-        if (!observableContainerIsStable({ file: normalized, localName })) continue;
-        for (const member of members) paths.add(`${localName}.${member}`);
+        if (!observableContainerIsStable({ file: normalized, localName })) {
+          continue;
+        }
+        for (const member of members) {
+          paths.add(`${localName}.${member}`);
+        }
       }
       for (const [localName, symbol] of resolvedFor(normalized, "observable-container")) {
-        if (!observableContainerIsStable(symbol)) continue;
+        if (!observableContainerIsStable(symbol)) {
+          continue;
+        }
         const members = records
           .get(symbol.file)
           ?.observableMemberDeclarations.get(symbol.localName);
-        if (!members) continue;
-        for (const member of members) paths.add(`${localName}.${member}`);
+        if (!members) {
+          continue;
+        }
+        for (const member of members) {
+          paths.add(`${localName}.${member}`);
+        }
       }
       return paths;
     },
@@ -1669,7 +1693,7 @@ function directLegendValueHookObservable(
   useValueHooks: ReadonlySet<string>,
 ): string | null {
   if (
-    declaration.parameters.length !== 0 ||
+    declaration.parameters.length > 0 ||
     !declaration.body ||
     declaration.body.statements.length !== 1
   ) {
@@ -1966,13 +1990,14 @@ function storedCallbackProperty(
   if (!field || !ts.isPropertyDeclaration(field)) {
     return null;
   }
-  const initializer = field.initializer && unwrapTransparentExpression(field.initializer);
+  const initializer = field.initializer && unwrapTransparentExpression(field.initializer),
+    fieldType = field.type;
   return (initializer && ts.isArrayLiteralExpression(initializer)) ||
-    (!!field.type &&
-      (ts.isArrayTypeNode(field.type) ||
-        (ts.isTypeReferenceNode(field.type) &&
-          ts.isIdentifier(field.type.typeName) &&
-          field.type.typeName.text === "Array")))
+    (fieldType !== undefined &&
+      (ts.isArrayTypeNode(fieldType) ||
+        (ts.isTypeReferenceNode(fieldType) &&
+          ts.isIdentifier(fieldType.typeName) &&
+          fieldType.typeName.text === "Array")))
     ? property
     : null;
 }
@@ -2181,8 +2206,8 @@ function compilerOptionsFor(root: string): ts.CompilerOptions {
     return { jsx: ts.JsxEmit.Preserve, moduleResolution: ts.ModuleResolutionKind.Bundler };
   }
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(configFile)),
-    { options } = parsed;
-  const missingBaseConfig = parsed.errors.some((diagnostic) => diagnostic.code === 6053);
+    { options } = parsed,
+    missingBaseConfig = parsed.errors.some((diagnostic) => diagnostic.code === 6053);
   return options.moduleResolution === undefined && missingBaseConfig
     ? { ...options, moduleResolution: ts.ModuleResolutionKind.Bundler }
     : options;
@@ -2202,13 +2227,14 @@ function isComponentInitializer(node: ts.Expression, wrappers: ReactComponentWra
   ) {
     return true;
   }
-  return (
-    ts.isCallExpression(initializer) &&
-    isReactComponentWrapper(initializer.expression, wrappers) &&
-    initializer.arguments.length >= 1 &&
-    !!initializer.arguments[0] &&
-    isComponentRenderFunction(initializer.arguments[0])
-  );
+  if (
+    !ts.isCallExpression(initializer) ||
+    !isReactComponentWrapper(initializer.expression, wrappers)
+  ) {
+    return false;
+  }
+  const [renderFunction] = initializer.arguments;
+  return renderFunction !== undefined && isComponentRenderFunction(renderFunction);
 }
 
 function componentFunction(
@@ -2222,7 +2248,7 @@ function componentFunction(
   if (
     ts.isCallExpression(initializer) &&
     isReactComponentWrapper(initializer.expression, wrappers) &&
-    initializer.arguments.length >= 1
+    initializer.arguments.length > 0
   ) {
     const argument = initializer.arguments[0];
     return argument ? componentRenderFunction(argument) : null;

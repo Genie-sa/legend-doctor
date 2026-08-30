@@ -20,13 +20,13 @@ import {
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import {
   isInsideJsxEventCallback,
   isJsxNode,
   isSynchronousRenderCallback,
   setterCallUsesPreviousValue,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export interface CommandOnlyCallableReads {
   effectSites: readonly ts.Identifier[];
@@ -229,7 +229,7 @@ export function stateReadCallbackEscapesThroughUnknownHook(
           : null;
       if (
         hookName &&
-        /^use[A-Z0-9]/.test(hookName) &&
+        /^use[A-Z0-9]/u.test(hookName) &&
         !["useCallback", "useMemo", "useEffect", "useLayoutEffect", "useInsertionEffect"].includes(
           hookName,
         ) &&
@@ -240,9 +240,9 @@ export function stateReadCallbackEscapesThroughUnknownHook(
           continue;
         }
         const property =
-          argumentIndex !== -1
-            ? objectCallbackProperty(current.arguments[argumentIndex]!, node)
-            : null;
+          argumentIndex === -1
+            ? null
+            : objectCallbackProperty(current.arguments[argumentIndex]!, node);
         if (property && callbackPropertyIsDeferred?.(hookName, argumentIndex, property) === true) {
           continue;
         }
@@ -551,8 +551,8 @@ function jsxPropMayRenderCallable(name: string): boolean {
     name === "children" ||
     name === "component" ||
     name === "renderer" ||
-    /^render(?:[A-Z]|$)/.test(name) ||
-    /(?:Renderer|Component)$/.test(name)
+    /^render(?:[A-Z]|$)/u.test(name) ||
+    /(?:Renderer|Component)$/u.test(name)
   );
 }
 

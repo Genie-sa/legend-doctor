@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AnalysisCoverageLedger } from "../src/analysis-coverage.js";
-import type { AnalysisCoverageEntry, AnalysisCoverageOutcome } from "../src/analysis-coverage.js";
+import {
+  AnalysisCoverageLedger,
+  type AnalysisCoverageEntry,
+  type AnalysisCoverageOutcome,
+} from "../src/analysis-coverage.js";
+
+const requireValue = <Value>(value: Value | undefined): Value => {
+  assert.ok(value);
+  return value;
+};
 
 function outcome(status: AnalysisCoverageOutcome["status"], code: string): AnalysisCoverageOutcome {
   return { reason: { code, message: code.replaceAll("-", " ") }, status };
@@ -14,10 +22,10 @@ function entry(
 ): AnalysisCoverageEntry {
   return {
     stages: {
-      detector: outcome(detectorStatus, "detector-complete"),
-      lowering: outcome("skipped", "lowering-not-requested"),
       parser: outcome("analyzed", "parsed"),
+      lowering: outcome("skipped", "lowering-not-requested"),
       semantic: outcome("unsupported", "project-context-unavailable"),
+      detector: outcome(detectorStatus, "detector-complete"),
     },
     target,
   };
@@ -31,21 +39,21 @@ test("reports every analysis stage explicitly for file and function targets", ()
   );
 
   const report = ledger.report();
-  assert.deepEqual(Object.keys(report.entries[0]?.stages ?? {}), [
+  assert.deepEqual(Object.keys(requireValue(report.entries[0]).stages ?? {}), [
     "parser",
     "lowering",
     "semantic",
     "detector",
   ]);
-  assert.deepEqual(report.entries[1]?.target, {
+  assert.deepEqual(requireValue(report.entries[1]).target, {
     end: 75,
     file: "src/view.tsx",
     kind: "function",
     name: null,
     start: 40,
   });
-  assert.equal(report.entries[1]?.stages.detector.status, "skipped");
-  assert.equal(report.entries[1]?.stages.detector.reason.code, "detector-complete");
+  assert.equal(requireValue(report.entries[1]).stages.detector.status, "skipped");
+  assert.equal(requireValue(report.entries[1]).stages.detector.reason.code, "detector-complete");
   assert.deepEqual(JSON.parse(JSON.stringify(report)), report);
   assert.deepEqual(JSON.parse(JSON.stringify(ledger)), report);
 });
@@ -62,7 +70,7 @@ test("sorts reports deterministically without depending on record order or local
   for (const input of inputs) {
     forward.record(input);
   }
-  for (const input of [...inputs].reverse()) {
+  for (const input of inputs.toReversed()) {
     reverse.record(input);
   }
 
@@ -82,7 +90,7 @@ test("rejects duplicate targets instead of silently replacing coverage", () => {
   ledger.record(entry({ file: "src/view.tsx", kind: "file" }));
   assert.throws(
     () => ledger.record(entry({ file: "src/view.tsx", kind: "file" }, "unsupported")),
-    /already recorded/,
+    /already recorded/u,
   );
 });
 
@@ -91,23 +99,23 @@ test("rejects omitted or unexpected targets against the project universe", () =>
     second = { file: "src/second.ts", kind: "file" as const },
     ledger = new AnalysisCoverageLedger([first, second]);
   ledger.record(entry(first));
-  assert.throws(() => ledger.report(), /coverage targets were not recorded/);
+  assert.throws(() => ledger.report(), /coverage targets were not recorded/u);
   assert.throws(
     () => ledger.record(entry({ file: "src/third.ts", kind: "file" })),
-    /unexpected coverage target/,
+    /unexpected coverage target/u,
   );
 });
 
 test("rejects impossible detector coverage and duplicate function ranges", () => {
   const target = { file: "src/view.tsx", kind: "file" as const },
-    impossible = entry(target);
+    impossible = entry(target),
+    impossibleCoverage = globalThis.structuredClone(impossible);
+  Object.assign(impossibleCoverage.stages, {
+    parser: outcome("unknown", "parser-recovery"),
+  });
   assert.throws(
-    () =>
-      new AnalysisCoverageLedger().record({
-        ...impossible,
-        stages: { ...impossible.stages, parser: outcome("unknown", "parser-recovery") },
-      }),
-    /detector cannot be analyzed/,
+    () => new AnalysisCoverageLedger().record(impossibleCoverage),
+    /detector cannot be analyzed/u,
   );
 
   const ledger = new AnalysisCoverageLedger();
@@ -117,7 +125,7 @@ test("rejects impossible detector coverage and duplicate function ranges", () =>
       ledger.record(
         entry({ end: 2, file: "src/view.tsx", kind: "function", name: "alias", start: 1 }),
       ),
-    /already recorded/,
+    /already recorded/u,
   );
 });
 
@@ -131,18 +139,18 @@ test("rejects omitted stages and blank reasons instead of treating them as unkno
   const ledger = new AnalysisCoverageLedger();
   assert.throws(
     () => ledger.record(missingStage as unknown as AnalysisCoverageEntry),
-    /must explicitly report/,
+    /must explicitly report/u,
   );
 
   const blankReason = entry({ file: "src/blank.tsx", kind: "file" }),
-    invalid = {
-      ...blankReason,
-      stages: {
-        ...blankReason.stages,
-        lowering: { reason: { code: " ", message: "not needed" }, status: "skipped" as const },
-      },
-    };
-  assert.throws(() => ledger.record(invalid), /reason code must not be empty/);
+    invalid = globalThis.structuredClone(blankReason);
+  Object.assign(invalid.stages, {
+    lowering: {
+      reason: { code: " ", message: "not needed" },
+      status: "skipped" as const,
+    },
+  });
+  assert.throws(() => ledger.record(invalid), /reason code must not be empty/u);
 });
 
 test("defines an empty report as no registered targets", () => {

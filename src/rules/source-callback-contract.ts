@@ -16,7 +16,7 @@ export interface SourceHookDeclaration {
 }
 
 export interface SourceHookResolver {
-  resolveHook(importerFile: string, name: string): SourceHookDeclaration | null;
+  resolveHook: (importerFile: string, name: string) => SourceHookDeclaration | null;
 }
 
 interface CallbackBinding {
@@ -287,6 +287,7 @@ function callbackReferenceIsRefStorage(
   ) {
     return false;
   }
+  // SAFETY: The parent kind check above proves this node is an object literal.
   const object = property.parent as ts.ObjectLiteralExpression,
     propertyName = objectPropertyName(property);
   if (propertyName !== storedRef.property) {

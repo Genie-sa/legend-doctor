@@ -15,7 +15,6 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import {
   expressionContainsJsx,
@@ -31,6 +30,7 @@ import {
   nearestRepeatedRenderCall,
   oneHopRenderProjectionReferences,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 interface LiteralBooleanLeafOptions {
   branchCallSiteExists: boolean;
@@ -73,7 +73,7 @@ export function isLiteralBooleanLeafState(
       const value = call.arguments[0];
       return (
         call.arguments.length === 1 &&
-        !!value &&
+        value !== undefined &&
         (value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword) &&
         (isEventRootedLiteralSetterCall(call, state.owner) || options.hasMemoizedOptionCommand)
       );
@@ -174,7 +174,7 @@ function isAdjacentBooleanLeafState(
     ),
     indexes = expressions
       .map((expression) => children.indexOf(expression))
-      .sort((left, right) => left - right);
+      .toSorted((left, right) => left - right);
   return (
     children.length > expressions.length &&
     indexes[0] !== -1 &&
@@ -364,7 +364,7 @@ function isEventBooleanSetter(call: ts.CallExpression, state: StateCandidate): b
   }
   const callback = nearestNestedFunction(call, state.owner);
   return (
-    !!callback &&
+    callback !== null &&
     (ts.isArrowFunction(callback) ||
       ts.isFunctionDeclaration(callback) ||
       ts.isFunctionExpression(callback)) &&
@@ -377,7 +377,7 @@ function isPureBooleanSetter(call: ts.CallExpression): boolean {
   const argument = call.arguments[0];
   return (
     call.arguments.length === 1 &&
-    !!argument &&
+    argument !== undefined &&
     (isLiteralBooleanSetter(call) || (isPureExpression(argument) && isBooleanExpression(argument)))
   );
 }
@@ -433,7 +433,7 @@ function callbackIsIntrinsicEventRooted(
 }
 
 function attributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
-  if (!/^on[A-Z]/.test(attribute.name.getText())) {
+  if (!/^on[A-Z]/u.test(attribute.name.getText())) {
     return false;
   }
   const opening = attribute.parent.parent,
@@ -441,7 +441,7 @@ function attributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
       ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
         ? opening.tagName
         : null;
-  return !!tag && ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
+  return tag !== null && ts.isIdentifier(tag) && /^[a-z]/u.test(tag.text);
 }
 
 function isBooleanExpression(expression: ts.Expression): boolean {
@@ -483,7 +483,7 @@ function isLiteralBooleanSetter(call: ts.CallExpression): boolean {
   const value = call.arguments[0];
   return (
     call.arguments.length === 1 &&
-    !!value &&
+    value !== undefined &&
     (value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword)
   );
 }

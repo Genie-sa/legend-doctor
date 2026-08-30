@@ -14,9 +14,9 @@ import {
   nodeWithin,
   visit,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import { collectHookImports, isImportedHookCall } from "../imports.js";
 import { uniqueVariableDeclaration } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export type HookConsumerResult = "none" | "safe" | "unsafe";
 
@@ -191,7 +191,9 @@ function cursorReferencesFormOneStableList(
     (attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText() === "keyExtractor",
   );
   return (
-    !!keyAttribute && ts.isJsxAttribute(keyAttribute) && keyExtractorIsStable(keyAttribute, owner)
+    keyAttribute !== undefined &&
+    ts.isJsxAttribute(keyAttribute) &&
+    keyExtractorIsStable(keyAttribute, owner)
   );
 }
 

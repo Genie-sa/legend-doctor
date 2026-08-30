@@ -13,7 +13,6 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import type { ChildContractResolver } from "./child-contract.js";
 import { isRenderGateReference } from "./deferred-reveal.js";
@@ -25,6 +24,7 @@ import {
   jsxElementCountIn,
   stateMayHoldCallable,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export interface ObjectDraftProofs {
   childContracts: ChildContractResolver | null;
@@ -119,7 +119,7 @@ export function isPropertyLocalObjectDraftState(
 
   const returned = uniqueReturnedExpression(state.owner);
   return (
-    !!returned &&
+    returned !== null &&
     sinks.length >= 2 &&
     hasIndependentRenderCutWitness(returned, sinks, proofs.localComponents, proofs.sourceComponents)
   );
@@ -184,7 +184,9 @@ function typedStringDraftProperties(state: StateCandidate): ReadonlySet<string> 
 
   const names = new Set(
     type.members.map((member) =>
-      (member as ts.PropertySignature).name.getText().replaceAll(/^['"]|['"]$/g, ""),
+      // SAFETY: The preceding every-member check proves each member is a
+      // PropertySignature with a statically named property.
+      (member as ts.PropertySignature).name.getText().replaceAll(/^['"]|['"]$/gu, ""),
     ),
   );
   if (names.size !== type.members.length) {
@@ -291,7 +293,7 @@ function deferredSetterOnlyOpening(
         : null;
   if (
     !attribute ||
-    !/^on[A-Z]/.test(attribute.name.getText()) ||
+    !/^on[A-Z]/u.test(attribute.name.getText()) ||
     !expression ||
     (!ts.isArrowFunction(expression) && !ts.isFunctionExpression(expression)) ||
     ts.isBlock(expression.body) ||
@@ -304,7 +306,7 @@ function deferredSetterOnlyOpening(
     return null;
   }
   const component = opening.tagName.getText();
-  if (/^[a-z]/.test(component)) {
+  if (/^[a-z]/u.test(component)) {
     return opening;
   }
   return childContracts &&
@@ -329,7 +331,8 @@ function openingReadsProperty(
           : null,
       access = expression && unwrapTransparentExpression(expression);
     return (
-      !!access &&
+      access !== null &&
+      access !== undefined &&
       ts.isPropertyAccessExpression(access) &&
       ts.isIdentifier(unwrapTransparentExpression(access.expression)) &&
       access.expression.getText() === stateName &&
@@ -432,7 +435,7 @@ function safeStringTrim(
     call.arguments.length === 0 &&
     ts.isPropertyAccessExpression(callee) &&
     callee.name.text === "trim" &&
-    !!receiver &&
+    receiver !== null &&
     ts.isPropertyAccessExpression(receiver) &&
     ts.isIdentifier(unwrapTransparentExpression(receiver.expression)) &&
     receiver.expression.getText() === stateName &&

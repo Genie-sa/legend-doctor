@@ -17,9 +17,9 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate } from "../analyze-source.js";
 import { isSafeProjectionExpression, jsxSubtreeAncestors } from "./deferred-reveal.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 import type { JsxSubtreeNode } from "./deferred-reveal.js";
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set(),
@@ -90,7 +90,7 @@ export function hasIndependentRenderCutWitness(
 
 function isComponentBoundaryName(name: string): boolean {
   const member = name.slice(name.lastIndexOf(".") + 1);
-  return member !== "Fragment" && (name.includes(".") || /^[A-Z]/.test(name));
+  return member !== "Fragment" && (name.includes(".") || /^[A-Z]/u.test(name));
 }
 
 export function oneHopRenderProjectionReferences(
@@ -109,6 +109,7 @@ export function oneHopRenderProjectionReferences(
     ),
     declaration = declarations.size === 1 ? [...declarations][0] : null;
   if (!declaration) {
+    // SAFETY: The entry guard proves every render node is an Identifier.
     return renderNodes as readonly ts.Identifier[];
   }
   if (
@@ -147,6 +148,7 @@ export function boundedRenderProjectionReferences(
     return null;
   }
 
+  // SAFETY: The entry guard proves every render node is an Identifier.
   let references = renderNodes as readonly ts.Identifier[],
     hops = 0;
   while (hops < maxHops) {
@@ -329,7 +331,7 @@ export function hasOnlyEventCommandReads(
       const call = findAncestorUntil(node, ts.isCallExpression, state.owner),
         candidate = call?.arguments[0];
       safe =
-        !!candidate &&
+        candidate !== undefined &&
         (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
         callbackIsEventRooted(candidate, state.owner, state.valueName, new Set(), (root) =>
           additionalRoots.has(root),
@@ -433,7 +435,7 @@ export function callbackIsEventRooted(
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     if (
       attribute &&
-      /^on[A-Z]/.test(attribute.name.getText()) &&
+      /^on[A-Z]/u.test(attribute.name.getText()) &&
       isJsxEventHandlerReference(attribute, node)
     ) {
       return;
@@ -490,15 +492,16 @@ export function isSafeJsxProjectionReference(
     }
     const { initializer } = attribute;
     return (
-      !!initializer &&
+      initializer !== undefined &&
       ts.isJsxExpression(initializer) &&
-      !!initializer.expression &&
+      initializer.expression !== undefined &&
       isSafeProjectionExpression(initializer.expression, node, allowedIdentifierCalls)
     );
   }
   const expression = findAncestorUntil(node, ts.isJsxExpression, boundary);
   return (
-    !!expression?.expression &&
+    expression !== null &&
+    expression.expression !== undefined &&
     isSafeProjectionExpression(expression.expression, node, allowedIdentifierCalls)
   );
 }
@@ -672,7 +675,7 @@ export function isInsideJsxEventCallback(node: ts.Node, boundary: RuntimeFunctio
     if (
       attribute &&
       isInsideJsxAttribute(current, attribute) &&
-      /^on[A-Z]/.test(attribute.name.getText())
+      /^on[A-Z]/u.test(attribute.name.getText())
     ) {
       return true;
     }
@@ -837,7 +840,7 @@ export function isUniquelySelectedRepeatedProjection(
   }
   const leaf = nearestJsxElement(nodes[0]!, clause);
   return (
-    !!leaf &&
+    leaf !== null &&
     nodes.every((node) => nearestJsxElement(node, clause) === leaf) &&
     jsxKeyMatchesLiteral(leaf, clause.expression)
   );
@@ -848,7 +851,8 @@ function expressionIsUniquelyFiltered(expression: ts.Expression, boundary: ts.No
   if (ts.isIdentifier(value)) {
     const declaration = uniqueVariableDeclaration(boundary, value.text);
     return (
-      !!declaration?.initializer &&
+      declaration !== null &&
+      declaration.initializer !== undefined &&
       ts.isVariableDeclarationList(declaration.parent) &&
       (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
       expressionIsUniquelyFiltered(declaration.initializer, boundary)
@@ -1027,7 +1031,7 @@ function isIndexOfItem(expression: ts.Expression, array: string, item: string): 
     value.expression.name.text === "indexOf" &&
     ts.isIdentifier(value.expression.expression) &&
     value.expression.expression.text === array &&
-    !!argument &&
+    argument !== undefined &&
     ts.isIdentifier(argument) &&
     argument.text === item
   );
@@ -1068,7 +1072,7 @@ function jsxKeyMatchesLiteral(
       : null;
   const caseValue = unwrapTransparentExpression(literal);
   return (
-    !!keyValue &&
+    keyValue !== null &&
     ((ts.isStringLiteralLike(keyValue) &&
       ts.isStringLiteralLike(caseValue) &&
       keyValue.text === caseValue.text) ||

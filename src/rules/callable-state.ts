@@ -75,7 +75,7 @@ export function stateTypeMayBeCallable(
             ts.isConstructSignatureDeclaration(member) ||
             ts.isMethodSignature(member) ||
             ((ts.isPropertySignature(member) || ts.isIndexSignatureDeclaration(member)) &&
-              !!member.type &&
+              member.type !== undefined &&
               stateTypeMayBeCallable(member.type, sourceFile, nextSeen)),
         );
       }
@@ -189,7 +189,7 @@ function declarationScope(declaration: ts.Declaration): ts.Node {
 function lazyInitializerMayReturnCallable(initializer: ts.Expression | undefined): boolean {
   const value = initializer && unwrapTransparentExpression(initializer);
   return (
-    !!value &&
+    value !== undefined &&
     (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) &&
     callbackMayReturnCallable(value)
   );
@@ -211,7 +211,7 @@ function setterMayStoreCallable(state: StateCandidate): boolean {
     }
     const argument = node.arguments[0] && unwrapTransparentExpression(node.arguments[0]);
     callable =
-      !!argument &&
+      argument !== undefined &&
       (ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)
         ? argument.parameters.length === 0 && callbackMayReturnCallable(argument)
         : expressionContainsCallableLiteral(argument));
@@ -261,7 +261,11 @@ function expressionMayBeCallable(
       return true;
     }
     const initializer = ts.isVariableDeclaration(declaration) && declaration.initializer;
-    return !!initializer && expressionMayBeCallable(initializer, new Set(seen).add(value.text));
+    return (
+      initializer !== false &&
+      initializer !== undefined &&
+      expressionMayBeCallable(initializer, new Set(seen).add(value.text))
+    );
   }
   if (ts.isConditionalExpression(value)) {
     return (

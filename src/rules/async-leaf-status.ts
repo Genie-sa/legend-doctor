@@ -15,7 +15,6 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import {
   commonRenderGateSubtree,
   hasStateInitializer,
@@ -31,6 +30,7 @@ import {
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export interface AsyncLeafStatusAnalysis {
   cohesive: ReadonlySet<StateCandidate>;
@@ -50,7 +50,7 @@ export function directReactHookFormEventCallbacks(
   visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
     if (
       !ts.isJsxAttribute(node) ||
-      !/^on[A-Z]/.test(node.name.getText()) ||
+      !/^on[A-Z]/u.test(node.name.getText()) ||
       !node.initializer ||
       !ts.isJsxExpression(node.initializer) ||
       !node.initializer.expression ||
@@ -303,7 +303,7 @@ function jsxAttributeIsDeferredEvent(
   if (jsxAttributeIsIntrinsicEvent(attribute)) {
     return true;
   }
-  if (!/^on[A-Z]/.test(attribute.name.getText()) || !childContracts) {
+  if (!/^on[A-Z]/u.test(attribute.name.getText()) || !childContracts) {
     return false;
   }
   const opening = attribute.parent.parent,
@@ -325,7 +325,7 @@ function jsxAttributeIsDeferredEvent(
 }
 
 function jsxAttributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
-  if (!/^on[A-Z]/.test(attribute.name.getText())) {
+  if (!/^on[A-Z]/u.test(attribute.name.getText())) {
     return false;
   }
   const opening = attribute.parent.parent,
@@ -333,7 +333,7 @@ function jsxAttributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
       ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
         ? opening.tagName
         : null;
-  return !!tag && ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
+  return tag !== null && ts.isIdentifier(tag) && /^[a-z]/u.test(tag.text);
 }
 
 function isReactHookFormSubmitAdapter(
@@ -418,7 +418,8 @@ function isReactHookFormFactoryCall(
         ts.isImportDeclaration(statement) &&
         ts.isStringLiteral(statement.moduleSpecifier) &&
         statement.moduleSpecifier.text === "react-hook-form" &&
-        !!statement.importClause?.namedBindings &&
+        statement.importClause !== undefined &&
+        statement.importClause.namedBindings !== undefined &&
         ts.isNamedImports(statement.importClause.namedBindings) &&
         statement.importClause.namedBindings.elements.some(
           (specifier) =>
@@ -476,9 +477,8 @@ function startsAsyncCommandSegment(
   }
 
   const following = block.statements.slice(index + 1);
-  for (let offset = 0; offset < following.length; offset += 1) {
-    const candidate = following[offset]!,
-      awaitExpression = firstAwaitExpression(candidate),
+  for (const candidate of following) {
+    const awaitExpression = firstAwaitExpression(candidate),
       awaitPosition = awaitExpression?.getStart() ?? null,
       promiseBoundary = containsPromiseCompletionReset(candidate, setterCalls),
       boundary = awaitPosition ?? (promiseBoundary ? candidate.end : null);
@@ -761,7 +761,7 @@ function asyncLeafCallSites(
     return null;
   }
 
-  const boundaries = openings.map(jsxCallSite),
+  const boundaries = openings.map((opening) => jsxCallSite(opening)),
     returned = returnedExpressions(owner).filter((expression) =>
       boundaries.every((boundary) => nodeWithin(boundary, expression)),
     );

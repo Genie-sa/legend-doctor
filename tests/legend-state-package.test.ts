@@ -6,9 +6,9 @@ import test from "node:test";
 
 import { resolveInstalledLegendState } from "../src/legend-state-package.js";
 
-async function writeInstalledPackage(
+async function writeInstalledPackage<Manifest extends object>(
   root: string,
-  manifest: Record<string, unknown>,
+  manifest: Manifest,
   declarations: Record<string, string> = {},
 ): Promise<string> {
   const packageDirectory = path.join(root, "node_modules", "@legendapp", "state");
@@ -22,9 +22,9 @@ async function writeInstalledPackage(
   return packageDirectory;
 }
 
-test("resolves an aliased useValue export from the installed react declarations", async (t) => {
+test("resolves an aliased useValue export from the installed react declarations", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-alias-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeInstalledPackage(
     root,
     { name: "@legendapp/state", version: "3.0.0-beta.48" },
@@ -37,9 +37,9 @@ test("resolves an aliased useValue export from the installed react declarations"
   });
 });
 
-test("resolves declarations through the exports map and walks up from nested roots", async (t) => {
+test("resolves declarations through the exports map and walks up from nested roots", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-exports-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeInstalledPackage(
     root,
     {
@@ -58,11 +58,11 @@ test("resolves declarations through the exports map and walks up from nested roo
   });
 });
 
-test("reports missing useValue and unresolvable declarations distinctly", async (t) => {
+test("reports missing useValue and unresolvable declarations distinctly", async (testContext) => {
   const missingRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-missing-")),
     unknownRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-unknown-"));
-  t.after(() => rm(missingRoot, { force: true, recursive: true }));
-  t.after(() => rm(unknownRoot, { force: true, recursive: true }));
+  testContext.after(() => rm(missingRoot, { force: true, recursive: true }));
+  testContext.after(() => rm(unknownRoot, { force: true, recursive: true }));
   await writeInstalledPackage(
     missingRoot,
     { name: "@legendapp/state", version: "2.1.0" },
@@ -80,9 +80,9 @@ test("reports missing useValue and unresolvable declarations distinctly", async 
   });
 });
 
-test("returns null when no @legendapp/state package is installed", async (t) => {
+test("returns null when no @legendapp/state package is installed", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-none-"));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   assert.equal(await resolveInstalledLegendState(root), null);
 });

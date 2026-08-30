@@ -8,11 +8,11 @@ import {
 } from "../analysis-ast.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "../analyze-source.js";
 import { nearestNestedFunction, nodeWithin, visit, visitSkippingNestedFunctions } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import { isImportedHookCall } from "../imports.js";
-import type { HookImports } from "../imports.js";
 import { mutationRegionOnlyCallsStateSetters } from "./effect-drafts.js";
 import { callbackIsEventRooted, hasDirectPrimitiveInitializer } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
+import type { HookImports } from "../imports.js";
 
 export interface ListenerRefStateCluster {
   action: "use-ref";
@@ -82,7 +82,9 @@ export function findListenerRefStateClusters(
     }
 
     const claimed = new Set<StateCandidate>(),
-      regions = [...candidateRegions].sort(([left], [right]) => left.getStart() - right.getStart());
+      regions = [...candidateRegions].toSorted(
+        ([left], [right]) => left.getStart() - right.getStart(),
+      );
     for (const [region, regionMembers] of regions) {
       if (
         regionMembers.size < 2 ||
@@ -92,7 +94,7 @@ export function findListenerRefStateClusters(
       ) {
         continue;
       }
-      const members = [...regionMembers].sort(
+      const members = [...regionMembers].toSorted(
           (left, right) => left.call.getStart() - right.call.getStart(),
         ),
         primary = members[0];
@@ -398,7 +400,9 @@ function listenerContaining(
 
 function setterRegionIsSynchronous(call: ts.CallExpression, owner: RuntimeFunctionLike): boolean {
   const region = nearestNestedFunction(call, owner);
-  return !!region && region !== owner && !isAsync(region) && !containsAwaitOrYield(region.body);
+  return (
+    region !== null && region !== owner && !isAsync(region) && !containsAwaitOrYield(region.body)
+  );
 }
 
 function regionIsSynchronousEvent(

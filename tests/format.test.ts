@@ -44,9 +44,9 @@ test("text output includes Legend practice findings", () => {
     ],
     schemaVersion: 1,
   });
-  assert.match(output, /store\.ts:8:3 \[batch-observable-writes\]/);
-  assert.match(output, /1 shown/);
-  assert.match(output, /Re-run legend-doctor after applying change findings/);
+  assert.match(output, /store\.ts:8:3 \[batch-observable-writes\]/u);
+  assert.match(output, /1 shown/u);
+  assert.match(output, /Re-run legend-doctor after applying change findings/u);
 });
 
 test("text output surfaces the keep-react-effect directive for review-effect findings", () => {
@@ -68,6 +68,6 @@ test("text output surfaces the keep-react-effect directive for review-effect fin
     practices: [],
     schemaVersion: 1,
   });
-  assert.match(output, /legend-doctor keep-react-effect/);
-  assert.doesNotMatch(output, /Re-run legend-doctor/);
+  assert.match(output, /legend-doctor keep-react-effect/u);
+  assert.doesNotMatch(output, /Re-run legend-doctor/u);
 });

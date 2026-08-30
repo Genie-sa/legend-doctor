@@ -55,12 +55,12 @@ async function main(): Promise<void> {
     }
   }
 
-  let labeled = 0,
-    matched = 0,
-    actualActionable = 0,
+  let actualActionable = 0,
     correctActionable = 0,
     expectedActionable = 0,
-    knownMisses = 0;
+    knownMisses = 0,
+    labeled = 0,
+    matched = 0;
   const byAction = new Map<string, { correct: number; expected: number; predicted: number }>();
   for (const gold of goldCases) {
     const target = targets.get(gold.target);
@@ -135,8 +135,8 @@ async function main(): Promise<void> {
     }
   }
 
-  let practiceMatches = 0,
-    practiceLabels = 0;
+  let practiceLabels = 0,
+    practiceMatches = 0;
   const labeledPractices = new Set(
     goldPracticeCases.map((gold) => practiceKey(gold.target, gold.file, gold.line, gold.action)),
   );

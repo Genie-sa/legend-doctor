@@ -12,7 +12,6 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { HookImports } from "../imports.js";
 import {
   bindingContainsName,
@@ -20,6 +19,7 @@ import {
   localFunctionBinding,
   uniqueVariableDeclaration,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 export interface ReactCommitContext {
   directTransitionCallbacks: ReadonlyMap<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>;
@@ -181,26 +181,25 @@ function directTransitionContext(
   if (!safe) {
     return null;
   }
-  for (const binding of new Set([...bindings, ...imports.startTransition])) {
-    visit(owner.body, (node) => {
-      if (
-        !safe ||
-        !ts.isIdentifier(node) ||
-        node.text !== binding ||
-        isDeclarationName(node) ||
-        isNonValueIdentifier(node)
-      ) {
-        return;
-      }
-      if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
-        return;
-      }
-      if (ts.isArrayLiteralExpression(node.parent)) {
-        return;
-      }
-      safe = false;
-    });
-  }
+  const transitionBindings = new Set([...bindings, ...imports.startTransition]);
+  visit(owner.body, (node) => {
+    if (
+      !safe ||
+      !ts.isIdentifier(node) ||
+      !transitionBindings.has(node.text) ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+      return;
+    }
+    if (ts.isArrayLiteralExpression(node.parent)) {
+      return;
+    }
+    safe = false;
+  });
   visit(owner.body, (node) => {
     if (
       !safe ||

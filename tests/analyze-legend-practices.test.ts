@@ -3,6 +3,11 @@ import test from "node:test";
 
 import { analyzeLegendPractices } from "../src/analyze-legend-practices.js";
 
+const requireValue = <Value>(value: Value | undefined): Value => {
+  assert.ok(value);
+  return value;
+};
+
 function actions(source: string): string[] {
   return analyzeLegendPractices(source, "fixture.ts").map((finding) => finding.action);
 }
@@ -19,11 +24,11 @@ test("assigns consecutive direct fields of one local observable", () => {
   `,
     "fixture.ts",
   );
-  assert.equal(finding?.action, "assign-observable-fields");
-  assert.equal(finding?.location.line, 5);
-  assert.match(finding?.message ?? "", /observers publish once/);
-  assert.match(finding?.message ?? "", /player\$\.assign/);
-  assert.match(finding?.message ?? "", /`error`, `loading`/);
+  assert.equal(requireValue(finding).action, "assign-observable-fields");
+  assert.equal(requireValue(finding).location.line, 5);
+  assert.match(requireValue(finding).message ?? "", /observers publish once/u);
+  assert.match(requireValue(finding).message ?? "", /player\$\.assign/u);
+  assert.match(requireValue(finding).message ?? "", /`error`, `loading`/u);
 });
 
 test("recognizes typed observable parameters", () => {
@@ -74,8 +79,8 @@ test("replaces exact observable boolean flips with toggle", () => {
     toggles = findings.filter((finding) => finding.action === "toggle-observable");
   assert.equal(toggles.length, 2);
   assert.ok(toggles.every((finding) => finding.confidence === "certain"));
-  assert.match(toggles[0]?.message ?? "", /shell\$\.palette\.open\.toggle\(\)/);
-  assert.match(toggles[1]?.message ?? "", /local\$\.expanded\.toggle\(\)/);
+  assert.match(requireValue(toggles[0]).message ?? "", /shell\$\.palette\.open\.toggle\(\)/u);
+  assert.match(requireValue(toggles[1]).message ?? "", /local\$\.expanded\.toggle\(\)/u);
 });
 
 test("replaces exact boolean updater on a typed observable", () => {
@@ -161,14 +166,17 @@ test("replaces legacy Legend React selectors with useValue", () => {
     ["replace-legacy-use-value", "replace-legacy-use-value", "replace-legacy-use-value"],
   );
   assert.ok(findings.every((finding) => finding.confidence === "certain"));
-  assert.match(findings[0]?.message ?? "", /useValue\(profile\$\.name\)/);
-  assert.match(findings[1]?.message ?? "", /useValue\(profile\$\.email\)/);
-  assert.match(findings[1]?.message ?? "", /pass the proven observable path directly/);
+  assert.match(requireValue(findings[0]).message ?? "", /useValue\(profile\$\.name\)/u);
+  assert.match(requireValue(findings[1]).message ?? "", /useValue\(profile\$\.email\)/u);
   assert.match(
-    findings[2]?.message ?? "",
-    /useValue\(\(\) => profile\$\.first\.get\(\) \+ profile\$\.last\.get\(\)\)/,
+    requireValue(findings[1]).message ?? "",
+    /pass the proven observable path directly/u,
   );
-  assert.match(findings[2]?.message ?? "", /preserve the selector arguments/);
+  assert.match(
+    requireValue(findings[2]).message ?? "",
+    /useValue\(\(\) => profile\$\.first\.get\(\) \+ profile\$\.last\.get\(\)\)/u,
+  );
+  assert.match(requireValue(findings[2]).message ?? "", /preserve the selector arguments/u);
 });
 
 test("keeps legacy callbacks when a direct observable path is not proven", () => {
@@ -190,8 +198,8 @@ test("keeps legacy callbacks when a direct observable path is not proven", () =>
   assert.equal(findings.length, 3);
   for (const finding of findings) {
     assert.equal(finding.action, "replace-legacy-use-value");
-    assert.match(finding.message, /preserve the selector arguments/);
-    assert.doesNotMatch(finding.message, /pass the proven observable path directly/);
+    assert.match(finding.message, /preserve the selector arguments/u);
+    assert.doesNotMatch(finding.message, /pass the proven observable path directly/u);
   }
 });
 
@@ -227,8 +235,8 @@ test("assigns direct fields under the same nested observable object", () => {
   `,
     "fixture.ts",
   );
-  assert.equal(finding?.action, "assign-observable-fields");
-  assert.match(finding?.message ?? "", /player\$\.status\.assign/);
+  assert.equal(requireValue(finding).action, "assign-observable-fields");
+  assert.match(requireValue(finding).message ?? "", /player\$\.status\.assign/u);
 });
 
 test("uses batch when a transaction spans observable roots", () => {
@@ -284,9 +292,9 @@ test("passes a proven observable directly to useValue", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "pass-observable-to-use-value");
-  assert.equal(finding?.confidence, "certain");
-  assert.match(finding?.message ?? "", /useValue\(theme\$\.accent\)/);
+  assert.equal(requireValue(finding).action, "pass-observable-to-use-value");
+  assert.equal(requireValue(finding).confidence, "certain");
+  assert.match(requireValue(finding).message ?? "", /useValue\(theme\$\.accent\)/u);
 });
 
 test("passes a dynamically keyed observable directly only for one stable primitive parameter", () => {
@@ -305,7 +313,7 @@ test("passes a dynamically keyed observable directly only for one stable primiti
     positive.map((finding) => finding.action),
     ["pass-observable-to-use-value"],
   );
-  assert.match(positive[0]?.message ?? "", /useValue\(ratings\$\[key\]\)/);
+  assert.match(requireValue(positive[0]).message ?? "", /useValue\(ratings\$\[key\]\)/u);
 
   for (const [parameter, setup, key] of [
     ["key: { toString(): string }", "", "key"],
@@ -350,9 +358,15 @@ test("passes an eagerly read observable directly to useValue", () => {
     findings.map((finding) => finding.action),
     ["pass-observable-to-use-value", "pass-observable-to-use-value"],
   );
-  assert.match(findings[0]?.message ?? "", /read\(profile\$\.name\)/);
-  assert.match(findings[1]?.message ?? "", /read\(profile\$\.avatar, \{ suspense: true \}\)/);
-  assert.match(findings[0]?.evidence.join(" ") ?? "", /before useValue can subscribe/);
+  assert.match(requireValue(findings[0]).message ?? "", /read\(profile\$\.name\)/u);
+  assert.match(
+    requireValue(findings[1]).message ?? "",
+    /read\(profile\$\.avatar, \{ suspense: true \}\)/u,
+  );
+  assert.match(
+    requireValue(findings[0]).evidence.join(" ") ?? "",
+    /before useValue can subscribe/u,
+  );
 });
 
 test("preserves useValue types and options when simplifying one direct get selector", () => {
@@ -370,10 +384,10 @@ test("preserves useValue types and options when simplifying one direct get selec
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "pass-observable-to-use-value");
+  assert.equal(requireValue(finding).action, "pass-observable-to-use-value");
   assert.match(
-    finding?.message ?? "",
-    /LegendReact\.useValue<Promise<string>>\(profile\$\.avatar, \{ suspense: true \}\)/,
+    requireValue(finding).message ?? "",
+    /LegendReact\.useValue<Promise<string>>\(profile\$\.avatar, \{ suspense: true \}\)/u,
   );
 });
 
@@ -430,7 +444,7 @@ test("writes one changed object field through the narrowest observable child", (
     findings.map((finding) => finding.action),
     ["narrow-observable-write"],
   );
-  assert.match(findings[0]?.message ?? "", /profile\$\.name\.set\(name\)/);
+  assert.match(requireValue(findings[0]).message ?? "", /profile\$\.name\.set\(name\)/u);
 });
 
 test("writes one dynamic record entry without cloning its parent object", () => {
@@ -449,7 +463,7 @@ test("writes one dynamic record entry without cloning its parent object", () => 
     findings.map((finding) => finding.action),
     ["narrow-observable-write"],
   );
-  assert.match(findings[0]?.message ?? "", /rows\$\[id\]\.set\(row\)/);
+  assert.match(requireValue(findings[0]).message ?? "", /rows\$\[id\]\.set\(row\)/u);
 });
 
 test("appends one inert value directly to a proven observable array", () => {
@@ -476,9 +490,9 @@ test("appends one inert value directly to a proven observable array", () => {
     ),
     appendFindings = findings.filter((finding) => finding.action === "narrow-observable-write");
   assert.equal(appendFindings.length, 3);
-  assert.match(appendFindings[0]?.message ?? "", /pages\$\.push\(page\)/);
-  assert.match(appendFindings[1]?.message ?? "", /store\$\.rows\.push\(row\)/);
-  assert.match(appendFindings[2]?.message ?? "", /files\$\.push\(next\)/);
+  assert.match(requireValue(appendFindings[0]).message ?? "", /pages\$\.push\(page\)/u);
+  assert.match(requireValue(appendFindings[1]).message ?? "", /store\$\.rows\.push\(row\)/u);
+  assert.match(requireValue(appendFindings[2]).message ?? "", /files\$\.push\(next\)/u);
 });
 
 test("keeps array writes whose append or array identity is not exact", () => {
@@ -633,7 +647,7 @@ test("uses peek for proven non-tracking React snapshots and event commands", () 
     peekFindings = findings.filter((finding) => finding.action === "use-peek-for-snapshot");
   assert.equal(peekFindings.length, 4);
   assert.ok(peekFindings.every((finding) => finding.confidence === "probable"));
-  assert.match(peekFindings[0]?.message ?? "", /\.peek\(\)/);
+  assert.match(requireValue(peekFindings[0]).message ?? "", /\.peek\(\)/u);
 });
 
 test("uses peek for aliased React hooks and direct JSX event callbacks", () => {
@@ -872,10 +886,10 @@ test("narrows a broad useValue binding to its only static child", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "narrow-use-value-subscription");
-  assert.equal(finding?.confidence, "certain");
-  assert.match(finding?.message ?? "", /useValue\(profile\$\.name\)/);
-  assert.match(finding?.evidence.join(" ") ?? "", /2 raw-value reads/);
+  assert.equal(requireValue(finding).action, "narrow-use-value-subscription");
+  assert.equal(requireValue(finding).confidence, "certain");
+  assert.match(requireValue(finding).message ?? "", /useValue\(profile\$\.name\)/u);
+  assert.match(requireValue(finding).evidence.join(" ") ?? "", /2 raw-value reads/u);
 });
 
 test("narrows useValue to the deepest shared static observable path", () => {
@@ -891,9 +905,9 @@ test("narrows useValue to the deepest shared static observable path", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "narrow-use-value-subscription");
-  assert.match(finding?.message ?? "", /useValue\(profile\$\.contact\.name\)/);
-  assert.match(finding?.message ?? "", /profile\.contact\.name/);
+  assert.equal(requireValue(finding).action, "narrow-use-value-subscription");
+  assert.match(requireValue(finding).message ?? "", /useValue\(profile\$\.contact\.name\)/u);
+  assert.match(requireValue(finding).message ?? "", /profile\.contact\.name/u);
 });
 
 test("uses the deepest common path when sibling leaves are read", () => {
@@ -909,8 +923,8 @@ test("uses the deepest common path when sibling leaves are read", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "narrow-use-value-subscription");
-  assert.match(finding?.message ?? "", /useValue\(profile\$\.contact\)/);
+  assert.equal(requireValue(finding).action, "narrow-use-value-subscription");
+  assert.match(requireValue(finding).message ?? "", /useValue\(profile\$\.contact\)/u);
 });
 
 test("keeps a broad subscription when every known observable field is consumed", () => {
@@ -955,12 +969,12 @@ test("moves a subscription only into one stable isolated JSX leaf", () => {
     "fixture.tsx",
   );
   assert.equal(
-    positive.find((finding) => finding.location.line === 5)?.action,
+    requireValue(positive.find((finding) => finding.location.line === 5)).action,
     "move-use-value-down",
   );
   assert.match(
-    positive.find((finding) => finding.location.line === 5)?.message ?? "",
-    /1 JSX element instead of the 13-element owner/,
+    requireValue(positive.find((finding) => finding.location.line === 5)).message ?? "",
+    /1 JSX element instead of the 13-element owner/u,
   );
 
   const cohesive = analyzeLegendPractices(
@@ -1045,10 +1059,13 @@ test("moves a subscription behind a complete conditional JSX slot without changi
       "fixture.tsx",
     ),
     finding = positive.find((candidate) => candidate.location.line === 5);
-  assert.equal(finding?.action, "move-use-value-down");
-  assert.match(finding?.message ?? "", /always-mounted wrapper/);
-  assert.match(finding?.message ?? "", /complete conditional JSX slot/);
-  assert.match(finding?.evidence.join(" ") ?? "", /preserves the subscription lifetime/);
+  assert.equal(requireValue(finding).action, "move-use-value-down");
+  assert.match(requireValue(finding).message ?? "", /always-mounted wrapper/u);
+  assert.match(requireValue(finding).message ?? "", /complete conditional JSX slot/u);
+  assert.match(
+    requireValue(finding).evidence.join(" ") ?? "",
+    /preserves the subscription lifetime/u,
+  );
 
   const controllingValue = analyzeLegendPractices(
     `
@@ -1066,7 +1083,7 @@ test("moves a subscription behind a complete conditional JSX slot without changi
     "fixture.tsx",
   );
   assert.equal(
-    controllingValue.find((candidate) => candidate.location.line === 5)?.action,
+    requireValue(controllingValue.find((candidate) => candidate.location.line === 5)).action,
     "move-use-value-down",
   );
 
@@ -1209,17 +1226,20 @@ test("splits divergent leaf reads into per-leaf subscriptions", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "split-use-value-leaves");
-  assert.equal(finding?.confidence, "certain");
-  assert.equal(finding?.disposition, "change");
-  assert.match(finding?.message ?? "", /const tracks = useValue\(localMusicState\$\.tracks\)/);
+  assert.equal(requireValue(finding).action, "split-use-value-leaves");
+  assert.equal(requireValue(finding).confidence, "certain");
+  assert.equal(requireValue(finding).disposition, "change");
   assert.match(
-    finding?.message ?? "",
-    /const isLocalFilesSelected = useValue\(localMusicState\$\.isLocalFilesSelected\)/,
+    requireValue(finding).message ?? "",
+    /const tracks = useValue\(localMusicState\$\.tracks\)/u,
   );
   assert.match(
-    finding?.evidence.join(" ") ?? "",
-    /3 raw-value reads resolve through 2 distinct static leaf paths/,
+    requireValue(finding).message ?? "",
+    /const isLocalFilesSelected = useValue\(localMusicState\$\.isLocalFilesSelected\)/u,
+  );
+  assert.match(
+    requireValue(finding).evidence.join(" ") ?? "",
+    /3 raw-value reads resolve through 2 distinct static leaf paths/u,
   );
 });
 
@@ -1236,7 +1256,7 @@ test("keeps the single-path narrowing when one shared path exists", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "narrow-use-value-subscription");
+  assert.equal(requireValue(finding).action, "narrow-use-value-subscription");
 });
 
 test("abstains from the split when the whole value escapes as a bare read", () => {
@@ -1324,7 +1344,7 @@ test("stops narrowing at a TypeScript assertion boundary", () => {
   `,
     "fixture.tsx",
   );
-  assert.match(finding?.message ?? "", /useValue\(profile\$\.contact\)/);
+  assert.match(requireValue(finding).message ?? "", /useValue\(profile\$\.contact\)/u);
 });
 
 test("narrows a child used by a boolean projection", () => {
@@ -1340,8 +1360,8 @@ test("narrows a child used by a boolean projection", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "narrow-use-value-subscription");
-  assert.match(finding?.message ?? "", /useValue\(profile\$\.enabled\)/);
+  assert.equal(requireValue(finding).action, "narrow-use-value-subscription");
+  assert.match(requireValue(finding).message ?? "", /useValue\(profile\$\.enabled\)/u);
 });
 
 test("narrows a single-property useValue destructure", () => {
@@ -1357,10 +1377,10 @@ test("narrows a single-property useValue destructure", () => {
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "narrow-use-value-subscription");
-  assert.match(finding?.message ?? "", /useValue\(theme\$\.colors\.dark\)/);
-  assert.match(finding?.message ?? "", /const palette =/);
-  assert.doesNotMatch(finding?.message ?? "", /palette\.dark/);
+  assert.equal(requireValue(finding).action, "narrow-use-value-subscription");
+  assert.match(requireValue(finding).message ?? "", /useValue\(theme\$\.colors\.dark\)/u);
+  assert.match(requireValue(finding).message ?? "", /const palette =/u);
+  assert.doesNotMatch(requireValue(finding).message ?? "", /palette\.dark/u);
 });
 
 test("tracks observable paths created by proven project factories and aliases", () => {
@@ -1383,7 +1403,7 @@ test("tracks observable paths created by proven project factories and aliases", 
     findings.map((finding) => finding.action),
     ["narrow-use-value-subscription"],
   );
-  assert.match(findings[0]?.message ?? "", /useValue\(value\$\.name\)/);
+  assert.match(requireValue(findings[0]).message ?? "", /useValue\(value\$\.name\)/u);
 });
 
 test("tracks typed aliases of source-proven observable member paths", () => {
@@ -1403,7 +1423,7 @@ test("tracks typed aliases of source-proven observable member paths", () => {
     findings.map((finding) => finding.action),
     ["narrow-use-value-subscription"],
   );
-  assert.match(findings[0]?.message ?? "", /useValue\(value\$\.name\)/);
+  assert.match(requireValue(findings[0]).message ?? "", /useValue\(value\$\.name\)/u);
 });
 
 test("does not infer mutable, nullable, reserved, or unproven observable aliases", () => {
@@ -1472,7 +1492,7 @@ test("splits divergent static leaf reads instead of keeping the broad subscripti
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "split-use-value-leaves");
+  assert.equal(requireValue(finding).action, "split-use-value-leaves");
 });
 
 test("narrows optional raw-value reads only when they share one static child path", () => {
@@ -1488,8 +1508,8 @@ test("narrows optional raw-value reads only when they share one static child pat
   `,
     "fixture.tsx",
   );
-  assert.equal(finding?.action, "narrow-use-value-subscription");
-  assert.match(finding?.message ?? "", /useValue\(dialog\$\.data\.id\)/);
+  assert.equal(requireValue(finding).action, "narrow-use-value-subscription");
+  assert.match(requireValue(finding).message ?? "", /useValue\(dialog\$\.data\.id\)/u);
 
   for (const body of [
     `return <span>{dialog?.state}{dialog?.data?.id}</span>;`,
@@ -1753,11 +1773,11 @@ test("recommends batch when a conditional same-root write follows an assign run"
     "fixture.ts",
   );
   assert.deepEqual(rest, []);
-  assert.equal(finding?.action, "batch-observable-writes");
-  assert.equal(finding?.location.line, 5);
-  assert.match(finding?.message ?? "", /batch\(\(\) => \{ \.\.\. \}\)/);
-  assert.match(finding?.message ?? "", /player\$\.assign/);
-  assert.match(finding?.message ?? "", /`player\$\.durationSec`/);
+  assert.equal(requireValue(finding).action, "batch-observable-writes");
+  assert.equal(requireValue(finding).location.line, 5);
+  assert.match(requireValue(finding).message ?? "", /batch\(\(\) => \{ \.\.\. \}\)/u);
+  assert.match(requireValue(finding).message ?? "", /player\$\.assign/u);
+  assert.match(requireValue(finding).message ?? "", /`player\$\.durationSec`/u);
 });
 
 test("recommends batch when a conditional same-root write interrupts an assign run", () => {
@@ -1777,7 +1797,10 @@ test("recommends batch when a conditional same-root write interrupts an assign r
     findings.map((finding) => finding.action),
     ["batch-observable-writes"],
   );
-  assert.match(findings[0]?.message ?? "", /conditional write to `player\$\.durationSec`/);
+  assert.match(
+    requireValue(findings[0]).message ?? "",
+    /conditional write to `player\$\.durationSec`/u,
+  );
 });
 
 test("keeps the assign recommendation when the conditional writes another root", () => {
@@ -1830,8 +1853,8 @@ test("keeps replace-legacy-use-value as a change when no installed package is re
   `,
     "fixture.ts",
   );
-  assert.equal(finding?.action, "replace-legacy-use-value");
-  assert.equal(finding?.disposition, "change");
+  assert.equal(requireValue(finding).action, "replace-legacy-use-value");
+  assert.equal(requireValue(finding).disposition, "change");
 });
 
 test("marks replace-legacy-use-value as style when the installed useValue is an alias", () => {
@@ -1845,8 +1868,8 @@ test("marks replace-legacy-use-value as style when the installed useValue is an 
     new Set(),
     { useValueExport: "alias", version: "3.0.0-beta.48" },
   );
-  assert.equal(finding?.disposition, "style");
-  assert.match(finding?.evidence.join("\n") ?? "", /no runtime effect/);
+  assert.equal(requireValue(finding).disposition, "style");
+  assert.match(requireValue(finding).evidence.join("\n") ?? "", /no runtime effect/u);
 });
 
 test("suppresses replace-legacy-use-value when the installed package lacks useValue", () => {

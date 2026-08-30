@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { promisify } from "node:util";
 
@@ -39,9 +40,9 @@ async function writeFixtureRoot(): Promise<string> {
   return root;
 }
 
-test("--disposition change keeps only change findings and practices", async (t) => {
+test("--disposition change keeps only change findings and practices", async (testContext) => {
   const root = await writeFixtureRoot();
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const { stdout } = await run(process.execPath, [
       CLI_PATH,
@@ -60,9 +61,9 @@ test("--disposition change keeps only change findings and practices", async (t) 
   );
 });
 
-test("--disposition keep composes with the equals form and drops practices", async (t) => {
+test("--disposition keep composes with the equals form and drops practices", async (testContext) => {
   const root = await writeFixtureRoot();
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const { stdout } = await run(process.execPath, [CLI_PATH, root, "--json", "--disposition=keep"]),
     report = JSON.parse(stdout) as AnalysisReport;
@@ -90,29 +91,29 @@ async function runExpectingFailure(args: readonly string[]): Promise<CliFailure>
   throw new Error(`expected CLI failure for: ${args.join(" ")}`);
 }
 
-test("rejects an unknown disposition value as a usage error", async (t) => {
+test("rejects an unknown disposition value as a usage error", async (testContext) => {
   const root = await writeFixtureRoot();
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const failure = await runExpectingFailure([root, "--json", "--disposition", "bogus"]);
 
   assert.equal(failure.code, 2);
   assert.equal(failure.stdout, "");
-  assert.match(failure.stderr, /bogus/);
+  assert.match(failure.stderr, /bogus/u);
   for (const valid of ["candidate", "change", "keep", "style"]) {
-    assert.match(failure.stderr, new RegExp(valid));
+    assert.match(failure.stderr, new RegExp(valid, "u"));
   }
-  assert.match(failure.stderr, /--help/);
+  assert.match(failure.stderr, /--help/u);
 });
 
-test("rejects --disposition without a value", async (t) => {
+test("rejects --disposition without a value", async (testContext) => {
   const root = await writeFixtureRoot();
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const failure = await runExpectingFailure([root, "--disposition", "--json"]);
 
   assert.equal(failure.code, 2);
-  assert.match(failure.stderr, /--disposition/);
+  assert.match(failure.stderr, /--disposition/u);
 });
 
 test("rejects an unknown flag and suggests the closest known flag", async () => {
@@ -120,29 +121,29 @@ test("rejects an unknown flag and suggests the closest known flag", async () => 
 
   assert.equal(failure.code, 2);
   assert.equal(failure.stdout, "");
-  assert.match(failure.stderr, /--acitonable/);
-  assert.match(failure.stderr, /--actionable/);
-  assert.match(failure.stderr, /--help/);
+  assert.match(failure.stderr, /--acitonable/u);
+  assert.match(failure.stderr, /--actionable/u);
+  assert.match(failure.stderr, /--help/u);
 });
 
-test("rejects a second positional target", async (t) => {
+test("rejects a second positional target", async (testContext) => {
   const root = await writeFixtureRoot();
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const failure = await runExpectingFailure([root, "extra-target"]);
 
   assert.equal(failure.code, 2);
-  assert.match(failure.stderr, /extra-target/);
+  assert.match(failure.stderr, /extra-target/u);
 });
 
-test("rejects --coverage without --json and names the fix", async (t) => {
+test("rejects --coverage without --json and names the fix", async (testContext) => {
   const root = await writeFixtureRoot();
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const failure = await runExpectingFailure([root, "--coverage"]);
 
   assert.equal(failure.code, 2);
-  assert.match(failure.stderr, /--json/);
+  assert.match(failure.stderr, /--json/u);
 });
 
 test("reports a missing target with the resolved path and exit code 1", async () => {
@@ -151,52 +152,52 @@ test("reports a missing target with the resolved path and exit code 1", async ()
 
   assert.equal(failure.code, 1);
   assert.equal(failure.stdout, "");
-  assert.match(failure.stderr, new RegExp(`legend-doctor-missing.*nope`));
-  assert.doesNotMatch(failure.stderr, /--help/);
+  assert.match(failure.stderr, /legend-doctor-missing.*nope/u);
+  assert.doesNotMatch(failure.stderr, /--help/u);
 });
 
 test("--help documents flags, dispositions, and exit codes on stdout", async () => {
   const { stdout, stderr } = await run(process.execPath, [CLI_PATH, "--help"]);
 
   assert.equal(stderr, "");
-  assert.match(stdout, /Usage/);
-  assert.match(stdout, /--json/);
-  assert.match(stdout, /--actionable/);
-  assert.match(stdout, /--disposition/);
-  assert.match(stdout, /--coverage/);
-  assert.match(stdout, /candidate \| change \| keep \| style/);
-  assert.match(stdout, /Agent loop/);
-  assert.match(stdout, /keep-react-effect/);
-  assert.match(stdout, /Exit codes/);
+  assert.match(stdout, /Usage/u);
+  assert.match(stdout, /--json/u);
+  assert.match(stdout, /--actionable/u);
+  assert.match(stdout, /--disposition/u);
+  assert.match(stdout, /--coverage/u);
+  assert.match(stdout, /candidate \| change \| keep \| style/u);
+  assert.match(stdout, /Agent loop/u);
+  assert.match(stdout, /keep-react-effect/u);
+  assert.match(stdout, /Exit codes/u);
 });
 
 test("-h prints the same help without scanning", async () => {
   const { stdout } = await run(process.execPath, [CLI_PATH, "-h", "/definitely/not/a/real/path"]);
 
-  assert.match(stdout, /Usage/);
+  assert.match(stdout, /Usage/u);
 });
 
 test("--version prints the package version", async () => {
   const { stdout, stderr } = await run(process.execPath, [CLI_PATH, "--version"]);
 
   assert.equal(stderr, "");
-  assert.match(stdout, /^legend-doctor \d+\.\d+\.\d+\n$/);
+  assert.match(stdout, /^legend-doctor \d+\.\d+\.\d+\n$/u);
 });
 
-test("text summary names the resolved scan root", async (t) => {
+test("text summary names the resolved scan root", async (testContext) => {
   const root = await writeFixtureRoot();
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const { stdout } = await run(process.execPath, [CLI_PATH, root]);
 
-  assert.match(stdout, new RegExp(`Scanned \\d+ files under .*${path.basename(root)}`));
+  assert.match(stdout, new RegExp(`Scanned \\d+ files under .*${path.basename(root)}`, "u"));
 });
 
-test("text output appends the re-run hint when change findings are shown", async (t) => {
+test("text output appends the re-run hint when change findings are shown", async (testContext) => {
   const root = await writeFixtureRoot();
-  t.after(() => rm(root, { force: true, recursive: true }));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const { stdout } = await run(process.execPath, [CLI_PATH, root]);
 
-  assert.match(stdout, /Re-run legend-doctor after applying change findings/);
+  assert.match(stdout, /Re-run legend-doctor after applying change findings/u);
 });

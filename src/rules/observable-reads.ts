@@ -17,12 +17,9 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import { isImportedHookCall } from "../imports.js";
-import type { HookImports } from "../imports.js";
 import type { LegendPracticeFinding } from "../types.js";
 import { propIsPrimitiveValueConsumer } from "./child-contract.js";
-import type { ChildContractResolver } from "./child-contract.js";
 import {
   bindingContainsName,
   callbackIsEventRooted,
@@ -33,6 +30,9 @@ import {
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
+import type { HookImports } from "../imports.js";
+import type { ChildContractResolver } from "./child-contract.js";
 
 const MIN_LEAF_OWNER_ELEMENTS = 12,
   MAX_LEAF_OWNER_SHARE = 0.4;
@@ -250,7 +250,7 @@ function directJsxPropTransport(reference: ts.Identifier): DirectJsxPropTranspor
     return null;
   }
   const prop = attribute.name.getText();
-  if (prop === "children" || prop === "key" || prop === "ref" || /^on[A-Z]/.test(prop)) {
+  if (prop === "children" || prop === "key" || prop === "ref" || /^on[A-Z]/u.test(prop)) {
     return null;
   }
   return {
@@ -386,7 +386,7 @@ function hasAncestorUseValueSubscription(
     overlap = trackedUseValuePaths(node, imports, observableBindings).some((otherObservable) => {
       const otherPath = staticPropertyPath(otherObservable);
       return (
-        !!otherPath &&
+        otherPath !== null &&
         otherPath.length <= currentPath.length &&
         otherPath.every((part, index) => part === currentPath[index])
       );
@@ -806,7 +806,7 @@ function isDirectJsxEventCallback(
     return false;
   }
   const attribute = expression.parent;
-  return ts.isJsxAttribute(attribute) && /^on[A-Z]/.test(attribute.name.getText());
+  return ts.isJsxAttribute(attribute) && /^on[A-Z]/u.test(attribute.name.getText());
 }
 
 function nonTrackingSnapshotFinding(
@@ -845,7 +845,7 @@ function directUseValueInput(
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
 ): DirectUseValueInput | null {
-  if (!isUseValueCall(call, imports) || call.arguments.length < 1 || call.arguments.length > 2) {
+  if (!isUseValueCall(call, imports) || call.arguments.length === 0 || call.arguments.length > 2) {
     return null;
   }
   const input = call.arguments[0]!,
@@ -1132,7 +1132,10 @@ function narrowUseValueFinding(
   if (consumesEveryKnownField(observable, paths, observableKeys)) {
     return null;
   }
-  const commonPath = paths.slice(1).reduce(commonPathPrefix, paths[0]!);
+  let commonPath = paths[0]!;
+  for (const path of paths.slice(1)) {
+    commonPath = commonPathPrefix(commonPath, path);
+  }
   if (commonPath.length > 0) {
     if (
       optionalReferences.some(

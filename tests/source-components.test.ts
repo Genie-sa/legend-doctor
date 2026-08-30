@@ -39,7 +39,7 @@ test("resolves named, default, and barrel-exported source components", async () 
       const components = buildSourceIndex(root, sources).componentsFor(
         path.join(root, "screen.tsx"),
       );
-      assert.deepEqual([...components].sort(), ["DefaultLeaf", "NamedLeaf"]);
+      assert.deepEqual([...components].toSorted(), ["DefaultLeaf", "NamedLeaf"]);
     },
   );
 });
@@ -82,7 +82,7 @@ test("indexes shared UI components as provenance without deciding leaf safety", 
       const components = buildSourceIndex(root, sources).componentsFor(
         path.join(root, "screen.tsx"),
       );
-      assert.deepEqual([...components].sort(), ["Calendar", "DropdownMenu"]);
+      assert.deepEqual([...components].toSorted(), ["Calendar", "DropdownMenu"]);
     },
   );
 });
@@ -107,7 +107,7 @@ test("resolves each import with its nearest application tsconfig", async () => {
     (root, sources) => {
       const index = buildSourceIndex(root, sources);
       assert.deepEqual(
-        [...index.componentsFor(path.join(root, "apps/web/src/Screen.tsx"))].sort(),
+        [...index.componentsFor(path.join(root, "apps/web/src/Screen.tsx"))].toSorted(),
         ["Leaf", "Panel"],
       );
       assert.deepEqual(

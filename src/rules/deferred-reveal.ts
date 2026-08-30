@@ -12,8 +12,8 @@ import {
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "../analyze-source.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 
@@ -78,7 +78,7 @@ function deferredRevealState(
   if (
     !effect.callback ||
     !effect.dependencies ||
-    effect.dependencies.elements.length !== 0 ||
+    effect.dependencies.elements.length > 0 ||
     !ts.isBlock(effect.callback.body)
   ) {
     return null;
@@ -135,6 +135,7 @@ function soleLiteralTrueSetterCall(
       ts.isIdentifier(node.expression) &&
       stateBySetter.has(node.expression.text)
     ) {
+      // SAFETY: The adjacent guards prove the call target is an Identifier.
       calls.push(node as ts.CallExpression & { expression: ts.Identifier });
     }
   });
@@ -166,7 +167,7 @@ function callbackCancelsDeferredHandle(
       return false;
     }
     const call = ts.isBlock(cleanup.body)
-      ? (() => {
+      ? ((): ts.Expression | null => {
           const only = cleanup.body.statements[0];
           return cleanup.body.statements.length === 1 && only && ts.isExpressionStatement(only)
             ? only.expression
@@ -180,7 +181,7 @@ function callbackCancelsDeferredHandle(
       ts.isPropertyAccessExpression(call.expression) &&
       ts.isIdentifier(call.expression.expression) &&
       call.expression.expression.text === handle &&
-      /^(?:cancel|clear|remove)$/.test(call.expression.name.text) &&
+      /^(?:cancel|clear|remove)$/u.test(call.expression.name.text) &&
       call.arguments.length === 0
     ) {
       return true;
@@ -188,9 +189,9 @@ function callbackCancelsDeferredHandle(
     const argument = call.arguments[0];
     return (
       ts.isIdentifier(call.expression) &&
-      /^(?:cancel|clear|remove)/.test(call.expression.text) &&
+      /^(?:cancel|clear|remove)/u.test(call.expression.text) &&
       call.arguments.length === 1 &&
-      !!argument &&
+      argument !== undefined &&
       ts.isIdentifier(argument) &&
       argument.text === handle
     );
@@ -287,7 +288,7 @@ function localJsxFactoryReturn(
   if (
     !ts.isCallExpression(call) ||
     call.questionDotToken ||
-    call.arguments.length !== 0 ||
+    call.arguments.length > 0 ||
     !ts.isIdentifier(call.expression)
   ) {
     return null;
@@ -315,7 +316,7 @@ function localJsxFactoryReturn(
   const factory = unwrapTransparentExpression(declaration.initializer);
   if (
     (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
-    factory.parameters.length !== 0 ||
+    factory.parameters.length > 0 ||
     factory.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     (ts.isFunctionExpression(factory) && factory.asteriskToken)
   ) {
@@ -340,7 +341,7 @@ function statementContainsRenderableReturn(statement: ts.Statement, boundary: ts
   visitSkippingNestedRuntimeFunctions(statement, (node) => {
     if (
       ts.isReturnStatement(node) &&
-      !!node.expression &&
+      node.expression !== undefined &&
       (expressionContainsJsx(node.expression) ||
         (ts.isIdentifier(node.expression) &&
           uniqueConstJsxInitializer(boundary, node.expression.text) !== null))

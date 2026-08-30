@@ -13,7 +13,6 @@ import {
   nearestNestedFunction,
   visit,
 } from "../ast.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import { isSafeProjectionExpression } from "./deferred-reveal.js";
 import { mutationRegionOnlyCallsStateSetters } from "./effect-drafts.js";
@@ -27,6 +26,7 @@ import {
   oneHopRenderProjectionReferences,
   sourceHasRuntimeBinding,
 } from "./state-proofs.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 
 interface EventOwnedScalarOptions {
   eventCallbacks: ReadonlySet<RuntimeFunctionLike>;
@@ -90,7 +90,7 @@ export function isReactiveHostPropScalarState(
       !attribute ||
       !opening ||
       (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) ||
-      /^(?:children|key|ref|render|on[A-Z])/.test(attribute.name.getText()) ||
+      /^(?:children|key|ref|render|on[A-Z])/u.test(attribute.name.getText()) ||
       !isHostOpening(opening, options.hostComponents)
     ) {
       return false;
@@ -149,7 +149,7 @@ export function isSourceEventScalarLeafState(
       !attribute ||
       !opening ||
       (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) ||
-      /^(?:children|key|ref|render|on[A-Z])/.test(attribute.name.getText())
+      /^(?:children|key|ref|render|on[A-Z])/u.test(attribute.name.getText())
     ) {
       return false;
     }
@@ -202,9 +202,9 @@ function isEventOwnedNumericState(
     setterName = state.setterName!;
   return (
     setterCall.arguments.length === 1 &&
-    !!argument &&
+    argument !== undefined &&
     isPureExpression(argument) &&
-    !!callback &&
+    callback !== null &&
     options.eventCallbacks.has(callback) &&
     mutationRegionOnlyCallsStateSetters(callback, new Set([setterName]))
   );
@@ -225,10 +225,10 @@ function isEventOwnedLiteralBooleanState(
         callback = nearestNestedFunction(call, state.owner);
       return (
         call.arguments.length === 1 &&
-        !!argument &&
+        argument !== undefined &&
         (argument.kind === ts.SyntaxKind.TrueKeyword ||
           argument.kind === ts.SyntaxKind.FalseKeyword) &&
-        !!callback &&
+        callback !== null &&
         options.eventCallbacks.has(callback) &&
         mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]))
       );
@@ -242,7 +242,7 @@ function isEventOwnedScalarBase(
   options: EventOwnedScalarOptions,
 ): boolean {
   return (
-    !!state.setterName &&
+    state.setterName !== null &&
     jsxElementCount(state.owner) >= 12 &&
     usage.localRenderReads > 0 &&
     usage.localRenderReads === usage.directRenderNodes.length &&
@@ -337,5 +337,7 @@ function isHostOpening(
   hostComponents: ReadonlySet<string>,
 ): boolean {
   const target = opening.tagName;
-  return ts.isIdentifier(target) && (/^[a-z]/.test(target.text) || hostComponents.has(target.text));
+  return (
+    ts.isIdentifier(target) && (/^[a-z]/u.test(target.text) || hostComponents.has(target.text))
+  );
 }

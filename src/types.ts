@@ -1,6 +1,6 @@
-export type Confidence = "certain" | "probable";
+type Confidence = "certain" | "probable";
 
-export type StateAction =
+type StateAction =
   | "keep-state"
   | "delete-unused-state"
   | "move-state-down"
@@ -10,7 +10,7 @@ export type StateAction =
   | "use-ref"
   | "review-state";
 
-export type EffectAction =
+type EffectAction =
   | "delete-effect"
   | "move-to-event"
   | "use-mount"
@@ -19,9 +19,9 @@ export type EffectAction =
   | "keep-effect"
   | "review-effect";
 
-export type HookAction = StateAction | EffectAction;
+type HookAction = StateAction | EffectAction;
 
-export type LegendPracticeAction =
+type LegendPracticeAction =
   | "assign-observable-fields"
   | "batch-observable-writes"
   | "move-use-value-into-child"
@@ -34,13 +34,13 @@ export type LegendPracticeAction =
   | "toggle-observable"
   | "use-peek-for-snapshot";
 
-export interface SourceLocation {
+interface SourceLocation {
   column: number;
   file: string;
   line: number;
 }
 
-export interface HookFinding {
+interface HookFinding {
   action: HookAction;
   confidence: Confidence;
   disposition: "candidate" | "change" | "keep";
@@ -67,7 +67,7 @@ export interface HookFinding {
   };
 }
 
-export interface LegendPracticeFinding {
+interface LegendPracticeFinding {
   action: LegendPracticeAction;
   confidence: Confidence;
   disposition: "change" | "style";
@@ -77,7 +77,7 @@ export interface LegendPracticeFinding {
   practice: "assign" | "batch" | "reactivity";
 }
 
-export interface AnalysisReport {
+interface AnalysisReport {
   files: number;
   findings: HookFinding[];
   hooks: {
@@ -88,3 +88,15 @@ export interface AnalysisReport {
   practices: LegendPracticeFinding[];
   schemaVersion: 1;
 }
+
+export type {
+  AnalysisReport,
+  Confidence,
+  EffectAction,
+  HookAction,
+  HookFinding,
+  LegendPracticeAction,
+  LegendPracticeFinding,
+  SourceLocation,
+  StateAction,
+};
