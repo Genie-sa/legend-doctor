@@ -1,5 +1,9 @@
-import ts from "typescript";
-
+import type {
+  ClassifiedEffect,
+  EffectCandidate,
+  StateCandidate,
+  StateUsage,
+} from "../analyze-source.js";
 import {
   bindingDeclarationCount,
   callRootIdentifier,
@@ -24,18 +28,90 @@ import {
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import { isImportedHookCall } from "../imports.js";
-import type {
-  ClassifiedEffect,
-  EffectCandidate,
-  StateCandidate,
-  StateUsage,
-} from "../analyze-source.js";
-import { isDependencyDrivenBrowserStorageEffect } from "./browser-storage-effect.js";
 import type { ChildContractResolver } from "./child-contract.js";
 import type { RuntimeFunctionLike } from "../ast.js";
+import { isDependencyDrivenBrowserStorageEffect } from "./browser-storage-effect.js";
+import { isImportedHookCall } from "../imports.js";
+import ts from "typescript";
 
 const KNOWN_GLOBAL_OBJECTS = new Set(["console", "Date", "Math", "JSON", "Promise", "globalThis"]);
+const MINIMUM_COMMITTED_GUARD_STATEMENTS = 2;
+const PURE_GLOBAL_RECEIVERS = new Set(["console", "Math", "Promise"]);
+const SCHEDULER_GLOBAL_PATTERN =
+  /^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|queueMicrotask)$/u;
+const STRING_SEARCH_METHOD_PATTERN = /^(?:endsWith|includes|indexOf|lastIndexOf|startsWith)$/u;
+const NO_EXEMPT_BINDINGS: ReadonlySet<string> = new Set<string>();
+const REACT_EFFECT_DIRECTIVE_PATTERN =
+  /^(?:react-effect-allow\b|legend-doctor\s+keep-react-effect\b)/u;
+const LIFETIME_API_PATTERN =
+  /^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|addEventListener|subscribe)$/u;
+
+interface CommittedRefContext {
+  readonly reactNamespaces: ReadonlySet<string>;
+  readonly useRefBindings: ReadonlySet<string>;
+}
+
+interface EffectClassificationContext extends CommittedRefContext {
+  readonly childContracts: ChildContractResolver | null;
+  readonly moduleScopeBindings: ReadonlySet<string>;
+  readonly stateBySetter: ReadonlyMap<string, StateCandidate>;
+  readonly stateByValue: ReadonlyMap<string, StateCandidate>;
+  readonly usageBySetter: ReadonlyMap<string, StateUsage>;
+  readonly useObservableBindings: ReadonlySet<string>;
+  readonly useValueBindings: ReadonlySet<string>;
+}
+
+interface InlineEffectContext extends EffectClassificationContext {
+  readonly hasCleanup: boolean;
+}
+
+interface DependencyEffectScope {
+  readonly command: ts.CallExpression;
+  readonly dependencies: ts.ArrayLiteralExpression;
+  readonly effectCallback: ts.ArrowFunction | ts.FunctionExpression;
+  readonly moduleScopeBindings: ReadonlySet<string>;
+  readonly owner: RuntimeFunctionLike;
+}
+
+function calleeName(callee: ts.Expression): string {
+  if (ts.isIdentifier(callee)) {
+    return callee.text;
+  }
+  return ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
+}
+
+function calleeRootIdentifier(callee: ts.Expression): ts.Identifier | null {
+  if (ts.isIdentifier(callee)) {
+    return callee;
+  }
+  return ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)
+    ? callee.expression
+    : null;
+}
+
+function soleExpressionStatementBody(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+): ts.Expression | null {
+  if (!ts.isBlock(callback.body)) {
+    return callback.body;
+  }
+  const [statement] = callback.body.statements;
+  return callback.body.statements.length === 1 && statement && ts.isExpressionStatement(statement)
+    ? statement.expression
+    : null;
+}
+
+function soleReturnStatementBody(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+): ts.Expression | undefined {
+  if (!ts.isBlock(callback.body)) {
+    return callback.body;
+  }
+  const [statement] = callback.body.statements;
+  return callback.body.statements.length === 1 && statement && ts.isReturnStatement(statement)
+    ? statement.expression
+    : undefined;
+}
 
 export function classifyEffect(
   effect: EffectCandidate,
@@ -51,39 +127,64 @@ export function classifyEffect(
   childContracts: ChildContractResolver | null,
 ): ClassifiedEffect {
   if (nonProductionHarness) {
-    return {
-      action: "keep-effect",
-      confidence: "certain",
-      derivedState: null,
-      message:
-        "Keep this effect in its test, story, or demo harness; production lifecycle migrations do not apply here.",
-    };
+    return harnessEffect();
   }
   if (hasReactEffectOwnershipDirective(effect)) {
-    return {
-      action: "keep-effect",
-      confidence: "certain",
-      derivedState: null,
-      message:
-        "Keep this React effect; its adjacent ownership directive explicitly preserves React lifecycle semantics.",
-    };
+    return ownershipDirectiveEffect();
   }
   if (!effect.callback) {
-    return {
-      action: "review-effect",
-      confidence: "probable",
-      derivedState: null,
-      message:
-        "Review this effect; its callback is not defined inline, so execution and cleanup ownership are unresolved.",
-    };
+    return unresolvedCallbackEffect();
   }
-
-  const derivedState = findPureDerivedSetter(
-    effect.callback,
-    effect.dependencies,
+  const context: EffectClassificationContext = {
+    childContracts,
+    moduleScopeBindings,
+    reactNamespaces,
     stateBySetter,
+    stateByValue,
     usageBySetter,
-  );
+    useObservableBindings,
+    useRefBindings,
+    useValueBindings,
+  };
+  return classifyInlineEffect(effect, effect.callback, context);
+}
+
+function harnessEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "certain",
+    derivedState: null,
+    message:
+      "Keep this effect in its test, story, or demo harness; production lifecycle migrations do not apply here.",
+  };
+}
+
+function ownershipDirectiveEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "certain",
+    derivedState: null,
+    message:
+      "Keep this React effect; its adjacent ownership directive explicitly preserves React lifecycle semantics.",
+  };
+}
+
+function unresolvedCallbackEffect(): ClassifiedEffect {
+  return {
+    action: "review-effect",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Review this effect; its callback is not defined inline, so execution and cleanup ownership are unresolved.",
+  };
+}
+
+function classifyInlineEffect(
+  effect: EffectCandidate,
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  context: EffectClassificationContext,
+): ClassifiedEffect {
+  const derivedState = findPureDerivedSetter(callback, effect.dependencies, context);
   if (derivedState) {
     return {
       action: "delete-effect",
@@ -92,14 +193,7 @@ export function classifyEffect(
       message: `Delete this effect and calculate the value passed to \`${derivedState.setterName}\` directly during render.`,
     };
   }
-
-  const eventReset = findMutationSiteReset(
-    effect,
-    stateBySetter,
-    stateByValue,
-    usageBySetter,
-    childContracts,
-  );
+  const eventReset = findMutationSiteReset(effect, context);
   if (eventReset) {
     return {
       action: "move-to-event",
@@ -108,143 +202,195 @@ export function classifyEffect(
       message: `Move the \`${eventReset.target.valueName}\` reset into every ${eventReset.sources.map((source) => `\`${source.valueName}\``).join(", ")} mutation—inside the same observable action if this state is migrated—then delete this effect.`,
     };
   }
-
-  const hasCleanup = callbackHasCleanup(effect.callback, stateBySetter);
+  const inline: InlineEffectContext = {
+    ...context,
+    hasCleanup: callbackHasCleanup(callback, context.stateBySetter),
+  };
   if (effect.dependencies?.elements.length === 0) {
-    if (isCleanupOnly(effect.callback)) {
-      return {
-        action: "use-unmount",
-        confidence: "probable",
-        derivedState: null,
-        message:
-          "Replace this teardown-only empty-dependency effect with `useUnmount` if once-only Legend lifecycle semantics are intended.",
-      };
-    }
-    if (
-      !hasCleanup &&
-      effect.owner &&
-      callbackIsCommittedRefIntegration(
-        effect.callback,
-        effect.owner,
-        useRefBindings,
-        reactNamespaces,
-        true,
-      )
-    ) {
-      return committedRefEffect();
-    }
-    if (
-      !hasCleanup &&
-      effect.owner &&
-      isSetupOnlyMountCandidate(effect.callback, effect.owner, stateBySetter, moduleScopeBindings)
-    ) {
-      return {
-        action: "use-mount",
-        confidence: "probable",
-        derivedState: null,
-        message:
-          "Replace this module-global, setup-only effect with `useMount` if suppressing React Strict Mode's development replay is intended.",
-      };
-    }
-    if (!hasCleanup && !callbackCallsKnownSetter(effect.callback, stateBySetter)) {
-      return {
-        action: "review-effect",
-        confidence: "probable",
-        derivedState: null,
-        message:
-          "Review this empty-dependency setup before choosing `useMount`; suppressing React Strict Mode's development replay changes lifecycle semantics.",
-      };
-    }
-    return {
-      action: "keep-effect",
-      confidence: "certain",
-      derivedState: null,
-      message: "Keep this React effect; it owns paired mount setup and cleanup semantics.",
-    };
+    return emptyDependencyClassification(effect, callback, inline);
   }
+  return dependencyEffectClassification(effect, callback, inline);
+}
 
+function emptyDependencyClassification(
+  effect: EffectCandidate,
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  inline: InlineEffectContext,
+): ClassifiedEffect {
+  if (isCleanupOnly(callback)) {
+    return unmountEffect();
+  }
+  if (!inline.hasCleanup && effect.owner) {
+    const mounted = mountClassification(callback, effect.owner, inline);
+    if (mounted) {
+      return mounted;
+    }
+  }
+  if (!inline.hasCleanup && !callbackCallsKnownSetter(callback, inline.stateBySetter)) {
+    return reviewEmptyDependencySetupEffect();
+  }
+  return keepPairedMountEffect();
+}
+
+function mountClassification(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  owner: RuntimeFunctionLike,
+  inline: InlineEffectContext,
+): ClassifiedEffect | null {
   if (
-    !hasCleanup &&
-    effect.owner &&
-    (isExactLatestValueRefMirror(effect, useRefBindings, reactNamespaces) ||
-      isExactCommittedPreviousValueGuard(effect, useRefBindings, reactNamespaces) ||
-      callbackIsCommittedRefIntegration(
-        effect.callback,
-        effect.owner,
-        useRefBindings,
-        reactNamespaces,
-      ) ||
-      isCommittedPropRefSnapshot(effect, stateBySetter))
+    !capturesOwnerSnapshot(callback, owner, inline) &&
+    callbackIsCommittedRefIntegration(callback, owner, inline)
   ) {
     return committedRefEffect();
   }
+  return isSetupOnlyMountCandidate(callback, owner, inline) ? useMountEffect() : null;
+}
 
-  if (effect.dependencies && effect.dependencies.elements.length > 0 && !hasCleanup) {
-    const dependencyNames = effect.dependencies.elements.flatMap((element) =>
-      ts.isIdentifier(element) ? [element.text] : [],
-    );
-    const directUseValueDependencies = dependencyNames.filter((name) => useValueBindings.has(name));
-    if (
-      !effect.callback.modifiers?.some(
-        (modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword,
-      ) &&
-      !effect.callback.asteriskToken &&
-      dependencyNames.length === effect.dependencies.elements.length &&
-      dependencyNames.length > 0 &&
-      directUseValueDependencies.length > 0 &&
-      dependencyNames.every(
-        (name) => useValueBindings.has(name) || useObservableBindings.has(name),
-      ) &&
-      directUseValueDependencies.every((name) => callbackReadsSynchronously(effect.callback!, name))
-    ) {
-      return {
-        action: "use-observe-effect",
-        confidence: "probable",
-        derivedState: null,
-        message:
-          "Rewrite this post-mount reaction with `useObserveEffect`, reading its observable sources directly; dependencies are `useValue` snapshots or stable `useObservable` handles.",
-      };
-    }
+function dependencyEffectClassification(
+  effect: EffectCandidate,
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  inline: InlineEffectContext,
+): ClassifiedEffect {
+  if (!inline.hasCleanup && effect.owner && isCommittedRefEffect(effect, callback, inline)) {
+    return committedRefEffect();
   }
-
-  if (!hasCleanup && effect.owner && isDependencyDrivenBrowserStorageEffect(effect)) {
-    return {
-      action: "keep-effect",
-      confidence: "probable",
-      derivedState: null,
-      message:
-        "Keep this React effect; it persists React dependencies to browser storage after commit.",
-    };
+  if (isObservableSourcedReaction(effect, callback, inline)) {
+    return observeEffect();
   }
-
+  if (!inline.hasCleanup && effect.owner && isDependencyDrivenBrowserStorageEffect(effect)) {
+    return keepBrowserStorageEffect();
+  }
   if (
-    !hasCleanup &&
+    !inline.hasCleanup &&
     effect.owner &&
-    isDependencyDrivenExternalCommandEffect(
-      effect,
-      stateByValue,
-      useValueBindings,
-      useObservableBindings,
-      moduleScopeBindings,
-    )
+    isDependencyDrivenExternalCommandEffect(effect, inline)
   ) {
-    return {
-      action: "keep-effect",
-      confidence: "probable",
-      derivedState: null,
-      message:
-        "Keep this React effect; external integration follows React dependencies and is not an observable reaction.",
-    };
+    return keepExternalIntegrationEffect();
   }
+  return inline.hasCleanup ? keepLifecycleEffect() : reviewCausalOwnerEffect();
+}
 
-  if (hasCleanup) {
-    return {
-      action: "keep-effect",
-      confidence: "certain",
-      derivedState: null,
-      message: "Keep this React effect; it owns an explicit setup and cleanup lifecycle.",
-    };
+function isCommittedRefEffect(
+  effect: EffectCandidate,
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  inline: InlineEffectContext,
+): boolean {
+  return (
+    effect.owner !== null &&
+    (isExactLatestValueRefMirror(effect, inline) ||
+      isExactCommittedPreviousValueGuard(effect, inline) ||
+      callbackIsCommittedRefIntegration(callback, effect.owner, inline) ||
+      isCommittedPropRefSnapshot(effect, inline.stateBySetter))
+  );
+}
+
+function isObservableSourcedReaction(
+  effect: EffectCandidate,
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  inline: InlineEffectContext,
+): boolean {
+  const { dependencies } = effect;
+  if (inline.hasCleanup || !dependencies || dependencies.elements.length === 0) {
+    return false;
   }
+  const dependencyNames = dependencies.elements.flatMap((element) =>
+    ts.isIdentifier(element) ? [element.text] : [],
+  );
+  const directUseValueDependencies = dependencyNames.filter((name) =>
+    inline.useValueBindings.has(name),
+  );
+  return (
+    !callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) &&
+    !callback.asteriskToken &&
+    dependencyNames.length === dependencies.elements.length &&
+    dependencyNames.length > 0 &&
+    directUseValueDependencies.length > 0 &&
+    dependencyNames.every(
+      (name) => inline.useValueBindings.has(name) || inline.useObservableBindings.has(name),
+    ) &&
+    directUseValueDependencies.every((name) => callbackReadsSynchronously(callback, name))
+  );
+}
+
+function unmountEffect(): ClassifiedEffect {
+  return {
+    action: "use-unmount",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Replace this teardown-only empty-dependency effect with `useUnmount` if once-only Legend lifecycle semantics are intended.",
+  };
+}
+
+function useMountEffect(): ClassifiedEffect {
+  return {
+    action: "use-mount",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Replace this module-global, setup-only effect with `useMount` if suppressing React Strict Mode's development replay is intended.",
+  };
+}
+
+function reviewEmptyDependencySetupEffect(): ClassifiedEffect {
+  return {
+    action: "review-effect",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Review this empty-dependency setup before choosing `useMount`; suppressing React Strict Mode's development replay changes lifecycle semantics.",
+  };
+}
+
+function keepPairedMountEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "certain",
+    derivedState: null,
+    message: "Keep this React effect; it owns paired mount setup and cleanup semantics.",
+  };
+}
+
+function observeEffect(): ClassifiedEffect {
+  return {
+    action: "use-observe-effect",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Rewrite this post-mount reaction with `useObserveEffect`, reading its observable sources directly; dependencies are `useValue` snapshots or stable `useObservable` handles.",
+  };
+}
+
+function keepBrowserStorageEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Keep this React effect; it persists React dependencies to browser storage after commit.",
+  };
+}
+
+function keepExternalIntegrationEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Keep this React effect; external integration follows React dependencies and is not an observable reaction.",
+  };
+}
+
+function keepLifecycleEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "certain",
+    derivedState: null,
+    message: "Keep this React effect; it owns an explicit setup and cleanup lifecycle.",
+  };
+}
+
+function reviewCausalOwnerEffect(): ClassifiedEffect {
   return {
     action: "review-effect",
     confidence: "probable",
@@ -260,25 +406,26 @@ function hasReactEffectOwnershipDirective(effect: EffectCandidate): boolean {
     ts.isExpressionStatement,
     effect.owner ?? effect.call.getSourceFile(),
   );
-  if (!statement) {
-    return false;
-  }
-  const sourceFile = effect.call.getSourceFile();
+  const directive = statement && adjacentLeadingCommentText(statement);
+  return directive !== null && REACT_EFFECT_DIRECTIVE_PATTERN.test(directive);
+}
+
+function adjacentLeadingCommentText(statement: ts.Statement): string | null {
+  const sourceFile = statement.getSourceFile();
   const leadingComments =
     ts.getLeadingCommentRanges(sourceFile.text, statement.getFullStart()) ?? [];
   const comment = leadingComments.at(-1);
   if (!comment) {
-    return false;
+    return null;
   }
   const gap = sourceFile.text.slice(comment.end, statement.getStart(sourceFile));
   if (/\r?\n[\t ]*\r?\n/u.test(gap)) {
-    return false;
+    return null;
   }
-  const body = sourceFile.text
+  return sourceFile.text
     .slice(comment.pos, comment.end)
     .replace(/^\s*\/[/*]+\s*/u, "")
     .replace(/\*\/\s*$/u, "");
-  return /^(?:react-effect-allow\b|legend-doctor\s+keep-react-effect\b)/u.test(body);
 }
 
 function isCommittedPropRefSnapshot(
@@ -286,7 +433,7 @@ function isCommittedPropRefSnapshot(
   stateBySetter: ReadonlyMap<string, StateCandidate>,
 ): boolean {
   const { callback, dependencies, owner } = effect;
-  const dependency = dependencies?.elements[0];
+  const [dependency] = dependencies?.elements ?? [];
   if (
     !callback ||
     !owner ||
@@ -299,12 +446,26 @@ function isCommittedPropRefSnapshot(
     return false;
   }
   const refName = dependency.text;
-  if (!parameterBindingNames(owner).has(refName)) {
-    return false;
-  }
-  const statement = callback.body.statements[0]!;
+  const [statement] = callback.body.statements;
+  const argument =
+    statement && parameterBindingNames(owner).has(refName)
+      ? refCurrentSetterArgument(statement, stateBySetter)
+      : null;
+  return (
+    argument !== null &&
+    ts.isPropertyAccessExpression(argument) &&
+    argument.name.text === "current" &&
+    ts.isIdentifier(argument.expression) &&
+    argument.expression.text === refName
+  );
+}
+
+function refCurrentSetterArgument(
+  statement: ts.Statement,
+  stateBySetter: ReadonlyMap<string, StateCandidate>,
+): ts.Expression | null {
   if (!ts.isExpressionStatement(statement)) {
-    return false;
+    return null;
   }
   const expression = unwrapTransparentExpression(statement.expression);
   if (
@@ -313,15 +474,9 @@ function isCommittedPropRefSnapshot(
     !stateBySetter.has(expression.expression.text) ||
     expression.arguments.length !== 1
   ) {
-    return false;
+    return null;
   }
-  const argument = unwrapTransparentExpression(expression.arguments[0]!);
-  return (
-    ts.isPropertyAccessExpression(argument) &&
-    argument.name.text === "current" &&
-    ts.isIdentifier(argument.expression) &&
-    argument.expression.text === refName
-  );
+  return unwrapTransparentExpression(expression.arguments[0]!);
 }
 
 function parameterBindingNames(owner: RuntimeFunctionLike): ReadonlySet<string> {
@@ -334,10 +489,7 @@ function parameterBindingNames(owner: RuntimeFunctionLike): ReadonlySet<string> 
 
 function isDependencyDrivenExternalCommandEffect(
   effect: EffectCandidate,
-  stateByValue: ReadonlyMap<string, StateCandidate>,
-  useValueBindings: ReadonlySet<string>,
-  useObservableBindings: ReadonlySet<string>,
-  moduleScopeBindings: ReadonlySet<string>,
+  context: EffectClassificationContext,
 ): boolean {
   const { callback, dependencies, owner } = effect;
   if (
@@ -346,179 +498,195 @@ function isDependencyDrivenExternalCommandEffect(
     !dependencies?.elements.length ||
     !owner ||
     callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
-    callback.asteriskToken
+    callback.asteriskToken ||
+    dependenciesReadLocalSnapshots(dependencies, context)
   ) {
     return false;
   }
+  const survey = surveyEffectCalls(callback, callback.body);
+  const [command] = survey.commands;
+  if (survey.hasOtherMutation || survey.commands.length !== 1 || !command) {
+    return false;
+  }
+  const scope: DependencyEffectScope = {
+    command,
+    dependencies,
+    effectCallback: callback,
+    moduleScopeBindings: context.moduleScopeBindings,
+    owner,
+  };
+  return commandSupportCallsAreInert(survey, scope) && isExternalCommandCallee(command, owner);
+}
 
-  let readsLocalStateOrObservableSnapshot = false;
+function dependenciesReadLocalSnapshots(
+  dependencies: ts.ArrayLiteralExpression,
+  context: EffectClassificationContext,
+): boolean {
+  let reads = false;
   visit(dependencies, (node) => {
     if (
       ts.isIdentifier(node) &&
-      (stateByValue.has(node.text) ||
-        useValueBindings.has(node.text) ||
-        useObservableBindings.has(node.text))
+      (context.stateByValue.has(node.text) ||
+        context.useValueBindings.has(node.text) ||
+        context.useObservableBindings.has(node.text))
     ) {
-      readsLocalStateOrObservableSnapshot = true;
+      reads = true;
     }
   });
-  if (readsLocalStateOrObservableSnapshot) {
-    return false;
-  }
+  return reads;
+}
 
+interface EffectCallSurvey {
+  readonly calls: readonly ts.CallExpression[];
+  readonly commands: readonly ts.CallExpression[];
+  readonly hasOtherMutation: boolean;
+}
+
+function surveyEffectCalls(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  body: ts.Block,
+): EffectCallSurvey {
   const calls: ts.CallExpression[] = [];
   const commands: ts.CallExpression[] = [];
   let hasOtherMutation = false;
-  visitSkippingNestedFunctions(callback.body, callback, (node) => {
+  visitSkippingNestedFunctions(body, callback, (node) => {
     if (ts.isCallExpression(node)) {
       calls.push(node);
       if (isStandaloneEffectCommand(node, callback)) {
         commands.push(node);
       }
     }
-    if (
-      ts.isAwaitExpression(node) ||
-      ts.isYieldExpression(node) ||
-      (ts.isNewExpression(node) && !isDependencyEffectValueConstructor(node)) ||
-      ts.isDeleteExpression(node) ||
-      ts.isPostfixUnaryExpression(node) ||
-      (ts.isPrefixUnaryExpression(node) &&
-        (node.operator === ts.SyntaxKind.PlusPlusToken ||
-          node.operator === ts.SyntaxKind.MinusMinusToken)) ||
-      (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind))
-    ) {
+    if (isMutatingEffectNode(node)) {
       hasOtherMutation = true;
     }
   });
-  if (hasOtherMutation || commands.length !== 1) {
-    return false;
-  }
+  return { calls, commands, hasOtherMutation };
+}
 
-  const call = commands[0]!;
-  const nestedCalls = calls.filter((candidate) => candidate !== call);
+function isMutatingEffectNode(node: ts.Node): boolean {
+  return (
+    ts.isAwaitExpression(node) ||
+    ts.isYieldExpression(node) ||
+    (ts.isNewExpression(node) && !isDependencyEffectValueConstructor(node)) ||
+    ts.isDeleteExpression(node) ||
+    ts.isPostfixUnaryExpression(node) ||
+    (ts.isPrefixUnaryExpression(node) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken ||
+        node.operator === ts.SyntaxKind.MinusMinusToken)) ||
+    (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind))
+  );
+}
+
+function commandSupportCallsAreInert(
+  survey: EffectCallSurvey,
+  scope: DependencyEffectScope,
+): boolean {
+  const nestedCalls = survey.calls.filter((candidate) => candidate !== scope.command);
   const argumentCalls = nestedCalls.filter((candidate) =>
-    call.arguments.some((argument) => nodeWithin(candidate, argument)),
+    scope.command.arguments.some((argument) => nodeWithin(candidate, argument)),
   );
   const projectionCallbacks = new Set<ts.Node>(
     nestedCalls.flatMap((candidate) => {
-      const projection = dependencyMapProjectionCallback(candidate, call, dependencies, callback);
+      const projection = dependencyMapProjectionCallback(candidate, scope);
       return projection ? [projection] : [];
     }),
   );
-  if (
-    containsFunctionLike(callback.body, projectionCallbacks) ||
+  return !(
+    containsFunctionLike(scope.effectCallback.body, projectionCallbacks) ||
     argumentCalls.length > 1 ||
     nestedCalls.length - argumentCalls.length > 1 ||
-    nestedCalls.some(
-      (candidate) =>
-        !isDependencyEffectSupportCall(
-          candidate,
-          call,
-          owner,
-          dependencies,
-          moduleScopeBindings,
-          callback,
-        ),
-    ) ||
-    isSubscriptionCall(call)
-  ) {
-    return false;
-  }
+    nestedCalls.some((candidate) => !isDependencyEffectSupportCall(candidate, scope)) ||
+    isSubscriptionCall(scope.command)
+  );
+}
+
+function isExternalCommandCallee(call: ts.CallExpression, owner: RuntimeFunctionLike): boolean {
   const callee = call.expression;
   if (ts.isIdentifier(callee)) {
     return (
       bindingDeclarationCount(owner, callee.text) === 0 &&
-      !/^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|queueMicrotask)$/u.test(
-        callee.text,
-      )
+      !SCHEDULER_GLOBAL_PATTERN.test(callee.text)
     );
   }
-  if (!ts.isPropertyAccessExpression(callee) && !ts.isElementAccessExpression(callee)) {
-    return false;
-  }
-  if (isCallbackDrivenCall(call)) {
+  if (
+    (!ts.isPropertyAccessExpression(callee) && !ts.isElementAccessExpression(callee)) ||
+    isCallbackDrivenCall(call)
+  ) {
     return false;
   }
   const root = callRootIdentifier(callee);
-  return root !== null && !["console", "Math", "Promise"].includes(root);
+  return root !== null && !PURE_GLOBAL_RECEIVERS.has(root);
 }
 
 function isDependencyEffectSupportCall(
   call: ts.CallExpression,
-  command: ts.CallExpression,
-  owner: RuntimeFunctionLike,
-  dependencies: ts.ArrayLiteralExpression,
-  moduleScopeBindings: ReadonlySet<string>,
-  effectCallback: ts.ArrowFunction | ts.FunctionExpression,
+  scope: DependencyEffectScope,
 ): boolean {
-  if (dependencyMapProjectionCallback(call, command, dependencies, effectCallback)) {
+  if (dependencyMapProjectionCallback(call, scope)) {
     return true;
   }
   if (isCallbackDrivenCall(call) || isSubscriptionCall(call)) {
     return false;
   }
-
-  if (
-    ts.isPropertyAccessExpression(call.expression) &&
-    /^(?:endsWith|includes|indexOf|lastIndexOf|startsWith)$/u.test(call.expression.name.text)
-  ) {
+  if (isStringSearchCall(call)) {
     return true;
   }
-
   const root = callRootIdentifier(call.expression);
   if (root === null) {
     return false;
   }
-  if (bindingDeclarationCount(owner, root) !== 0) {
-    return (
-      command.arguments.some((argument) => nodeWithin(call, argument)) &&
-      isImportedTranslationArgument(call, owner, dependencies)
-    );
-  }
-  return moduleScopeBindings.has(root) || KNOWN_GLOBAL_OBJECTS.has(root);
+  return bindingDeclarationCount(scope.owner, root) === 0
+    ? scope.moduleScopeBindings.has(root) || KNOWN_GLOBAL_OBJECTS.has(root)
+    : scope.command.arguments.some((argument) => nodeWithin(call, argument)) &&
+        isImportedTranslationArgument(call, scope.owner, scope.dependencies);
+}
+
+function isStringSearchCall(call: ts.CallExpression): boolean {
+  return (
+    ts.isPropertyAccessExpression(call.expression) &&
+    STRING_SEARCH_METHOD_PATTERN.test(call.expression.name.text)
+  );
 }
 
 function dependencyMapProjectionCallback(
   call: ts.CallExpression,
-  command: ts.CallExpression,
-  dependencies: ts.ArrayLiteralExpression,
-  effectCallback: ts.ArrowFunction | ts.FunctionExpression,
+  scope: DependencyEffectScope,
 ): ts.ArrowFunction | null {
   if (
-    !command.arguments.some((argument) => nodeWithin(call, argument)) ||
+    !scope.command.arguments.some((argument) => nodeWithin(call, argument)) ||
     !ts.isPropertyAccessExpression(call.expression) ||
     call.expression.name.text !== "map" ||
     call.arguments.length !== 1
   ) {
     return null;
   }
-  const argument = call.arguments[0]!;
-  if (!ts.isArrowFunction(argument)) {
-    return null;
-  }
-  const callback = argument;
-  const parameter = callback.parameters.length === 1 ? callback.parameters[0]! : null;
-  if (
-    !parameter ||
-    !ts.isIdentifier(parameter.name) ||
-    parameter.dotDotDotToken ||
-    parameter.initializer ||
-    ts.isBlock(callback.body) ||
-    callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
-    !isParameterProjection(callback.body, parameter.name.text)
-  ) {
+  const [argument] = call.arguments;
+  if (!argument || !ts.isArrowFunction(argument) || !isPureProjectionArrow(argument)) {
     return null;
   }
   const receiver = unwrapTransparentExpression(call.expression.expression);
   const root = staticAccessRoot(receiver);
-  if (!root || bindingDeclarationCount(effectCallback, root.text) !== 0) {
+  if (!root || bindingDeclarationCount(scope.effectCallback, root.text) !== 0) {
     return null;
   }
-  return dependencies.elements.some((dependency) =>
+  return scope.dependencies.elements.some((dependency) =>
     sameStaticAccess(receiver, unwrapTransparentExpression(dependency)),
   )
-    ? callback
+    ? argument
     : null;
+}
+
+function isPureProjectionArrow(callback: ts.ArrowFunction): boolean {
+  const parameter = callback.parameters.length === 1 ? callback.parameters[0]! : null;
+  return (
+    parameter !== null &&
+    ts.isIdentifier(parameter.name) &&
+    !parameter.dotDotDotToken &&
+    !parameter.initializer &&
+    !ts.isBlock(callback.body) &&
+    !callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) &&
+    isParameterProjection(callback.body, parameter.name.text)
+  );
 }
 
 function staticAccessRoot(expression: ts.Expression): ts.Identifier | null {
@@ -575,52 +743,68 @@ function isImportedTranslationArgument(
   ) {
     return false;
   }
+  const hookName = translationHookName(owner.body, localName);
+  return (
+    hookName !== null &&
+    bindingDeclarationCount(owner, hookName) === 0 &&
+    importsUseTranslationAs(owner.getSourceFile(), hookName)
+  );
+}
 
+type ConstObjectDestructuring = ts.VariableDeclaration & {
+  readonly initializer: ts.CallExpression;
+  readonly name: ts.ObjectBindingPattern;
+};
+
+function isConstObjectDestructuring(node: ts.Node): node is ConstObjectDestructuring {
+  return (
+    ts.isVariableDeclaration(node) &&
+    ts.isObjectBindingPattern(node.name) &&
+    node.initializer !== undefined &&
+    ts.isCallExpression(node.initializer) &&
+    ts.isVariableDeclarationList(node.parent) &&
+    (node.parent.flags & ts.NodeFlags.Const) !== 0
+  );
+}
+
+function isTranslationBinding(element: ts.BindingElement, localName: string): boolean {
+  const sourceName = element.propertyName ?? element.name;
+  return (
+    !element.dotDotDotToken &&
+    ts.isIdentifier(element.name) &&
+    element.name.text === localName &&
+    ts.isIdentifier(sourceName) &&
+    sourceName.text === "t"
+  );
+}
+
+function translationHookName(body: ts.Node, localName: string): string | null {
   let hookName: string | null = null;
-  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
-    if (
-      hookName !== null ||
-      !ts.isVariableDeclaration(node) ||
-      !ts.isObjectBindingPattern(node.name) ||
-      !node.initializer ||
-      !ts.isCallExpression(node.initializer) ||
-      !ts.isVariableDeclarationList(node.parent) ||
-      (node.parent.flags & ts.NodeFlags.Const) === 0
-    ) {
+  visitSkippingNestedRuntimeFunctions(body, (node) => {
+    if (hookName !== null || !isConstObjectDestructuring(node)) {
       return;
     }
-    const binding = node.name.elements.find((element) => {
-      const sourceName = element.propertyName ?? element.name;
-      return (
-        !element.dotDotDotToken &&
-        ts.isIdentifier(element.name) &&
-        element.name.text === localName &&
-        ts.isIdentifier(sourceName) &&
-        sourceName.text === "t"
-      );
-    });
+    const binding = node.name.elements.find((element) => isTranslationBinding(element, localName));
     if (binding && ts.isIdentifier(node.initializer.expression)) {
       hookName = node.initializer.expression.text;
     }
   });
-  return (
-    hookName !== null &&
-    bindingDeclarationCount(owner, hookName) === 0 &&
-    owner
-      .getSourceFile()
-      .statements.some(
-        (statement) =>
-          ts.isImportDeclaration(statement) &&
-          ts.isStringLiteral(statement.moduleSpecifier) &&
-          statement.moduleSpecifier.text === "react-i18next" &&
-          statement.importClause?.namedBindings !== undefined &&
-          ts.isNamedImports(statement.importClause.namedBindings) &&
-          statement.importClause.namedBindings.elements.some(
-            (specifier) =>
-              specifier.name.text === hookName &&
-              (specifier.propertyName?.text ?? specifier.name.text) === "useTranslation",
-          ),
-      )
+  return hookName;
+}
+
+function importsUseTranslationAs(sourceFile: ts.SourceFile, hookName: string): boolean {
+  return sourceFile.statements.some(
+    (statement) =>
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === "react-i18next" &&
+      statement.importClause?.namedBindings !== undefined &&
+      ts.isNamedImports(statement.importClause.namedBindings) &&
+      statement.importClause.namedBindings.elements.some(
+        (specifier) =>
+          specifier.name.text === hookName &&
+          (specifier.propertyName?.text ?? specifier.name.text) === "useTranslation",
+      ),
   );
 }
 
@@ -674,28 +858,48 @@ function committedRefEffect(): ClassifiedEffect {
 
 function isExactLatestValueRefMirror(
   effect: EffectCandidate,
-  useRefBindings: ReadonlySet<string>,
-  reactNamespaces: ReadonlySet<string>,
+  context: CommittedRefContext,
 ): boolean {
   const { callback, dependencies, owner } = effect;
   const dependency = dependencies?.elements[0] ?? null;
   if (!callback || !owner || (dependencies !== null && dependencies.elements.length !== 1)) {
     return false;
   }
+  const mirror = latestValueRefAssignment(callback);
+  if (
+    !mirror ||
+    localBindingNames(callback, null).has(mirror.refName) ||
+    !localCommittedRefBindings(owner, context.useRefBindings, context.reactNamespaces).has(
+      mirror.refName,
+    )
+  ) {
+    return false;
+  }
+  const sourceFile = effect.call.getSourceFile();
+  return (
+    isPureExpression(mirror.source) &&
+    (dependency === null ||
+      mirror.source.getText(sourceFile) ===
+        unwrapTransparentExpression(dependency).getText(sourceFile))
+  );
+}
 
-  const statementExpression = ts.isBlock(callback.body)
-    ? callback.body.statements.length === 1 &&
-      ts.isExpressionStatement(callback.body.statements[0]!)
-      ? callback.body.statements[0]!.expression
-      : null
-    : callback.body;
+interface RefMirrorAssignment {
+  readonly refName: string;
+  readonly source: ts.Expression;
+}
+
+function latestValueRefAssignment(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+): RefMirrorAssignment | null {
+  const statementExpression = soleExpressionStatementBody(callback);
   const assignment = statementExpression && unwrapTransparentExpression(statementExpression);
   if (
     !assignment ||
     !ts.isBinaryExpression(assignment) ||
     assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken
   ) {
-    return false;
+    return null;
   }
   const target = unwrapTransparentExpression(assignment.left);
   if (
@@ -703,108 +907,142 @@ function isExactLatestValueRefMirror(
     target.name.text !== "current" ||
     !ts.isIdentifier(target.expression)
   ) {
-    return false;
+    return null;
   }
-  const refName = target.expression.text;
-  if (
-    localBindingNames(callback, null).has(refName) ||
-    !localCommittedRefBindings(owner, useRefBindings, reactNamespaces).has(refName)
-  ) {
-    return false;
-  }
-  const sourceFile = effect.call.getSourceFile();
-  const source = unwrapTransparentExpression(assignment.right);
-  return (
-    isPureExpression(source) &&
-    (dependency === null ||
-      source.getText(sourceFile) === unwrapTransparentExpression(dependency).getText(sourceFile))
-  );
+  return {
+    refName: target.expression.text,
+    source: unwrapTransparentExpression(assignment.right),
+  };
 }
 
 function isExactCommittedPreviousValueGuard(
   effect: EffectCandidate,
-  useRefBindings: ReadonlySet<string>,
-  reactNamespaces: ReadonlySet<string>,
+  context: CommittedRefContext,
 ): boolean {
   const { callback, dependencies, owner } = effect;
-  const callbackBody = callback?.body;
   const ownerBody = owner?.body;
-  const dependency = dependencies?.elements[0];
+  const [dependency] = dependencies?.elements ?? [];
   if (
     !callback ||
     !owner ||
     !ownerBody ||
     !ts.isBlock(ownerBody) ||
-    !callbackBody ||
-    !ts.isBlock(callbackBody) ||
-    callback.parameters.length > 0 ||
-    callback.asteriskToken ||
-    callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    !ts.isBlock(callback.body) ||
+    !isSynchronousParameterlessCallback(callback) ||
     dependencies?.elements.length !== 1 ||
     !dependency ||
     !ts.isIdentifier(dependency) ||
-    callbackBody.statements.length < 2
+    callback.body.statements.length < MINIMUM_COMMITTED_GUARD_STATEMENTS
   ) {
     return false;
   }
-
-  const dependencyName = dependency.text;
-  const guard = callbackBody.statements[0]!;
-  if (!ts.isIfStatement(guard) || guard.elseStatement || !isBareReturn(guard.thenStatement)) {
+  const refName = committedPreviousValueRefName(callback.body, dependency.text);
+  if (!refName || localBindingNames(callback, null).has(refName)) {
     return false;
+  }
+  const query: SeededRefQuery = {
+    context,
+    dependencyName: dependency.text,
+    owner,
+    refName,
+  };
+  return ownerBody.statements.some((statement) => declaresSeededCommittedRef(statement, query));
+}
+
+function isSynchronousParameterlessCallback(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+): boolean {
+  return (
+    callback.parameters.length === 0 &&
+    !callback.asteriskToken &&
+    !callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+  );
+}
+
+function committedPreviousValueRefName(body: ts.Block, dependencyName: string): string | null {
+  const [guard, commitStatement] = body.statements;
+  if (
+    !guard ||
+    !ts.isIfStatement(guard) ||
+    guard.elseStatement ||
+    !isBareReturn(guard.thenStatement)
+  ) {
+    return null;
   }
   const condition = unwrapTransparentExpression(guard.expression);
   if (
     !ts.isBinaryExpression(condition) ||
     condition.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken
   ) {
-    return false;
+    return null;
   }
   const refName = committedRefComparedWithDependency(condition, dependencyName);
-  if (!refName || localBindingNames(callback, null).has(refName)) {
-    return false;
-  }
-
-  const commitStatement = callbackBody.statements[1]!;
-  if (!ts.isExpressionStatement(commitStatement)) {
-    return false;
-  }
-  const commit = unwrapTransparentExpression(commitStatement.expression);
-  const committedValue = ts.isBinaryExpression(commit)
-    ? unwrapTransparentExpression(commit.right)
+  return refName && commitsDependencyToRef(commitStatement, refName, dependencyName)
+    ? refName
     : null;
+}
+
+function commitsDependencyToRef(
+  statement: ts.Statement | undefined,
+  refName: string,
+  dependencyName: string,
+): boolean {
+  if (!statement || !ts.isExpressionStatement(statement)) {
+    return false;
+  }
+  const commit = unwrapTransparentExpression(statement.expression);
+  if (!ts.isBinaryExpression(commit) || commit.operatorToken.kind !== ts.SyntaxKind.EqualsToken) {
+    return false;
+  }
+  const committedValue = unwrapTransparentExpression(commit.right);
+  return (
+    committedRefName(commit.left) === refName &&
+    ts.isIdentifier(committedValue) &&
+    committedValue.text === dependencyName
+  );
+}
+
+interface SeededRefQuery {
+  readonly context: CommittedRefContext;
+  readonly dependencyName: string;
+  readonly owner: RuntimeFunctionLike;
+  readonly refName: string;
+}
+
+function declaresSeededCommittedRef(statement: ts.Statement, query: SeededRefQuery): boolean {
   if (
-    !ts.isBinaryExpression(commit) ||
-    commit.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-    committedRefName(commit.left) !== refName ||
-    !committedValue ||
-    !ts.isIdentifier(committedValue) ||
-    committedValue.text !== dependencyName
+    !ts.isVariableStatement(statement) ||
+    !(statement.declarationList.flags & ts.NodeFlags.Const)
   ) {
     return false;
   }
+  return statement.declarationList.declarations.some((declaration) =>
+    isSeededCommittedRefDeclaration(declaration, query),
+  );
+}
 
-  return ownerBody.statements.some((statement) => {
-    if (
-      !ts.isVariableStatement(statement) ||
-      !(statement.declarationList.flags & ts.NodeFlags.Const)
-    ) {
-      return false;
-    }
-    return statement.declarationList.declarations.some(
-      (declaration) =>
-        ts.isIdentifier(declaration.name) &&
-        declaration.name.text === refName &&
-        declaration.initializer !== undefined &&
-        ts.isCallExpression(declaration.initializer) &&
-        isImportedHookCall(declaration.initializer, useRefBindings, reactNamespaces, "useRef") &&
-        importedHookIsUnshadowed(declaration.initializer, owner) &&
-        declaration.initializer.arguments.length === 1 &&
-        ts.isIdentifier(declaration.initializer.arguments[0]!) &&
-        declaration.initializer.arguments[0]!.text === dependencyName &&
-        bindingDeclarationCount(owner, refName) === 1,
-    );
-  });
+function isSeededCommittedRefDeclaration(
+  declaration: ts.VariableDeclaration,
+  query: SeededRefQuery,
+): boolean {
+  const { initializer } = declaration;
+  return (
+    ts.isIdentifier(declaration.name) &&
+    declaration.name.text === query.refName &&
+    initializer !== undefined &&
+    ts.isCallExpression(initializer) &&
+    isImportedHookCall(
+      initializer,
+      query.context.useRefBindings,
+      query.context.reactNamespaces,
+      "useRef",
+    ) &&
+    importedHookIsUnshadowed(initializer, query.owner) &&
+    initializer.arguments.length === 1 &&
+    ts.isIdentifier(initializer.arguments[0]!) &&
+    initializer.arguments[0]!.text === query.dependencyName &&
+    bindingDeclarationCount(query.owner, query.refName) === 1
+  );
 }
 
 function isBareReturn(statement: ts.Statement): boolean {
@@ -843,173 +1081,219 @@ function committedRefName(expression: ts.Expression): string | null {
     : null;
 }
 
+interface RefIntegrationScope {
+  readonly derivedBindings: Set<string>;
+  integratesCommittedRef: boolean;
+  readonly refs: ReadonlySet<string>;
+}
+
 function callbackIsCommittedRefIntegration(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   owner: RuntimeFunctionLike,
-  useRefBindings: ReadonlySet<string>,
-  reactNamespaces: ReadonlySet<string>,
-  rejectSnapshotCaptures = false,
+  context: CommittedRefContext,
 ): boolean {
   if (!owner.body) {
     return false;
   }
-  const refs = localCommittedRefBindings(owner, useRefBindings, reactNamespaces);
+  const refs = localCommittedRefBindings(owner, context.useRefBindings, context.reactNamespaces);
   if (refs.size === 0) {
     return false;
   }
-  const derivedBindings = new Set<string>();
-  let integratesCommittedRef = false;
-
-  if (rejectSnapshotCaptures) {
-    const ownerLocals = localBindingNames(owner, callback);
-    const callbackLocals = localBindingNames(callback, null);
-    let capturesSnapshot = false;
-    visit(callback.body, (node) => {
-      if (
-        !capturesSnapshot &&
-        ts.isIdentifier(node) &&
-        ownerLocals.has(node.text) &&
-        !refs.has(node.text) &&
-        !callbackLocals.has(node.text) &&
-        !isNonValueIdentifier(node)
-      ) {
-        capturesSnapshot = true;
-      }
-    });
-    if (capturesSnapshot) {
-      return false;
-    }
-  }
-
-  const readsCommittedRef = (node: ts.Node): boolean => {
-    let reads = false;
-    visit(node, (child) => {
-      if (
-        reads ||
-        !ts.isPropertyAccessExpression(child) ||
-        child.name.text !== "current" ||
-        !ts.isIdentifier(child.expression) ||
-        !refs.has(child.expression.text)
-      ) {
-        return;
-      }
-      const { parent } = child;
-      const directAssignment =
-        ts.isBinaryExpression(parent) &&
-        parent.left === child &&
-        isAssignmentOperator(parent.operatorToken.kind);
-      const directUpdate =
-        (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) &&
-        parent.operand === child;
-      if (!directAssignment && !directUpdate) {
-        reads = true;
-      }
-    });
-    return reads;
+  const scope: RefIntegrationScope = {
+    derivedBindings: new Set<string>(),
+    integratesCommittedRef: false,
+    refs,
   };
-  const expressionIsRefDerived = (expression: ts.Expression): boolean => {
-    const value = unwrapTransparentExpression(expression);
-    if (ts.isIdentifier(value)) {
-      return derivedBindings.has(value.text);
-    }
-    if (ts.isPropertyAccessExpression(value)) {
-      return (
-        (value.name.text === "current" &&
-          ts.isIdentifier(value.expression) &&
-          refs.has(value.expression.text)) ||
-        expressionIsRefDerived(value.expression)
-      );
-    }
-    if (ts.isElementAccessExpression(value)) {
-      return (
-        expressionIsRefDerived(value.expression) &&
-        (!value.argumentExpression || !containsCallExpression(value.argumentExpression))
-      );
-    }
-    if (!ts.isCallExpression(value)) {
-      return false;
-    }
-    const receiver =
-      ts.isPropertyAccessExpression(value.expression) ||
-      ts.isElementAccessExpression(value.expression)
-        ? value.expression.expression
-        : null;
+  if (ts.isBlock(callback.body)) {
     return (
-      receiver !== null &&
-      expressionIsRefDerived(receiver) &&
-      value.arguments.every((argument) => !containsCallExpression(argument))
+      statementsAreRefIntegration(callback.body.statements, scope) && scope.integratesCommittedRef
     );
-  };
-  const expressionIsRefIntegration = (expression: ts.Expression): boolean => {
+  }
+  return expressionIsRefIntegration(callback.body, scope) && scope.integratesCommittedRef;
+}
+
+function capturesOwnerBinding(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  owner: RuntimeFunctionLike,
+  exempt: ReadonlySet<string>,
+): boolean {
+  const ownerLocals = localBindingNames(owner, callback);
+  const callbackLocals = localBindingNames(callback, null);
+  let captures = false;
+  visit(callback.body, (node) => {
     if (
-      !ts.isCallExpression(expression) ||
-      (!readsCommittedRef(expression) && !expressionIsRefDerived(expression))
+      !captures &&
+      ts.isIdentifier(node) &&
+      ownerLocals.has(node.text) &&
+      !exempt.has(node.text) &&
+      !callbackLocals.has(node.text) &&
+      !isNonValueIdentifier(node)
+    ) {
+      captures = true;
+    }
+  });
+  return captures;
+}
+
+function capturesOwnerSnapshot(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  owner: RuntimeFunctionLike,
+  context: CommittedRefContext,
+): boolean {
+  return capturesOwnerBinding(
+    callback,
+    owner,
+    localCommittedRefBindings(owner, context.useRefBindings, context.reactNamespaces),
+  );
+}
+
+function isCommittedRefRead(child: ts.Node, refs: ReadonlySet<string>): boolean {
+  if (
+    !ts.isPropertyAccessExpression(child) ||
+    child.name.text !== "current" ||
+    !ts.isIdentifier(child.expression) ||
+    !refs.has(child.expression.text)
+  ) {
+    return false;
+  }
+  const { parent } = child;
+  const directAssignment =
+    ts.isBinaryExpression(parent) &&
+    parent.left === child &&
+    isAssignmentOperator(parent.operatorToken.kind);
+  const directUpdate =
+    (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) &&
+    parent.operand === child;
+  return !directAssignment && !directUpdate;
+}
+
+function readsCommittedRef(node: ts.Node, refs: ReadonlySet<string>): boolean {
+  let reads = false;
+  visit(node, (child) => {
+    if (!reads && isCommittedRefRead(child, refs)) {
+      reads = true;
+    }
+  });
+  return reads;
+}
+
+function callResultIsRefDerived(value: ts.CallExpression, scope: RefIntegrationScope): boolean {
+  const receiver =
+    ts.isPropertyAccessExpression(value.expression) ||
+    ts.isElementAccessExpression(value.expression)
+      ? value.expression.expression
+      : null;
+  return (
+    receiver !== null &&
+    expressionIsRefDerived(receiver, scope) &&
+    value.arguments.every((argument) => !containsCallExpression(argument))
+  );
+}
+
+function expressionIsRefDerived(expression: ts.Expression, scope: RefIntegrationScope): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(value)) {
+    return scope.derivedBindings.has(value.text);
+  }
+  if (ts.isPropertyAccessExpression(value)) {
+    return (
+      (value.name.text === "current" &&
+        ts.isIdentifier(value.expression) &&
+        scope.refs.has(value.expression.text)) ||
+      expressionIsRefDerived(value.expression, scope)
+    );
+  }
+  if (ts.isElementAccessExpression(value)) {
+    return (
+      expressionIsRefDerived(value.expression, scope) &&
+      (!value.argumentExpression || !containsCallExpression(value.argumentExpression))
+    );
+  }
+  return ts.isCallExpression(value) && callResultIsRefDerived(value, scope);
+}
+
+function expressionIsRefIntegration(
+  expression: ts.Expression,
+  scope: RefIntegrationScope,
+): boolean {
+  if (
+    !ts.isCallExpression(expression) ||
+    (!readsCommittedRef(expression, scope.refs) && !expressionIsRefDerived(expression, scope))
+  ) {
+    return false;
+  }
+  let safe = true;
+  visit(expression, (node) => {
+    if (
+      safe &&
+      ts.isCallExpression(node) &&
+      !readsCommittedRef(node, scope.refs) &&
+      !expressionIsRefDerived(node, scope)
+    ) {
+      safe = false;
+    }
+  });
+  if (safe) {
+    scope.integratesCommittedRef = true;
+  }
+  return safe;
+}
+
+function statementsAreRefIntegration(
+  statements: readonly ts.Statement[],
+  scope: RefIntegrationScope,
+): boolean {
+  const inheritedBindings = new Set(scope.derivedBindings);
+  const safe =
+    statements.length > 0 &&
+    statements.every((statement) => statementIsRefIntegration(statement, scope));
+  scope.derivedBindings.clear();
+  for (const binding of inheritedBindings) {
+    scope.derivedBindings.add(binding);
+  }
+  return safe;
+}
+
+function constDeclarationsAreRefDerived(
+  statement: ts.VariableStatement,
+  scope: RefIntegrationScope,
+): boolean {
+  if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
+    return false;
+  }
+  for (const declaration of statement.declarationList.declarations) {
+    if (
+      !ts.isIdentifier(declaration.name) ||
+      !declaration.initializer ||
+      !expressionIsRefDerived(declaration.initializer, scope)
     ) {
       return false;
     }
-    let safe = true;
-    visit(expression, (node) => {
-      if (
-        safe &&
-        ts.isCallExpression(node) &&
-        !readsCommittedRef(node) &&
-        !expressionIsRefDerived(node)
-      ) {
-        safe = false;
-      }
-    });
-    if (safe) {
-      integratesCommittedRef = true;
-    }
-    return safe;
-  };
-  const statementsAreRefIntegration = (statements: readonly ts.Statement[]): boolean => {
-    const inheritedBindings = new Set(derivedBindings),
-      safe =
-        statements.length > 0 &&
-        statements.every((statement) => statementIsRefIntegration(statement));
-    derivedBindings.clear();
-    for (const binding of inheritedBindings) {
-      derivedBindings.add(binding);
-    }
-    return safe;
-  };
-  function statementIsRefIntegration(statement: ts.Statement): boolean {
-    if (ts.isBlock(statement)) {
-      return statementsAreRefIntegration(statement.statements);
-    }
-    if (ts.isReturnStatement(statement)) {
-      return statement.expression === undefined;
-    }
-    if (ts.isVariableStatement(statement)) {
-      if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
-        return false;
-      }
-      for (const declaration of statement.declarationList.declarations) {
-        if (
-          !ts.isIdentifier(declaration.name) ||
-          !declaration.initializer ||
-          !expressionIsRefDerived(declaration.initializer)
-        ) {
-          return false;
-        }
-        derivedBindings.add(declaration.name.text);
-      }
-      return true;
-    }
-    if (ts.isIfStatement(statement)) {
-      return (
-        !containsCallExpression(statement.expression) &&
-        statementIsRefIntegration(statement.thenStatement) &&
-        (!statement.elseStatement || statementIsRefIntegration(statement.elseStatement))
-      );
-    }
-    return ts.isExpressionStatement(statement) && expressionIsRefIntegration(statement.expression);
+    scope.derivedBindings.add(declaration.name.text);
   }
-  if (ts.isBlock(callback.body)) {
-    return statementsAreRefIntegration(callback.body.statements) && integratesCommittedRef;
+  return true;
+}
+
+function statementIsRefIntegration(statement: ts.Statement, scope: RefIntegrationScope): boolean {
+  if (ts.isBlock(statement)) {
+    return statementsAreRefIntegration(statement.statements, scope);
   }
-  return expressionIsRefIntegration(callback.body) && integratesCommittedRef;
+  if (ts.isReturnStatement(statement)) {
+    return statement.expression === undefined;
+  }
+  if (ts.isVariableStatement(statement)) {
+    return constDeclarationsAreRefDerived(statement, scope);
+  }
+  if (ts.isIfStatement(statement)) {
+    return (
+      !containsCallExpression(statement.expression) &&
+      statementIsRefIntegration(statement.thenStatement, scope) &&
+      (!statement.elseStatement || statementIsRefIntegration(statement.elseStatement, scope))
+    );
+  }
+  return (
+    ts.isExpressionStatement(statement) && expressionIsRefIntegration(statement.expression, scope)
+  );
 }
 
 function localCommittedRefBindings(
@@ -1038,78 +1322,50 @@ function localCommittedRefBindings(
 }
 
 function importedHookIsUnshadowed(call: ts.CallExpression, owner: RuntimeFunctionLike): boolean {
-  const callee = call.expression;
-  const root = ts.isIdentifier(callee)
-    ? callee
-    : ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)
-      ? callee.expression
-      : null;
+  const root = calleeRootIdentifier(call.expression);
   return root !== null && bindingDeclarationCount(owner, root.text) === 0;
 }
 
 function isSetupOnlyMountCandidate(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   owner: RuntimeFunctionLike,
-  stateBySetter: ReadonlyMap<string, StateCandidate>,
-  moduleScopeBindings: ReadonlySet<string>,
+  context: EffectClassificationContext,
 ): boolean {
-  if (!ts.isBlock(callback.body) || callback.body.statements.length === 0) {
-    return false;
-  }
-  if (callbackCallsKnownSetter(callback, stateBySetter)) {
-    return false;
-  }
   if (
+    !ts.isBlock(callback.body) ||
+    callback.body.statements.length === 0 ||
+    callbackCallsKnownSetter(callback, context.stateBySetter) ||
     !callback.body.statements.every(
       (statement) =>
         ts.isExpressionStatement(statement) && expressionContainsCall(statement.expression),
-    )
+    ) ||
+    hasLifetimeOrUnresolvedSetupCall(callback.body, context.moduleScopeBindings)
   ) {
     return false;
   }
+  return !capturesOwnerBinding(callback, owner, NO_EXEMPT_BINDINGS);
+}
 
-  let callsUnresolvedSetup = false,
-    ownsLifetimeApi = false;
-  visit(callback.body, (node) => {
+function hasLifetimeOrUnresolvedSetupCall(
+  body: ts.Block,
+  moduleScopeBindings: ReadonlySet<string>,
+): boolean {
+  let unresolved = false;
+  visit(body, (node) => {
     if (!ts.isCallExpression(node)) {
       return;
     }
     const callee = node.expression;
-    const name = ts.isIdentifier(callee)
-      ? callee.text
-      : ts.isPropertyAccessExpression(callee)
-        ? callee.name.text
-        : "";
-    if (
-      /^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|addEventListener|subscribe)$/u.test(
-        name,
-      )
-    ) {
-      ownsLifetimeApi = true;
+    if (LIFETIME_API_PATTERN.test(calleeName(callee))) {
+      unresolved = true;
+      return;
     }
     const root = callRootIdentifier(callee);
     if (root && !moduleScopeBindings.has(root) && !KNOWN_GLOBAL_OBJECTS.has(root)) {
-      callsUnresolvedSetup = true;
+      unresolved = true;
     }
   });
-  if (ownsLifetimeApi || callsUnresolvedSetup) {
-    return false;
-  }
-
-  const ownerLocals = localBindingNames(owner, callback);
-  const callbackLocals = localBindingNames(callback, null);
-  let capturesOwnerLocal = false;
-  visit(callback.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      ownerLocals.has(node.text) &&
-      !callbackLocals.has(node.text) &&
-      !isNonValueIdentifier(node)
-    ) {
-      capturesOwnerLocal = true;
-    }
-  });
-  return !capturesOwnerLocal;
+  return unresolved;
 }
 
 function expressionContainsCall(expression: ts.Expression): boolean {
@@ -1126,11 +1382,11 @@ function callbackReadsSynchronously(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   name: string,
 ): boolean {
-  let deferredRead = false,
-    reads = false,
-    shadowed = callback.parameters.some(
-      (parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === name,
-    );
+  let deferredRead = false;
+  let reads = false;
+  let shadowed = callback.parameters.some(
+    (parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === name,
+  );
   visit(callback.body, (node) => {
     if (ts.isIdentifier(node) && isDeclarationName(node) && node.text === name) {
       shadowed = true;
@@ -1145,30 +1401,35 @@ function callbackReadsSynchronously(
       return;
     }
     reads = true;
-    let current: ts.Node | undefined = node.parent;
-    while (current && current !== callback) {
-      if (
-        isRuntimeFunctionLike(current) &&
-        current !== callback &&
-        !isSynchronousEffectCallback(current)
-      ) {
-        deferredRead = true;
-        return;
-      }
-      current = current.parent;
+    if (readIsDeferred(node, callback)) {
+      deferredRead = true;
     }
   });
   return reads && !deferredRead && !shadowed;
 }
 
-function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
-  if (
-    callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
-    callback.asteriskToken
+function readIsDeferred(
+  node: ts.Node,
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+): boolean {
+  for (
+    let current: ts.Node | undefined = node.parent;
+    current && current !== callback;
+    current = current.parent
   ) {
-    return false;
+    if (
+      isRuntimeFunctionLike(current) &&
+      current !== callback &&
+      !isSynchronousEffectCallback(current)
+    ) {
+      return true;
+    }
   }
-  let expression: ts.Node = callback;
+  return false;
+}
+
+function outermostTransparentWrapper(node: ts.Node): ts.Node {
+  let expression = node;
   while (
     ts.isParenthesizedExpression(expression.parent) ||
     ts.isAsExpression(expression.parent) ||
@@ -1178,6 +1439,17 @@ function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
   ) {
     expression = expression.parent;
   }
+  return expression;
+}
+
+function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
+  if (
+    callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    callback.asteriskToken
+  ) {
+    return false;
+  }
+  const expression = outermostTransparentWrapper(callback);
   const call = expression.parent;
   if (!ts.isCallExpression(call)) {
     return false;
@@ -1197,15 +1469,9 @@ function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
   );
 }
 
-function hasSynchronousArrayReceiver(expression: ts.Expression): boolean {
-  const receiver = unwrapTransparentExpression(expression);
-  if (ts.isArrayLiteralExpression(receiver)) {
-    return true;
-  }
-  if (!ts.isIdentifier(receiver)) {
-    return false;
-  }
-
+function soleBindingDeclaration(
+  receiver: ts.Identifier,
+): ts.BindingElement | ts.ParameterDeclaration | ts.VariableDeclaration | null {
   const declarations: (ts.BindingElement | ts.ParameterDeclaration | ts.VariableDeclaration)[] = [];
   visit(receiver.getSourceFile(), (node) => {
     if (
@@ -1216,13 +1482,12 @@ function hasSynchronousArrayReceiver(expression: ts.Expression): boolean {
       declarations.push(node);
     }
   });
-  if (declarations.length !== 1) {
-    return false;
-  }
-  const declaration = declarations[0]!;
-  if (arrayBindingHasDirectOverride(receiver)) {
-    return false;
-  }
+  return declarations.length === 1 ? declarations[0]! : null;
+}
+
+function declarationHasArrayType(
+  declaration: ts.BindingElement | ts.ParameterDeclaration | ts.VariableDeclaration,
+): boolean {
   if (ts.isBindingElement(declaration)) {
     return bindingElementHasArrayType(declaration);
   }
@@ -1234,6 +1499,21 @@ function hasSynchronousArrayReceiver(expression: ts.Expression): boolean {
       declaration.initializer !== undefined &&
       ts.isArrayLiteralExpression(unwrapTransparentExpression(declaration.initializer)))
   );
+}
+
+function hasSynchronousArrayReceiver(expression: ts.Expression): boolean {
+  const receiver = unwrapTransparentExpression(expression);
+  if (ts.isArrayLiteralExpression(receiver)) {
+    return true;
+  }
+  if (!ts.isIdentifier(receiver)) {
+    return false;
+  }
+  const declaration = soleBindingDeclaration(receiver);
+  if (!declaration || arrayBindingHasDirectOverride(receiver)) {
+    return false;
+  }
+  return declarationHasArrayType(declaration);
 }
 
 function arrayBindingHasDirectOverride(receiver: ts.Identifier): boolean {
@@ -1310,51 +1590,35 @@ function isArrayTypeNode(type: ts.TypeNode | undefined): boolean {
 function findPureDerivedSetter(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   dependencies: ts.ArrayLiteralExpression | null,
-  stateBySetter: ReadonlyMap<string, StateCandidate>,
-  usageBySetter: ReadonlyMap<string, StateUsage>,
+  context: EffectClassificationContext,
 ): StateCandidate | null {
   if (!dependencies || dependencies.elements.length === 0) {
     return null;
   }
-  const statements = ts.isBlock(callback.body)
-    ? callback.body.statements
-    : [ts.factory.createExpressionStatement(callback.body)];
-  if (statements.length !== 1) {
+  const call = soleDirectSetterCall(callback, context.stateBySetter);
+  if (!call || !isSoleUnescapedSetterUsage(context.usageBySetter.get(call.expression.text))) {
     return null;
   }
-  const statement = statements[0];
-  if (
-    !statement ||
-    !ts.isExpressionStatement(statement) ||
-    !ts.isCallExpression(statement.expression)
-  ) {
-    return null;
-  }
-  const call = statement.expression;
-  if (
-    !ts.isIdentifier(call.expression) ||
-    !stateBySetter.has(call.expression.text) ||
-    call.arguments.length !== 1
-  ) {
-    return null;
-  }
-  const state = stateBySetter.get(call.expression.text);
-  const usage = usageBySetter.get(call.expression.text);
-  if (
-    !state ||
-    !usage ||
-    usage.setterCalls !== 1 ||
-    usage.setterReferences !== 1 ||
-    usage.escaped ||
-    usage.shadowed
-  ) {
-    return null;
-  }
-  const value = call.arguments[0];
-  if (!value || !isTransparentDerivedValue(value, dependencies)) {
-    return null;
-  }
-  return state;
+  const state = context.stateBySetter.get(call.expression.text);
+  const [value] = call.arguments;
+  return state && value && isTransparentDerivedValue(value, dependencies) ? state : null;
+}
+
+function isSoleUnescapedSetterUsage(usage: StateUsage | undefined): boolean {
+  return (
+    usage !== undefined &&
+    usage.setterCalls === 1 &&
+    usage.setterReferences === 1 &&
+    !usage.escaped &&
+    !usage.shadowed
+  );
+}
+
+interface DerivedInputScan {
+  readonly dependencyTexts: ReadonlySet<string>;
+  hasInput: boolean;
+  inputsMatch: boolean;
+  readonly sourceFile: ts.SourceFile;
 }
 
 function isTransparentDerivedValue(
@@ -1364,52 +1628,62 @@ function isTransparentDerivedValue(
   if (!isPureExpression(value)) {
     return false;
   }
-
   const sourceFile = value.getSourceFile();
-  const dependencyTexts = new Set(
-    dependencies.elements.map((dependency) =>
-      unwrapTransparentExpression(dependency).getText(sourceFile),
+  const scan: DerivedInputScan = {
+    dependencyTexts: new Set(
+      dependencies.elements.map((dependency) =>
+        unwrapTransparentExpression(dependency).getText(sourceFile),
+      ),
     ),
-  );
-  let hasInput = false;
-  let inputsMatch = true;
-  const inspect = (node: ts.Node): void => {
-    if (!inputsMatch) {
-      return;
-    }
-    if (
-      ts.isArrayLiteralExpression(node) ||
-      ts.isObjectLiteralExpression(node) ||
-      ts.isArrowFunction(node) ||
-      ts.isFunctionExpression(node) ||
-      ts.isClassExpression(node) ||
-      ts.isRegularExpressionLiteral(node) ||
-      ts.isTaggedTemplateExpression(node) ||
-      ts.isJsxElement(node) ||
-      ts.isJsxSelfClosingElement(node) ||
-      ts.isJsxFragment(node)
-    ) {
-      inputsMatch = false;
-      return;
-    }
-    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
-      hasInput = true;
-      if (!dependencyTexts.has(unwrapTransparentExpression(node).getText(sourceFile))) {
-        inputsMatch = false;
-      }
-      return;
-    }
-    if (ts.isIdentifier(node) && !isNonValueIdentifier(node)) {
-      hasInput = true;
-      if (!dependencyTexts.has(node.text)) {
-        inputsMatch = false;
-      }
-      return;
-    }
-    node.forEachChild(inspect);
+    hasInput: false,
+    inputsMatch: true,
+    sourceFile,
   };
-  inspect(value);
-  return hasInput && inputsMatch;
+  inspectDerivedInput(value, scan);
+  return scan.hasInput && scan.inputsMatch;
+}
+
+function isOpaqueDerivedInput(node: ts.Node): boolean {
+  return (
+    ts.isArrayLiteralExpression(node) ||
+    ts.isObjectLiteralExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isClassExpression(node) ||
+    ts.isRegularExpressionLiteral(node) ||
+    ts.isTaggedTemplateExpression(node) ||
+    ts.isJsxElement(node) ||
+    ts.isJsxSelfClosingElement(node) ||
+    ts.isJsxFragment(node)
+  );
+}
+
+function derivedInputText(node: ts.Node, sourceFile: ts.SourceFile): string | null {
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+    return unwrapTransparentExpression(node).getText(sourceFile);
+  }
+  return ts.isIdentifier(node) && !isNonValueIdentifier(node) ? node.text : null;
+}
+
+function recordDerivedInput(inputText: string, scan: DerivedInputScan): void {
+  scan.hasInput = true;
+  scan.inputsMatch = scan.dependencyTexts.has(inputText);
+}
+
+function inspectDerivedInput(node: ts.Node, scan: DerivedInputScan): void {
+  if (!scan.inputsMatch) {
+    return;
+  }
+  if (isOpaqueDerivedInput(node)) {
+    scan.inputsMatch = false;
+    return;
+  }
+  const inputText = derivedInputText(node, scan.sourceFile);
+  if (inputText === null) {
+    node.forEachChild((child) => inspectDerivedInput(child, scan));
+    return;
+  }
+  recordDerivedInput(inputText, scan);
 }
 
 interface MutationSiteReset {
@@ -1419,43 +1693,56 @@ interface MutationSiteReset {
 
 function findMutationSiteReset(
   effect: EffectCandidate,
-  stateBySetter: ReadonlyMap<string, StateCandidate>,
-  stateByValue: ReadonlyMap<string, StateCandidate>,
-  usageBySetter: ReadonlyMap<string, StateUsage>,
-  childContracts: ChildContractResolver | null,
+  context: EffectClassificationContext,
 ): MutationSiteReset | null {
-  if (
-    !effect.callback ||
-    !effect.owner ||
-    !effect.dependencies ||
-    effect.dependencies.elements.length === 0
-  ) {
+  const sources = dependencySourceStates(effect, context.stateByValue);
+  if (!effect.callback || !effect.owner || !sources) {
     return null;
   }
-  const sourceNames = effect.dependencies.elements.flatMap((element) =>
+  const target = resetTargetState(effect.callback, effect.owner, context);
+  if (!target || sources.includes(target)) {
+    return null;
+  }
+  return sources.every((source) => setterOnlyMutatesAtEventBoundaries(source, context))
+    ? { sources, target }
+    : null;
+}
+
+function dependencySourceStates(
+  effect: EffectCandidate,
+  stateByValue: ReadonlyMap<string, StateCandidate>,
+): readonly StateCandidate[] | null {
+  const { dependencies, owner } = effect;
+  if (!owner || !dependencies || dependencies.elements.length === 0) {
+    return null;
+  }
+  const sourceNames = dependencies.elements.flatMap((element) =>
     ts.isIdentifier(element) ? [element.text] : [],
   );
-  if (sourceNames.length !== effect.dependencies.elements.length) {
+  if (sourceNames.length !== dependencies.elements.length) {
     return null;
   }
   const sources = sourceNames.flatMap((name) => {
     const state = stateByValue.get(name);
-    return state && state.owner === effect.owner ? [state] : [];
+    return state && state.owner === owner ? [state] : [];
   });
-  if (sources.length !== sourceNames.length || new Set(sources).size !== sources.length) {
-    return null;
-  }
+  return sources.length === sourceNames.length && new Set(sources).size === sources.length
+    ? sources
+    : null;
+}
 
-  const setterCall = soleDirectSetterCall(effect.callback, stateBySetter);
-  if (!setterCall) {
+function resetTargetState(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  owner: RuntimeFunctionLike,
+  context: EffectClassificationContext,
+): StateCandidate | null {
+  const setterCall = soleDirectSetterCall(callback, context.stateBySetter);
+  const target = setterCall ? context.stateBySetter.get(setterCall.expression.text) : undefined;
+  if (!setterCall || !target || target.owner !== owner) {
     return null;
   }
-  const target = stateBySetter.get(setterCall.expression.text);
-  if (!target || target.owner !== effect.owner || sources.includes(target)) {
-    return null;
-  }
-  const initializer = target.call.arguments[0];
-  const reset = setterCall.arguments[0];
+  const [initializer] = target.call.arguments;
+  const [reset] = setterCall.arguments;
   if (
     !initializer ||
     !reset ||
@@ -1464,28 +1751,26 @@ function findMutationSiteReset(
   ) {
     return null;
   }
-  const targetUsage = target.setterName ? usageBySetter.get(target.setterName) : undefined;
-  if (!targetUsage || targetUsage.setterCalls <= targetUsage.effectWrites) {
-    return null;
-  }
+  const targetUsage = target.setterName ? context.usageBySetter.get(target.setterName) : undefined;
+  return targetUsage && targetUsage.setterCalls > targetUsage.effectWrites ? target : null;
+}
 
-  for (const source of sources) {
-    if (!source.setterName) {
-      return null;
-    }
-    const usage = usageBySetter.get(source.setterName);
-    if (
-      !usage ||
-      usage.shadowed ||
-      usage.escaped ||
-      usage.effectWrites > 0 ||
-      usage.setterReferences === 0 ||
-      !allSetterReferencesAreEventBoundaries(source, childContracts)
-    ) {
-      return null;
-    }
+function setterOnlyMutatesAtEventBoundaries(
+  source: StateCandidate,
+  context: EffectClassificationContext,
+): boolean {
+  if (!source.setterName) {
+    return false;
   }
-  return { sources, target };
+  const usage = context.usageBySetter.get(source.setterName);
+  return (
+    usage !== undefined &&
+    !usage.shadowed &&
+    !usage.escaped &&
+    usage.effectWrites === 0 &&
+    usage.setterReferences !== 0 &&
+    allSetterReferencesAreEventBoundaries(source, context.childContracts)
+  );
 }
 
 function isStablePrimitiveReset(expression: ts.Expression): boolean {
@@ -1508,16 +1793,7 @@ function soleDirectSetterCall(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   stateBySetter: ReadonlyMap<string, StateCandidate>,
 ): (ts.CallExpression & { expression: ts.Identifier }) | null {
-  const expression = ts.isBlock(callback.body)
-    ? ((): ts.Expression | null => {
-        const statement = callback.body.statements[0];
-        return callback.body.statements.length === 1 &&
-          statement &&
-          ts.isExpressionStatement(statement)
-          ? statement.expression
-          : null;
-      })()
-    : callback.body;
+  const expression = soleExpressionStatementBody(callback);
   if (
     !expression ||
     !ts.isCallExpression(expression) ||
@@ -1553,45 +1829,69 @@ function allSetterReferencesAreEventBoundaries(
       return;
     }
     references += 1;
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
-    if (!attribute) {
-      valid = false;
-      return;
-    }
-    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
-      const callback = nearestNestedFunction(node, state.owner);
-      if (
-        !jsxAttributeHasProvenEventContract(attribute, childContracts) ||
-        !callback ||
-        !isInsideJsxAttribute(callback, attribute)
-      ) {
-        valid = false;
-      }
-      return;
-    }
-    if (isDirectJsxAttributeExpression(attribute, node)) {
-      if (!jsxAttributeHasProvenEventContract(attribute, childContracts)) {
-        valid = false;
-      }
-      return;
-    }
-    const property = findAncestorUntil(node, ts.isPropertyAssignment, attribute);
-    const opening = jsxOpeningForAttribute(attribute);
-    const target = opening?.tagName.getText() ?? null;
-    const propName = attribute.name.getText();
-    const callbackProperty = property ? staticPropertyName(property.name) : null;
-    if (
-      !property ||
-      property.initializer !== node ||
-      !callbackProperty ||
-      !isValueTransitionProp(callbackProperty) ||
-      !target ||
-      !childContracts?.componentArrayItemCallbackIsDeferred(target, propName, callbackProperty)
-    ) {
+    if (!setterReferenceIsEventBoundary(node, state, childContracts)) {
       valid = false;
     }
   });
   return valid && references > 0;
+}
+
+interface EventBoundaryQuery {
+  readonly attribute: ts.JsxAttribute;
+  readonly childContracts: ChildContractResolver | null;
+  readonly state: StateCandidate;
+}
+
+function setterReferenceIsEventBoundary(
+  node: ts.Identifier,
+  state: StateCandidate,
+  childContracts: ChildContractResolver | null,
+): boolean {
+  const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
+  if (!attribute) {
+    return false;
+  }
+  const query: EventBoundaryQuery = { attribute, childContracts, state };
+  if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+    return handlerCallSiteIsBoundToAttribute(node, query);
+  }
+  if (isDirectJsxAttributeExpression(attribute, node)) {
+    return jsxAttributeHasProvenEventContract(attribute, childContracts);
+  }
+  return isDeferredArrayItemCallbackProperty(node, query);
+}
+
+function handlerCallSiteIsBoundToAttribute(
+  node: ts.Identifier,
+  query: EventBoundaryQuery,
+): boolean {
+  const callback = nearestNestedFunction(node, query.state.owner);
+  if (!callback || !jsxAttributeHasProvenEventContract(query.attribute, query.childContracts)) {
+    return false;
+  }
+  return isInsideJsxAttribute(callback, query.attribute);
+}
+
+function isDeferredArrayItemCallbackProperty(
+  node: ts.Identifier,
+  query: EventBoundaryQuery,
+): boolean {
+  const property = findAncestorUntil(node, ts.isPropertyAssignment, query.attribute);
+  const opening = jsxOpeningForAttribute(query.attribute);
+  const target = opening?.tagName.getText() ?? null;
+  const callbackProperty = property ? staticPropertyName(property.name) : null;
+  return (
+    property !== null &&
+    property.initializer === node &&
+    callbackProperty !== null &&
+    isValueTransitionProp(callbackProperty) &&
+    target !== null &&
+    query.childContracts?.componentArrayItemCallbackIsDeferred(
+      target,
+      query.attribute.name.getText(),
+      callbackProperty,
+    ) === true
+  );
 }
 
 function jsxAttributeHasProvenEventContract(
@@ -1664,11 +1964,7 @@ function isSubscriptionCall(call: ts.CallExpression): boolean {
 }
 
 function isCleanupOnly(callback: ts.ArrowFunction | ts.FunctionExpression): boolean {
-  const expression = ts.isBlock(callback.body)
-    ? callback.body.statements.length === 1 && ts.isReturnStatement(callback.body.statements[0]!)
-      ? callback.body.statements[0]!.expression
-      : undefined
-    : callback.body;
+  const expression = soleReturnStatementBody(callback);
   if (!expression) {
     return false;
   }

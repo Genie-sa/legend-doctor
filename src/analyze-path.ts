@@ -1,55 +1,53 @@
-import { readFile, readdir, stat } from "node:fs/promises";
-import path from "node:path";
-
-import ts from "typescript";
-
-import { unwrapTransparentExpression } from "./analysis-ast.js";
-import { analyzeLegendPracticesFile } from "./analyze-legend-practices.js";
-import { ReactCompilerResolver } from "./react-compiler-package.js";
-import { analyzeSourceFile, findingHookImports } from "./analyze-source.js";
-import { isNonProductionHarness, isRuntimeFunctionLike } from "./ast.js";
-import type { RuntimeFunctionLike } from "./ast.js";
-import {
-  propCallbackIsDeferred,
-  propCallbackRunsOnlyInReactEffect,
-  propDefersArrayItemCallback,
-  propObjectCallbackIsDeferred,
-} from "./rules/child-contract.js";
-import type {
-  CallbackContractSourceResolver,
-  ChildComponentSource,
-  ChildContractResolver,
-} from "./rules/child-contract.js";
-import { sourceHookDefersCallback } from "./rules/source-callback-contract.js";
-import type {
-  SourceHookDeclaration,
-  SourceHookResolver,
-} from "./rules/source-callback-contract.js";
-import { keyedCursorConsumerResult } from "./rules/hook-keyed-cursor-contract.js";
-import { AnalysisCoverageLedger } from "./analysis-coverage.js";
 import type {
   AnalysisCoverageOutcome,
   AnalysisCoverageReport,
   AnalysisCoverageStages,
   AnalysisCoverageTarget,
 } from "./analysis-coverage.js";
-import { AnalysisProject, isSupportedAnalysisFile } from "./analysis-project.js";
 import type { AnalysisDiagnostic, AnalysisFile } from "./analysis-project.js";
-import { createSemanticContext } from "./semantic-context.js";
+import { AnalysisProject, isSupportedAnalysisFile } from "./analysis-project.js";
+import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
+import type {
+  CallbackContractSourceResolver,
+  ChildComponentSource,
+  ChildContractResolver,
+} from "./rules/child-contract.js";
 import type { SemanticContext, SemanticContextDiagnostic } from "./semantic-context.js";
-import { resolveInstalledLegendState } from "./legend-state-package.js";
-import type { InstalledLegendState } from "./legend-state-package.js";
-import { pathIdentityKey } from "./path-identity.js";
+import type {
+  SourceHookDeclaration,
+  SourceHookResolver,
+} from "./rules/source-callback-contract.js";
+import { analyzeSourceFile, findingHookImports } from "./analyze-source.js";
 import {
   collectReactComponentWrappers,
   isReactComponentWrapper,
 } from "./react-component-wrappers.js";
+import { isNonProductionHarness, isRuntimeFunctionLike } from "./ast.js";
+import {
+  propCallbackIsDeferred,
+  propCallbackRunsOnlyInReactEffect,
+  propDefersArrayItemCallback,
+  propObjectCallbackIsDeferred,
+} from "./rules/child-contract.js";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { AnalysisCoverageLedger } from "./analysis-coverage.js";
+import type { InstalledLegendState } from "./legend-state-package.js";
+import { ReactCompilerResolver } from "./react-compiler-package.js";
 import type { ReactComponentWrappers } from "./react-component-wrappers.js";
-import { buildSourceIndexFromFiles } from "./source-components.js";
+import type { RuntimeFunctionLike } from "./ast.js";
 import type { SourceIndex } from "./source-components.js";
-import { StateFlowIndex } from "./state-flow.js";
 import type { StateFlowCoverage } from "./state-flow.js";
-import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
+import { StateFlowIndex } from "./state-flow.js";
+import { analyzeLegendPracticesFile } from "./analyze-legend-practices.js";
+import { buildSourceIndexFromFiles } from "./source-components.js";
+import { createSemanticContext } from "./semantic-context.js";
+import { keyedCursorConsumerResult } from "./rules/hook-keyed-cursor-contract.js";
+import path from "node:path";
+import { pathIdentityKey } from "./path-identity.js";
+import { resolveInstalledLegendState } from "./legend-state-package.js";
+import { sourceHookDefersCallback } from "./rules/source-callback-contract.js";
+import ts from "typescript";
+import { unwrapTransparentExpression } from "./analysis-ast.js";
 
 const IGNORED_DIRECTORIES = new Set([
   ".git",
@@ -62,6 +60,14 @@ const IGNORED_DIRECTORIES = new Set([
   "vendor",
 ]);
 const SOURCE_READ_BATCH_SIZE = 64;
+const HOOK_BINDING_PATTERN = /^use[A-Z0-9]/u;
+
+interface ComponentDeclarationQuery {
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
+  file: string;
+  localName: string;
+  sourceFile: ts.SourceFile;
+}
 
 export interface AnalysisContext {
   installedLegendState: InstalledLegendState | null;
@@ -101,17 +107,7 @@ async function createAnalysisContextFromFiles(
   options: AnalysisContextOptions,
 ): Promise<AnalysisContext> {
   const sources = new Map<string, string>();
-  for (let start = 0; start < files.length; start += SOURCE_READ_BATCH_SIZE) {
-    const batch = files.slice(start, start + SOURCE_READ_BATCH_SIZE);
-    const results = await Promise.allSettled(batch.map((file) => readFile(file, "utf8")));
-    for (let index = 0; index < batch.length; index += 1) {
-      const result = results[index]!;
-      if (result.status === "rejected") {
-        throw result.reason;
-      }
-      sources.set(batch[index]!, result.value);
-    }
-  }
+  await readSourceBatch(files, 0, sources);
   const project = new AnalysisProject(sources);
   const semantic = options.configFilePath
     ? createSemanticContext(project, { configFilePath: options.configFilePath })
@@ -126,14 +122,33 @@ async function createAnalysisContextFromFiles(
   };
 }
 
-export async function analyzePath(
+async function readSourceBatch(
+  files: readonly string[],
+  start: number,
+  sources: Map<string, string>,
+): Promise<void> {
+  if (start >= files.length) {
+    return;
+  }
+  const batch = files.slice(start, start + SOURCE_READ_BATCH_SIZE);
+  const results = await Promise.allSettled(batch.map((file) => readFile(file, "utf8")));
+  for (const [index, result] of results.entries()) {
+    if (result.status === "rejected") {
+      throw result.reason;
+    }
+    sources.set(batch[index]!, result.value);
+  }
+  await readSourceBatch(files, start + SOURCE_READ_BATCH_SIZE, sources);
+}
+
+export function analyzePath(
   targetPath: string,
   sharedContext?: AnalysisContext,
 ): Promise<AnalysisReport> {
   return analyzePathInternal(targetPath, sharedContext, false);
 }
 
-export async function analyzePathDetailed(
+export function analyzePathDetailed(
   targetPath: string,
   sharedContext?: AnalysisContext,
 ): Promise<DetailedAnalysisResult> {
@@ -155,140 +170,271 @@ async function analyzePathInternal(
   sharedContext: AnalysisContext | undefined,
   includeDetails: boolean,
 ): Promise<AnalysisReport | DetailedAnalysisResult> {
-  const absoluteTarget = path.resolve(targetPath);
-  const targetStats = await stat(absoluteTarget);
-  const analysisRoot = targetStats.isDirectory() ? absoluteTarget : path.dirname(absoluteTarget);
-  const files = targetStats.isDirectory()
-    ? await collectSourceFiles(absoluteTarget)
-    : [absoluteTarget];
-  const context =
-    sharedContext ??
-    (targetStats.isDirectory()
-      ? await createAnalysisContextFromFiles(analysisRoot, files, {})
-      : await createAnalysisContext(analysisRoot));
-  const findings: HookFinding[] = [];
-  const practices: LegendPracticeFinding[] = [];
-  const analysisFiles = files.map((file) => {
-    const reportFileName = path.relative(analysisRoot, file) || path.basename(file);
-    if (!isSupportedAnalysisFile(file)) {
-      return { analysisFile: null, file, functionEntries: [], reportFileName };
-    }
-    const analysisFile = context.project.getFile(file);
-    if (!analysisFile) {
-      throw new Error(`analysis context does not own target file: ${reportFileName}`);
-    }
-    return {
-      analysisFile,
-      file,
-      functionEntries: includeDetails ? functionCoverageEntries(analysisFile, reportFileName) : [],
-      reportFileName,
-    };
+  const target = await resolveAnalysisTarget(targetPath);
+  const context = sharedContext ?? (await createTargetContext(target));
+  const entries = analysisFileEntries(target.files, {
+    analysisRoot: target.analysisRoot,
+    context,
+    includeDetails,
   });
-  const coverage = includeDetails
-    ? new AnalysisCoverageLedger(
-        analysisFiles.flatMap((entry) => [
-          { file: entry.reportFileName, kind: "file" as const },
-          ...entry.functionEntries.map((functionEntry) => functionEntry.target),
-        ]),
-      )
-    : null;
-  const diagnostics: AnalysisDiagnostic[] = [];
-  const reactCompiler = new ReactCompilerResolver();
-  for (const { analysisFile, file, functionEntries, reportFileName } of analysisFiles) {
-    if (!analysisFile) {
-      coverage?.record({
-        stages: unsupportedFileCoverage(),
-        target: { file: reportFileName, kind: "file" },
-      });
-      continue;
-    }
-    if (includeDetails) {
-      diagnostics.push(
-        ...analysisFile.parserDiagnostics.map((diagnostic) => ({
-          ...diagnostic,
-          file: reportFileName,
-        })),
-      );
-    }
-    const stateFlow = new StateFlowIndex();
-    const hookImports = findingHookImports(analysisFile);
-    const mayContainPractice = mayContainLegendPractice(analysisFile);
-    const analyzeHooks = hookImports !== null || includeDetails;
-    const analyzePractices = mayContainPractice || includeDetails;
-    const childContracts =
-      analyzeHooks || analyzePractices ? createChildContractResolver(context, file) : null;
-    if (analyzeHooks) {
-      findings.push(
-        ...analyzeSourceFile(
-          analysisFile,
-          reportFileName,
-          context.sourceIndex.componentsFor(file),
-          stateFlow,
-          childContracts,
-          context.sourceIndex.legendValueBridgesFor(file),
-          context.sourceIndex.deferredCallbackHooksFor(file),
-          hookImports ?? undefined,
-        ),
-      );
-    }
-    if (analyzePractices) {
-      const importedObservables = new Set([
-        ...context.sourceIndex.observablesFor(file),
-        ...context.sourceIndex.observablePathsFor(file),
-      ]);
-      const importedObservableFactories = context.sourceIndex.observableFactoriesFor(file);
-      practices.push(
-        ...analyzeLegendPracticesFile(
-          analysisFile,
-          reportFileName,
-          importedObservables,
-          importedObservableFactories,
-          isLegendPracticeEligible(analysisFile, importedObservables, importedObservableFactories),
-          context.installedLegendState,
-          context.sourceIndex.observableKeysFor(file),
-          childContracts,
-          await reactCompiler.packageCompilesFile(file),
-        ),
-      );
-    }
-    if (coverage) {
-      const stages = analyzedFileCoverage(analysisFile, context, functionEntries, stateFlow);
-      coverage.record({
-        stages,
-        target: { file: reportFileName, kind: "file" },
-      });
-      for (const { node, target } of functionEntries) {
-        coverage.record({
-          stages: analyzedFunctionCoverage(analysisFile, context, target, node, stateFlow),
-          target,
-        });
-      }
-    }
-  }
-
-  const states = findings.filter((finding) => finding.hook === "useState").length;
-  const effects = findings.filter((finding) => finding.hook === "useEffect").length;
-  const report: AnalysisReport = {
-    files: files.length,
-    findings,
-    hooks: { effects, states, total: states + effects },
-    practices,
-    schemaVersion: 1,
-  };
+  const coverage = includeDetails ? new AnalysisCoverageLedger(coverageTargets(entries)) : null;
+  const pass = await runAnalysisPass(entries, { context, coverage, includeDetails });
+  const report = analysisReport(target.files.length, pass);
   if (!coverage) {
     return report;
   }
   return {
     coverage: coverage.report(),
     diagnostics: {
-      parser: diagnostics,
+      parser: pass.accumulator.diagnostics,
       semantic: displaySemanticDiagnostics(
         context.semanticDiagnostics,
-        analysisFiles.flatMap((entry) => (entry.analysisFile ? [entry.analysisFile] : [])),
-        analysisRoot,
+        entries.flatMap((entry) => (entry.analysisFile ? [entry.analysisFile] : [])),
+        target.analysisRoot,
       ),
     },
     report,
+  };
+}
+
+interface AnalysisTarget {
+  analysisRoot: string;
+  files: readonly string[];
+  isDirectory: boolean;
+}
+
+async function resolveAnalysisTarget(targetPath: string): Promise<AnalysisTarget> {
+  const absoluteTarget = path.resolve(targetPath);
+  const targetStats = await stat(absoluteTarget);
+  const isDirectory = targetStats.isDirectory();
+  return {
+    analysisRoot: isDirectory ? absoluteTarget : path.dirname(absoluteTarget),
+    files: isDirectory ? await collectSourceFiles(absoluteTarget) : [absoluteTarget],
+    isDirectory,
+  };
+}
+
+function createTargetContext(target: AnalysisTarget): Promise<AnalysisContext> {
+  return target.isDirectory
+    ? createAnalysisContextFromFiles(target.analysisRoot, target.files, {})
+    : createAnalysisContext(target.analysisRoot);
+}
+
+interface AnalysisFileEntry {
+  analysisFile: AnalysisFile | null;
+  file: string;
+  functionEntries: FunctionCoverageEntry[];
+  reportFileName: string;
+}
+
+interface SupportedAnalysisFileEntry extends AnalysisFileEntry {
+  analysisFile: AnalysisFile;
+}
+
+interface AnalysisFileEntryOptions {
+  analysisRoot: string;
+  context: AnalysisContext;
+  includeDetails: boolean;
+}
+
+interface AnalysisPassOptions {
+  context: AnalysisContext;
+  coverage: AnalysisCoverageLedger | null;
+  includeDetails: boolean;
+}
+
+interface AnalysisAccumulator {
+  diagnostics: AnalysisDiagnostic[];
+  findings: HookFinding[];
+  practices: LegendPracticeFinding[];
+}
+
+interface AnalysisPass extends AnalysisPassOptions {
+  accumulator: AnalysisAccumulator;
+  compiledFiles: ReadonlySet<string>;
+}
+
+function analysisFileEntries(
+  files: readonly string[],
+  options: AnalysisFileEntryOptions,
+): AnalysisFileEntry[] {
+  return files.map((file) => {
+    const reportFileName = path.relative(options.analysisRoot, file) || path.basename(file);
+    if (!isSupportedAnalysisFile(file)) {
+      return { analysisFile: null, file, functionEntries: [], reportFileName };
+    }
+    const analysisFile = options.context.project.getFile(file);
+    if (!analysisFile) {
+      throw new Error(`analysis context does not own target file: ${reportFileName}`);
+    }
+    return {
+      analysisFile,
+      file,
+      functionEntries: options.includeDetails
+        ? functionCoverageEntries(analysisFile, reportFileName)
+        : [],
+      reportFileName,
+    };
+  });
+}
+
+function coverageTargets(entries: readonly AnalysisFileEntry[]): AnalysisCoverageTarget[] {
+  return entries.flatMap((entry) => [
+    { file: entry.reportFileName, kind: "file" as const },
+    ...entry.functionEntries.map((functionEntry) => functionEntry.target),
+  ]);
+}
+
+async function runAnalysisPass(
+  entries: readonly AnalysisFileEntry[],
+  options: AnalysisPassOptions,
+): Promise<AnalysisPass> {
+  const pass: AnalysisPass = {
+    ...options,
+    accumulator: { diagnostics: [], findings: [], practices: [] },
+    compiledFiles: await reactCompiledFiles(entries, options.includeDetails),
+  };
+  for (const entry of entries) {
+    analyzeFileEntry(entry, pass);
+  }
+  return pass;
+}
+
+async function reactCompiledFiles(
+  entries: readonly AnalysisFileEntry[],
+  includeDetails: boolean,
+): Promise<ReadonlySet<string>> {
+  const reactCompiler = new ReactCompilerResolver();
+  const candidates = entries.filter(
+    (entry) =>
+      entry.analysisFile !== null &&
+      (includeDetails || mayContainLegendPractice(entry.analysisFile)),
+  );
+  const compiled = await Promise.all(
+    candidates.map(async (entry) => ({
+      compiles: await reactCompiler.packageCompilesFile(entry.file),
+      file: entry.file,
+    })),
+  );
+  return new Set(compiled.filter((entry) => entry.compiles).map((entry) => entry.file));
+}
+
+function analyzeFileEntry(entry: AnalysisFileEntry, pass: AnalysisPass): void {
+  if (!isSupportedEntry(entry)) {
+    pass.coverage?.record({
+      stages: unsupportedFileCoverage(),
+      target: { file: entry.reportFileName, kind: "file" },
+    });
+    return;
+  }
+  if (pass.includeDetails) {
+    pass.accumulator.diagnostics.push(
+      ...entry.analysisFile.parserDiagnostics.map((diagnostic) => ({
+        ...diagnostic,
+        file: entry.reportFileName,
+      })),
+    );
+  }
+  analyzeSupportedFileEntry(entry, pass);
+}
+
+function isSupportedEntry(entry: AnalysisFileEntry): entry is SupportedAnalysisFileEntry {
+  return entry.analysisFile !== null;
+}
+
+function analyzeSupportedFileEntry(entry: SupportedAnalysisFileEntry, pass: AnalysisPass): void {
+  const stateFlow = new StateFlowIndex();
+  const hookImports = findingHookImports(entry.analysisFile);
+  const analyzeHooks = hookImports !== null || pass.includeDetails;
+  const analyzePractices = mayContainLegendPractice(entry.analysisFile) || pass.includeDetails;
+  const childContracts =
+    analyzeHooks || analyzePractices ? createChildContractResolver(pass.context, entry.file) : null;
+  if (analyzeHooks) {
+    pass.accumulator.findings.push(
+      ...analyzeSourceFile(
+        entry.analysisFile,
+        entry.reportFileName,
+        pass.context.sourceIndex.componentsFor(entry.file),
+        stateFlow,
+        childContracts,
+        pass.context.sourceIndex.legendValueBridgesFor(entry.file),
+        pass.context.sourceIndex.deferredCallbackHooksFor(entry.file),
+        hookImports ?? undefined,
+      ),
+    );
+  }
+  if (analyzePractices) {
+    pass.accumulator.practices.push(...legendPracticeFindings(entry, pass, childContracts));
+  }
+  recordEntryCoverage(entry, pass, stateFlow);
+}
+
+function legendPracticeFindings(
+  entry: SupportedAnalysisFileEntry,
+  pass: AnalysisPass,
+  childContracts: ChildContractResolver | null,
+): readonly LegendPracticeFinding[] {
+  const { sourceIndex } = pass.context;
+  const importedObservables = new Set([
+    ...sourceIndex.observablesFor(entry.file),
+    ...sourceIndex.observablePathsFor(entry.file),
+  ]);
+  const importedObservableFactories = sourceIndex.observableFactoriesFor(entry.file);
+  return analyzeLegendPracticesFile(
+    entry.analysisFile,
+    entry.reportFileName,
+    importedObservables,
+    importedObservableFactories,
+    isLegendPracticeEligible(entry.analysisFile, importedObservables, importedObservableFactories),
+    pass.context.installedLegendState,
+    sourceIndex.observableKeysFor(entry.file),
+    childContracts,
+    pass.compiledFiles.has(entry.file),
+  );
+}
+
+function recordEntryCoverage(
+  entry: SupportedAnalysisFileEntry,
+  pass: AnalysisPass,
+  stateFlow: StateFlowIndex,
+): void {
+  const { coverage } = pass;
+  if (!coverage) {
+    return;
+  }
+  coverage.record({
+    stages: analyzedFileCoverage({
+      context: pass.context,
+      file: entry.analysisFile,
+      functionEntries: entry.functionEntries,
+      stateFlow,
+    }),
+    target: { file: entry.reportFileName, kind: "file" },
+  });
+  for (const { node, target } of entry.functionEntries) {
+    coverage.record({
+      stages: analyzedFunctionCoverage({
+        context: pass.context,
+        file: entry.analysisFile,
+        node,
+        stateFlow,
+        target,
+      }),
+      target,
+    });
+  }
+}
+
+function analysisReport(fileCount: number, pass: AnalysisPass): AnalysisReport {
+  const { findings, practices } = pass.accumulator;
+  const states = findings.filter((finding) => finding.hook === "useState").length;
+  const effects = findings.filter((finding) => finding.hook === "useEffect").length;
+  return {
+    files: fileCount,
+    findings,
+    hooks: { effects, states, total: states + effects },
+    practices,
+    schemaVersion: 1,
   };
 }
 
@@ -380,8 +526,8 @@ function isLegendPracticeEligible(
 function mayContainLegendPractice(file: AnalysisFile): boolean {
   const sourceText = file.sourceFile.text;
   return (
-    /\.(?:get|set)\s*\(/.test(sourceText) ||
-    /\b(?:useValue|useSelector|use\$)\s*\(/.test(sourceText)
+    /\.(?:get|set)\s*\(/u.test(sourceText) ||
+    /\b(?:useValue|useSelector|use\$)\s*\(/u.test(sourceText)
   );
 }
 
@@ -397,12 +543,23 @@ function outcome(
   return { reason: { code, message }, status };
 }
 
-function analyzedFileCoverage(
-  file: AnalysisFile,
-  context: AnalysisContext,
-  functionEntries: readonly FunctionCoverageEntry[],
-  stateFlow: StateFlowIndex,
-): AnalysisCoverageStages {
+interface FileCoverageInputs {
+  context: AnalysisContext;
+  file: AnalysisFile;
+  functionEntries: readonly FunctionCoverageEntry[];
+  stateFlow: StateFlowIndex;
+}
+
+interface FunctionCoverageInputs {
+  context: AnalysisContext;
+  file: AnalysisFile;
+  node: RuntimeFunctionLike;
+  stateFlow: StateFlowIndex;
+  target: Extract<AnalysisCoverageTarget, { kind: "function" }>;
+}
+
+function analyzedFileCoverage(inputs: FileCoverageInputs): AnalysisCoverageStages {
+  const { context, file, functionEntries, stateFlow } = inputs;
   const recovered = file.parserDiagnostics.length > 0;
   return {
     detector: recovered
@@ -427,13 +584,8 @@ function analyzedFileCoverage(
   };
 }
 
-function analyzedFunctionCoverage(
-  file: AnalysisFile,
-  context: AnalysisContext,
-  target: Extract<AnalysisCoverageTarget, { kind: "function" }>,
-  node: RuntimeFunctionLike,
-  stateFlow: StateFlowIndex,
-): AnalysisCoverageStages {
+function analyzedFunctionCoverage(inputs: FunctionCoverageInputs): AnalysisCoverageStages {
+  const { context, file, node, stateFlow, target } = inputs;
   const recovered = file.parserDiagnostics.some((diagnostic) =>
     diagnosticAffectsTarget(diagnostic, target),
   );
@@ -565,270 +717,339 @@ function unsupportedFileCoverage(): AnalysisCoverageStages {
   };
 }
 
-async function collectSourceFiles(root: string): Promise<string[]> {
-  const files: string[] = [];
-  async function walk(directory: string): Promise<void> {
-    const entries = await readdir(directory, { withFileTypes: true });
-    entries.sort((left, right) => left.name.localeCompare(right.name));
-    for (const entry of entries) {
-      if (entry.isSymbolicLink()) {
-        continue;
-      }
-      const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (!IGNORED_DIRECTORIES.has(entry.name)) {
-          await walk(entryPath);
+async function collectSourceFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const collected = await Promise.all(
+    entries
+      .toSorted((left, right) => left.name.localeCompare(right.name))
+      .map(async (entry) => {
+        if (entry.isSymbolicLink()) {
+          return [];
         }
-      } else if (entry.isFile() && isSupportedAnalysisFile(entry.name)) {
-        files.push(entryPath);
-      }
-    }
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          return IGNORED_DIRECTORIES.has(entry.name) ? [] : await collectSourceFiles(entryPath);
+        }
+        return entry.isFile() && isSupportedAnalysisFile(entry.name) ? [entryPath] : [];
+      }),
+  );
+  return collected.flat();
+}
+
+function cached(cache: Map<string, boolean>, key: string, compute: () => boolean): boolean {
+  const hit = cache.get(key);
+  if (hit !== undefined) {
+    return hit;
   }
-  await walk(root);
-  return files;
+  const value = compute();
+  cache.set(key, value);
+  return value;
+}
+
+type HookDeclarationRef = NonNullable<ReturnType<SourceIndex["hookDeclarationFor"]>>;
+
+interface KeyedRowConsumerQuery {
+  declaration: HookDeclarationRef;
+  setterProperty: string;
+  stateProperty: string;
+}
+
+class ChildContracts implements ChildContractResolver {
+  private readonly arrayItemCallbackContracts = new Map<string, boolean>();
+  private readonly callbackContracts = new Map<string, boolean>();
+  private readonly componentCallbackContracts = new Map<string, boolean>();
+  private readonly componentEffectCallbackContracts = new Map<string, boolean>();
+  private readonly componentInvocationCallbackContracts = new Map<string, boolean>();
+  private readonly componentSources = new Map<string, ChildComponentSource | null>();
+  private readonly hookDeclarations = new Map<string, SourceHookDeclaration | null>();
+  private readonly keyedCursorContracts = new Map<string, boolean>();
+  private readonly context: AnalysisContext;
+  private readonly importerFile: string;
+  private readonly deferredRegistrations: ReturnType<
+    SourceIndex["deferredCallbackRegistrationsFor"]
+  >;
+
+  private readonly hookResolver: SourceHookResolver = {
+    resolveHook: (file, name) => this.resolveHookDeclaration(file, name),
+  };
+
+  private readonly callbackSources: CallbackContractSourceResolver = {
+    contextReaderHooks: (file, contextName) =>
+      this.context.sourceIndex.contextReaderHooksFor(file, contextName),
+    deferredCallbackHooks: (file) => this.context.sourceIndex.deferredCallbackHooksFor(file),
+    frameworkEventComponent: (file, name) =>
+      this.context.sourceIndex.frameworkEventComponentFor(file, name),
+    hookCallbackIsDeferred: (file, name, argumentIndex) =>
+      this.hookDefersCallback(file, name, argumentIndex),
+    resolveComponent: (file, name) => this.resolveComponentSource(file, name),
+    resolveHook: (file, name) => this.hookComponentSource(file, name),
+    sourceFile: (file) => this.context.project.getFile(file)?.sourceFile ?? null,
+  };
+
+  public constructor(context: AnalysisContext, importerFile: string) {
+    this.context = context;
+    this.importerFile = importerFile;
+    this.deferredRegistrations = context.sourceIndex.deferredCallbackRegistrationsFor(importerFile);
+  }
+
+  public callbackPropertyIsDeferred(
+    hookName: string,
+    argumentIndex: number,
+    property: string,
+  ): boolean {
+    return cached(this.callbackContracts, `${hookName}\0${argumentIndex}\0${property}`, () => {
+      const source = this.resolveHookDeclaration(this.importerFile, hookName);
+      return (
+        source !== null &&
+        sourceHookDefersCallback(source, argumentIndex, property, this.hookResolver)
+      );
+    });
+  }
+
+  public callbackRegistrationIsDeferred(
+    ownerBinding: string,
+    method: string,
+    argumentIndex: number,
+  ): boolean {
+    return this.deferredRegistrations.get(ownerBinding)?.get(method)?.has(argumentIndex) ?? false;
+  }
+
+  public componentArrayItemCallbackIsDeferred(
+    componentName: string,
+    propName: string,
+    callbackProperty: string,
+  ): boolean {
+    return cached(
+      this.arrayItemCallbackContracts,
+      `${componentName}\0${propName}\0${callbackProperty}`,
+      () => {
+        const source = this.resolveComponentSource(this.importerFile, componentName);
+        return (
+          source !== null &&
+          propDefersArrayItemCallback(source, propName, callbackProperty, this.callbackSources)
+        );
+      },
+    );
+  }
+
+  public componentCallbackPropIsDeferred(componentName: string, propName: string): boolean {
+    return cached(this.componentCallbackContracts, `${componentName}\0${propName}\0`, () => {
+      const source = this.resolveComponentSource(this.importerFile, componentName);
+      return source !== null && propCallbackIsDeferred(source, propName, this.callbackSources);
+    });
+  }
+
+  public componentCallbackPropIsDeferredAtInvocation(
+    componentName: string,
+    propName: string,
+    invocation: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  ): boolean {
+    return cached(
+      this.componentInvocationCallbackContracts,
+      `${componentName}\0${propName}\0${invocation.pos}`,
+      () => {
+        const source = this.resolveComponentSource(this.importerFile, componentName);
+        return (
+          source !== null &&
+          propCallbackIsDeferred({ ...source, invocation }, propName, this.callbackSources)
+        );
+      },
+    );
+  }
+
+  public componentCallbackPropRunsOnlyInReactEffect(
+    componentName: string,
+    propName: string,
+  ): boolean {
+    return cached(this.componentEffectCallbackContracts, `${componentName}\0${propName}`, () => {
+      const source = this.resolveComponentSource(this.importerFile, componentName);
+      return source !== null && propCallbackRunsOnlyInReactEffect(source, propName);
+    });
+  }
+
+  public componentPropCallbackIsDeferred(
+    componentName: string,
+    propName: string,
+    callbackProperty: string,
+  ): boolean {
+    return cached(
+      this.componentCallbackContracts,
+      `${componentName}\0${propName}\0${callbackProperty}`,
+      () => {
+        const source = this.resolveComponentSource(this.importerFile, componentName);
+        return (
+          source !== null &&
+          propObjectCallbackIsDeferred(source, propName, callbackProperty, this.callbackSources)
+        );
+      },
+    );
+  }
+
+  public frameworkEventComponent(componentName: string): boolean {
+    return this.context.sourceIndex.frameworkEventComponentFor(this.importerFile, componentName);
+  }
+
+  public hookStateHasKeyedRowConsumer(
+    hookName: string,
+    stateProperty: string,
+    setterProperty: string,
+  ): boolean {
+    return cached(
+      this.keyedCursorContracts,
+      `${hookName}\0${stateProperty}\0${setterProperty}`,
+      () => this.hasSingleKeyedRowConsumer(hookName, stateProperty, setterProperty),
+    );
+  }
+
+  public pureProjectionBindings(): ReadonlySet<string> {
+    return this.context.sourceIndex.pureProjectionsFor(this.importerFile);
+  }
+
+  public resolveComponent(name: string): ChildComponentSource | null {
+    return this.resolveComponentSource(this.importerFile, name);
+  }
+
+  private hookDefersCallback(file: string, name: string, argumentIndex: number): boolean {
+    const source = this.resolveHookDeclaration(file, name);
+    return (
+      source !== null && sourceHookDefersCallback(source, argumentIndex, null, this.hookResolver)
+    );
+  }
+
+  private hookComponentSource(file: string, name: string): ChildComponentSource | null {
+    const source = this.resolveHookDeclaration(file, name);
+    if (!source?.owner.body) {
+      return null;
+    }
+    return {
+      ...source,
+      body: source.owner.body,
+      deferredCallbackHooks: this.context.sourceIndex.deferredCallbackHooksFor(source.file),
+    };
+  }
+
+  private resolveHookDeclaration(file: string, name: string): SourceHookDeclaration | null {
+    const key = `${file}\0${name}`;
+    const hit = this.hookDeclarations.get(key);
+    if (hit !== undefined) {
+      return hit;
+    }
+    const declaration = this.readHookDeclaration(file, name);
+    this.hookDeclarations.set(key, declaration);
+    return declaration;
+  }
+
+  private readHookDeclaration(file: string, name: string): SourceHookDeclaration | null {
+    const resolved = this.context.sourceIndex.hookDeclarationFor(file, name);
+    const analysisFile = resolved ? this.context.project.getFile(resolved.file) : null;
+    if (!resolved || !analysisFile) {
+      return null;
+    }
+    const owner = findHookDeclaration(analysisFile.sourceFile, resolved.localName);
+    return owner ? { file: resolved.file, owner, sourceFile: analysisFile.sourceFile } : null;
+  }
+
+  private resolveComponentSource(file: string, name: string): ChildComponentSource | null {
+    const key = `${file}\0${name}`;
+    const hit = this.componentSources.get(key);
+    if (hit !== undefined) {
+      return hit;
+    }
+    const source = this.readComponentSource(file, name);
+    this.componentSources.set(key, source);
+    return source;
+  }
+
+  private readComponentSource(file: string, name: string): ChildComponentSource | null {
+    const resolved = this.context.sourceIndex.componentDeclarationFor(file, name);
+    const analysisFile = resolved ? this.context.project.getFile(resolved.file) : null;
+    if (!resolved || !analysisFile) {
+      return null;
+    }
+    return findComponentDeclaration({
+      deferredCallbackHooks: this.context.sourceIndex.deferredCallbackHooksFor(resolved.file),
+      file: resolved.file,
+      localName: resolved.localName,
+      sourceFile: analysisFile.sourceFile,
+    });
+  }
+
+  private hasSingleKeyedRowConsumer(
+    hookName: string,
+    stateProperty: string,
+    setterProperty: string,
+  ): boolean {
+    const declaration = this.context.sourceIndex.hookDeclarationFor(this.importerFile, hookName);
+    if (!declaration) {
+      return false;
+    }
+    const query: KeyedRowConsumerQuery = { declaration, setterProperty, stateProperty };
+    const results = this.context.project.files
+      .filter((file) => !isNonProductionHarness(file.originalPath))
+      .flatMap((file) => this.keyedCursorResults(file, query));
+    return (
+      !results.includes("unsafe") && results.filter((result) => result === "safe").length === 1
+    );
+  }
+
+  private keyedCursorResults(
+    file: AnalysisFile,
+    query: KeyedRowConsumerQuery,
+  ): ReturnType<typeof keyedCursorConsumerResult>[] {
+    return importedHookBindings(file.sourceFile)
+      .filter((binding) => this.bindingResolvesTo(file, binding, query.declaration))
+      .map((binding) =>
+        keyedCursorConsumerResult(
+          file.sourceFile,
+          binding,
+          query.stateProperty,
+          query.setterProperty,
+        ),
+      );
+  }
+
+  private bindingResolvesTo(
+    file: AnalysisFile,
+    binding: string,
+    declaration: HookDeclarationRef,
+  ): boolean {
+    const resolved = this.context.sourceIndex.hookDeclarationFor(file.identityPath, binding);
+    return (
+      resolved !== null &&
+      pathIdentityKey(resolved.file) === pathIdentityKey(declaration.file) &&
+      resolved.localName === declaration.localName
+    );
+  }
 }
 
 function createChildContractResolver(
   context: AnalysisContext,
   importerFile: string,
 ): ChildContractResolver {
-  const callbackContracts = new Map<string, boolean>();
-  const arrayItemCallbackContracts = new Map<string, boolean>();
-  const componentCallbackContracts = new Map<string, boolean>();
-  const componentInvocationCallbackContracts = new Map<string, boolean>();
-  const componentEffectCallbackContracts = new Map<string, boolean>();
-  const componentSources = new Map<string, ChildComponentSource | null>();
-  const keyedCursorContracts = new Map<string, boolean>();
-  const hookSources = new Map<string, SourceHookDeclaration | null>();
-  const hookResolver: SourceHookResolver = {
-    resolveHook(file: string, name: string): SourceHookDeclaration | null {
-      const key = `${file}\0${name}`;
-      if (hookSources.has(key)) {
-        return hookSources.get(key) ?? null;
-      }
-      const resolved = context.sourceIndex.hookDeclarationFor(file, name);
-      if (!resolved) {
-        hookSources.set(key, null);
-        return null;
-      }
-      const analysisFile = context.project.getFile(resolved.file);
-      if (!analysisFile) {
-        hookSources.set(key, null);
-        return null;
-      }
-      const owner = findHookDeclaration(analysisFile.sourceFile, resolved.localName),
-        source = owner ? { file: resolved.file, owner, sourceFile: analysisFile.sourceFile } : null;
-      hookSources.set(key, source);
-      return source;
-    },
-  };
-  const resolveComponent = (file: string, name: string): ChildComponentSource | null => {
-    const key = `${file}\0${name}`;
-    if (componentSources.has(key)) {
-      return componentSources.get(key) ?? null;
-    }
-    const resolved = context.sourceIndex.componentDeclarationFor(file, name);
-    if (!resolved) {
-      componentSources.set(key, null);
-      return null;
-    }
-    const analysisFile = context.project.getFile(resolved.file),
-      source = analysisFile
-        ? findComponentDeclaration(
-            analysisFile.sourceFile,
-            resolved.file,
-            resolved.localName,
-            context.sourceIndex.deferredCallbackHooksFor(resolved.file),
-          )
-        : null;
-    componentSources.set(key, source);
-    return source;
-  };
-  const callbackSourceResolver: CallbackContractSourceResolver = {
-    contextReaderHooks(file, contextName) {
-      return context.sourceIndex.contextReaderHooksFor(file, contextName);
-    },
-    deferredCallbackHooks(file) {
-      return context.sourceIndex.deferredCallbackHooksFor(file);
-    },
-    frameworkEventComponent(file, name) {
-      return context.sourceIndex.frameworkEventComponentFor(file, name);
-    },
-    hookCallbackIsDeferred(file, name, argumentIndex): boolean {
-      const source = hookResolver.resolveHook(file, name);
-      return source !== null && sourceHookDefersCallback(source, argumentIndex, null, hookResolver);
-    },
-    resolveComponent,
-    resolveHook(file, name): ChildComponentSource | null {
-      const source = hookResolver.resolveHook(file, name);
-      if (!source?.owner.body) {
-        return null;
-      }
-      return {
-        ...source,
-        body: source.owner.body,
-        deferredCallbackHooks: context.sourceIndex.deferredCallbackHooksFor(source.file),
-      };
-    },
-    sourceFile(file): ts.SourceFile | null {
-      return context.project.getFile(file)?.sourceFile ?? null;
-    },
-  };
-  const deferredRegistrations = context.sourceIndex.deferredCallbackRegistrationsFor(importerFile);
-  return {
-    callbackPropertyIsDeferred(hookName, argumentIndex, property): boolean {
-      const key = `${hookName}\0${argumentIndex}\0${property}`;
-      const cached = callbackContracts.get(key);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const source = hookResolver.resolveHook(importerFile, hookName);
-      const deferred =
-        source !== null && sourceHookDefersCallback(source, argumentIndex, property, hookResolver);
-      callbackContracts.set(key, deferred);
-      return deferred;
-    },
-    callbackRegistrationIsDeferred(ownerBinding, method, argumentIndex): boolean {
-      return deferredRegistrations.get(ownerBinding)?.get(method)?.has(argumentIndex) ?? false;
-    },
-    componentArrayItemCallbackIsDeferred(componentName, propName, callbackProperty): boolean {
-      const key = `${componentName}\0${propName}\0${callbackProperty}`;
-      const cached = arrayItemCallbackContracts.get(key);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const source = resolveComponent(importerFile, componentName);
-      const deferred =
-        source !== null &&
-        propDefersArrayItemCallback(source, propName, callbackProperty, callbackSourceResolver);
-      arrayItemCallbackContracts.set(key, deferred);
-      return deferred;
-    },
-    componentCallbackPropIsDeferred(componentName, propName): boolean {
-      const key = `${componentName}\0${propName}\0`;
-      const cached = componentCallbackContracts.get(key);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const source = resolveComponent(importerFile, componentName);
-      const deferred =
-        source !== null && propCallbackIsDeferred(source, propName, callbackSourceResolver);
-      componentCallbackContracts.set(key, deferred);
-      return deferred;
-    },
-    componentCallbackPropIsDeferredAtInvocation(componentName, propName, invocation): boolean {
-      const key = `${componentName}\0${propName}\0${invocation.pos}`;
-      const cached = componentInvocationCallbackContracts.get(key);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const source = resolveComponent(importerFile, componentName);
-      const deferred =
-        source !== null &&
-        propCallbackIsDeferred({ ...source, invocation }, propName, callbackSourceResolver);
-      componentInvocationCallbackContracts.set(key, deferred);
-      return deferred;
-    },
-    componentCallbackPropRunsOnlyInReactEffect(componentName, propName): boolean {
-      const key = `${componentName}\0${propName}`;
-      const cached = componentEffectCallbackContracts.get(key);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const source = resolveComponent(importerFile, componentName);
-      const effectOnly = source !== null && propCallbackRunsOnlyInReactEffect(source, propName);
-      componentEffectCallbackContracts.set(key, effectOnly);
-      return effectOnly;
-    },
-    componentPropCallbackIsDeferred(componentName, propName, callbackProperty): boolean {
-      const key = `${componentName}\0${propName}\0${callbackProperty}`;
-      const cached = componentCallbackContracts.get(key);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const source = resolveComponent(importerFile, componentName);
-      const deferred =
-        source !== null &&
-        propObjectCallbackIsDeferred(source, propName, callbackProperty, callbackSourceResolver);
-      componentCallbackContracts.set(key, deferred);
-      return deferred;
-    },
-    frameworkEventComponent(componentName): boolean {
-      return context.sourceIndex.frameworkEventComponentFor(importerFile, componentName);
-    },
-    hookStateHasKeyedRowConsumer(hookName, stateProperty, setterProperty): boolean {
-      const key = `${hookName}\0${stateProperty}\0${setterProperty}`;
-      const cached = keyedCursorContracts.get(key);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const declaration = context.sourceIndex.hookDeclarationFor(importerFile, hookName);
-      if (!declaration) {
-        keyedCursorContracts.set(key, false);
-        return false;
-      }
-      let safeConsumers = 0;
-      let unsafe = false;
-      for (const file of context.project.files) {
-        if (isNonProductionHarness(file.originalPath)) {
-          continue;
-        }
-        for (const binding of importedHookBindings(file.sourceFile)) {
-          const resolved = context.sourceIndex.hookDeclarationFor(file.identityPath, binding);
-          if (
-            !resolved ||
-            pathIdentityKey(resolved.file) !== pathIdentityKey(declaration.file) ||
-            resolved.localName !== declaration.localName
-          ) {
-            continue;
-          }
-          const result = keyedCursorConsumerResult(
-            file.sourceFile,
-            binding,
-            stateProperty,
-            setterProperty,
-          );
-          if (result === "safe") {
-            safeConsumers += 1;
-          }
-          if (result === "unsafe") {
-            unsafe = true;
-          }
-        }
-      }
-      const safe = !unsafe && safeConsumers === 1;
-      keyedCursorContracts.set(key, safe);
-      return safe;
-    },
-    pureProjectionBindings(): ReadonlySet<string> {
-      return context.sourceIndex.pureProjectionsFor(importerFile);
-    },
-    resolveComponent(name: string): ChildComponentSource | null {
-      return resolveComponent(importerFile, name);
-    },
-  };
+  return new ChildContracts(context, importerFile);
 }
 
 function importedHookBindings(sourceFile: ts.SourceFile): readonly string[] {
-  const bindings: string[] = [];
-  for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || statement.importClause?.isTypeOnly) {
-      continue;
-    }
-    const clause = statement.importClause;
-    if (clause?.name && /^use[A-Z0-9]/.test(clause.name.text)) {
-      bindings.push(clause.name.text);
-    }
-    if (!clause?.namedBindings || !ts.isNamedImports(clause.namedBindings)) {
-      continue;
-    }
-    for (const element of clause.namedBindings.elements) {
-      if (!element.isTypeOnly && /^use[A-Z0-9]/.test(element.name.text)) {
-        bindings.push(element.name.text);
-      }
-    }
+  return sourceFile.statements.flatMap((statement) => statementHookBindings(statement));
+}
+
+function statementHookBindings(statement: ts.Statement): string[] {
+  if (!ts.isImportDeclaration(statement) || statement.importClause?.isTypeOnly) {
+    return [];
   }
-  return bindings;
+  const clause = statement.importClause;
+  const defaultBinding =
+    clause?.name && HOOK_BINDING_PATTERN.test(clause.name.text) ? [clause.name.text] : [];
+  return [...defaultBinding, ...namedHookBindings(clause?.namedBindings)];
+}
+
+function namedHookBindings(namedBindings: ts.NamedImportBindings | undefined): string[] {
+  if (!namedBindings || !ts.isNamedImports(namedBindings)) {
+    return [];
+  }
+  return namedBindings.elements
+    .filter((element) => !element.isTypeOnly && HOOK_BINDING_PATTERN.test(element.name.text))
+    .map((element) => element.name.text);
 }
 
 function findHookDeclaration(
@@ -836,81 +1057,114 @@ function findHookDeclaration(
   localName: string,
 ): SourceHookDeclaration["owner"] | null {
   for (const statement of sourceFile.statements) {
-    if (
-      ts.isFunctionDeclaration(statement) &&
-      statement.name?.text === localName &&
-      statement.body
-    ) {
-      return statement;
-    }
-    if (!ts.isVariableStatement(statement)) {
-      continue;
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        !ts.isIdentifier(declaration.name) ||
-        declaration.name.text !== localName ||
-        !declaration.initializer
-      ) {
-        continue;
-      }
-      const initializer = unwrapTransparentExpression(declaration.initializer);
-      if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
-        return initializer;
-      }
+    const owner = statementHookOwner(statement, localName);
+    if (owner) {
+      return owner;
     }
   }
   return null;
 }
 
-function findComponentDeclaration(
-  sourceFile: ts.SourceFile,
-  file: string,
+function statementHookOwner(
+  statement: ts.Statement,
   localName: string,
-  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
-): ChildComponentSource | null {
-  const reactWrappers = collectReactComponentWrappers(sourceFile);
-  for (const statement of sourceFile.statements) {
-    if (
-      ts.isFunctionDeclaration(statement) &&
-      statement.name?.text === localName &&
-      statement.body
-    ) {
-      return {
-        body: statement.body,
-        deferredCallbackHooks,
-        file,
-        owner: statement,
-        reactWrapped: false,
-      };
-    }
-    if (!ts.isVariableStatement(statement)) {
-      continue;
-    }
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== localName) {
-        continue;
-      }
-      if (!declaration.initializer) {
-        continue;
-      }
-      let initializer = unwrapTransparentExpression(declaration.initializer);
-      const wrapped = wrapperRenderFunction(initializer, reactWrappers);
-      if (wrapped) {
-        initializer = wrapped;
-      }
-      if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
-        return {
-          body: initializer.body,
-          deferredCallbackHooks,
-          file,
-          owner: initializer,
-          reactWrapped: wrapped !== null,
-        };
-      }
+): SourceHookDeclaration["owner"] | null {
+  if (ts.isFunctionDeclaration(statement)) {
+    return statement.name?.text === localName && statement.body ? statement : null;
+  }
+  if (!ts.isVariableStatement(statement)) {
+    return null;
+  }
+  for (const declaration of statement.declarationList.declarations) {
+    const owner = declarationHookOwner(declaration, localName);
+    if (owner) {
+      return owner;
     }
   }
   return null;
+}
+
+function declarationHookOwner(
+  declaration: ts.VariableDeclaration,
+  localName: string,
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  if (
+    !ts.isIdentifier(declaration.name) ||
+    declaration.name.text !== localName ||
+    !declaration.initializer
+  ) {
+    return null;
+  }
+  const initializer = unwrapTransparentExpression(declaration.initializer);
+  return ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)
+    ? initializer
+    : null;
+}
+
+function findComponentDeclaration(query: ComponentDeclarationQuery): ChildComponentSource | null {
+  const reactWrappers = collectReactComponentWrappers(query.sourceFile);
+  for (const statement of query.sourceFile.statements) {
+    const source = statementComponentSource(statement, query, reactWrappers);
+    if (source) {
+      return source;
+    }
+  }
+  return null;
+}
+
+function statementComponentSource(
+  statement: ts.Statement,
+  query: ComponentDeclarationQuery,
+  reactWrappers: ReactComponentWrappers,
+): ChildComponentSource | null {
+  if (ts.isFunctionDeclaration(statement)) {
+    return statement.name?.text === query.localName && statement.body
+      ? {
+          body: statement.body,
+          deferredCallbackHooks: query.deferredCallbackHooks,
+          file: query.file,
+          owner: statement,
+          reactWrapped: false,
+        }
+      : null;
+  }
+  if (!ts.isVariableStatement(statement)) {
+    return null;
+  }
+  for (const declaration of statement.declarationList.declarations) {
+    const source = declarationComponentSource(declaration, query, reactWrappers);
+    if (source) {
+      return source;
+    }
+  }
+  return null;
+}
+
+function declarationComponentSource(
+  declaration: ts.VariableDeclaration,
+  query: ComponentDeclarationQuery,
+  reactWrappers: ReactComponentWrappers,
+): ChildComponentSource | null {
+  if (
+    !ts.isIdentifier(declaration.name) ||
+    declaration.name.text !== query.localName ||
+    !declaration.initializer
+  ) {
+    return null;
+  }
+  const unwrapped = unwrapTransparentExpression(declaration.initializer);
+  const wrapped = wrapperRenderFunction(unwrapped, reactWrappers);
+  const initializer = wrapped ?? unwrapped;
+  if (!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer)) {
+    return null;
+  }
+  return {
+    body: initializer.body,
+    deferredCallbackHooks: query.deferredCallbackHooks,
+    file: query.file,
+    owner: initializer,
+    reactWrapped: wrapped !== null,
+  };
 }
 
 function wrapperRenderFunction(

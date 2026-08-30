@@ -1,14 +1,13 @@
-import ts from "typescript";
-
 import {
   containsElementAccess,
   staticPathHasBinding,
   staticPropertyPath,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
-import { visit } from "../ast.js";
 import type { LegendPracticeFinding } from "../types.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "./observable-reads.js";
+import ts from "typescript";
+import { visit } from "../ast.js";
 
 export function findObservableTogglePractices(
   sourceFile: ts.SourceFile,

@@ -1,10 +1,10 @@
-import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+
+import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
-
 import { resolveInstalledLegendState } from "../src/legend-state-package.js";
+import test from "node:test";
 
 async function writeInstalledPackage<Manifest extends object>(
   root: string,

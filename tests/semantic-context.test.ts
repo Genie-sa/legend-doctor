@@ -1,14 +1,12 @@
-import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { AnalysisProject } from "../src/analysis-project.js";
+import type { TestContext } from "node:test";
+import assert from "node:assert/strict";
+import { createSemanticContext } from "../src/semantic-context.js";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { TestContext } from "node:test";
-
 import ts from "typescript";
-
-import { AnalysisProject } from "../src/analysis-project.js";
-import { createSemanticContext } from "../src/semantic-context.js";
 
 function temporaryDirectory(testContext: TestContext): string {
   const directory = mkdtempSync(path.join(os.tmpdir(), "legend-doctor-semantic-"));

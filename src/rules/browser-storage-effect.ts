@@ -1,13 +1,12 @@
-import ts from "typescript";
-
 import {
   bindingDeclarationCount,
   isAssignmentOperator,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
-import { visit } from "../ast.js";
 import type { EffectCandidate } from "../analyze-source.js";
 import type { RuntimeFunctionLike } from "../ast.js";
+import ts from "typescript";
+import { visit } from "../ast.js";
 
 export function isDependencyDrivenBrowserStorageEffect(effect: EffectCandidate): boolean {
   const { callback, dependencies, owner } = effect;
@@ -27,33 +26,49 @@ export function isDependencyDrivenBrowserStorageEffect(effect: EffectCandidate):
       return statement.statements.every(statementIsSafe);
     }
     if (ts.isIfStatement(statement)) {
-      return (
-        isSafeStorageExpression(statement.expression, owner) &&
-        statementIsSafe(statement.thenStatement) &&
-        (!statement.elseStatement || statementIsSafe(statement.elseStatement))
-      );
+      return isSafeStorageBranch(statement, owner, statementIsSafe);
     }
     if (ts.isReturnStatement(statement)) {
       return statement.expression === undefined;
     }
-    if (!ts.isExpressionStatement(statement)) {
-      return false;
-    }
-    const expression = unwrapTransparentExpression(
-      ts.isVoidExpression(statement.expression)
-        ? statement.expression.expression
-        : statement.expression,
-    );
-    if (!ts.isCallExpression(expression) || !isBrowserStorageMutation(expression, owner)) {
-      return false;
-    }
-    if (!expression.arguments.every((argument) => isSafeStorageExpression(argument, owner))) {
+    if (
+      !ts.isExpressionStatement(statement) ||
+      !isBrowserStorageMutationStatement(statement, owner)
+    ) {
       return false;
     }
     storageMutations += 1;
     return true;
   };
   return callback.body.statements.every(statementIsSafe) && storageMutations > 0;
+}
+
+function isSafeStorageBranch(
+  statement: ts.IfStatement,
+  owner: RuntimeFunctionLike,
+  statementIsSafe: (statement: ts.Statement) => boolean,
+): boolean {
+  return (
+    isSafeStorageExpression(statement.expression, owner) &&
+    statementIsSafe(statement.thenStatement) &&
+    (!statement.elseStatement || statementIsSafe(statement.elseStatement))
+  );
+}
+
+function isBrowserStorageMutationStatement(
+  statement: ts.ExpressionStatement,
+  owner: RuntimeFunctionLike,
+): boolean {
+  const expression = unwrapTransparentExpression(
+    ts.isVoidExpression(statement.expression)
+      ? statement.expression.expression
+      : statement.expression,
+  );
+  return (
+    ts.isCallExpression(expression) &&
+    isBrowserStorageMutation(expression, owner) &&
+    expression.arguments.every((argument) => isSafeStorageExpression(argument, owner))
+  );
 }
 
 function isSafeStorageExpression(expression: ts.Expression, owner: RuntimeFunctionLike): boolean {

@@ -1,7 +1,7 @@
+import type { LegendPracticeFinding } from "../src/types.js";
+import { analyzeLegendPractices } from "../src/analyze-legend-practices.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { analyzeLegendPractices } from "../src/analyze-legend-practices.js";
 
 const requireValue = <Value>(value: Value | undefined): Value => {
   assert.ok(value);
@@ -101,7 +101,7 @@ test("replaces exact boolean updater on a typed observable", () => {
 });
 
 test("keeps observable writes when an exact untracked boolean flip is not proven", () => {
-  const source = (statement: string) =>
+  const source = (statement: string): LegendPracticeFinding[] =>
     analyzeLegendPractices(
       `
     import { observable } from "@legendapp/state";
@@ -849,7 +849,7 @@ test("uses cross-file observable provenance for event snapshots", () => {
 });
 
 test("keeps computed, shallow, dynamic, and unproven useValue selectors", () => {
-  const source = (selector: string) =>
+  const source = (selector: string): LegendPracticeFinding[] =>
     analyzeLegendPractices(
       `
     import { observable } from "@legendapp/state";
@@ -1427,7 +1427,7 @@ test("tracks typed aliases of source-proven observable member paths", () => {
 });
 
 test("does not infer mutable, nullable, reserved, or unproven observable aliases", () => {
-  const source = (declarations: string, expression: string) =>
+  const source = (declarations: string, expression: string): LegendPracticeFinding[] =>
     analyzeLegendPractices(
       `
     import { observable } from "@legendapp/state";
@@ -1535,7 +1535,7 @@ test("narrows optional raw-value reads only when they share one static child pat
 });
 
 test("keeps broad useValue reads when the child subscription is not proven equivalent", () => {
-  const source = (body: string) =>
+  const source = (body: string): LegendPracticeFinding[] =>
     analyzeLegendPractices(
       `
     import { observable } from "@legendapp/state";
@@ -1581,7 +1581,7 @@ test("keeps array length as a selector concern rather than an observable child",
 });
 
 test("keeps multi-property, defaulted, and rest useValue destructures", () => {
-  const source = (binding: string) =>
+  const source = (binding: string): LegendPracticeFinding[] =>
     analyzeLegendPractices(
       `
     import { observable } from "@legendapp/state";

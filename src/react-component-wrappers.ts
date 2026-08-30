@@ -11,32 +11,9 @@ export function collectReactComponentWrappers(sourceFile: ts.SourceFile): ReactC
   const names = new Set<string>();
   const namespaces = new Set<string>();
   for (const statement of sourceFile.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      statement.moduleSpecifier.text !== "react"
-    ) {
-      continue;
-    }
-    const clause = statement.importClause;
-    if (!clause || clause.isTypeOnly) {
-      continue;
-    }
-    if (clause.name) {
-      namespaces.add(clause.name.text);
-    }
-    if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
-      namespaces.add(clause.namedBindings.name.text);
-    } else if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
-      for (const element of clause.namedBindings.elements) {
-        if (element.isTypeOnly) {
-          continue;
-        }
-        const imported = element.propertyName?.text ?? element.name.text;
-        if (imported === "memo" || imported === "forwardRef") {
-          names.add(element.name.text);
-        }
-      }
+    const clause = reactImportClause(statement);
+    if (clause) {
+      collectWrapperBindings(clause, names, namespaces);
     }
   }
   addConstAliases(sourceFile, names);
@@ -55,31 +32,88 @@ export function isReactComponentWrapper(
         (expression.name.text === "memo" || expression.name.text === "forwardRef");
 }
 
+function reactImportClause(statement: ts.Statement): ts.ImportClause | null {
+  if (
+    !ts.isImportDeclaration(statement) ||
+    !ts.isStringLiteral(statement.moduleSpecifier) ||
+    statement.moduleSpecifier.text !== "react"
+  ) {
+    return null;
+  }
+  const clause = statement.importClause;
+  return clause && !clause.isTypeOnly ? clause : null;
+}
+
+function collectWrapperBindings(
+  clause: ts.ImportClause,
+  names: Set<string>,
+  namespaces: Set<string>,
+): void {
+  if (clause.name) {
+    namespaces.add(clause.name.text);
+  }
+  const { namedBindings } = clause;
+  if (!namedBindings) {
+    return;
+  }
+  if (ts.isNamespaceImport(namedBindings)) {
+    namespaces.add(namedBindings.name.text);
+    return;
+  }
+  collectWrapperNames(namedBindings, names);
+}
+
+function collectWrapperNames(namedImports: ts.NamedImports, names: Set<string>): void {
+  for (const element of namedImports.elements) {
+    if (element.isTypeOnly) {
+      continue;
+    }
+    const imported = element.propertyName?.text ?? element.name.text;
+    if (imported === "memo" || imported === "forwardRef") {
+      names.add(element.name.text);
+    }
+  }
+}
+
 function addConstAliases(sourceFile: ts.SourceFile, wrappers: Set<string>): void {
   let changed = true;
   while (changed) {
     changed = false;
     for (const statement of sourceFile.statements) {
-      if (
-        !ts.isVariableStatement(statement) ||
-        (statement.declarationList.flags & ts.NodeFlags.Const) === 0
-      ) {
+      if (!isConstVariableStatement(statement)) {
         continue;
       }
       for (const declaration of statement.declarationList.declarations) {
-        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
-          continue;
-        }
-        const source = unwrapTransparentExpression(declaration.initializer);
-        if (
-          ts.isIdentifier(source) &&
-          wrappers.has(source.text) &&
-          !wrappers.has(declaration.name.text)
-        ) {
-          wrappers.add(declaration.name.text);
+        if (addAliasForWrappedInitializer(declaration, wrappers)) {
           changed = true;
         }
       }
     }
   }
+}
+
+function isConstVariableStatement(statement: ts.Statement): statement is ts.VariableStatement {
+  return (
+    ts.isVariableStatement(statement) &&
+    (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+  );
+}
+
+function addAliasForWrappedInitializer(
+  declaration: ts.VariableDeclaration,
+  wrappers: Set<string>,
+): boolean {
+  if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+    return false;
+  }
+  const source = unwrapTransparentExpression(declaration.initializer);
+  if (
+    !ts.isIdentifier(source) ||
+    !wrappers.has(source.text) ||
+    wrappers.has(declaration.name.text)
+  ) {
+    return false;
+  }
+  wrappers.add(declaration.name.text);
+  return true;
 }

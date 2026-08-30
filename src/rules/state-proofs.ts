@@ -1,5 +1,3 @@
-import ts from "typescript";
-
 import {
   bindingDeclarationCount,
   hookCallName,
@@ -17,10 +15,11 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
-import type { StateCandidate } from "../analyze-source.js";
 import { isSafeProjectionExpression, jsxSubtreeAncestors } from "./deferred-reveal.js";
-import type { RuntimeFunctionLike } from "../ast.js";
 import type { JsxSubtreeNode } from "./deferred-reveal.js";
+import type { RuntimeFunctionLike } from "../ast.js";
+import type { StateCandidate } from "../analyze-source.js";
+import ts from "typescript";
 
 const uniqueVariableDeclarationsByBoundary = new WeakMap<
   ts.Node,
@@ -32,6 +31,14 @@ const localFunctionBindingsByOwner = new WeakMap<
   ReadonlyMap<string, ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression>
 >();
 
+/** Two independent elements are the smallest render cut worth reporting on its own. */
+const MIN_INDEPENDENT_JSX_ELEMENTS = 2;
+
+/** A projection trail that stops on its own is only trusted once it has settled for two hops. */
+const MIN_SETTLED_PROJECTION_HOPS = 2;
+
+const EVENT_HANDLER_PROP = /^on[A-Z]/u;
+const USE_CALLBACK_HOOK: ReadonlySet<string> = new Set(["useCallback"]);
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
 const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
@@ -52,50 +59,69 @@ export function hasIndependentRenderCutWitness(
     if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) {
       return;
     }
-    const candidateSubtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node;
-    const independent = excluded.every(
-      (subtree) =>
-        candidateSubtree !== subtree &&
-        !nodeWithin(candidateSubtree, subtree) &&
-        !nodeWithin(subtree, candidateSubtree),
-    );
-    if (!independent) {
-      return;
-    }
-    for (
-      let current: ts.Node | undefined = candidateSubtree.parent;
-      current && current !== returned;
-      current = current.parent
+    const subtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node;
+    if (
+      !isIndependentOfAll(subtree, excluded) ||
+      hasIndependentJsxAncestor(subtree, returned, excluded)
     ) {
-      if (
-        (ts.isJsxElement(current) ||
-          ts.isJsxFragment(current) ||
-          ts.isJsxSelfClosingElement(current)) &&
-        excluded.every(
-          (subtree) =>
-            current !== subtree && !nodeWithin(current, subtree) && !nodeWithin(subtree, current),
-        )
-      ) {
-        return;
-      }
+      return;
     }
     independentElements += 1;
-    if (hasIndependentComponent) {
+    hasIndependentComponent ||= containsComponentBoundary(
+      subtree,
+      localComponents,
+      sourceComponents,
+    );
+  });
+  return hasIndependentComponent || independentElements >= MIN_INDEPENDENT_JSX_ELEMENTS;
+}
+
+/** The candidate neither is, nor contains, nor sits inside any already-excluded subtree. */
+function isIndependentOfAll(candidate: ts.Node, excluded: readonly ts.Node[]): boolean {
+  return excluded.every(
+    (subtree) =>
+      candidate !== subtree && !nodeWithin(candidate, subtree) && !nodeWithin(subtree, candidate),
+  );
+}
+
+/** A nearer independent JSX ancestor already counts this subtree, so it must not count again. */
+function hasIndependentJsxAncestor(
+  subtree: ts.Node,
+  returned: ts.Node,
+  excluded: readonly ts.Node[],
+): boolean {
+  for (
+    let current: ts.Node | undefined = subtree.parent;
+    current && current !== returned;
+    current = current.parent
+  ) {
+    if (
+      (ts.isJsxElement(current) ||
+        ts.isJsxFragment(current) ||
+        ts.isJsxSelfClosingElement(current)) &&
+      isIndependentOfAll(current, excluded)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function containsComponentBoundary(
+  subtree: ts.Node,
+  localComponents: ReadonlySet<string>,
+  sourceComponents: ReadonlySet<string>,
+): boolean {
+  let found = false;
+  visit(subtree, (descendant) => {
+    if (found || (!ts.isJsxOpeningElement(descendant) && !ts.isJsxSelfClosingElement(descendant))) {
       return;
     }
-    visit(candidateSubtree, (descendant) => {
-      if (
-        hasIndependentComponent ||
-        (!ts.isJsxOpeningElement(descendant) && !ts.isJsxSelfClosingElement(descendant))
-      ) {
-        return;
-      }
-      const name = descendant.tagName.getText();
-      hasIndependentComponent =
-        isComponentBoundaryName(name) || localComponents.has(name) || sourceComponents.has(name);
-    });
+    const name = descendant.tagName.getText();
+    found =
+      isComponentBoundaryName(name) || localComponents.has(name) || sourceComponents.has(name);
   });
-  return hasIndependentComponent || independentElements >= 2;
+  return found;
 }
 
 function isComponentBoundaryName(name: string): boolean {
@@ -114,38 +140,19 @@ export function oneHopRenderProjectionReferences(
   if (renderNodes.length === 0 || renderNodes.some((node) => !ts.isIdentifier(node))) {
     return null;
   }
-  const declarations = new Set(
-    renderNodes.map((node) => findAncestorUntil(node, ts.isVariableDeclaration, owner)),
-  );
-  const declaration = declarations.size === 1 ? [...declarations][0] : null;
+  const declaration = soleVariableDeclaration(renderNodes, owner);
   if (!declaration) {
     // SAFETY: The entry guard proves every render node is an Identifier.
     return renderNodes as readonly ts.Identifier[];
   }
+  const projection = constProjectionDeclaration(declaration, owner, renderNodes);
   if (
-    !declaration.initializer ||
-    !ts.isIdentifier(declaration.name) ||
-    !renderNodes.every((node) => nodeWithin(node, declaration.initializer!)) ||
-    !ts.isVariableDeclarationList(declaration.parent) ||
-    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
-    bindingDeclarationCount(owner, declaration.name.text) !== 1 ||
-    !renderNodes.every((node) => isAllowedProjection(declaration.initializer!, node))
+    !projection ||
+    !renderNodes.every((node) => isAllowedProjection(projection.initializer, node))
   ) {
     return null;
   }
-  const declarationName = declaration.name;
-  const references: ts.Identifier[] = [];
-  visit(owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node.text === declarationName.text &&
-      node !== declarationName &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node)
-    ) {
-      references.push(node);
-    }
-  });
+  const references = bindingReferences(owner, projection.name);
   return references.length > 0 ? references : null;
 }
 
@@ -157,99 +164,148 @@ export function boundedRenderProjectionReferences(
   if (renderNodes.length === 0 || renderNodes.some((node) => !ts.isIdentifier(node))) {
     return null;
   }
-
   // SAFETY: The entry guard proves every render node is an Identifier.
-  let references = renderNodes as readonly ts.Identifier[];
-  let hops = 0;
-  while (hops < maxHops) {
-    const declarations = new Set(
-      references.map((node) => findAncestorUntil(node, ts.isVariableDeclaration, owner)),
-    );
-    const declaration = declarations.size === 1 ? [...declarations][0] : null;
-    if (!declaration) {
-      return hops >= 2 ? references : null;
-    }
-    if (
-      !declaration.initializer ||
-      !ts.isIdentifier(declaration.name) ||
-      !references.every((node) => nodeWithin(node, declaration.initializer!)) ||
-      !ts.isVariableDeclarationList(declaration.parent) ||
-      (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
-      bindingDeclarationCount(owner, declaration.name.text) !== 1 ||
-      !references.every((node) =>
-        isSafeProjectionExpression(
-          declaration.initializer!,
-          node,
-          EMPTY_BINDINGS,
-          sourceHasRuntimeBinding(owner.getSourceFile(), "Math")
-            ? EMPTY_BINDINGS
-            : PURE_MATH_PROJECTION_CALLS,
-        ),
-      )
-    ) {
-      return null;
-    }
+  return followProjectionHops(renderNodes as readonly ts.Identifier[], owner, maxHops);
+}
 
-    const declarationName = declaration.name.text;
-    const next: ts.Identifier[] = [];
-    visit(owner.body, (node) => {
-      if (
-        ts.isIdentifier(node) &&
-        node.text === declarationName &&
-        node !== declaration.name &&
-        !isDeclarationName(node) &&
-        !isNonValueIdentifier(node)
-      ) {
-        next.push(node);
-      }
-    });
-    if (next.length === 0) {
+/**
+ * Walks up to `maxHops` single-declaration projection hops. The trail settles when a hop has no
+ * enclosing declaration left; running out of hops instead requires the references to be free.
+ */
+function followProjectionHops(
+  renderNodes: readonly ts.Identifier[],
+  owner: RuntimeFunctionLike,
+  maxHops: number,
+): readonly ts.Identifier[] | null {
+  let references = renderNodes;
+  for (let hops = 0; hops < maxHops; hops += 1) {
+    const declaration = soleVariableDeclaration(references, owner);
+    if (!declaration) {
+      return hops >= MIN_SETTLED_PROJECTION_HOPS ? references : null;
+    }
+    const next = nextProjectionHop(declaration, owner, references);
+    if (!next) {
       return null;
     }
     references = next;
-    hops += 1;
   }
-
   return references.some((node) => findAncestorUntil(node, ts.isVariableDeclaration, owner))
     ? null
     : references;
 }
 
+/** The references to the declared binding, or null when this hop is not a safe pure projection. */
+function nextProjectionHop(
+  declaration: ts.VariableDeclaration,
+  owner: RuntimeFunctionLike,
+  references: readonly ts.Identifier[],
+): ts.Identifier[] | null {
+  const projection = constProjectionDeclaration(declaration, owner, references);
+  if (
+    !projection ||
+    !references.every((node) =>
+      isSafeProjectionExpression(
+        projection.initializer,
+        node,
+        EMPTY_BINDINGS,
+        sourceHasRuntimeBinding(owner.getSourceFile(), "Math")
+          ? EMPTY_BINDINGS
+          : PURE_MATH_PROJECTION_CALLS,
+      ),
+    )
+  ) {
+    return null;
+  }
+  const next = bindingReferences(owner, projection.name);
+  return next.length > 0 ? next : null;
+}
+
+/** The one variable declaration that encloses every node, or null when they disagree. */
+function soleVariableDeclaration(
+  nodes: readonly ts.Node[],
+  owner: RuntimeFunctionLike,
+): ts.VariableDeclaration | null {
+  const declarations = new Set(
+    nodes.map((node) => findAncestorUntil(node, ts.isVariableDeclaration, owner)),
+  );
+  if (declarations.size !== 1) {
+    return null;
+  }
+  const [declaration] = declarations;
+  return declaration ?? null;
+}
+
+/** A uniquely bound `const x = <initializer>` whose initializer contains every reference. */
+function constProjectionDeclaration(
+  declaration: ts.VariableDeclaration,
+  owner: RuntimeFunctionLike,
+  references: readonly ts.Node[],
+): { readonly initializer: ts.Expression; readonly name: ts.Identifier } | null {
+  const { initializer, name } = declaration;
+  if (
+    !initializer ||
+    !ts.isIdentifier(name) ||
+    !references.every((node) => nodeWithin(node, initializer)) ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
+    bindingDeclarationCount(owner, name.text) !== 1
+  ) {
+    return null;
+  }
+  return { initializer, name };
+}
+
+/** Every value reference to the binding inside the owner, excluding its own declaration name. */
+function bindingReferences(owner: RuntimeFunctionLike, name: ts.Identifier): ts.Identifier[] {
+  const references: ts.Identifier[] = [];
+  visit(owner.body, (node) => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === name.text &&
+      node !== name &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
+    ) {
+      references.push(node);
+    }
+  });
+  return references;
+}
+
 export function sourceHasRuntimeBinding(sourceFile: ts.SourceFile, name: string): boolean {
   let found = false;
   visit(sourceFile, (node) => {
-    if (found) {
-      return;
-    }
-    if (
-      (ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node)) &&
-      bindingContainsName(node.name, name)
-    ) {
-      found = true;
-      return;
-    }
-    if (
-      (ts.isFunctionDeclaration(node) ||
-        ts.isFunctionExpression(node) ||
-        ts.isClassDeclaration(node) ||
-        ts.isClassExpression(node)) &&
-      node.name?.text === name
-    ) {
-      found = true;
-      return;
-    }
-    if (
-      (ts.isImportClause(node) && node.name?.text === name) ||
-      (ts.isImportSpecifier(node) && node.name.text === name) ||
-      (ts.isNamespaceImport(node) && node.name.text === name) ||
-      (ts.isCatchClause(node) &&
-        node.variableDeclaration &&
-        bindingContainsName(node.variableDeclaration.name, name))
-    ) {
+    if (!found && nodeBindsRuntimeName(node, name)) {
       found = true;
     }
   });
   return found;
+}
+
+/** The node introduces a runtime binding for the name, shadowing any global of that name. */
+function nodeBindsRuntimeName(node: ts.Node, name: string): boolean {
+  if (ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node)) {
+    return bindingContainsName(node.name, name);
+  }
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isClassExpression(node)
+  ) {
+    return node.name?.text === name;
+  }
+  if (ts.isCatchClause(node)) {
+    return (
+      node.variableDeclaration !== undefined &&
+      bindingContainsName(node.variableDeclaration.name, name)
+    );
+  }
+  return (
+    (ts.isImportClause(node) && node.name?.text === name) ||
+    (ts.isImportSpecifier(node) && node.name.text === name) ||
+    (ts.isNamespaceImport(node) && node.name.text === name)
+  );
 }
 
 export function isUnshadowedMathCall(
@@ -268,16 +324,16 @@ export function isUnshadowedMathCall(
 }
 
 export function hasDirectPrimitiveInitializer(state: StateCandidate): boolean {
-  const initializer = state.call.arguments[0];
+  const [initializer] = state.call.arguments;
   return initializer !== undefined && isDirectPrimitiveExpression(initializer);
 }
 
 export function setterCallUsesPreviousValue(call: ts.CallExpression): boolean {
-  const argument = call.arguments[0];
+  const [argument] = call.arguments;
   if (!argument || (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument))) {
     return false;
   }
-  const parameter = argument.parameters[0];
+  const [parameter] = argument.parameters;
   if (!parameter || !ts.isIdentifier(parameter.name)) {
     return false;
   }
@@ -325,32 +381,38 @@ export function hasOnlyEventCommandReads(
       isDeclarationName(node) ||
       isNonValueIdentifier(node) ||
       node.parent === state.call.parent ||
-      ignored.has(node)
+      ignored.has(node) ||
+      findAncestorUntil(node, isJsxNode, state.owner)
     ) {
       return;
     }
-    if (findAncestorUntil(node, isJsxNode, state.owner)) {
-      return;
-    }
-    const callback = nearestNestedFunction(node, state.owner);
-    if (callback) {
-      safe = callbackOrAncestorIsEventRooted(callback, state, additionalRoots);
-      return;
-    }
-    if (isHookDependencyReference(node, new Set(["useCallback"]))) {
-      const call = findAncestorUntil(node, ts.isCallExpression, state.owner);
-      const candidate = call?.arguments[0];
-      safe =
-        candidate !== undefined &&
-        (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
-        callbackIsEventRooted(candidate, state.owner, state.valueName, new Set(), (root) =>
-          additionalRoots.has(root),
-        );
-      return;
-    }
-    safe = false;
+    safe = stateReadIsEventCommand(node, state, additionalRoots);
   });
   return safe;
+}
+
+/** A read outside JSX is safe only from an event-rooted callback, or as a useCallback dependency. */
+function stateReadIsEventCommand(
+  reference: ts.Identifier,
+  state: StateCandidate,
+  additionalRoots: ReadonlySet<RuntimeFunctionLike>,
+): boolean {
+  const callback = nearestNestedFunction(reference, state.owner);
+  if (callback) {
+    return callbackOrAncestorIsEventRooted(callback, state, additionalRoots);
+  }
+  if (!isHookDependencyReference(reference, USE_CALLBACK_HOOK)) {
+    return false;
+  }
+  const call = findAncestorUntil(reference, ts.isCallExpression, state.owner);
+  const candidate = call?.arguments[0];
+  return (
+    candidate !== undefined &&
+    (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
+    callbackIsEventRooted(candidate, state.owner, state.valueName, new Set(), (root) =>
+      additionalRoots.has(root),
+    )
+  );
 }
 
 function callbackOrAncestorIsEventRooted(
@@ -367,9 +429,7 @@ function callbackOrAncestorIsEventRooted(
         : undefined
   ) {
     if (
-      (ts.isArrowFunction(candidate) ||
-        ts.isFunctionDeclaration(candidate) ||
-        ts.isFunctionExpression(candidate)) &&
+      isPlainFunction(candidate) &&
       callbackIsEventRooted(candidate, state.owner, state.valueName, new Set(), (root) =>
         additionalRoots.has(root),
       )
@@ -385,10 +445,7 @@ export function callbackIsEventRooted(
   owner: RuntimeFunctionLike,
   dependencyName: string,
   seen: ReadonlySet<string>,
-  additionalRoot: (
-    callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-    owner: RuntimeFunctionLike,
-  ) => boolean = () => false,
+  additionalRoot: AdditionalEventRoot = () => false,
 ): boolean {
   if (additionalRoot(callback, owner)) {
     return true;
@@ -396,75 +453,127 @@ export function callbackIsEventRooted(
   if (callback.body && isInsideJsxEventCallback(callback.body, owner)) {
     return true;
   }
-  const name = ts.isFunctionDeclaration(callback)
-    ? callback.name?.text
-    : ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
-      ? callback.parent.name.text
-      : ts.isCallExpression(callback.parent) &&
-          ts.isVariableDeclaration(callback.parent.parent) &&
-          ts.isIdentifier(callback.parent.parent.name)
-        ? callback.parent.parent.name.text
-        : undefined;
+  const name = eventCallbackName(callback);
   if (!name || seen.has(name) || bindingDeclarationCount(owner, name) !== 1) {
     return false;
   }
-  if (
-    dependencyName &&
-    ts.isCallExpression(callback.parent) &&
-    hookCallName(callback.parent) === "useCallback"
-  ) {
-    const dependencies = callback.parent.arguments[1];
-    if (
-      !dependencies ||
-      !ts.isArrayLiteralExpression(dependencies) ||
-      !dependencies.elements.some(
-        (element) => ts.isIdentifier(element) && element.text === dependencyName,
-      )
-    ) {
-      return false;
-    }
+  if (!useCallbackListsDependency(callback, dependencyName)) {
+    return false;
   }
+  return everyReferenceIsEventRooted(name, {
+    additionalRoot,
+    dependencyName,
+    owner,
+    seen: new Set(seen).add(name),
+  });
+}
 
-  const nextSeen = new Set(seen).add(name);
+type AdditionalEventRoot = (
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  owner: RuntimeFunctionLike,
+) => boolean;
+
+/** What a nested `callbackIsEventRooted` recursion needs to carry from its caller. */
+interface EventRootTrace {
+  readonly additionalRoot: AdditionalEventRoot;
+  readonly dependencyName: string;
+  readonly owner: RuntimeFunctionLike;
+  readonly seen: ReadonlySet<string>;
+}
+
+/** The name this callback is bound to, whether by declaration, assignment, or a hook wrapper. */
+function eventCallbackName(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+): string | undefined {
+  if (ts.isFunctionDeclaration(callback)) {
+    return callback.name?.text;
+  }
+  const { parent } = callback;
+  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    return parent.name.text;
+  }
+  return ts.isCallExpression(parent) &&
+    ts.isVariableDeclaration(parent.parent) &&
+    ts.isIdentifier(parent.parent.name)
+    ? parent.parent.name.text
+    : undefined;
+}
+
+/** A useCallback wrapper stays event-rooted only while it lists the state value as a dependency. */
+function useCallbackListsDependency(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  dependencyName: string,
+): boolean {
+  const { parent } = callback;
+  if (!dependencyName || !ts.isCallExpression(parent) || hookCallName(parent) !== "useCallback") {
+    return true;
+  }
+  const [, dependencies] = parent.arguments;
+  return (
+    dependencies !== undefined &&
+    ts.isArrayLiteralExpression(dependencies) &&
+    dependencies.elements.some(
+      (element) => ts.isIdentifier(element) && element.text === dependencyName,
+    )
+  );
+}
+
+/** The named callback is referenced at least once, and every reference stays event-rooted. */
+function everyReferenceIsEventRooted(name: string, trace: EventRootTrace): boolean {
   let referenced = false;
   let safe = true;
-  visit(owner.body, (node) => {
+  visit(trace.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
       node.text !== name ||
       isDeclarationName(node) ||
-      isNonValueIdentifier(node)
+      isNonValueIdentifier(node) ||
+      isHookDependencyReference(node, USE_CALLBACK_HOOK)
     ) {
-      return;
-    }
-    if (isHookDependencyReference(node, new Set(["useCallback"]))) {
       return;
     }
     referenced = true;
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
-    if (
-      attribute &&
-      /^on[A-Z]/u.test(attribute.name.getText()) &&
-      isJsxEventHandlerReference(attribute, node)
-    ) {
-      return;
+    if (!eventReferenceIsRooted(node, trace)) {
+      safe = false;
     }
-    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
-      const caller = nearestNestedFunction(node, owner);
-      if (
-        caller &&
-        (ts.isArrowFunction(caller) ||
-          ts.isFunctionDeclaration(caller) ||
-          ts.isFunctionExpression(caller)) &&
-        callbackIsEventRooted(caller, owner, dependencyName, nextSeen, additionalRoot)
-      ) {
-        return;
-      }
-    }
-    safe = false;
   });
   return referenced && safe;
+}
+
+/** The reference is a JSX event handler, or a call made from another event-rooted callback. */
+function eventReferenceIsRooted(reference: ts.Identifier, trace: EventRootTrace): boolean {
+  const attribute = findAncestorUntil(reference, ts.isJsxAttribute, trace.owner);
+  if (
+    attribute &&
+    EVENT_HANDLER_PROP.test(attribute.name.getText()) &&
+    isJsxEventHandlerReference(attribute, reference)
+  ) {
+    return true;
+  }
+  if (!ts.isCallExpression(reference.parent) || reference.parent.expression !== reference) {
+    return false;
+  }
+  const caller = nearestNestedFunction(reference, trace.owner);
+  return (
+    caller !== null &&
+    isPlainFunction(caller) &&
+    callbackIsEventRooted(
+      caller,
+      trace.owner,
+      trace.dependencyName,
+      trace.seen,
+      trace.additionalRoot,
+    )
+  );
+}
+
+function isPlainFunction(
+  node: ts.Node,
+): node is ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression {
+  return (
+    ts.isArrowFunction(node) || ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)
+  );
 }
 
 export function isJsxEventHandlerReference(
@@ -541,7 +650,7 @@ export function lowestCommonJsxSubtree(
   boundary: ts.Node,
 ): JsxSubtreeNode | null {
   const ancestorLists = nodes.map((node) => jsxSubtreeAncestors(node, boundary));
-  const first = ancestorLists[0];
+  const [first] = ancestorLists;
   if (!first || ancestorLists.some((ancestors) => ancestors.length === 0)) {
     return null;
   }
@@ -591,7 +700,7 @@ export function hasRepeatedJsxRenderWorkOutside(
     ) {
       return;
     }
-    const callback = node.arguments[0];
+    const [callback] = node.arguments;
     if (
       callback &&
       (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
@@ -685,7 +794,7 @@ export function isInsideJsxEventCallback(node: ts.Node, boundary: RuntimeFunctio
     if (
       attribute &&
       isInsideJsxAttribute(current, attribute) &&
-      /^on[A-Z]/u.test(attribute.name.getText())
+      EVENT_HANDLER_PROP.test(attribute.name.getText())
     ) {
       return true;
     }
@@ -694,21 +803,8 @@ export function isInsideJsxEventCallback(node: ts.Node, boundary: RuntimeFunctio
 }
 
 export function isSynchronousRenderCallback(node: ts.FunctionLikeDeclaration): boolean {
-  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
-    let expression: ts.Expression = node;
-    while (
-      (ts.isParenthesizedExpression(expression.parent) ||
-        ts.isAsExpression(expression.parent) ||
-        ts.isTypeAssertionExpression(expression.parent) ||
-        ts.isSatisfiesExpression(expression.parent) ||
-        ts.isNonNullExpression(expression.parent)) &&
-      expression.parent.expression === expression
-    ) {
-      expression = expression.parent;
-    }
-    if (ts.isCallExpression(expression.parent) && expression.parent.expression === expression) {
-      return true;
-    }
+  if ((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && isImmediatelyInvoked(node)) {
+    return true;
   }
   const { parent } = node;
   if (!ts.isCallExpression(parent)) {
@@ -731,6 +827,22 @@ export function isSynchronousRenderCallback(node: ts.FunctionLikeDeclaration): b
       "some",
     ].includes(parent.expression.name.text)
   );
+}
+
+/** The function is the callee of its own call, seen through transparent wrapper expressions. */
+function isImmediatelyInvoked(node: ts.ArrowFunction | ts.FunctionExpression): boolean {
+  let expression: ts.Expression = node;
+  while (
+    (ts.isParenthesizedExpression(expression.parent) ||
+      ts.isAsExpression(expression.parent) ||
+      ts.isTypeAssertionExpression(expression.parent) ||
+      ts.isSatisfiesExpression(expression.parent) ||
+      ts.isNonNullExpression(expression.parent)) &&
+    expression.parent.expression === expression
+  ) {
+    expression = expression.parent;
+  }
+  return ts.isCallExpression(expression.parent) && expression.parent.expression === expression;
 }
 
 export function isJsxNode(
@@ -802,53 +914,109 @@ export function isUniquelySelectedRepeatedProjection(
   nodes: readonly ts.Node[],
   boundary: RuntimeFunctionLike,
 ): boolean {
-  const repeatedCalls = nodes.map((node) => nearestRepeatedRenderCall(node, boundary));
-  const repeated = repeatedCalls[0];
-  if (
-    !repeated ||
-    repeatedCalls.some((call) => call !== repeated) ||
-    !ts.isPropertyAccessExpression(repeated.expression) ||
-    repeated.expression.name.text !== "map"
-  ) {
+  const selection = uniqueMapSelection(nodes, boundary);
+  if (!selection) {
     return false;
   }
-  const callback = repeated.arguments[0];
-  const item =
-    callback &&
-    (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
-    callback.parameters[0]?.name;
-  if (!callback || !item || !ts.isIdentifier(item)) {
-    return false;
-  }
-  const receiver = unwrapTransparentExpression(repeated.expression.expression);
-  if (ts.isIdentifier(receiver) && bindingIsReferenced(callback, receiver.text)) {
-    return false;
-  }
-  if (!expressionIsUniquelyFiltered(repeated.expression.expression, boundary)) {
-    return false;
-  }
-
-  const clauses = new Set(nodes.map((node) => findAncestorUntil(node, ts.isCaseClause, callback)));
-  const clause = clauses.size === 1 ? [...clauses][0] : null;
+  const clause = soleCaseClause(nodes, selection.callback);
   if (!clause || !isPrimitiveLiteral(clause.expression)) {
     return false;
   }
-  const switchStatement = findAncestorUntil(clause, ts.isSwitchStatement, callback);
-  const switchExpression =
-    switchStatement && unwrapTransparentExpression(switchStatement.expression);
-  const returnStatement = clause.statements[0];
+  return (
+    clauseSwitchesOnItem(clause, selection) &&
+    clauseReturnsEvery(clause, nodes) &&
+    nodesShareOneKeyedLeaf(nodes, clause)
+  );
+}
+
+/** The inline `.map` callback every render node lives in, together with its item parameter. */
+interface RepeatedMapSelection {
+  readonly callback: ts.Expression;
+  readonly item: ts.Identifier;
+}
+
+/** The nodes all render inside one `.map` over a de-duplicated array the callback cannot re-read. */
+function uniqueMapSelection(
+  nodes: readonly ts.Node[],
+  boundary: RuntimeFunctionLike,
+): RepeatedMapSelection | null {
+  const repeated = soleRepeatedMapCall(nodes, boundary);
+  if (!repeated || !ts.isPropertyAccessExpression(repeated.expression)) {
+    return null;
+  }
+  const selection = mapCallbackItem(repeated);
+  const receiver = unwrapTransparentExpression(repeated.expression.expression);
   if (
-    !switchExpression ||
-    !ts.isIdentifier(switchExpression) ||
-    switchExpression.text !== item.text ||
+    !selection ||
+    (ts.isIdentifier(receiver) && bindingIsReferenced(selection.callback, receiver.text))
+  ) {
+    return null;
+  }
+  return expressionIsUniquelyFiltered(repeated.expression.expression, boundary) ? selection : null;
+}
+
+/** The single `.map(...)` call that every node renders inside, or null when they differ. */
+function soleRepeatedMapCall(
+  nodes: readonly ts.Node[],
+  boundary: RuntimeFunctionLike,
+): ts.CallExpression | null {
+  const repeatedCalls = nodes.map((node) => nearestRepeatedRenderCall(node, boundary));
+  const [repeated] = repeatedCalls;
+  return repeated &&
+    repeatedCalls.every((call) => call === repeated) &&
+    ts.isPropertyAccessExpression(repeated.expression) &&
+    repeated.expression.name.text === "map"
+    ? repeated
+    : null;
+}
+
+/** The lone item parameter of an inline `.map(item => ...)` callback. */
+function mapCallbackItem(call: ts.CallExpression): RepeatedMapSelection | null {
+  const [callback] = call.arguments;
+  if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
+    return null;
+  }
+  const item = callback.parameters[0]?.name;
+  return item && ts.isIdentifier(item) ? { callback, item } : null;
+}
+
+/** The one `case` clause that every render node sits in, or null when they disagree. */
+function soleCaseClause(nodes: readonly ts.Node[], boundary: ts.Node): ts.CaseClause | null {
+  const clauses = new Set(nodes.map((node) => findAncestorUntil(node, ts.isCaseClause, boundary)));
+  if (clauses.size !== 1) {
+    return null;
+  }
+  const [clause] = clauses;
+  return clause ?? null;
+}
+
+/** The clause belongs to a `switch` on the map callback's own item parameter. */
+function clauseSwitchesOnItem(clause: ts.CaseClause, selection: RepeatedMapSelection): boolean {
+  const switchStatement = findAncestorUntil(clause, ts.isSwitchStatement, selection.callback);
+  if (!switchStatement) {
+    return false;
+  }
+  const switchExpression = unwrapTransparentExpression(switchStatement.expression);
+  return ts.isIdentifier(switchExpression) && switchExpression.text === selection.item.text;
+}
+
+/** The clause body is exactly one `return` whose expression contains every render node. */
+function clauseReturnsEvery(clause: ts.CaseClause, nodes: readonly ts.Node[]): boolean {
+  const [returnStatement] = clause.statements;
+  if (
     clause.statements.length !== 1 ||
     !returnStatement ||
     !ts.isReturnStatement(returnStatement) ||
-    !returnStatement.expression ||
-    !nodes.every((node) => nodeWithin(node, returnStatement.expression!))
+    !returnStatement.expression
   ) {
     return false;
   }
+  const returned = returnStatement.expression;
+  return nodes.every((node) => nodeWithin(node, returned));
+}
+
+/** All render nodes sit under one JSX leaf whose `key` is the clause literal. */
+function nodesShareOneKeyedLeaf(nodes: readonly ts.Node[], clause: ts.CaseClause): boolean {
   const leaf = nearestJsxElement(nodes[0]!, clause);
   return (
     leaf !== null &&
@@ -860,27 +1028,31 @@ export function isUniquelySelectedRepeatedProjection(
 function expressionIsUniquelyFiltered(expression: ts.Expression, boundary: ts.Node): boolean {
   const value = unwrapTransparentExpression(expression);
   if (ts.isIdentifier(value)) {
-    const declaration = uniqueVariableDeclaration(boundary, value.text);
-    return (
-      declaration !== null &&
-      declaration.initializer !== undefined &&
-      ts.isVariableDeclarationList(declaration.parent) &&
-      (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
-      expressionIsUniquelyFiltered(declaration.initializer, boundary)
-    );
+    return constInitializerIsUniquelyFiltered(value, boundary);
   }
-  if (!ts.isCallExpression(value) || !ts.isPropertyAccessExpression(value.expression)) {
+  if (
+    !ts.isCallExpression(value) ||
+    !ts.isPropertyAccessExpression(value.expression) ||
+    value.expression.name.text !== "filter"
+  ) {
     return false;
-  }
-  if (value.expression.name.text !== "filter") {
-    return false;
-  }
-  if (isExactUniquenessFilter(value, boundary)) {
-    return true;
   }
   return (
-    isPureSubsetFilter(value, boundary) &&
-    expressionIsUniquelyFiltered(value.expression.expression, boundary)
+    isExactUniquenessFilter(value, boundary) ||
+    (isPureSubsetFilter(value, boundary) &&
+      expressionIsUniquelyFiltered(value.expression.expression, boundary))
+  );
+}
+
+/** The name resolves to a unique `const` whose initializer is itself uniquely filtered. */
+function constInitializerIsUniquelyFiltered(name: ts.Identifier, boundary: ts.Node): boolean {
+  const declaration = uniqueVariableDeclaration(boundary, name.text);
+  return (
+    declaration !== null &&
+    declaration.initializer !== undefined &&
+    ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+    expressionIsUniquelyFiltered(declaration.initializer, boundary)
   );
 }
 
@@ -900,7 +1072,7 @@ function bindingIsReferenced(node: ts.Node, name: string): boolean {
 }
 
 function isPureSubsetFilter(call: ts.CallExpression, boundary: ts.Node): boolean {
-  const callback = call.arguments[0];
+  const [callback] = call.arguments;
   if (
     !callback ||
     (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -932,13 +1104,13 @@ function isPureSubsetFilter(call: ts.CallExpression, boundary: ts.Node): boolean
 }
 
 function isExactUniquenessFilter(call: ts.CallExpression, boundary: ts.Node): boolean {
-  if (!ts.isPropertyAccessExpression(call.expression)) {
+  if (
+    !ts.isPropertyAccessExpression(call.expression) ||
+    !expressionHasArrayType(call.expression.expression, boundary)
+  ) {
     return false;
   }
-  if (!expressionHasArrayType(call.expression.expression, boundary)) {
-    return false;
-  }
-  const callback = call.arguments[0];
+  const [callback] = call.arguments;
   if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
     return false;
   }
@@ -953,15 +1125,36 @@ function isExactUniquenessFilter(call: ts.CallExpression, boundary: ts.Node): bo
   ) {
     return false;
   }
-  const onlyStatement = ts.isBlock(callback.body) ? callback.body.statements[0] : undefined;
-  const body = ts.isBlock(callback.body)
-    ? callback.body.statements.length === 1 && onlyStatement && ts.isReturnStatement(onlyStatement)
-      ? onlyStatement.expression
-      : undefined
-    : callback.body;
-  if (!body) {
-    return false;
+  const body = concisePredicateBody(callback);
+  return body !== null && isIndexOfIdentityComparison(body, { array, index, item });
+}
+
+/** The single returned expression of a predicate, written concisely or as a one-statement block. */
+function concisePredicateBody(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+): ts.Expression | null {
+  const { body } = callback;
+  if (!ts.isBlock(body)) {
+    return body;
   }
+  const [onlyStatement] = body.statements;
+  return body.statements.length === 1 && onlyStatement && ts.isReturnStatement(onlyStatement)
+    ? (onlyStatement.expression ?? null)
+    : null;
+}
+
+/** The three parameters of the canonical de-duplication predicate. */
+interface UniquenessFilterParameters {
+  readonly array: ts.Identifier;
+  readonly index: ts.Identifier;
+  readonly item: ts.Identifier;
+}
+
+/** `array.indexOf(item) === index`, which keeps only the first occurrence of each element. */
+function isIndexOfIdentityComparison(
+  body: ts.Expression,
+  parameters: UniquenessFilterParameters,
+): boolean {
   const comparison = unwrapTransparentExpression(body);
   if (
     !ts.isBinaryExpression(comparison) ||
@@ -970,17 +1163,14 @@ function isExactUniquenessFilter(call: ts.CallExpression, boundary: ts.Node): bo
     return false;
   }
   return (
-    isIndexOfItem(comparison.left, array.text, item.text) &&
+    isIndexOfItem(comparison.left, parameters.array.text, parameters.item.text) &&
     ts.isIdentifier(comparison.right) &&
-    comparison.right.text === index.text
+    comparison.right.text === parameters.index.text
   );
 }
 
 function expressionHasArrayType(expression: ts.Expression, boundary: ts.Node): boolean {
-  let value: ts.Expression = expression;
-  while (ts.isParenthesizedExpression(value)) {
-    value = value.expression;
-  }
+  const value = unwrapParentheses(expression);
   if (ts.isArrayLiteralExpression(value)) {
     return true;
   }
@@ -990,28 +1180,42 @@ function expressionHasArrayType(expression: ts.Expression, boundary: ts.Node): b
   if (!ts.isIdentifier(value)) {
     return false;
   }
-  const name = value.text;
+  const types = declaredTypesOfName(boundary.getSourceFile(), value.text);
+  return types.length === 1 && ts.isArrayTypeNode(types[0]!);
+}
+
+function unwrapParentheses(expression: ts.Expression): ts.Expression {
+  let value = expression;
+  while (ts.isParenthesizedExpression(value)) {
+    value = value.expression;
+  }
+  return value;
+}
+
+/** Every written type annotation that binds the given name anywhere in the file. */
+function declaredTypesOfName(sourceFile: ts.SourceFile, name: string): ts.TypeNode[] {
   const types: ts.TypeNode[] = [];
-  visit(boundary.getSourceFile(), (node) => {
-    if (ts.isBindingElement(node) && ts.isIdentifier(node.name) && node.name.text === name) {
-      const type = destructuredBindingType(node);
-      if (type) {
-        types.push(type);
-      }
-      return;
-    }
-    if (
-      (!ts.isParameter(node) && !ts.isVariableDeclaration(node)) ||
-      !ts.isIdentifier(node.name) ||
-      node.name.text !== name
-    ) {
-      return;
-    }
-    if (node.type) {
-      types.push(node.type);
+  visit(sourceFile, (node) => {
+    const type = boundNameType(node, name);
+    if (type) {
+      types.push(type);
     }
   });
-  return types.length === 1 && ts.isArrayTypeNode(types[0]!);
+  return types;
+}
+
+function boundNameType(node: ts.Node, name: string): ts.TypeNode | undefined {
+  if (ts.isBindingElement(node) && ts.isIdentifier(node.name) && node.name.text === name) {
+    return destructuredBindingType(node);
+  }
+  if (
+    (!ts.isParameter(node) && !ts.isVariableDeclaration(node)) ||
+    !ts.isIdentifier(node.name) ||
+    node.name.text !== name
+  ) {
+    return undefined;
+  }
+  return node.type;
 }
 
 function destructuredBindingType(binding: ts.BindingElement): ts.TypeNode | undefined {
@@ -1074,11 +1278,7 @@ function jsxKeyMatchesLiteral(
   if (!key || !ts.isJsxAttribute(key) || !key.initializer) {
     return false;
   }
-  const keyValue = ts.isStringLiteral(key.initializer)
-    ? key.initializer
-    : ts.isJsxExpression(key.initializer) && key.initializer.expression
-      ? unwrapTransparentExpression(key.initializer.expression)
-      : null;
+  const keyValue = jsxAttributeLiteral(key.initializer);
   const caseValue = unwrapTransparentExpression(literal);
   return (
     keyValue !== null &&
@@ -1089,6 +1289,16 @@ function jsxKeyMatchesLiteral(
         ts.isNumericLiteral(caseValue) &&
         keyValue.text === caseValue.text))
   );
+}
+
+/** The literal behind a JSX attribute value, whether written bare or inside braces. */
+function jsxAttributeLiteral(initializer: ts.JsxAttributeValue): ts.Expression | null {
+  if (ts.isStringLiteral(initializer)) {
+    return initializer;
+  }
+  return ts.isJsxExpression(initializer) && initializer.expression
+    ? unwrapTransparentExpression(initializer.expression)
+    : null;
 }
 
 export function expressionDependsOnBinding(

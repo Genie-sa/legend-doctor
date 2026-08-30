@@ -1,10 +1,9 @@
+import { isRuntimeFunctionLike, visit } from "../src/ast.js";
+
+import { StateFlowIndex } from "../src/state-flow.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import ts from "typescript";
-
-import { isRuntimeFunctionLike, visit } from "../src/ast.js";
-import { StateFlowIndex } from "../src/state-flow.js";
 
 const requireValue = <Value>(value: Value | undefined): Value => {
   assert.ok(value);
@@ -15,10 +14,12 @@ const requireCall = (
   name: string,
 ): ts.CallExpression => requireValue(calls.get(name));
 
-function functionAndCalls(source: string): {
+interface FunctionAndCalls {
   calls: Map<string, ts.CallExpression>;
   fn: ts.FunctionDeclaration;
-} {
+}
+
+function functionAndCalls(source: string): FunctionAndCalls {
   const file = ts.createSourceFile("fixture.ts", source, ts.ScriptTarget.Latest, true);
   const fn = file.statements.find(ts.isFunctionDeclaration);
   assert.ok(fn && isRuntimeFunctionLike(fn));

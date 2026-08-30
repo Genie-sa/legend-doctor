@@ -52,8 +52,30 @@ const COVERAGE_STATUSES: ReadonlySet<AnalysisCoverageStatus> = new Set([
   "unsupported",
 ]);
 
+type AnalysisCoverageFunctionTarget = Extract<AnalysisCoverageTarget, { kind: "function" }>;
+
 function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
+  if (left < right) {
+    return -1;
+  }
+  return left > right ? 1 : 0;
+}
+
+function compareFunctionSpans(
+  left: AnalysisCoverageFunctionTarget,
+  right: AnalysisCoverageFunctionTarget,
+): number {
+  const startOrder = left.start - right.start;
+  if (startOrder !== 0) {
+    return startOrder;
+  }
+
+  const endOrder = left.end - right.end;
+  if (endOrder !== 0) {
+    return endOrder;
+  }
+
+  return compareText(left.name ?? "", right.name ?? "");
 }
 
 function compareTargets(left: AnalysisCoverageTarget, right: AnalysisCoverageTarget): number {
@@ -69,17 +91,7 @@ function compareTargets(left: AnalysisCoverageTarget, right: AnalysisCoverageTar
     return 0;
   }
 
-  const startOrder = left.start - right.start;
-  if (startOrder !== 0) {
-    return startOrder;
-  }
-
-  const endOrder = left.end - right.end;
-  if (endOrder !== 0) {
-    return endOrder;
-  }
-
-  return compareText(left.name ?? "", right.name ?? "");
+  return compareFunctionSpans(left, right);
 }
 
 function requireNonBlank(value: string, field: string): string {
@@ -87,6 +99,18 @@ function requireNonBlank(value: string, field: string): string {
     throw new TypeError(`${field} must not be empty`);
   }
   return value;
+}
+
+function requireFunctionSpan(target: AnalysisCoverageFunctionTarget): void {
+  if (target.name !== null) {
+    requireNonBlank(target.name, "function target name");
+  }
+  if (!Number.isSafeInteger(target.start) || target.start < 0) {
+    throw new TypeError("function target start must be a non-negative safe integer");
+  }
+  if (!Number.isSafeInteger(target.end) || target.end <= target.start) {
+    throw new TypeError("function target end must be a safe integer after start");
+  }
 }
 
 function normalizeTarget(target: AnalysisCoverageTarget): AnalysisCoverageTarget {
@@ -98,15 +122,7 @@ function normalizeTarget(target: AnalysisCoverageTarget): AnalysisCoverageTarget
     throw new TypeError("coverage target kind must be file or function");
   }
 
-  if (target.name !== null) {
-    requireNonBlank(target.name, "function target name");
-  }
-  if (!Number.isSafeInteger(target.start) || target.start < 0) {
-    throw new TypeError("function target start must be a non-negative safe integer");
-  }
-  if (!Number.isSafeInteger(target.end) || target.end <= target.start) {
-    throw new TypeError("function target end must be a safe integer after start");
-  }
+  requireFunctionSpan(target);
 
   return {
     end: target.end,
@@ -136,6 +152,8 @@ function normalizeOutcome(
 
 function normalizeStages(stages: AnalysisCoverageStages): AnalysisCoverageStages {
   const suppliedStages = Object.keys(stages);
+  // SAFETY: ANALYSIS_COVERAGE_STAGES is a readonly tuple of string literals.
+  // Widening its element type to string only loosens what `includes` accepts.
   if (
     suppliedStages.length !== ANALYSIS_COVERAGE_STAGES.length ||
     suppliedStages.some((stage) => !(ANALYSIS_COVERAGE_STAGES as readonly string[]).includes(stage))
@@ -206,7 +224,7 @@ export class AnalysisCoverageLedger {
     }
     return {
       entries: [...this.#entries.values()]
-        .sort((left, right) => compareTargets(left.target, right.target))
+        .toSorted((left, right) => compareTargets(left.target, right.target))
         .map((entry) => ({
           stages: {
             parser: normalizeOutcome("parser", entry.stages.parser),

@@ -1,10 +1,9 @@
+import { AnalysisProject } from "../src/analysis-project.js";
+
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
-
 import ts from "typescript";
-
-import { AnalysisProject } from "../src/analysis-project.js";
 
 const requireValue = <Value>(value: Value | undefined): Value => {
   assert.ok(value);

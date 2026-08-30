@@ -1,5 +1,3 @@
-import ts from "typescript";
-
 import {
   bindingDeclarationCount,
   isAssignmentOperator,
@@ -11,7 +9,11 @@ import {
 import { findAncestor, isRuntimeFunctionLike, nodeWithin, visit } from "../ast.js";
 import type { LegendPracticeFinding } from "../types.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "./observable-reads.js";
+import type { RuntimeFunctionLike } from "../ast.js";
+import ts from "typescript";
 import { uniqueVariableDeclaration } from "./state-proofs.js";
+
+const SPREAD_WITH_ONE_MEMBER = 2;
 
 interface SnapshotBinding {
   declaration: ts.VariableDeclaration;
@@ -20,6 +22,18 @@ interface SnapshotBinding {
 interface NarrowWrite {
   evidence: readonly [string, string];
   message: string;
+}
+
+interface SnapshotAppendContext {
+  sourceFile: ts.SourceFile;
+  target: ts.Expression;
+  write: ts.CallExpression;
+}
+
+interface SnapshotReadContext {
+  owner: RuntimeFunctionLike;
+  targetSpread: ts.SpreadAssignment | ts.SpreadElement;
+  write: ts.CallExpression;
 }
 
 export function findObservableCloneWritePractices(
@@ -52,11 +66,10 @@ export function findObservableCloneWritePractices(
   return findings;
 }
 
-function narrowObservableObjectWrite(
+function observableSetTarget(
   call: ts.CallExpression,
-  sourceFile: ts.SourceFile,
   observableBindings: ReadonlySet<string>,
-): NarrowWrite | null {
+): ts.Expression | null {
   if (
     call.arguments.length !== 1 ||
     !ts.isPropertyAccessExpression(call.expression) ||
@@ -65,61 +78,99 @@ function narrowObservableObjectWrite(
     return null;
   }
   const target = unwrapTransparentExpression(call.expression.expression);
-  if (!staticPathHasBinding(target, observableBindings)) {
+  return staticPathHasBinding(target, observableBindings) ? target : null;
+}
+
+function narrowObservableObjectWrite(
+  call: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+  observableBindings: ReadonlySet<string>,
+): NarrowWrite | null {
+  const target = observableSetTarget(call, observableBindings);
+  if (!target) {
     return null;
   }
+  const override = clonedOverrideProperty(call, target, sourceFile);
+  if (!override) {
+    return null;
+  }
+  return narrowedChildWrite(override, target.getText(sourceFile), sourceFile);
+}
 
+function clonedOverrideProperty(
+  call: ts.CallExpression,
+  target: ts.Expression,
+  sourceFile: ts.SourceFile,
+): ts.ObjectLiteralElementLike | null {
   const value = unwrapTransparentExpression(call.arguments[0]!);
-  if (!ts.isObjectLiteralExpression(value) || value.properties.length !== 2) {
+  if (!ts.isObjectLiteralExpression(value) || value.properties.length !== SPREAD_WITH_ONE_MEMBER) {
     return null;
   }
   const [spread, override] = value.properties;
   if (!spread || !ts.isSpreadAssignment(spread) || !override) {
     return null;
   }
-
   const snapshot = snapshotTarget(spread.expression, call, sourceFile);
-  if (!snapshot || snapshot.target.getText(sourceFile) !== target.getText(sourceFile)) {
+  if (
+    !snapshot ||
+    snapshot.target.getText(sourceFile) !== target.getText(sourceFile) ||
+    (snapshot.binding !== null && !snapshotBindingIsReadOnly(snapshot.binding, spread, call))
+  ) {
     return null;
   }
-  if (snapshot.binding && !snapshotBindingIsReadOnly(snapshot.binding, spread, call)) {
-    return null;
-  }
+  return override;
+}
 
-  const targetText = target.getText(sourceFile);
+function narrowedChildWrite(
+  override: ts.ObjectLiteralElementLike,
+  targetText: string,
+  sourceFile: ts.SourceFile,
+): NarrowWrite | null {
   if (ts.isShorthandPropertyAssignment(override)) {
-    if (RESERVED_OBSERVABLE_MEMBERS.has(override.name.text)) {
-      return null;
-    }
-    return objectWrite(
-      `${targetText}.${override.name.text}.set(${override.name.text})`,
-      targetText,
-    );
+    return RESERVED_OBSERVABLE_MEMBERS.has(override.name.text)
+      ? null
+      : objectWrite(`${targetText}.${override.name.text}.set(${override.name.text})`, targetText);
   }
   if (!ts.isPropertyAssignment(override)) {
     return null;
   }
-  const argument = override.initializer.getText(sourceFile);
-  if (ts.isIdentifier(override.name) || ts.isStringLiteral(override.name)) {
-    const property = override.name.text;
-    if (RESERVED_OBSERVABLE_MEMBERS.has(property)) {
-      return null;
-    }
-    const child = ts.isIdentifier(override.name)
-      ? `.${property}`
-      : `[${override.name.getText(sourceFile)}]`;
-    return objectWrite(`${targetText}${child}.set(${argument})`, targetText);
-  }
-  if (ts.isNumericLiteral(override.name)) {
-    return objectWrite(
-      `${targetText}[${override.name.getText(sourceFile)}].set(${argument})`,
-      targetText,
-    );
-  }
-  if (!ts.isComputedPropertyName(override.name) || !safeDynamicKey(override.name.expression)) {
+  return (
+    namedChildWrite(override, targetText, sourceFile) ??
+    computedChildWrite(override, targetText, sourceFile)
+  );
+}
+
+function namedChildWrite(
+  override: ts.PropertyAssignment,
+  targetText: string,
+  sourceFile: ts.SourceFile,
+): NarrowWrite | null {
+  const { name } = override;
+  if (!ts.isIdentifier(name) && !ts.isStringLiteral(name)) {
     return null;
   }
-  const key = override.name.expression.getText(sourceFile);
+  if (RESERVED_OBSERVABLE_MEMBERS.has(name.text)) {
+    return null;
+  }
+  const child = ts.isIdentifier(name) ? `.${name.text}` : `[${name.getText(sourceFile)}]`;
+  const argument = override.initializer.getText(sourceFile);
+  return objectWrite(`${targetText}${child}.set(${argument})`, targetText);
+}
+
+function computedChildWrite(
+  override: ts.PropertyAssignment,
+  targetText: string,
+  sourceFile: ts.SourceFile,
+): NarrowWrite | null {
+  const { name } = override;
+  const argument = override.initializer.getText(sourceFile);
+  if (ts.isNumericLiteral(name)) {
+    return objectWrite(`${targetText}[${name.getText(sourceFile)}].set(${argument})`, targetText);
+  }
+  if (!ts.isComputedPropertyName(name) || !safeDynamicKey(name.expression)) {
+    return null;
+  }
+  const key = name.expression.getText(sourceFile);
   return objectWrite(`${targetText}[${key}].set(${argument})`, targetText);
 }
 
@@ -138,31 +189,21 @@ function narrowObservableArrayAppend(
   sourceFile: ts.SourceFile,
   observableBindings: ReadonlySet<string>,
 ): NarrowWrite | null {
+  const target = observableSetTarget(call, observableBindings);
   if (
-    call.arguments.length !== 1 ||
-    !ts.isPropertyAccessExpression(call.expression) ||
-    call.expression.name.text !== "set"
-  ) {
-    return null;
-  }
-  const target = unwrapTransparentExpression(call.expression.expression);
-  const root = rootIdentifier(target);
-  if (
-    !root ||
-    !staticPathHasBinding(target, observableBindings) ||
+    !target ||
+    !rootIdentifier(target) ||
     !observableTargetStartsAsArray(target, call, sourceFile)
   ) {
     return null;
   }
-
   const argument = unwrapTransparentExpression(call.arguments[0]!);
   const appended = ts.isArrowFunction(argument)
     ? updaterAppendValue(argument)
-    : snapshotAppendValue(argument, target, call, sourceFile);
+    : snapshotAppendValue(argument, { sourceFile, target, write: call });
   if (!appended || !isEvaluationInert(appended)) {
     return null;
   }
-
   const targetText = target.getText(sourceFile);
   const appendedText = appended.getText(sourceFile);
   return {
@@ -184,7 +225,7 @@ function updaterAppendValue(updater: ts.ArrowFunction): ts.Expression | null {
     return null;
   }
   const array = unwrapTransparentExpression(updater.body);
-  if (!ts.isArrayLiteralExpression(array) || array.elements.length !== 2) {
+  if (!ts.isArrayLiteralExpression(array) || array.elements.length !== SPREAD_WITH_ONE_MEMBER) {
     return null;
   }
   const [snapshot, appended] = array.elements;
@@ -205,11 +246,13 @@ function updaterAppendValue(updater: ts.ArrowFunction): ts.Expression | null {
 
 function snapshotAppendValue(
   expression: ts.Expression,
-  target: ts.Expression,
-  write: ts.CallExpression,
-  sourceFile: ts.SourceFile,
+  context: SnapshotAppendContext,
 ): ts.Expression | null {
-  if (!ts.isArrayLiteralExpression(expression) || expression.elements.length !== 2) {
+  const { sourceFile, target, write } = context;
+  if (
+    !ts.isArrayLiteralExpression(expression) ||
+    expression.elements.length !== SPREAD_WITH_ONE_MEMBER
+  ) {
     return null;
   }
   const [spread, appended] = expression.elements;
@@ -217,14 +260,13 @@ function snapshotAppendValue(
     return null;
   }
   const snapshot = snapshotTarget(spread.expression, write, sourceFile);
-  if (!snapshot || snapshot.target.getText(sourceFile) !== target.getText(sourceFile)) {
-    return null;
-  }
   if (
-    snapshot.binding &&
-    (!snapshotBindingIsReadOnly(snapshot.binding, spread, write) ||
-      (ts.isIdentifier(snapshot.binding.declaration.name) &&
-        expressionReferencesName(appended, snapshot.binding.declaration.name.text)))
+    !snapshot ||
+    snapshot.target.getText(sourceFile) !== target.getText(sourceFile) ||
+    (snapshot.binding !== null &&
+      (!snapshotBindingIsReadOnly(snapshot.binding, spread, write) ||
+        (ts.isIdentifier(snapshot.binding.declaration.name) &&
+          expressionReferencesName(appended, snapshot.binding.declaration.name.text))))
   ) {
     return null;
   }
@@ -237,39 +279,45 @@ function observableTargetStartsAsArray(
   sourceFile: ts.SourceFile,
 ): boolean {
   const root = rootIdentifier(target);
-  if (!root) {
+  const properties = staticPropertyPath(target);
+  if (!root || !properties) {
     return false;
   }
   const declaration =
     lexicalVariableDeclaration(write, root.text) ??
     uniqueVariableDeclaration(sourceFile, root.text);
-  if (!declaration?.initializer) {
+  const factory = declaration?.initializer
+    ? unwrapTransparentExpression(declaration.initializer)
+    : null;
+  if (!factory || !ts.isCallExpression(factory) || factory.arguments.length === 0) {
     return false;
   }
-  const factory = unwrapTransparentExpression(declaration.initializer);
-  if (!ts.isCallExpression(factory) || factory.arguments.length === 0) {
-    return false;
-  }
-  let initializer: ts.Expression = factory.arguments[0]!;
-  const properties = staticPropertyPath(target);
-  if (!properties) {
-    return false;
-  }
+  const initializer = resolveObjectPath(factory.arguments[0]!, properties);
+  return (
+    initializer !== null && ts.isArrayLiteralExpression(unwrapTransparentExpression(initializer))
+  );
+}
+
+function resolveObjectPath(
+  root: ts.Expression,
+  properties: readonly string[],
+): ts.Expression | null {
+  let initializer = root;
   for (const propertyName of properties) {
     const object = unwrapTransparentExpression(initializer);
     if (!ts.isObjectLiteralExpression(object)) {
-      return false;
+      return null;
     }
     const property = object.properties.find(
       (candidate) =>
         ts.isPropertyAssignment(candidate) && staticPropertyName(candidate.name) === propertyName,
     );
     if (!property || !ts.isPropertyAssignment(property)) {
-      return false;
+      return null;
     }
-    initializer = property.initializer;
+    ({ initializer } = property);
   }
-  return ts.isArrayLiteralExpression(unwrapTransparentExpression(initializer));
+  return initializer;
 }
 
 function lexicalVariableDeclaration(node: ts.Node, name: string): ts.VariableDeclaration | null {
@@ -324,6 +372,19 @@ function snapshotTarget(
   if (direct) {
     return { binding: null, target: direct };
   }
+  const resolved = resolvedSnapshotBinding(expression, write, sourceFile);
+  if (!resolved) {
+    return null;
+  }
+  const target = peekTarget(resolved.initializer);
+  return target ? { binding: { declaration: resolved.declaration }, target } : null;
+}
+
+function resolvedSnapshotBinding(
+  expression: ts.Expression,
+  write: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+): { declaration: ts.VariableDeclaration; initializer: ts.Expression } | null {
   const value = unwrapTransparentExpression(expression);
   if (!ts.isIdentifier(value)) {
     return null;
@@ -332,7 +393,6 @@ function snapshotTarget(
   if (!owner?.body || bindingDeclarationCount(owner, value.text) !== 1) {
     return null;
   }
-
   const resolved = uniqueVariableDeclaration(owner.body, value.text);
   if (
     !resolved?.initializer ||
@@ -342,8 +402,7 @@ function snapshotTarget(
   ) {
     return null;
   }
-  const target = peekTarget(resolved.initializer);
-  return target ? { binding: { declaration: resolved }, target } : null;
+  return { declaration: resolved, initializer: resolved.initializer };
 }
 
 function peekTarget(expression: ts.Expression): ts.Expression | null {
@@ -378,66 +437,68 @@ function snapshotBindingIsReadOnly(
   if (!owner?.body || !ts.isIdentifier(binding.declaration.name)) {
     return false;
   }
-  let crossesAsyncBoundary = false;
-  visit(owner.body, (node) => {
-    if (
-      node.getStart() > binding.declaration.end &&
-      node.end < write.getStart() &&
-      (ts.isAwaitExpression(node) || ts.isYieldExpression(node))
-    ) {
-      crossesAsyncBoundary = true;
-    }
-  });
-  if (crossesAsyncBoundary) {
+  if (crossesAsyncBoundary(owner.body, binding.declaration.end, write.getStart())) {
     return false;
   }
-  const name = binding.declaration.name.text;
+  const declared = binding.declaration.name;
   let safe = true;
   visit(owner.body, (node) => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== name ||
-      node === binding.declaration.name
-    ) {
+    if (!safe || !ts.isIdentifier(node) || node.text !== declared.text || node === declared) {
       return;
     }
-    if (node.getStart() >= write.end) {
-      safe = false;
-      return;
-    }
-    if (nodeWithin(node, targetSpread.expression)) {
-      return;
-    }
-    if (findAncestor(node, isRuntimeFunctionLike) !== owner) {
-      safe = false;
-      return;
-    }
-    if (referenceMayRepeatAfterWrite(node, write, owner)) {
-      safe = false;
-      return;
-    }
-    const access = outermostAccess(node);
-    if (access === node && !isControlConditionReference(node, owner)) {
-      safe = false;
-      return;
-    }
-    const { parent } = access;
-    if (
-      (ts.isBinaryExpression(parent) &&
-        parent.left === access &&
-        isAssignmentOperator(parent.operatorToken.kind)) ||
-      ((ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) &&
-        parent.operand === access) ||
-      (ts.isDeleteExpression(parent) && parent.expression === access) ||
-      (ts.isCallExpression(parent) && parent.expression === access) ||
-      (ts.isTaggedTemplateExpression(parent) && parent.tag === access) ||
-      (ts.isSpreadElement(parent) && parent.expression === access)
-    ) {
+    if (!referenceIsReadOnly(node, { owner, targetSpread, write })) {
       safe = false;
     }
   });
   return safe;
+}
+
+function crossesAsyncBoundary(body: ts.Node, start: number, end: number): boolean {
+  let crosses = false;
+  visit(body, (node) => {
+    if (
+      node.getStart() > start &&
+      node.end < end &&
+      (ts.isAwaitExpression(node) || ts.isYieldExpression(node))
+    ) {
+      crosses = true;
+    }
+  });
+  return crosses;
+}
+
+function referenceIsReadOnly(node: ts.Identifier, context: SnapshotReadContext): boolean {
+  const { owner, targetSpread, write } = context;
+  if (nodeWithin(node, targetSpread.expression)) {
+    return true;
+  }
+  if (
+    node.getStart() >= write.end ||
+    findAncestor(node, isRuntimeFunctionLike) !== owner ||
+    referenceMayRepeatAfterWrite(node, write, owner)
+  ) {
+    return false;
+  }
+  const access = outermostAccess(node);
+  if (access === node && !isControlConditionReference(node, owner)) {
+    return false;
+  }
+  return !isMutatingAccess(access);
+}
+
+function isMutatingAccess(access: ts.Expression): boolean {
+  const { parent } = access;
+  return (
+    (ts.isBinaryExpression(parent) &&
+      parent.left === access &&
+      isAssignmentOperator(parent.operatorToken.kind)) ||
+    ((ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) &&
+      parent.operand === access) ||
+    (ts.isDeleteExpression(parent) && parent.expression === access) ||
+    (ts.isCallExpression(parent) && parent.expression === access) ||
+    (ts.isTaggedTemplateExpression(parent) && parent.tag === access) ||
+    (ts.isSpreadElement(parent) && parent.expression === access)
+  );
 }
 
 function isControlConditionReference(node: ts.Node, owner: ts.Node): boolean {

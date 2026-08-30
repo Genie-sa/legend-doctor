@@ -1,11 +1,4 @@
-import ts from "typescript";
-
-import {
-  isDeclarationName,
-  isNonValueIdentifier,
-  isPureExpression,
-  unwrapTransparentExpression,
-} from "../analysis-ast.js";
+import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import {
   findAncestor,
   findAncestorUntil,
@@ -13,9 +6,6 @@ import {
   nearestNestedFunction,
   visit,
 } from "../ast.js";
-import type { StateCandidate, StateUsage } from "../analyze-source.js";
-import { isSafeProjectionExpression } from "./deferred-reveal.js";
-import { mutationRegionOnlyCallsStateSetters } from "./effect-drafts.js";
 import {
   hasIndependentRenderCutWitness,
   isHookDependencyReference,
@@ -26,7 +16,16 @@ import {
   oneHopRenderProjectionReferences,
   sourceHasRuntimeBinding,
 } from "./state-proofs.js";
+import {
+  isDeclarationName,
+  isNonValueIdentifier,
+  isPureExpression,
+  unwrapTransparentExpression,
+} from "../analysis-ast.js";
 import type { RuntimeFunctionLike } from "../ast.js";
+import { isSafeProjectionExpression } from "./deferred-reveal.js";
+import { mutationRegionOnlyCallsStateSetters } from "./effect-drafts.js";
+import ts from "typescript";
 
 interface EventOwnedScalarOptions {
   eventCallbacks: ReadonlySet<RuntimeFunctionLike>;
@@ -46,6 +45,23 @@ interface ReactiveHostPropScalarOptions extends EventOwnedScalarOptions {
   hostComponents: ReadonlySet<string>;
   pureProjectionImports: ReadonlySet<string>;
 }
+
+interface LeafSurfaces {
+  returned: ts.Expression;
+  surfaces: Map<number, ts.JsxElement | ts.JsxSelfClosingElement>;
+}
+
+interface HostPropAnchor {
+  attributeStart: number;
+  surfaceStart: number;
+}
+
+const RESERVED_ATTRIBUTE = /^(?:children|key|ref|render|on[A-Z])/u;
+const MIN_OWNER_ELEMENTS = 12;
+const MIN_LEAF_SURFACES = 2;
+const MAX_LEAF_SURFACES = 6;
+const MAX_LEAF_ELEMENTS = 6;
+const MAX_LEAF_ELEMENT_SHARE = 0.4;
 
 /**
  * Proves that an event-owned scalar changes one prop on one host surface.
@@ -73,36 +89,56 @@ export function isReactiveHostPropScalarState(
   if (!projections || projections.length === 0) {
     return false;
   }
+  return sharesOneHostPropAnchor(projections, state, options);
+}
 
-  let attributeStart: number | null = null,
-    surfaceStart: number | null = null;
+function sharesOneHostPropAnchor(
+  projections: readonly ts.Identifier[],
+  state: StateCandidate,
+  options: ReactiveHostPropScalarOptions,
+): boolean {
+  let shared: HostPropAnchor | null = null;
   for (const projection of projections) {
-    if (
-      nearestNestedFunction(projection, state.owner) ||
-      nearestRepeatedRenderCall(projection, state.owner) ||
-      !isSafeJsxProjectionReference(projection, state.owner, options.pureProjectionImports)
-    ) {
+    const anchor = hostPropAnchor(projection, state, options);
+    if (!anchor) {
       return false;
     }
-    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
-    const opening = attribute?.parent.parent;
+    shared ??= anchor;
     if (
-      !attribute ||
-      !opening ||
-      (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) ||
-      /^(?:children|key|ref|render|on[A-Z])/u.test(attribute.name.getText()) ||
-      !isHostOpening(opening, options.hostComponents)
+      shared.surfaceStart !== anchor.surfaceStart ||
+      shared.attributeStart !== anchor.attributeStart
     ) {
-      return false;
-    }
-    const surface = ts.isJsxOpeningElement(opening) ? opening.parent : opening;
-    surfaceStart ??= surface.getStart();
-    attributeStart ??= attribute.getStart();
-    if (surfaceStart !== surface.getStart() || attributeStart !== attribute.getStart()) {
       return false;
     }
   }
-  return surfaceStart !== null;
+  return shared !== null;
+}
+
+function hostPropAnchor(
+  projection: ts.Identifier,
+  state: StateCandidate,
+  options: ReactiveHostPropScalarOptions,
+): HostPropAnchor | null {
+  if (
+    nearestNestedFunction(projection, state.owner) ||
+    nearestRepeatedRenderCall(projection, state.owner) ||
+    !isSafeJsxProjectionReference(projection, state.owner, options.pureProjectionImports)
+  ) {
+    return null;
+  }
+  const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
+  const opening = attribute?.parent.parent;
+  if (
+    !attribute ||
+    !opening ||
+    (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) ||
+    RESERVED_ATTRIBUTE.test(attribute.name.getText()) ||
+    !isHostOpening(opening, options.hostComponents)
+  ) {
+    return null;
+  }
+  const surface = ts.isJsxOpeningElement(opening) ? opening.parent : opening;
+  return { attributeStart: attribute.getStart(), surfaceStart: surface.getStart() };
 }
 
 /**
@@ -115,7 +151,6 @@ export function isSourceEventScalarLeafState(
   usage: StateUsage,
   options: EventScalarLeafOptions,
 ): boolean {
-  const ownerElements = jsxElementCount(state.owner);
   if (!isEventOwnedNumericState(state, usage, options)) {
     return false;
   }
@@ -129,52 +164,75 @@ export function isSourceEventScalarLeafState(
     (expression, reference) =>
       isSafeProjectionExpression(expression, reference, options.pureProjectionImports, mathCalls),
   );
-  if (!projections || projections.length < 2) {
+  if (!projections || projections.length < MIN_LEAF_SURFACES) {
     return false;
   }
 
+  const collected = collectLeafSurfaces(projections, state, options);
+  if (!collected) {
+    return false;
+  }
+  return isIndependentLeafCut(collected, state, options);
+}
+
+function collectLeafSurfaces(
+  projections: readonly ts.Identifier[],
+  state: StateCandidate,
+  options: EventScalarLeafOptions,
+): LeafSurfaces | null {
   const surfaces = new Map<number, ts.JsxElement | ts.JsxSelfClosingElement>();
   let returned: ts.Expression | null = null;
   for (const projection of projections) {
-    if (
-      nearestNestedFunction(projection, state.owner) ||
-      nearestRepeatedRenderCall(projection, state.owner) ||
-      !isSafeJsxProjectionReference(projection, state.owner, options.pureProjectionImports)
-    ) {
-      return false;
-    }
-    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
-    const opening = attribute?.parent.parent;
-    if (
-      !attribute ||
-      !opening ||
-      (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) ||
-      /^(?:children|key|ref|render|on[A-Z])/u.test(attribute.name.getText())
-    ) {
-      return false;
-    }
-    const surface = ts.isJsxOpeningElement(opening) ? opening.parent : opening;
-    if (jsxElementCountIn(surface) > 6) {
-      return false;
+    const surface = leafSurface(projection, state, options);
+    const returnExpression = surface && directOwnerReturnExpression(projection, state.owner);
+    if (!surface || !returnExpression || (returned !== null && returned !== returnExpression)) {
+      return null;
     }
     surfaces.set(surface.getStart(), surface);
-
-    const returnExpression = directOwnerReturnExpression(projection, state.owner);
-    if (!returnExpression || (returned !== null && returned !== returnExpression)) {
-      return false;
-    }
     returned = returnExpression;
   }
+  return returned === null ? null : { returned, surfaces };
+}
 
-  const leaves = [...surfaces.values()];
+function leafSurface(
+  projection: ts.Identifier,
+  state: StateCandidate,
+  options: EventScalarLeafOptions,
+): ts.JsxElement | ts.JsxSelfClosingElement | null {
+  if (
+    nearestNestedFunction(projection, state.owner) ||
+    nearestRepeatedRenderCall(projection, state.owner) ||
+    !isSafeJsxProjectionReference(projection, state.owner, options.pureProjectionImports)
+  ) {
+    return null;
+  }
+  const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
+  const opening = attribute?.parent.parent;
+  if (
+    !attribute ||
+    !opening ||
+    (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) ||
+    RESERVED_ATTRIBUTE.test(attribute.name.getText())
+  ) {
+    return null;
+  }
+  const surface = ts.isJsxOpeningElement(opening) ? opening.parent : opening;
+  return jsxElementCountIn(surface) > MAX_LEAF_ELEMENTS ? null : surface;
+}
+
+function isIndependentLeafCut(
+  collected: LeafSurfaces,
+  state: StateCandidate,
+  options: EventScalarLeafOptions,
+): boolean {
+  const leaves = [...collected.surfaces.values()];
   const leafElements = leaves.reduce((sum, surface) => sum + jsxElementCountIn(surface), 0);
   return (
-    leaves.length >= 2 &&
-    leaves.length <= 6 &&
-    leafElements / ownerElements <= 0.4 &&
-    returned !== null &&
+    leaves.length >= MIN_LEAF_SURFACES &&
+    leaves.length <= MAX_LEAF_SURFACES &&
+    leafElements / jsxElementCount(state.owner) <= MAX_LEAF_ELEMENT_SHARE &&
     hasIndependentRenderCutWitness(
-      returned,
+      collected.returned,
       leaves,
       options.localComponents,
       options.sourceComponents,
@@ -197,7 +255,7 @@ function isEventOwnedNumericState(
   }
 
   const setterCall = usage.setterCallNodes[0]!;
-  const argument = setterCall.arguments[0];
+  const [argument] = setterCall.arguments;
   const callback = nearestNestedFunction(setterCall, state.owner);
   const setterName = state.setterName!;
   return (
@@ -221,7 +279,7 @@ function isEventOwnedLiteralBooleanState(
     usage.setterCalls === usage.setterCallNodes.length &&
     isEventOwnedScalarBase(state, usage, options) &&
     usage.setterCallNodes.every((call) => {
-      const argument = call.arguments[0];
+      const [argument] = call.arguments;
       const callback = nearestNestedFunction(call, state.owner);
       return (
         call.arguments.length === 1 &&
@@ -243,7 +301,7 @@ function isEventOwnedScalarBase(
 ): boolean {
   return (
     state.setterName !== null &&
-    jsxElementCount(state.owner) >= 12 &&
+    jsxElementCount(state.owner) >= MIN_OWNER_ELEMENTS &&
     usage.localRenderReads > 0 &&
     usage.localRenderReads === usage.directRenderNodes.length &&
     usage.effectReads === 0 &&
@@ -261,7 +319,7 @@ function isEventOwnedScalarBase(
 }
 
 function hasNumericInitializer(state: StateCandidate): boolean {
-  const initializer = state.call.arguments[0];
+  const [initializer] = state.call.arguments;
   if (!initializer) {
     return false;
   }

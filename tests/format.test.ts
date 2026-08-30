@@ -1,8 +1,7 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-
 import { agentFindings, formatTextReport } from "../src/format.js";
 import type { HookFinding } from "../src/types.js";
+import assert from "node:assert/strict";
+import test from "node:test";
 
 function finding(disposition: HookFinding["disposition"]): HookFinding {
   return {

@@ -1,13 +1,12 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import type { AnalysisReport } from "../src/types.js";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import test from "node:test";
 import { promisify } from "node:util";
-
-import type { AnalysisReport } from "../src/types.js";
+import test from "node:test";
 
 const run = promisify(execFile);
 const CLI_PATH = path.join(import.meta.dirname, "..", "src", "cli.js");
@@ -51,6 +50,7 @@ test("--disposition change keeps only change findings and practices", async (tes
     "--disposition",
     "change",
   ]);
+  // SAFETY: the CLI ran with --json and exited successfully, so stdout is a serialized AnalysisReport.
   const report = JSON.parse(stdout) as AnalysisReport;
 
   assert.equal(report.schemaVersion, 1);
@@ -66,6 +66,7 @@ test("--disposition keep composes with the equals form and drops practices", asy
   testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const { stdout } = await run(process.execPath, [CLI_PATH, root, "--json", "--disposition=keep"]);
+  // SAFETY: the CLI ran with --json and exited successfully, so stdout is a serialized AnalysisReport.
   const report = JSON.parse(stdout) as AnalysisReport;
 
   assert.deepEqual(
@@ -85,6 +86,8 @@ async function runExpectingFailure(args: readonly string[]): Promise<CliFailure>
   try {
     await run(process.execPath, [CLI_PATH, ...args]);
   } catch (error) {
+    // SAFETY: execFile rejects with an Error carrying the child's exit code and captured streams;
+    // Every property of the asserted shape is optional and read through a `??` fallback below.
     const failure = error as { code?: number; stderr?: string; stdout?: string };
     return { code: failure.code ?? 0, stderr: failure.stderr ?? "", stdout: failure.stdout ?? "" };
   }

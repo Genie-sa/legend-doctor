@@ -22,10 +22,10 @@ const RUNTIME_FUNCTION_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
 ]);
 const identifiersByNode = new WeakMap<ts.Node, ReadonlyMap<string, readonly ts.Identifier[]>>();
 
-export function findAncestor<T extends ts.Node>(
+export function findAncestor<TNode extends ts.Node>(
   node: ts.Node,
-  predicate: (candidate: ts.Node) => candidate is T,
-): T | null {
+  predicate: (candidate: ts.Node) => candidate is TNode,
+): TNode | null {
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
     if (predicate(current)) {
       return current;
@@ -34,11 +34,11 @@ export function findAncestor<T extends ts.Node>(
   return null;
 }
 
-export function findAncestorUntil<T extends ts.Node>(
+export function findAncestorUntil<TNode extends ts.Node>(
   node: ts.Node,
-  predicate: (candidate: ts.Node) => candidate is T,
+  predicate: (candidate: ts.Node) => candidate is TNode,
   boundary: ts.Node,
-): T | null {
+): TNode | null {
   for (
     let current: ts.Node | undefined = node.parent;
     current && current !== boundary;
@@ -80,7 +80,7 @@ export function identifiersNamed(
 }
 
 export function isNonProductionHarness(fileName: string): boolean {
-  return /(?:^|\/)(?:__tests__|stories|demos)(?:\/|$)|\.(?:spec|test|stories?)\.[cm]?[jt]sx?$/i.test(
+  return /(?:^|\/)(?:__tests__|stories|demos)(?:\/|$)|\.(?:spec|test|stories?)\.[cm]?[jt]sx?$/iu.test(
     fileName.split(path.sep).join("/"),
   );
 }
@@ -119,37 +119,37 @@ export function scriptKindForFile(fileName: string): ts.ScriptKind {
   return ts.ScriptKind.TS;
 }
 
-export function visit(node: ts.Node | undefined, callback: (node: ts.Node) => void): void {
+export function visit(node: ts.Node | undefined, visitor: (node: ts.Node) => void): void {
   if (!node) {
     return;
   }
-  callback(node);
-  node.forEachChild((child) => visit(child, callback));
+  visitor(node);
+  node.forEachChild((child) => visit(child, visitor));
 }
 
 export function visitSkippingNestedFunctions(
   node: ts.Node,
   allowedFunction: ts.FunctionLikeDeclaration,
-  callback: (node: ts.Node) => void,
+  visitor: (node: ts.Node) => void,
 ): void {
-  callback(node);
+  visitor(node);
   node.forEachChild((child) => {
     if (isRuntimeFunctionLike(child) && child !== allowedFunction) {
       return;
     }
-    visitSkippingNestedFunctions(child, allowedFunction, callback);
+    visitSkippingNestedFunctions(child, allowedFunction, visitor);
   });
 }
 
 export function visitSkippingNestedRuntimeFunctions(
   node: ts.Node,
-  callback: (node: ts.Node) => void,
+  visitor: (node: ts.Node) => void,
 ): void {
-  callback(node);
+  visitor(node);
   node.forEachChild((child) => {
     if (isRuntimeFunctionLike(child)) {
       return;
     }
-    visitSkippingNestedRuntimeFunctions(child, callback);
+    visitSkippingNestedRuntimeFunctions(child, visitor);
   });
 }

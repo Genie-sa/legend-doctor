@@ -1,5 +1,3 @@
-import ts from "typescript";
-
 import {
   isDeclarationName,
   isNonValueIdentifier,
@@ -7,6 +5,7 @@ import {
 } from "../analysis-ast.js";
 import { nodeWithin, visit, visitSkippingNestedRuntimeFunctions } from "../ast.js";
 import type { StateCandidate } from "../analyze-source.js";
+import ts from "typescript";
 
 interface LocalDeclarations {
   readonly callableReactTypes: ReadonlySet<string>;
@@ -51,36 +50,7 @@ export function stateTypeMayBeCallable(
     return true;
   }
   if (ts.isTypeReferenceNode(type)) {
-    const name = type.typeName.getText();
-    if (
-      type.typeArguments?.some((argument) => stateTypeMayBeCallable(argument, sourceFile, seen))
-    ) {
-      return true;
-    }
-    const locals = localDeclarations(sourceFile);
-    if (ts.isIdentifier(type.typeName) && !seen.has(name)) {
-      const declarations = nearestVisibleDeclarations(locals.types.get(name) ?? [], type);
-      if (declarations.length > 1) {
-        return false;
-      }
-      const declaration = declarations[0];
-      if (declaration) {
-        const nextSeen = new Set(seen).add(name);
-        if (ts.isTypeAliasDeclaration(declaration)) {
-          return stateTypeMayBeCallable(declaration.type, sourceFile, nextSeen);
-        }
-        return declaration.members.some(
-          (member) =>
-            ts.isCallSignatureDeclaration(member) ||
-            ts.isConstructSignatureDeclaration(member) ||
-            ts.isMethodSignature(member) ||
-            ((ts.isPropertySignature(member) || ts.isIndexSignatureDeclaration(member)) &&
-              member.type !== undefined &&
-              stateTypeMayBeCallable(member.type, sourceFile, nextSeen)),
-        );
-      }
-    }
-    return name === "Function" || locals.callableReactTypes.has(name);
+    return typeReferenceMayBeCallable(type, sourceFile, seen);
   }
   let callable = false;
   type.forEachChild((child) => {
@@ -89,6 +59,63 @@ export function stateTypeMayBeCallable(
     }
   });
   return callable;
+}
+
+function typeReferenceMayBeCallable(
+  type: ts.TypeReferenceNode,
+  sourceFile: ts.SourceFile,
+  seen: ReadonlySet<string>,
+): boolean {
+  if (type.typeArguments?.some((argument) => stateTypeMayBeCallable(argument, sourceFile, seen))) {
+    return true;
+  }
+  const local = localTypeReferenceCallability(type, sourceFile, seen);
+  if (local !== null) {
+    return local;
+  }
+  const name = type.typeName.getText();
+  return name === "Function" || localDeclarations(sourceFile).callableReactTypes.has(name);
+}
+
+function localTypeReferenceCallability(
+  type: ts.TypeReferenceNode,
+  sourceFile: ts.SourceFile,
+  seen: ReadonlySet<string>,
+): boolean | null {
+  const name = type.typeName.getText();
+  if (!ts.isIdentifier(type.typeName) || seen.has(name)) {
+    return null;
+  }
+  const declarations = nearestVisibleDeclarations(
+    localDeclarations(sourceFile).types.get(name) ?? [],
+    type,
+  );
+  if (declarations.length > 1) {
+    return false;
+  }
+  const [declaration] = declarations;
+  return declaration
+    ? declaredTypeMayBeCallable(declaration, sourceFile, new Set(seen).add(name))
+    : null;
+}
+
+function declaredTypeMayBeCallable(
+  declaration: ts.TypeAliasDeclaration | ts.InterfaceDeclaration,
+  sourceFile: ts.SourceFile,
+  seen: ReadonlySet<string>,
+): boolean {
+  if (ts.isTypeAliasDeclaration(declaration)) {
+    return stateTypeMayBeCallable(declaration.type, sourceFile, seen);
+  }
+  return declaration.members.some(
+    (member) =>
+      ts.isCallSignatureDeclaration(member) ||
+      ts.isConstructSignatureDeclaration(member) ||
+      ts.isMethodSignature(member) ||
+      ((ts.isPropertySignature(member) || ts.isIndexSignatureDeclaration(member)) &&
+        member.type !== undefined &&
+        stateTypeMayBeCallable(member.type, sourceFile, seen)),
+  );
 }
 
 function localDeclarations(sourceFile: ts.SourceFile): LocalDeclarations {
@@ -100,57 +127,76 @@ function localDeclarations(sourceFile: ts.SourceFile): LocalDeclarations {
   const types = new Map<string, (ts.TypeAliasDeclaration | ts.InterfaceDeclaration)[]>();
   const values = new Map<string, ts.Declaration[]>();
   visit(sourceFile, (node) => {
-    if (
-      ts.isImportDeclaration(node) &&
-      ts.isStringLiteral(node.moduleSpecifier) &&
-      node.moduleSpecifier.text === "react" &&
-      node.importClause
-    ) {
-      const addQualifiedTypes = (namespace: string): void => {
-        for (const exported of REACT_CALLABLE_TYPE_EXPORTS) {
-          callableReactTypes.add(`${namespace}.${exported}`);
-        }
-      };
-      if (node.importClause.name) {
-        addQualifiedTypes(node.importClause.name.text);
-      }
-      const bindings = node.importClause.namedBindings;
-      if (bindings && ts.isNamespaceImport(bindings)) {
-        addQualifiedTypes(bindings.name.text);
-      }
-      if (bindings && ts.isNamedImports(bindings)) {
-        for (const element of bindings.elements) {
-          const exported = element.propertyName?.text ?? element.name.text;
-          if (REACT_CALLABLE_TYPE_EXPORTS.has(exported)) {
-            callableReactTypes.add(element.name.text);
-          }
-        }
+    if (ts.isImportDeclaration(node)) {
+      if (isReactModuleImport(node) && node.importClause) {
+        collectReactCallableTypeNames(node.importClause, callableReactTypes);
       }
       return;
     }
     if (ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node)) {
-      const matches = types.get(node.name.text) ?? [];
-      matches.push(node);
-      types.set(node.name.text, matches);
+      appendNamedDeclaration(types, node.name.text, node);
       return;
     }
     if (
-      !ts.isVariableDeclaration(node) &&
-      !ts.isFunctionDeclaration(node) &&
-      !ts.isClassDeclaration(node)
+      (ts.isVariableDeclaration(node) ||
+        ts.isFunctionDeclaration(node) ||
+        ts.isClassDeclaration(node)) &&
+      node.name &&
+      ts.isIdentifier(node.name)
     ) {
-      return;
+      appendNamedDeclaration(values, node.name.text, node);
     }
-    if (!node.name || !ts.isIdentifier(node.name)) {
-      return;
-    }
-    const matches = values.get(node.name.text) ?? [];
-    matches.push(node);
-    values.set(node.name.text, matches);
   });
   const declarations = { callableReactTypes, types, values };
   localDeclarationsCache.set(sourceFile, declarations);
   return declarations;
+}
+
+function appendNamedDeclaration<Declaration>(
+  index: Map<string, Declaration[]>,
+  name: string,
+  declaration: Declaration,
+): void {
+  const matches = index.get(name) ?? [];
+  matches.push(declaration);
+  index.set(name, matches);
+}
+
+function isReactModuleImport(node: ts.ImportDeclaration): boolean {
+  return ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "react";
+}
+
+function addQualifiedReactTypes(namespace: string, callableReactTypes: Set<string>): void {
+  for (const exported of REACT_CALLABLE_TYPE_EXPORTS) {
+    callableReactTypes.add(`${namespace}.${exported}`);
+  }
+}
+
+function collectReactCallableTypeNames(
+  importClause: ts.ImportClause,
+  callableReactTypes: Set<string>,
+): void {
+  if (importClause.name) {
+    addQualifiedReactTypes(importClause.name.text, callableReactTypes);
+  }
+  const bindings = importClause.namedBindings;
+  if (!bindings) {
+    return;
+  }
+  if (ts.isNamespaceImport(bindings)) {
+    addQualifiedReactTypes(bindings.name.text, callableReactTypes);
+    return;
+  }
+  addNamedReactTypes(bindings, callableReactTypes);
+}
+
+function addNamedReactTypes(bindings: ts.NamedImports, callableReactTypes: Set<string>): void {
+  for (const element of bindings.elements) {
+    const exported = element.propertyName?.text ?? element.name.text;
+    if (REACT_CALLABLE_TYPE_EXPORTS.has(exported)) {
+      callableReactTypes.add(element.name.text);
+    }
+  }
 }
 
 function nearestVisibleDeclarations<Declaration extends ts.Declaration>(
@@ -158,23 +204,15 @@ function nearestVisibleDeclarations<Declaration extends ts.Declaration>(
   reference: ts.Node,
 ): readonly Declaration[] {
   let nearestScope: ts.Node | null = null;
-  const matches: Declaration[] = [];
   for (const declaration of declarations) {
     const scope = declarationScope(declaration);
-    if (!nodeWithin(reference, scope)) {
-      continue;
-    }
-    if (!nearestScope || nodeWithin(scope, nearestScope)) {
-      if (scope !== nearestScope) {
-        matches.length = 0;
-      }
+    if (nodeWithin(reference, scope) && (!nearestScope || nodeWithin(scope, nearestScope))) {
       nearestScope = scope;
-      matches.push(declaration);
-    } else if (scope === nearestScope) {
-      matches.push(declaration);
     }
   }
-  return matches;
+  return nearestScope === null
+    ? []
+    : declarations.filter((declaration) => declarationScope(declaration) === nearestScope);
 }
 
 function declarationScope(declaration: ts.Declaration): ts.Node {
@@ -246,26 +284,7 @@ function expressionMayBeCallable(
     return true;
   }
   if (ts.isIdentifier(value)) {
-    if (seen.has(value.text)) {
-      return false;
-    }
-    const declarations = nearestVisibleDeclarations(
-      localDeclarations(value.getSourceFile()).values.get(value.text) ?? [],
-      value,
-    );
-    if (declarations.length !== 1) {
-      return false;
-    }
-    const declaration = declarations[0]!;
-    if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
-      return true;
-    }
-    const initializer = ts.isVariableDeclaration(declaration) && declaration.initializer;
-    return (
-      initializer !== false &&
-      initializer !== undefined &&
-      expressionMayBeCallable(initializer, new Set(seen).add(value.text))
-    );
+    return identifierMayBeCallable(value, seen);
   }
   if (ts.isConditionalExpression(value)) {
     return (
@@ -282,6 +301,29 @@ function expressionMayBeCallable(
     return expressionMayBeCallable(value.left, seen) || expressionMayBeCallable(value.right, seen);
   }
   return expressionContainsCallableLiteral(value);
+}
+
+function identifierMayBeCallable(value: ts.Identifier, seen: ReadonlySet<string>): boolean {
+  if (seen.has(value.text)) {
+    return false;
+  }
+  const declarations = nearestVisibleDeclarations(
+    localDeclarations(value.getSourceFile()).values.get(value.text) ?? [],
+    value,
+  );
+  if (declarations.length !== 1) {
+    return false;
+  }
+  const declaration = declarations[0]!;
+  if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
+    return true;
+  }
+  const initializer = ts.isVariableDeclaration(declaration) && declaration.initializer;
+  return (
+    initializer !== false &&
+    initializer !== undefined &&
+    expressionMayBeCallable(initializer, new Set(seen).add(value.text))
+  );
 }
 
 function stateValueIsUsedAsCallable(state: StateCandidate): boolean {

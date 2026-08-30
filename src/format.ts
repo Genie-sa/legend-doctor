@@ -2,7 +2,10 @@ import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types
 
 export function formatTextReport(report: AnalysisReport, target?: string): string {
   const { findings } = report;
-  const lines = [...findings.map(formatFinding), ...report.practices.map(formatPracticeFinding)];
+  const lines = [
+    ...findings.map((finding) => formatFinding(finding)),
+    ...report.practices.map((practice) => formatPracticeFinding(practice)),
+  ];
   const scope = target
     ? `Scanned ${report.files} files under ${target}`
     : `Scanned ${report.files} files`;

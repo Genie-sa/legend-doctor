@@ -1,5 +1,9 @@
-import ts from "typescript";
-
+import {
+  bindingContainsName,
+  callbackIsEventRooted,
+  localFunctionBinding,
+  uniqueVariableDeclaration,
+} from "./state-proofs.js";
 import {
   collectBindingNames,
   isDeclarationName,
@@ -13,13 +17,8 @@ import {
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
 import type { HookImports } from "../imports.js";
-import {
-  bindingContainsName,
-  callbackIsEventRooted,
-  localFunctionBinding,
-  uniqueVariableDeclaration,
-} from "./state-proofs.js";
 import type { RuntimeFunctionLike } from "../ast.js";
+import ts from "typescript";
 
 export interface ReactCommitContext {
   directTransitionCallbacks: ReadonlyMap<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>;
@@ -29,77 +28,128 @@ export interface ReactCommitContext {
   sensitiveOwners: ReadonlySet<RuntimeFunctionLike>;
 }
 
+type ReactHookImportName =
+  | "startTransition"
+  | "useCallback"
+  | "useEffect"
+  | "useInsertionEffect"
+  | "useLayoutEffect"
+  | "useRef"
+  | "useTransition";
+
+interface CommitScan {
+  readonly effectCalls: ts.CallExpression[];
+  readonly lifecycleRegions: Set<ts.Node>;
+  readonly nonTransitionSensitiveOwners: Set<RuntimeFunctionLike>;
+  readonly sensitiveOwners: Set<RuntimeFunctionLike>;
+  readonly transitionOwners: Set<RuntimeFunctionLike>;
+}
+
+interface TransitionCallbackMaps {
+  readonly direct: Map<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>;
+  readonly event: Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>;
+}
+
 export function collectReactCommitContext(
   sourceFile: ts.SourceFile,
   imports: HookImports,
 ): ReactCommitContext {
-  const effectCalls: ts.CallExpression[] = [];
-  const lifecycleRegions = new Set<ts.Node>();
-  const nonTransitionSensitiveOwners = new Set<RuntimeFunctionLike>();
-  const sensitiveOwners = new Set<RuntimeFunctionLike>();
-  const transitionOwners = new Set<RuntimeFunctionLike>();
+  const scan: CommitScan = {
+    effectCalls: [],
+    lifecycleRegions: new Set(),
+    nonTransitionSensitiveOwners: new Set(),
+    sensitiveOwners: new Set(),
+    transitionOwners: new Set(),
+  };
   visit(sourceFile, (node) => {
-    if (ts.isJsxAttribute(node) && node.name.getText() === "ref") {
-      const expression =
-        node.initializer && ts.isJsxExpression(node.initializer)
-          ? node.initializer.expression
-          : null;
-      const owner = expression ? findAncestor(node, isRuntimeFunctionLike) : null;
-      if (expression && owner && refIdentityMayChange(expression, owner, imports)) {
-        markRuntimeAncestors(node, sensitiveOwners);
-        markRuntimeAncestors(node, nonTransitionSensitiveOwners);
-      }
-      return;
-    }
-    if (ts.isCallExpression(node) && isReactEffectCall(node, imports)) {
-      lifecycleRegions.add(node);
-      const owner = findAncestor(node, isRuntimeFunctionLike);
-      const callback =
-        owner && node.arguments[0]
-          ? resolveLifecycleCallback(node.arguments[0], owner, imports, new Set())
-          : null;
-      if (callback) {
-        lifecycleRegions.add(callback);
-      }
-      if (isImportedReactCall(node, imports.useEffect, imports.reactNamespaces, "useEffect")) {
-        effectCalls.push(node);
-      }
-      if (hasNoDependencyArray(node)) {
-        markRuntimeAncestors(node, sensitiveOwners);
-        markRuntimeAncestors(node, nonTransitionSensitiveOwners);
-      }
-      return;
-    }
-    if (isTransitionReference(node, imports)) {
-      markRuntimeAncestors(node, sensitiveOwners);
-      markRuntimeAncestors(node, transitionOwners);
-    }
+    collectCommitNode(node, scan, imports);
   });
-  const directTransitionCallbacks = new Map<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>();
-  const eventTransitionCallbacks = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
-  for (const owner of transitionOwners) {
-    if (nonTransitionSensitiveOwners.has(owner)) {
+  const transitions = transitionCallbackMaps(scan, imports);
+  return {
+    directTransitionCallbacks: transitions.direct,
+    effectCalls: scan.effectCalls,
+    eventTransitionCallbacks: transitions.event,
+    lifecycleRegions: scan.lifecycleRegions,
+    sensitiveOwners: scan.sensitiveOwners,
+  };
+}
+
+function collectCommitNode(node: ts.Node, scan: CommitScan, imports: HookImports): void {
+  if (ts.isJsxAttribute(node) && node.name.getText() === "ref") {
+    collectRefAttribute(node, scan, imports);
+    return;
+  }
+  if (ts.isCallExpression(node) && isReactEffectCall(node, imports)) {
+    collectEffectCall(node, scan, imports);
+    return;
+  }
+  if (isTransitionReference(node, imports)) {
+    markRuntimeAncestors(node, scan.sensitiveOwners);
+    markRuntimeAncestors(node, scan.transitionOwners);
+  }
+}
+
+function markCommitSensitive(node: ts.Node, scan: CommitScan): void {
+  markRuntimeAncestors(node, scan.sensitiveOwners);
+  markRuntimeAncestors(node, scan.nonTransitionSensitiveOwners);
+}
+
+function collectRefAttribute(node: ts.JsxAttribute, scan: CommitScan, imports: HookImports): void {
+  const expression =
+    node.initializer && ts.isJsxExpression(node.initializer) ? node.initializer.expression : null;
+  const owner = expression ? findAncestor(node, isRuntimeFunctionLike) : null;
+  if (expression && owner && refIdentityMayChange(expression, owner, imports)) {
+    markCommitSensitive(node, scan);
+  }
+}
+
+function collectEffectCall(node: ts.CallExpression, scan: CommitScan, imports: HookImports): void {
+  scan.lifecycleRegions.add(node);
+  const owner = findAncestor(node, isRuntimeFunctionLike);
+  const callback =
+    owner && node.arguments[0]
+      ? resolveLifecycleCallback(node.arguments[0], { imports, owner, seen: new Set() })
+      : null;
+  if (callback) {
+    scan.lifecycleRegions.add(callback);
+  }
+  if (isImportedReactCall(node, imports, "useEffect")) {
+    scan.effectCalls.push(node);
+  }
+  if (hasNoDependencyArray(node)) {
+    markCommitSensitive(node, scan);
+  }
+}
+
+function transitionCallbackMaps(scan: CommitScan, imports: HookImports): TransitionCallbackMaps {
+  const direct = new Map<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>();
+  const event = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
+  for (const owner of scan.transitionOwners) {
+    if (scan.nonTransitionSensitiveOwners.has(owner)) {
       continue;
     }
     const transitions = directTransitionContext(owner, imports);
-    if (!transitions) {
-      continue;
+    if (transitions) {
+      direct.set(owner, transitions.callbacks);
+      event.set(owner, transitions.eventCallbacks);
     }
-    directTransitionCallbacks.set(owner, transitions.callbacks);
-    eventTransitionCallbacks.set(owner, transitions.eventCallbacks);
   }
-  return {
-    directTransitionCallbacks,
-    effectCalls,
-    eventTransitionCallbacks,
-    lifecycleRegions,
-    sensitiveOwners,
-  };
+  return { direct, event };
 }
 
 interface DirectTransitionContext {
   callbacks: readonly RuntimeFunctionLike[];
   eventCallbacks: ReadonlySet<RuntimeFunctionLike>;
+}
+
+interface TransitionWalk {
+  readonly owner: RuntimeFunctionLike;
+  readonly body: ts.Node;
+  readonly imports: HookImports;
+  readonly bindings: ReadonlySet<string>;
+  readonly callbacks: RuntimeFunctionLike[];
+  readonly eventCallbacks: Set<RuntimeFunctionLike>;
+  safe: boolean;
 }
 
 function directTransitionContext(
@@ -109,116 +159,177 @@ function directTransitionContext(
   if (!owner.body) {
     return null;
   }
+  const walk: TransitionWalk = {
+    bindings: transitionStartBindings(owner.body, imports),
+    body: owner.body,
+    callbacks: [],
+    eventCallbacks: new Set(),
+    imports,
+    owner,
+    safe: true,
+  };
+  collectDirectTransitions(walk);
+  if (!walk.safe || transitionsEscapeCallPosition(walk)) {
+    return null;
+  }
+  return { callbacks: walk.callbacks, eventCallbacks: walk.eventCallbacks };
+}
+
+function transitionStartBindings(body: ts.Node, imports: HookImports): ReadonlySet<string> {
   const bindings = new Set<string>();
-  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+  visitSkippingNestedRuntimeFunctions(body, (node) => {
     if (
       ts.isVariableDeclaration(node) &&
       ts.isArrayBindingPattern(node.name) &&
       node.initializer &&
       ts.isCallExpression(node.initializer) &&
-      isImportedReactCall(
-        node.initializer,
-        imports.useTransition,
-        imports.reactNamespaces,
-        "useTransition",
-      )
+      isImportedReactCall(node.initializer, imports, "useTransition")
     ) {
-      const start = node.name.elements[1];
+      const [, start] = node.name.elements;
       if (start && !ts.isOmittedExpression(start) && ts.isIdentifier(start.name)) {
         bindings.add(start.name.text);
       }
     }
   });
+  return bindings;
+}
 
-  const callbacks: RuntimeFunctionLike[] = [];
-  const eventCallbacks = new Set<RuntimeFunctionLike>();
-  let safe = true;
-  visit(owner.body, (node) => {
-    if (!safe || !ts.isCallExpression(node)) {
-      return;
-    }
-    const directHookTransition =
-      ts.isIdentifier(node.expression) && bindings.has(node.expression.text);
-    const directStaticTransition = isImportedReactCall(
-      node,
-      imports.startTransition,
-      imports.reactNamespaces,
-      "startTransition",
-    );
-    if (!directHookTransition && !directStaticTransition) {
-      return;
-    }
-    const callback = node.arguments[0] ? directTransitionCallback(node.arguments[0]!, owner) : null;
-    if (!callback) {
-      safe = false;
-      return;
-    }
-    visit(callback.body, (reference) => {
-      if (
-        safe &&
-        ts.isIdentifier(reference) &&
-        !isDeclarationName(reference) &&
-        !isNonValueIdentifier(reference) &&
-        localFunctionBinding(owner, reference.text)
-      ) {
-        safe = false;
-      }
-    });
-    callbacks.push(callback);
-    const caller = findAncestor(node, isRuntimeFunctionLike);
-    if (
-      caller &&
-      caller !== owner &&
-      (ts.isArrowFunction(caller) ||
-        ts.isFunctionDeclaration(caller) ||
-        ts.isFunctionExpression(caller)) &&
-      callbackIsEventRooted(caller, owner, "", new Set())
-    ) {
-      eventCallbacks.add(callback);
+function collectDirectTransitions(walk: TransitionWalk): void {
+  visit(walk.body, (node) => {
+    if (walk.safe && ts.isCallExpression(node)) {
+      collectTransitionCall(node, walk);
     }
   });
+}
 
-  if (!safe) {
+function isDirectTransitionCall(node: ts.CallExpression, walk: TransitionWalk): boolean {
+  return (
+    (ts.isIdentifier(node.expression) && walk.bindings.has(node.expression.text)) ||
+    isImportedReactCall(node, walk.imports, "startTransition")
+  );
+}
+
+function collectTransitionCall(node: ts.CallExpression, walk: TransitionWalk): void {
+  if (!isDirectTransitionCall(node, walk)) {
+    return;
+  }
+  const callback = node.arguments[0]
+    ? directTransitionCallback(node.arguments[0]!, walk.owner)
+    : null;
+  if (!callback) {
+    walk.safe = false;
+    return;
+  }
+  walk.safe = !callbackReadsOwnerFunction(callback, walk.owner);
+  walk.callbacks.push(callback);
+  if (isEventRootedTransition(node, walk.owner)) {
+    walk.eventCallbacks.add(callback);
+  }
+}
+
+function callbackReadsOwnerFunction(
+  callback: RuntimeFunctionLike,
+  owner: RuntimeFunctionLike,
+): boolean {
+  let reads = false;
+  visit(callback.body, (reference) => {
+    if (
+      ts.isIdentifier(reference) &&
+      !isDeclarationName(reference) &&
+      !isNonValueIdentifier(reference) &&
+      localFunctionBinding(owner, reference.text)
+    ) {
+      reads = true;
+    }
+  });
+  return reads;
+}
+
+function isEventRootedTransition(node: ts.CallExpression, owner: RuntimeFunctionLike): boolean {
+  const caller = findAncestor(node, isRuntimeFunctionLike);
+  return (
+    caller !== null &&
+    caller !== owner &&
+    (ts.isArrowFunction(caller) ||
+      ts.isFunctionDeclaration(caller) ||
+      ts.isFunctionExpression(caller)) &&
+    callbackIsEventRooted(caller, owner, "", new Set())
+  );
+}
+
+function referenceIsCalledOrListed(node: ts.Node): boolean {
+  return (
+    (ts.isCallExpression(node.parent) && node.parent.expression === node) ||
+    ts.isArrayLiteralExpression(node.parent)
+  );
+}
+
+function isBareTransitionIdentifier(
+  node: ts.Node,
+  transitionBindings: ReadonlySet<string>,
+): boolean {
+  return (
+    ts.isIdentifier(node) &&
+    transitionBindings.has(node.text) &&
+    !isDeclarationName(node) &&
+    !isNonValueIdentifier(node) &&
+    !referenceIsCalledOrListed(node)
+  );
+}
+
+function isBareNamespacedStartTransition(node: ts.Node, imports: HookImports): boolean {
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    imports.reactNamespaces.has(node.expression.text) &&
+    node.name.text === "startTransition" &&
+    !referenceIsCalledOrListed(node)
+  );
+}
+
+function transitionsEscapeCallPosition(walk: TransitionWalk): boolean {
+  const transitionBindings = new Set([...walk.bindings, ...walk.imports.startTransition]);
+  let escapes = false;
+  visit(walk.body, (node) => {
+    if (
+      isBareTransitionIdentifier(node, transitionBindings) ||
+      isBareNamespacedStartTransition(node, walk.imports)
+    ) {
+      escapes = true;
+    }
+  });
+  return escapes;
+}
+
+function constInitializer(owner: RuntimeFunctionLike, name: string): ts.Expression | null {
+  const declaration = uniqueVariableDeclaration(owner, name);
+  if (
+    !declaration?.initializer ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0
+  ) {
     return null;
   }
-  const transitionBindings = new Set([...bindings, ...imports.startTransition]);
+  return unwrapTransparentExpression(declaration.initializer);
+}
+
+function isSoleReference(owner: RuntimeFunctionLike, value: ts.Identifier): boolean {
+  let references = 0;
+  let unique = true;
   visit(owner.body, (node) => {
     if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      !transitionBindings.has(node.text) ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
+      ts.isIdentifier(node) &&
+      node.text === value.text &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node)
     ) {
-      return;
+      references += 1;
+      if (node !== value) {
+        unique = false;
+      }
     }
-    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
-      return;
-    }
-    if (ts.isArrayLiteralExpression(node.parent)) {
-      return;
-    }
-    safe = false;
   });
-  visit(owner.body, (node) => {
-    if (
-      !safe ||
-      !ts.isPropertyAccessExpression(node) ||
-      !ts.isIdentifier(node.expression) ||
-      !imports.reactNamespaces.has(node.expression.text) ||
-      node.name.text !== "startTransition"
-    ) {
-      return;
-    }
-    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
-      return;
-    }
-    if (ts.isArrayLiteralExpression(node.parent)) {
-      return;
-    }
-    safe = false;
-  });
-  return safe ? { callbacks, eventCallbacks } : null;
+  return unique && references === 1;
 }
 
 function directTransitionCallback(
@@ -232,77 +343,55 @@ function directTransitionCallback(
   if (!ts.isIdentifier(value)) {
     return null;
   }
-
-  const declaration = uniqueVariableDeclaration(owner, value.text);
-  if (
-    !declaration?.initializer ||
-    !ts.isVariableDeclarationList(declaration.parent) ||
-    (declaration.parent.flags & ts.NodeFlags.Const) === 0
-  ) {
+  const callback = constInitializer(owner, value.text);
+  if (callback === null || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
     return null;
   }
-  const callback = unwrapTransparentExpression(declaration.initializer);
-  if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) {
-    return null;
-  }
-
-  let references = 0,
-    safe = true;
-  visit(owner.body, (node) => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== value.text ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
-    references += 1;
-    if (node !== value) {
-      safe = false;
-    }
-  });
-  return safe && references === 1 ? callback : null;
+  return isSoleReference(owner, value) ? callback : null;
 }
+
+interface LifecycleResolution {
+  readonly owner: RuntimeFunctionLike;
+  readonly imports: HookImports;
+  readonly seen: ReadonlySet<string>;
+}
+
+type LifecycleCallback = ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression;
 
 function resolveLifecycleCallback(
   expression: ts.Expression,
-  owner: RuntimeFunctionLike,
-  imports: HookImports,
-  seen: ReadonlySet<string>,
-): ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null {
+  resolution: LifecycleResolution,
+): LifecycleCallback | null {
   const value = unwrapTransparentExpression(expression);
   if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) {
     return value;
   }
-  if (!ts.isIdentifier(value) || seen.has(value.text)) {
+  if (!ts.isIdentifier(value) || resolution.seen.has(value.text)) {
     return null;
   }
+  return (
+    localFunctionBinding(resolution.owner, value.text) ?? resolveLifecycleAlias(value, resolution)
+  );
+}
 
-  const direct = localFunctionBinding(owner, value.text);
-  if (direct) {
-    return direct;
-  }
-  const declaration = uniqueVariableDeclaration(owner, value.text);
-  if (
-    !declaration?.initializer ||
-    !ts.isVariableDeclarationList(declaration.parent) ||
-    (declaration.parent.flags & ts.NodeFlags.Const) === 0
-  ) {
+function resolveLifecycleAlias(
+  value: ts.Identifier,
+  resolution: LifecycleResolution,
+): LifecycleCallback | null {
+  const initializer = constInitializer(resolution.owner, value.text);
+  if (initializer === null) {
     return null;
   }
-  const initializer = unwrapTransparentExpression(declaration.initializer);
-  const nextSeen = new Set(seen).add(value.text);
+  const next = { ...resolution, seen: new Set(resolution.seen).add(value.text) };
   if (ts.isIdentifier(initializer)) {
-    return resolveLifecycleCallback(initializer, owner, imports, nextSeen);
+    return resolveLifecycleCallback(initializer, next);
   }
   if (
     ts.isCallExpression(initializer) &&
-    isImportedReactCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback") &&
+    isImportedReactCall(initializer, resolution.imports, "useCallback") &&
     initializer.arguments[0]
   ) {
-    return resolveLifecycleCallback(initializer.arguments[0], owner, imports, nextSeen);
+    return resolveLifecycleCallback(initializer.arguments[0], next);
   }
   return null;
 }
@@ -315,6 +404,17 @@ function markRuntimeAncestors(node: ts.Node, owners: Set<RuntimeFunctionLike>): 
   }
 }
 
+function conditionalRefIdentityMayChange(
+  value: ts.ConditionalExpression,
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+): boolean {
+  return (
+    refIdentityMayChange(value.whenTrue, owner, imports) ||
+    refIdentityMayChange(value.whenFalse, owner, imports)
+  );
+}
+
 function refIdentityMayChange(
   expression: ts.Expression,
   owner: RuntimeFunctionLike,
@@ -325,14 +425,16 @@ function refIdentityMayChange(
     return !ts.isCallExpression(value) || !isStableReactRefFactory(value, imports);
   }
   if (ts.isConditionalExpression(value)) {
-    return (
-      refIdentityMayChange(value.whenTrue, owner, imports) ||
-      refIdentityMayChange(value.whenFalse, owner, imports)
-    );
+    return conditionalRefIdentityMayChange(value, owner, imports);
   }
-  if (!ts.isIdentifier(value)) {
-    return false;
-  }
+  return ts.isIdentifier(value) && aliasedRefIdentityMayChange(value, owner, imports);
+}
+
+function aliasedRefIdentityMayChange(
+  value: ts.Identifier,
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+): boolean {
   if (localFunctionBinding(owner, value.text)) {
     return true;
   }
@@ -342,22 +444,19 @@ function refIdentityMayChange(
   }
   const initializer = unwrapTransparentExpression(declaration.initializer);
   if (ts.isConditionalExpression(initializer)) {
-    return (
-      refIdentityMayChange(initializer.whenTrue, owner, imports) ||
-      refIdentityMayChange(initializer.whenFalse, owner, imports)
-    );
+    return conditionalRefIdentityMayChange(initializer, owner, imports);
   }
   return ts.isCallExpression(initializer) && !isStableReactRefFactory(initializer, imports);
 }
 
 function isStableReactRefFactory(call: ts.CallExpression, imports: HookImports): boolean {
-  if (isImportedReactCall(call, imports.useRef, imports.reactNamespaces, "useRef")) {
+  if (isImportedReactCall(call, imports, "useRef")) {
     return true;
   }
-  if (!isImportedReactCall(call, imports.useCallback, imports.reactNamespaces, "useCallback")) {
+  if (!isImportedReactCall(call, imports, "useCallback")) {
     return false;
   }
-  const dependencies = call.arguments[1];
+  const [, dependencies] = call.arguments;
   if (!dependencies) {
     return false;
   }
@@ -365,121 +464,104 @@ function isStableReactRefFactory(call: ts.CallExpression, imports: HookImports):
   return ts.isArrayLiteralExpression(value) && value.elements.length === 0;
 }
 
+function isAbsentDependencyExpression(value: ts.Expression): boolean {
+  return value.kind === ts.SyntaxKind.NullKeyword || ts.isVoidExpression(value);
+}
+
 function hasNoDependencyArray(call: ts.CallExpression): boolean {
-  const dependency = call.arguments[1];
+  const [, dependency] = call.arguments;
   if (!dependency) {
     return true;
   }
   const value = unwrapTransparentExpression(dependency);
-  if (value.kind === ts.SyntaxKind.NullKeyword) {
-    return true;
-  }
-  if (ts.isVoidExpression(value)) {
+  if (isAbsentDependencyExpression(value)) {
     return true;
   }
   if (!ts.isIdentifier(value) || value.text !== "undefined") {
     return false;
   }
-  const owner = findAncestor(call, isRuntimeFunctionLike);
-  return owner === null || !hasLexicalBindingAt(call, owner, value.text);
+  return bindingIsUnshadowed(call, value.text);
 }
 
 function isReactEffectCall(call: ts.CallExpression, imports: HookImports): boolean {
   return (
-    isImportedReactCall(call, imports.useEffect, imports.reactNamespaces, "useEffect") ||
-    isImportedReactCall(
-      call,
-      imports.useLayoutEffect,
-      imports.reactNamespaces,
-      "useLayoutEffect",
-    ) ||
-    isImportedReactCall(
-      call,
-      imports.useInsertionEffect,
-      imports.reactNamespaces,
-      "useInsertionEffect",
-    )
+    isImportedReactCall(call, imports, "useEffect") ||
+    isImportedReactCall(call, imports, "useLayoutEffect") ||
+    isImportedReactCall(call, imports, "useInsertionEffect")
   );
 }
 
 function isTransitionReference(node: ts.Node, imports: HookImports): boolean {
-  if (
-    ts.isCallExpression(node) &&
-    isImportedReactCall(node, imports.useTransition, imports.reactNamespaces, "useTransition")
-  ) {
+  if (ts.isCallExpression(node) && isImportedReactCall(node, imports, "useTransition")) {
     return true;
   }
   if (ts.isIdentifier(node)) {
-    if (!imports.startTransition.has(node.text)) {
-      return false;
-    }
-    const owner = findAncestor(node, isRuntimeFunctionLike);
-    return owner === null || !hasLexicalBindingAt(node, owner, node.text);
+    return imports.startTransition.has(node.text) && bindingIsUnshadowed(node, node.text);
+  }
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    imports.reactNamespaces.has(node.expression.text) &&
+    node.name.text === "startTransition" &&
+    bindingIsUnshadowed(node, node.expression.text)
+  );
+}
+
+function reactCallBinding(
+  expression: ts.LeftHandSideExpression,
+  imports: HookImports,
+  hook: ReactHookImportName,
+): string | null {
+  if (ts.isIdentifier(expression) && imports[hook].has(expression.text)) {
+    return expression.text;
   }
   if (
-    !ts.isPropertyAccessExpression(node) ||
-    !ts.isIdentifier(node.expression) ||
-    !imports.reactNamespaces.has(node.expression.text) ||
-    node.name.text !== "startTransition"
+    ts.isPropertyAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    imports.reactNamespaces.has(expression.expression.text) &&
+    expression.name.text === hook
   ) {
-    return false;
+    return expression.expression.text;
   }
-  const owner = findAncestor(node, isRuntimeFunctionLike);
-  return owner === null || !hasLexicalBindingAt(node, owner, node.expression.text);
+  return null;
 }
 
 function isImportedReactCall(
   call: ts.CallExpression,
-  localNames: ReadonlySet<string>,
-  namespaceNames: ReadonlySet<string>,
-  canonicalName: string,
+  imports: HookImports,
+  hook: ReactHookImportName,
 ): boolean {
-  const { expression } = call;
-  const binding =
-    ts.isIdentifier(expression) && localNames.has(expression.text)
-      ? expression.text
-      : ts.isPropertyAccessExpression(expression) &&
-          ts.isIdentifier(expression.expression) &&
-          namespaceNames.has(expression.expression.text) &&
-          expression.name.text === canonicalName
-        ? expression.expression.text
-        : null;
-  if (!binding) {
-    return false;
-  }
-  const owner = findAncestor(call, isRuntimeFunctionLike);
-  return owner === null || !hasLexicalBindingAt(call, owner, binding);
+  const binding = reactCallBinding(call.expression, imports, hook);
+  return binding !== null && bindingIsUnshadowed(call, binding);
+}
+
+function bindingIsUnshadowed(node: ts.Node, name: string): boolean {
+  const owner = findAncestor(node, isRuntimeFunctionLike);
+  return owner === null || !hasLexicalBindingAt(node, owner, name);
 }
 
 const functionScopedBindingsByOwner = new WeakMap<RuntimeFunctionLike, ReadonlySet<string>>();
 
-function hasLexicalBindingAt(node: ts.Node, owner: RuntimeFunctionLike, name: string): boolean {
-  if (owner.parameters.some((parameter) => bindingContainsName(parameter.name, name))) {
-    return true;
+function functionScopedBindings(owner: RuntimeFunctionLike, body: ts.Node): ReadonlySet<string> {
+  const cached = functionScopedBindingsByOwner.get(owner);
+  if (cached) {
+    return cached;
   }
-  if (!owner.body) {
-    return false;
-  }
+  const collected = new Set<string>();
+  visitSkippingNestedRuntimeFunctions(body, (current) => {
+    if (
+      ts.isVariableDeclaration(current) &&
+      ts.isVariableDeclarationList(current.parent) &&
+      (current.parent.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0
+    ) {
+      collectBindingNames(current.name, collected);
+    }
+  });
+  functionScopedBindingsByOwner.set(owner, collected);
+  return collected;
+}
 
-  let functionScopedBindings = functionScopedBindingsByOwner.get(owner);
-  if (!functionScopedBindings) {
-    const collected = new Set<string>();
-    visitSkippingNestedRuntimeFunctions(owner.body, (current) => {
-      if (
-        ts.isVariableDeclaration(current) &&
-        ts.isVariableDeclarationList(current.parent) &&
-        (current.parent.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0
-      ) {
-        collectBindingNames(current.name, collected);
-      }
-    });
-    functionScopedBindings = collected;
-    functionScopedBindingsByOwner.set(owner, functionScopedBindings);
-  }
-  if (functionScopedBindings.has(name)) {
-    return true;
-  }
-
+function enclosingScopeDeclares(node: ts.Node, owner: RuntimeFunctionLike, name: string): boolean {
   for (
     let current: ts.Node | undefined = node.parent;
     current && current !== owner;
@@ -490,6 +572,18 @@ function hasLexicalBindingAt(node: ts.Node, owner: RuntimeFunctionLike, name: st
     }
   }
   return false;
+}
+
+function hasLexicalBindingAt(node: ts.Node, owner: RuntimeFunctionLike, name: string): boolean {
+  if (owner.parameters.some((parameter) => bindingContainsName(parameter.name, name))) {
+    return true;
+  }
+  if (!owner.body) {
+    return false;
+  }
+  return (
+    functionScopedBindings(owner, owner.body).has(name) || enclosingScopeDeclares(node, owner, name)
+  );
 }
 
 function scopeDirectlyDeclares(scope: ts.Node, name: string): boolean {

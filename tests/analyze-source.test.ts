@@ -1,8 +1,8 @@
+import type { HookFinding } from "../src/types.js";
+import { agentFindings } from "../src/format.js";
+import { analyzeSource } from "../src/analyze-source.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { analyzeSource } from "../src/analyze-source.js";
-import { agentFindings } from "../src/format.js";
 
 const requireValue = <Value>(value: Value | undefined): Value => {
   assert.ok(value);
@@ -978,7 +978,7 @@ test("does not isolate controlled state with a render-phase setter", () => {
 });
 
 test("does not isolate controlled state read by an effect-like lifecycle hook", () => {
-  const source = (hookImport: string, hookCall: string) =>
+  const source = (hookImport: string, hookCall: string): HookFinding | undefined =>
     analyzeSource(
       `
     import { useState, ${hookImport} } from "react";
@@ -1046,7 +1046,7 @@ test("tracks state reads and writes through React lifecycle callback bindings", 
   `,
     "fixture.tsx",
   );
-  const stateFor = (owner: string) =>
+  const stateFor = (owner: string): HookFinding | undefined =>
     findings.find(
       (finding) =>
         finding.hook === "useState" &&
@@ -1981,18 +1981,21 @@ test("does not change a synchronized draft's stale deferred snapshot", () => {
 });
 
 test("rejects reset mirrors, hook-fed owner work, and edit commands with external work", () => {
-  const snippets = [
-    `useEffect(() => { setValue(source); }, [source]);`,
-    `const filtered = useDebouncedValue(value.trim()); useEffect(() => { setValue(source); }, [source]);`,
-    `useEffect(() => { setValue(source); }, [source]);`,
+  const cases = [
+    {
+      edit: `const edit = () => setValue(source);`,
+      setup: `useEffect(() => { setValue(source); }, [source]);`,
+    },
+    {
+      edit: `const edit = () => setValue("edit");`,
+      setup: `const filtered = useDebouncedValue(value.trim()); useEffect(() => { setValue(source); }, [source]);`,
+    },
+    {
+      edit: `const edit = () => { setValue("edit"); updateExternal(); };`,
+      setup: `useEffect(() => { setValue(source); }, [source]);`,
+    },
   ];
-  for (const [index, setup] of snippets.entries()) {
-    const edit =
-      index === 0
-        ? `const edit = () => setValue(source);`
-        : index === 2
-          ? `const edit = () => { setValue("edit"); updateExternal(); };`
-          : `const edit = () => setValue("edit");`;
+  for (const { edit, setup } of cases) {
     const [finding] = analyzeSource(
       `
       import { useEffect, useState } from "react";
@@ -5318,7 +5321,7 @@ test("groups a persistent dialog model behind one bounded payload gate", () => {
 });
 
 test("groups a persistent dialog payload, visibility, and monotonic mount latch", () => {
-  const source = (resetLatch: string) => `
+  const source = (resetLatch: string): string => `
     import { lazy, useState } from "react";
     interface Item { id: string }
     const ItemDialog = lazy(() => import("./ItemDialog"));
@@ -5353,7 +5356,7 @@ test("groups a persistent dialog payload, visibility, and monotonic mount latch"
 });
 
 test("groups one bounded logical-and dialog gate without merging payload fanout", () => {
-  const source = (extra: string) => `
+  const source = (extra: string): string => `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDialog(_props: unknown) { return null; }
@@ -5382,7 +5385,7 @@ test("groups one bounded logical-and dialog gate without merging payload fanout"
 });
 
 test("groups a bounded multi-element dialog gate without wrapping a broad branch", () => {
-  const source = (children: string) => `
+  const source = (children: string): string => `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDialog(_props: unknown) { return null; }
@@ -5419,7 +5422,7 @@ test("groups a bounded multi-element dialog gate without wrapping a broad branch
 });
 
 test("groups an undefined-initialized dialog payload without accepting opaque initializers", () => {
-  const source = (initializer: string) => `
+  const source = (initializer: string): string => `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDrawer(_props: unknown) { return null; }
@@ -5451,7 +5454,7 @@ test("isolates one nullable payload inside a bounded dialog boundary", () => {
     dialog: string,
     extraWrite = "",
     confirmBody = "if (!target) return; remove(target.id); setTarget(null);",
-  ) => `
+  ): string => `
     import { useState } from "react";
     interface Item { id: string; name: string }
     function Eager(_props: { onFire: () => void }) { return null; }
@@ -5545,7 +5548,7 @@ test("isolates call-free payload projections inside one bounded conditional dial
     dialog: string,
     extraWrite = "",
     producer = `<button onClick={() => open()}>Edit</button>`,
-  ) => `
+  ): string => `
     import { useState } from "react";
     interface Item { id: string }
     export function Screen({ item }: { item: Item }) {
@@ -5758,7 +5761,7 @@ test("rejects incomplete payload-gated feedback models", () => {
 });
 
 test("groups a co-written cursor and editable name into one observable draft", () => {
-  const source = (independentCursorWrite: string, extraControl = "") => `
+  const source = (independentCursorWrite: string, extraControl = ""): string => `
     import { useCallback, useState } from "react";
     interface Item { id: string; name: string }
     function Screen({ items }: { items: Item[] }) {
@@ -5816,7 +5819,7 @@ test("groups a co-written cursor and editable name into one observable draft", (
 });
 
 test("groups selection mode with its independently editable ID collection", () => {
-  const source = (partialModeWrite: string) => `
+  const source = (partialModeWrite: string): string => `
     import { useCallback, useState } from "react";
     function Screen({ rows }: { rows: Array<{ id: number }> }) {
       const [selectionMode, setSelectionMode] = useState(false);
@@ -6395,7 +6398,7 @@ test("isolates effect-written presentation state in a leaf subscriber", () => {
 });
 
 test("isolates presentation state written by an effect-owned memoized command", () => {
-  const source = (escape: string) => `
+  const source = (escape: string): string => `
     import { useEffect, useMemo, useState } from "react";
     export function Dashboard({ values }: { values: number[] }) {
       const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -6425,7 +6428,7 @@ test("isolates presentation state written by an effect-owned memoized command", 
 });
 
 test("requires a material five-element cut in a compact effect-written owner", () => {
-  const analyze = (siblings: string) =>
+  const analyze = (siblings: string): HookFinding | undefined =>
     analyzeSource(
       `
     import { useEffect, useState } from "react";
@@ -6636,7 +6639,7 @@ test("does not call lifecycle or render-callback state command-only", () => {
 });
 
 test("replaces a self-refreshing effect-owned command snapshot with a ref", () => {
-  const source = (escape: string, readAfterWrite: string) => `
+  const source = (escape: string, readAfterWrite: string): string => `
     import { useCallback, useEffect, useState } from "react";
     export function Listener({ next }: { next: string }) {
       const [previous, setPrevious] = useState<string>();

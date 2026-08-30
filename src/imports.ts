@@ -27,168 +27,145 @@ export interface HookImports {
   useValue: ReadonlySet<string>;
 }
 
+const LEGEND_MODULE = "@legendapp/state";
 const LEGEND_REACT_MODULE = "@legendapp/state/react";
 const REACT_MODULE = "react";
+const HOST_COMPONENT_MODULE = "react-native";
 
-export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
-  const batch = new Set<string>();
-  const reactNamespaces = new Set<string>();
-  const legendNamespaces = new Set<string>();
-  const legendReactNamespaces = new Set<string>();
-  const legacyUseValue = new Set<string>();
-  const hostComponents = new Set<string>();
-  const lazy = new Set<string>();
-  const observable = new Set<string>();
-  const observableTypes = new Set<string>();
-  const startTransition = new Set<string>();
-  const useCallback = new Set<string>();
-  const useEffect = new Set<string>();
-  const useInsertionEffect = new Set<string>();
-  const useImperativeHandle = new Set<string>();
-  const useLayoutEffect = new Set<string>();
-  const useMemo = new Set<string>();
-  const useMount = new Set<string>();
-  const useObservable = new Set<string>();
-  const useObserveEffect = new Set<string>();
-  const useRef = new Set<string>();
-  const useState = new Set<string>();
-  const useTransition = new Set<string>();
-  const useUnmount = new Set<string>();
-  const useValue = new Set<string>();
+type HookImportSets = { readonly [Key in keyof HookImports]: Set<string> };
 
-  for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
-      continue;
-    }
+const NAMESPACE_IMPORT_TARGETS = new Map<string, keyof HookImports>([
+  [LEGEND_MODULE, "legendNamespaces"],
+  [LEGEND_REACT_MODULE, "legendReactNamespaces"],
+  [REACT_MODULE, "reactNamespaces"],
+]);
 
-    const moduleName = statement.moduleSpecifier.text;
-    const clause = statement.importClause;
-    if (!clause) {
-      continue;
-    }
+const REACT_NAMED_IMPORT_TARGETS = new Map<string, keyof HookImports>([
+  ["lazy", "lazy"],
+  ["startTransition", "startTransition"],
+  ["useCallback", "useCallback"],
+  ["useEffect", "useEffect"],
+  ["useImperativeHandle", "useImperativeHandle"],
+  ["useInsertionEffect", "useInsertionEffect"],
+  ["useLayoutEffect", "useLayoutEffect"],
+  ["useMemo", "useMemo"],
+  ["useRef", "useRef"],
+  ["useState", "useState"],
+  ["useTransition", "useTransition"],
+]);
 
-    if (moduleName === REACT_MODULE && clause.name) {
-      reactNamespaces.add(clause.name.text);
-    }
+const LEGEND_REACT_NAMED_IMPORT_TARGETS = new Map<string, keyof HookImports>([
+  ["use$", "legacyUseValue"],
+  ["useMount", "useMount"],
+  ["useObservable", "useObservable"],
+  ["useObserveEffect", "useObserveEffect"],
+  ["useSelector", "legacyUseValue"],
+  ["useUnmount", "useUnmount"],
+  ["useValue", "useValue"],
+]);
 
-    const bindings = clause.namedBindings;
-    if (moduleName === "@legendapp/state" && bindings && ts.isNamespaceImport(bindings)) {
-      legendNamespaces.add(bindings.name.text);
-      continue;
-    }
-    if (moduleName === LEGEND_REACT_MODULE && bindings && ts.isNamespaceImport(bindings)) {
-      legendReactNamespaces.add(bindings.name.text);
-      continue;
-    }
-    if (moduleName === REACT_MODULE && bindings && ts.isNamespaceImport(bindings)) {
-      reactNamespaces.add(bindings.name.text);
-      continue;
-    }
-    if (!bindings || !ts.isNamedImports(bindings)) {
-      continue;
-    }
+const LEGEND_NAMED_IMPORT_TARGETS = new Map<string, keyof HookImports>([
+  ["Observable", "observableTypes"],
+  ["ObservableParam", "observableTypes"],
+  ["batch", "batch"],
+  ["observable", "observable"],
+]);
 
-    for (const element of bindings.elements) {
-      const importedName = element.propertyName?.text ?? element.name.text;
-      const localName = element.name.text;
-      if (moduleName === "react-native") {
-        hostComponents.add(localName);
-      }
-      if (moduleName === REACT_MODULE) {
-        if (importedName === "lazy") {
-          lazy.add(localName);
-        }
-        if (importedName === "useState") {
-          useState.add(localName);
-        }
-        if (importedName === "useCallback") {
-          useCallback.add(localName);
-        }
-        if (importedName === "useEffect") {
-          useEffect.add(localName);
-        }
-        if (importedName === "useInsertionEffect") {
-          useInsertionEffect.add(localName);
-        }
-        if (importedName === "useImperativeHandle") {
-          useImperativeHandle.add(localName);
-        }
-        if (importedName === "useLayoutEffect") {
-          useLayoutEffect.add(localName);
-        }
-        if (importedName === "useMemo") {
-          useMemo.add(localName);
-        }
-        if (importedName === "useRef") {
-          useRef.add(localName);
-        }
-        if (importedName === "useTransition") {
-          useTransition.add(localName);
-        }
-        if (importedName === "startTransition") {
-          startTransition.add(localName);
-        }
-      }
-      if (moduleName === LEGEND_REACT_MODULE) {
-        if (importedName === "useSelector" || importedName === "use$") {
-          legacyUseValue.add(localName);
-        }
-        if (importedName === "useObservable") {
-          useObservable.add(localName);
-        }
-        if (importedName === "useObserveEffect") {
-          useObserveEffect.add(localName);
-        }
-        if (importedName === "useMount") {
-          useMount.add(localName);
-        }
-        if (importedName === "useUnmount") {
-          useUnmount.add(localName);
-        }
-        if (importedName === "useValue") {
-          useValue.add(localName);
-        }
-      }
-      if (moduleName === "@legendapp/state") {
-        if (importedName === "batch") {
-          batch.add(localName);
-        }
-        if (importedName === "observable") {
-          observable.add(localName);
-        }
-        if (importedName === "Observable" || importedName === "ObservableParam") {
-          observableTypes.add(localName);
-        }
-      }
+const NAMED_IMPORT_TARGETS = new Map<string, ReadonlyMap<string, keyof HookImports>>([
+  [LEGEND_MODULE, LEGEND_NAMED_IMPORT_TARGETS],
+  [LEGEND_REACT_MODULE, LEGEND_REACT_NAMED_IMPORT_TARGETS],
+  [REACT_MODULE, REACT_NAMED_IMPORT_TARGETS],
+]);
+
+function createHookImportSets(): HookImportSets {
+  return {
+    batch: new Set(),
+    hostComponents: new Set(),
+    lazy: new Set(),
+    legacyUseValue: new Set(),
+    legendNamespaces: new Set(),
+    legendReactNamespaces: new Set(),
+    observable: new Set(),
+    observableTypes: new Set(),
+    reactNamespaces: new Set(),
+    startTransition: new Set(),
+    useCallback: new Set(),
+    useEffect: new Set(),
+    useImperativeHandle: new Set(),
+    useInsertionEffect: new Set(),
+    useLayoutEffect: new Set(),
+    useMemo: new Set(),
+    useMount: new Set(),
+    useObservable: new Set(),
+    useObserveEffect: new Set(),
+    useRef: new Set(),
+    useState: new Set(),
+    useTransition: new Set(),
+    useUnmount: new Set(),
+    useValue: new Set(),
+  };
+}
+
+function collectNamespaceName(sets: HookImportSets, moduleName: string, localName: string): void {
+  const target = NAMESPACE_IMPORT_TARGETS.get(moduleName);
+  if (target) {
+    sets[target].add(localName);
+  }
+}
+
+function collectNamedImportNames(
+  sets: HookImportSets,
+  moduleName: string,
+  elements: readonly ts.ImportSpecifier[],
+): void {
+  const targets = NAMED_IMPORT_TARGETS.get(moduleName);
+  for (const element of elements) {
+    const localName = element.name.text;
+    if (moduleName === HOST_COMPONENT_MODULE) {
+      sets.hostComponents.add(localName);
+    }
+    const target = targets?.get(element.propertyName?.text ?? localName);
+    if (target) {
+      sets[target].add(localName);
     }
   }
+}
 
-  return {
-    batch,
-    hostComponents,
-    lazy,
-    legacyUseValue,
-    legendNamespaces,
-    legendReactNamespaces,
-    observable,
-    observableTypes,
-    reactNamespaces,
-    startTransition,
-    useCallback,
-    useEffect,
-    useImperativeHandle,
-    useInsertionEffect,
-    useLayoutEffect,
-    useMemo,
-    useMount,
-    useObservable,
-    useObserveEffect,
-    useRef,
-    useState,
-    useTransition,
-    useUnmount,
-    useValue,
-  };
+function collectClauseNames(
+  sets: HookImportSets,
+  moduleName: string,
+  clause: ts.ImportClause,
+): void {
+  if (moduleName === REACT_MODULE && clause.name) {
+    sets.reactNamespaces.add(clause.name.text);
+  }
+  const bindings = clause.namedBindings;
+  if (bindings && ts.isNamespaceImport(bindings)) {
+    collectNamespaceName(sets, moduleName, bindings.name.text);
+    return;
+  }
+  if (bindings && ts.isNamedImports(bindings)) {
+    collectNamedImportNames(sets, moduleName, bindings.elements);
+  }
+}
+
+function collectStatementImports(sets: HookImportSets, statement: ts.Statement): void {
+  if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+    return;
+  }
+  const clause = statement.importClause;
+  if (!clause) {
+    return;
+  }
+  collectClauseNames(sets, statement.moduleSpecifier.text, clause);
+}
+
+export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
+  const sets = createHookImportSets();
+  for (const statement of sourceFile.statements) {
+    collectStatementImports(sets, statement);
+  }
+  return sets;
 }
 
 export function isImportedHookCall(

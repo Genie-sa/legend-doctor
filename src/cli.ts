@@ -1,16 +1,22 @@
 #!/usr/bin/env node
 
+import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
+import { agentFindings, formatTextReport } from "./format.js";
+import { analyzePath, analyzePathDetailed } from "./analyze-path.js";
 import { readFile, stat } from "node:fs/promises";
+import { URL } from "node:url";
 import path from "node:path";
 import process from "node:process";
-
-import { analyzePath, analyzePathDetailed } from "./analyze-path.js";
-import { agentFindings, formatTextReport } from "./format.js";
-import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
 
 type Disposition = HookFinding["disposition"] | LegendPracticeFinding["disposition"];
 
 const DISPOSITIONS: readonly Disposition[] = ["candidate", "change", "keep", "style"];
+const DISPOSITION_VALUES: ReadonlySet<string> = new Set(DISPOSITIONS);
+const CLI_ARGUMENT_OFFSET = 2;
+const JSON_INDENT = 2;
+const MAX_FLAG_SUGGESTION_DISTANCE = 3;
+const EXIT_INVALID_USAGE = 2;
+const EXIT_SCAN_FAILED = 1;
 const BOOLEAN_FLAGS = new Map<string, "actionable" | "coverage" | "help" | "json" | "version">([
   ["--actionable", "actionable"],
   ["--coverage", "coverage"],
@@ -83,16 +89,28 @@ interface CliOptions {
   version: boolean;
 }
 
-class UsageError extends Error {}
+class UsageError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "UsageError";
+  }
+}
 
-async function main(): Promise<void> {
-  const options = parseArguments(process.argv.slice(2));
+async function writeInformationalOutput(options: CliOptions): Promise<boolean> {
   if (options.help) {
     process.stdout.write(HELP);
-    return;
+    return true;
   }
   if (options.version) {
     process.stdout.write(`legend-doctor ${await packageVersion()}\n`);
+    return true;
+  }
+  return false;
+}
+
+async function main(): Promise<void> {
+  const options = parseArguments(process.argv.slice(CLI_ARGUMENT_OFFSET));
+  if (await writeInformationalOutput(options)) {
     return;
   }
   const target = path.resolve(options.target ?? process.cwd());
@@ -102,13 +120,13 @@ async function main(): Promise<void> {
   const outputReport = filterReport(report, options.actionable, options.disposition);
   process.stdout.write(
     options.json
-      ? `${JSON.stringify(detailed ? { ...detailed, report: outputReport } : outputReport, null, 2)}\n`
+      ? `${JSON.stringify(detailed ? { ...detailed, report: outputReport } : outputReport, null, JSON_INDENT)}\n`
       : `${formatTextReport(outputReport, target)}\n`,
   );
 }
 
-function parseArguments(args: readonly string[]): CliOptions {
-  const options: CliOptions = {
+function defaultOptions(): CliOptions {
+  return {
     actionable: false,
     coverage: false,
     disposition: null,
@@ -117,27 +135,47 @@ function parseArguments(args: readonly string[]): CliOptions {
     target: null,
     version: false,
   };
+}
+
+function applyDisposition(options: CliOptions, args: readonly string[], index: number): number {
+  const argument = args[index]!;
+  const inline = argument.startsWith("--disposition=");
+  options.disposition = parseDisposition(
+    inline ? argument.slice("--disposition=".length) : args[index + 1],
+  );
+  return inline ? index : index + 1;
+}
+
+function applyTargetArgument(options: CliOptions, argument: string): void {
+  if (argument.startsWith("-") && argument !== "-") {
+    throw new UsageError(unknownFlagMessage(argument));
+  }
+  if (options.target !== null) {
+    throw new UsageError(
+      `unexpected extra argument '${argument}'; pass exactly one target, got '${options.target}' first`,
+    );
+  }
+  options.target = argument;
+}
+
+function applyArgument(options: CliOptions, args: readonly string[], index: number): number {
+  const argument = args[index]!;
+  const booleanFlag = BOOLEAN_FLAGS.get(argument);
+  if (booleanFlag) {
+    options[booleanFlag] = true;
+    return index;
+  }
+  if (argument === "--disposition" || argument.startsWith("--disposition=")) {
+    return applyDisposition(options, args, index);
+  }
+  applyTargetArgument(options, argument);
+  return index;
+}
+
+function parseArguments(args: readonly string[]): CliOptions {
+  const options = defaultOptions();
   for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index]!;
-    const booleanFlag = BOOLEAN_FLAGS.get(argument);
-    if (booleanFlag) {
-      options[booleanFlag] = true;
-    } else if (argument === "--disposition" || argument.startsWith("--disposition=")) {
-      const inline = argument.startsWith("--disposition=");
-      const value = inline ? argument.slice("--disposition=".length) : args[index + 1];
-      if (!inline) {
-        index += 1;
-      }
-      options.disposition = parseDisposition(value);
-    } else if (argument.startsWith("-") && argument !== "-") {
-      throw new UsageError(unknownFlagMessage(argument));
-    } else if (options.target === null) {
-      options.target = argument;
-    } else {
-      throw new UsageError(
-        `unexpected extra argument '${argument}'; pass exactly one target, got '${options.target}' first`,
-      );
-    }
+    index = applyArgument(options, args, index);
   }
   if (options.coverage && !options.json) {
     throw new UsageError("--coverage has no text layout; add --json");
@@ -145,16 +183,20 @@ function parseArguments(args: readonly string[]): CliOptions {
   return options;
 }
 
+function isDisposition(value: string): value is Disposition {
+  return DISPOSITION_VALUES.has(value);
+}
+
 function parseDisposition(value: string | undefined): Disposition {
   if (value === undefined || value.startsWith("-")) {
     throw new UsageError(`--disposition needs a value: ${DISPOSITIONS.join(" | ")}`);
   }
-  if (!(DISPOSITIONS as readonly string[]).includes(value)) {
+  if (!isDisposition(value)) {
     throw new UsageError(
-      `--disposition must be one of: ${[...DISPOSITIONS].sort().join(", ")}; got '${value}'`,
+      `--disposition must be one of: ${DISPOSITIONS.toSorted().join(", ")}; got '${value}'`,
     );
   }
-  return value as Disposition;
+  return value;
 }
 
 function unknownFlagMessage(argument: string): string {
@@ -169,7 +211,7 @@ function closestFlag(flag: string): string | null {
   let best: { distance: number; name: string } | null = null;
   for (const known of KNOWN_FLAGS) {
     const distance = editDistance(flag, known);
-    if (distance <= 3 && (best === null || distance < best.distance)) {
+    if (distance <= MAX_FLAG_SUGGESTION_DISTANCE && (best === null || distance < best.distance)) {
       best = { distance, name: known };
     }
   }
@@ -177,7 +219,7 @@ function closestFlag(flag: string): string | null {
 }
 
 function editDistance(left: string, right: string): number {
-  let previous = Array.from({ length: right.length + 1 }, (_, column) => column);
+  let previous = Array.from({ length: right.length + 1 }, (_unused, column) => column);
   for (let row = 1; row <= left.length; row += 1) {
     const current = [row];
     for (let column = 1; column <= right.length; column += 1) {
@@ -197,10 +239,20 @@ async function assertReadableTarget(target: string): Promise<void> {
   }
 }
 
+function hasStringVersion(manifest: object): manifest is { version: string } {
+  return Object.entries(manifest).some(
+    ([key, value]) => key === "version" && String(value) === value,
+  );
+}
+
 async function packageVersion(): Promise<string> {
-  const manifest = await readFile(new URL("../../package.json", import.meta.url), "utf8");
-  const { version } = JSON.parse(manifest) as { version: string };
-  return version;
+  const manifest: unknown = JSON.parse(
+    await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+  );
+  if (!(manifest instanceof Object) || !hasStringVersion(manifest)) {
+    throw new Error("package.json does not declare a string version");
+  }
+  return manifest.version;
 }
 
 function filterReport(
@@ -220,12 +272,14 @@ function filterReport(
   };
 }
 
-main().catch((error: unknown) => {
+try {
+  await main();
+} catch (error) {
   const usage = error instanceof UsageError;
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`legend-doctor: ${message}\n`);
   if (usage) {
     process.stderr.write("Run `legend-doctor --help` for usage.\n");
   }
-  process.exitCode = usage ? 2 : 1;
-});
+  process.exitCode = usage ? EXIT_INVALID_USAGE : EXIT_SCAN_FAILED;
+}

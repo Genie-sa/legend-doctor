@@ -1,7 +1,6 @@
-import ts from "typescript";
-
 import { isRuntimeFunctionLike, visit } from "./ast.js";
 import type { RuntimeFunctionLike } from "./ast.js";
+import ts from "typescript";
 
 const bindingCountsByOwner = new WeakMap<RuntimeFunctionLike, ReadonlyMap<string, number>>();
 
@@ -102,16 +101,20 @@ export function exactObjectLiteralKeys(expression: ts.Expression): ReadonlySet<s
   }
   const keys = new Set<string>();
   for (const property of value.properties) {
-    if (ts.isSpreadAssignment(property)) {
-      return null;
-    }
-    const name = propertyNameText(property.name);
+    const name = objectLiteralPropertyKey(property);
     if (name === null) {
       return null;
     }
     keys.add(name);
   }
   return keys;
+}
+
+function objectLiteralPropertyKey(property: ts.ObjectLiteralElementLike): string | null {
+  if (ts.isSpreadAssignment(property)) {
+    return null;
+  }
+  return propertyNameText(property.name);
 }
 
 export function hookCallName(call: ts.CallExpression): string | null {
@@ -150,9 +153,8 @@ export function isDirectJsxAttributeExpression(
   );
 }
 
-export function isEvaluationInert(expression: ts.Expression): boolean {
-  const value = unwrapTransparentExpression(expression);
-  if (
+function isInertAtomicLiteral(value: ts.Expression): boolean {
+  return (
     ts.isIdentifier(value) ||
     ts.isNumericLiteral(value) ||
     ts.isBigIntLiteral(value) ||
@@ -161,61 +163,85 @@ export function isEvaluationInert(expression: ts.Expression): boolean {
     value.kind === ts.SyntaxKind.TrueKeyword ||
     value.kind === ts.SyntaxKind.FalseKeyword ||
     value.kind === ts.SyntaxKind.NullKeyword
+  );
+}
+
+function isInertPrefixUnary(value: ts.PrefixUnaryExpression): boolean {
+  const numericLiteral = ts.isNumericLiteral(value.operand);
+  const bigintLiteral = ts.isBigIntLiteral(value.operand);
+  return (
+    (numericLiteral && value.operator === ts.SyntaxKind.PlusToken) ||
+    ((numericLiteral || bigintLiteral) &&
+      (value.operator === ts.SyntaxKind.MinusToken ||
+        value.operator === ts.SyntaxKind.TildeToken)) ||
+    (value.operator === ts.SyntaxKind.ExclamationToken && isEvaluationInert(value.operand))
+  );
+}
+
+function isInertBinary(value: ts.BinaryExpression): boolean {
+  const operator = value.operatorToken.kind;
+  if (
+    operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
+    operator !== ts.SyntaxKind.BarBarToken &&
+    operator !== ts.SyntaxKind.QuestionQuestionToken &&
+    operator !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
+    operator !== ts.SyntaxKind.ExclamationEqualsEqualsToken
   ) {
-    return true;
+    return false;
   }
-  if (ts.isPrefixUnaryExpression(value)) {
-    const numericLiteral = ts.isNumericLiteral(value.operand);
-    const bigintLiteral = ts.isBigIntLiteral(value.operand);
+  return isEvaluationInert(value.left) && isEvaluationInert(value.right);
+}
+
+function isInertObjectLiteral(value: ts.ObjectLiteralExpression): boolean {
+  return value.properties.every((property) => {
+    if (ts.isShorthandPropertyAssignment(property)) {
+      return true;
+    }
     return (
-      (numericLiteral && value.operator === ts.SyntaxKind.PlusToken) ||
-      ((numericLiteral || bigintLiteral) &&
-        (value.operator === ts.SyntaxKind.MinusToken ||
-          value.operator === ts.SyntaxKind.TildeToken)) ||
-      (value.operator === ts.SyntaxKind.ExclamationToken && isEvaluationInert(value.operand))
+      ts.isPropertyAssignment(property) &&
+      !ts.isComputedPropertyName(property.name) &&
+      isEvaluationInert(property.initializer)
     );
+  });
+}
+
+function isInertConditional(value: ts.ConditionalExpression): boolean {
+  return (
+    isEvaluationInert(value.condition) &&
+    isEvaluationInert(value.whenTrue) &&
+    isEvaluationInert(value.whenFalse)
+  );
+}
+
+function isInertOperatorExpression(value: ts.Expression): boolean {
+  if (ts.isPrefixUnaryExpression(value)) {
+    return isInertPrefixUnary(value);
   }
   if (ts.isTypeOfExpression(value)) {
     return isEvaluationInert(value.expression);
   }
   if (ts.isConditionalExpression(value)) {
-    return (
-      isEvaluationInert(value.condition) &&
-      isEvaluationInert(value.whenTrue) &&
-      isEvaluationInert(value.whenFalse)
-    );
+    return isInertConditional(value);
   }
-  if (ts.isBinaryExpression(value)) {
-    const operator = value.operatorToken.kind;
-    if (
-      operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
-      operator !== ts.SyntaxKind.BarBarToken &&
-      operator !== ts.SyntaxKind.QuestionQuestionToken &&
-      operator !== ts.SyntaxKind.EqualsEqualsEqualsToken &&
-      operator !== ts.SyntaxKind.ExclamationEqualsEqualsToken
-    ) {
-      return false;
-    }
-    return isEvaluationInert(value.left) && isEvaluationInert(value.right);
-  }
+  return ts.isBinaryExpression(value) && isInertBinary(value);
+}
+
+function isInertLiteralStructure(value: ts.Expression): boolean {
   if (ts.isArrayLiteralExpression(value)) {
     return value.elements.every(
       (element) => !ts.isSpreadElement(element) && isEvaluationInert(element),
     );
   }
-  if (ts.isObjectLiteralExpression(value)) {
-    return value.properties.every((property) => {
-      if (ts.isShorthandPropertyAssignment(property)) {
-        return true;
-      }
-      return (
-        ts.isPropertyAssignment(property) &&
-        !ts.isComputedPropertyName(property.name) &&
-        isEvaluationInert(property.initializer)
-      );
-    });
-  }
-  return false;
+  return ts.isObjectLiteralExpression(value) && isInertObjectLiteral(value);
+}
+
+export function isEvaluationInert(expression: ts.Expression): boolean {
+  const value = unwrapTransparentExpression(expression);
+  return (
+    isInertAtomicLiteral(value) ||
+    isInertOperatorExpression(value) ||
+    isInertLiteralStructure(value)
+  );
 }
 
 export function isInsideJsxAttribute(node: ts.Node, attribute: ts.JsxAttribute): boolean {
@@ -223,14 +249,14 @@ export function isInsideJsxAttribute(node: ts.Node, attribute: ts.JsxAttribute):
 }
 
 export function isControlledInteractionProp(name: string): boolean {
-  return /^(?:onChange|onChangeText|onCheckedChange|onSelect|onToggle|onValueChange)$/.test(name);
+  return /^(?:onChange|onChangeText|onCheckedChange|onSelect|onToggle|onValueChange)$/u.test(name);
 }
 
 export function isValueTransitionProp(name: string): boolean {
   return (
     isControlledInteractionProp(name) ||
-    /^on(?:Change|Select|Toggle|Update)[A-Z][A-Za-z0-9]*$/.test(name) ||
-    /^on[A-Z][A-Za-z0-9]*(?:Change|Select|Toggle|Update)$/.test(name)
+    /^on(?:Change|Select|Toggle|Update)[A-Z][A-Za-z0-9]*$/u.test(name) ||
+    /^on[A-Z][A-Za-z0-9]*(?:Change|Select|Toggle|Update)$/u.test(name)
   );
 }
 

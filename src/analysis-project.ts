@@ -1,11 +1,10 @@
-import path from "node:path";
-
-import ts from "typescript";
-
-import { scriptKindForFile } from "./ast.js";
 import { canonicalPath, pathIdentityKey } from "./path-identity.js";
-import { parserDiagnosticsOf } from "./parser-diagnostics.js";
+
 import type { AnalysisDiagnostic } from "./parser-diagnostics.js";
+import { parserDiagnosticsOf } from "./parser-diagnostics.js";
+import path from "node:path";
+import { scriptKindForFile } from "./ast.js";
+import ts from "typescript";
 
 const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([
   ".cjs",
@@ -47,7 +46,7 @@ export class AnalysisProject {
       }
       filesByIdentity.set(key, file);
     }
-    this.files = [...filesByIdentity.values()].sort((left, right) =>
+    this.files = [...filesByIdentity.values()].toSorted((left, right) =>
       compareText(left.identityPath, right.identityPath),
     );
     this.#filesByIdentity = filesByIdentity;
@@ -86,7 +85,10 @@ export function isSupportedAnalysisFile(fileName: string): boolean {
 }
 
 function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
+  if (left < right) {
+    return -1;
+  }
+  return left > right ? 1 : 0;
 }
 
 function dialectForScriptKind(scriptKind: ts.ScriptKind): AnalysisDialect {

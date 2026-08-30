@@ -1,5 +1,4 @@
-import ts from "typescript";
-
+import type { EffectCandidate, StateCandidate, StateUsage } from "../analyze-source.js";
 import {
   bindingDeclarationCount,
   hookCallName,
@@ -7,16 +6,6 @@ import {
   isDirectJsxAttributeExpression,
   isNonValueIdentifier,
 } from "../analysis-ast.js";
-import {
-  findAncestorUntil,
-  nearestNestedFunction,
-  nodeWithin,
-  visit,
-  visitSkippingNestedFunctions,
-  visitSkippingNestedRuntimeFunctions,
-} from "../ast.js";
-import type { EffectCandidate, StateCandidate, StateUsage } from "../analyze-source.js";
-import { callbackHasCleanup } from "./effects.js";
 import {
   callbackIsEventRooted,
   expressionDependsOnBinding,
@@ -32,7 +21,17 @@ import {
   stateMayHoldCallable,
   uniqueVariableDeclaration,
 } from "./state-proofs.js";
+import {
+  findAncestorUntil,
+  nearestNestedFunction,
+  nodeWithin,
+  visit,
+  visitSkippingNestedFunctions,
+  visitSkippingNestedRuntimeFunctions,
+} from "../ast.js";
 import type { RuntimeFunctionLike } from "../ast.js";
+import { callbackHasCleanup } from "./effects.js";
+import ts from "typescript";
 
 export interface EffectDraftScope {
   bySetter: ReadonlyMap<string, StateCandidate>;
@@ -85,6 +84,44 @@ export interface EffectDraftProofs {
   uniqueReturnedExpression: (owner: RuntimeFunctionLike) => ts.Expression | null;
 }
 
+/** Inputs shared by every effect the draft search visits. */
+interface DraftContext {
+  effects: readonly EffectCandidate[];
+  localComponents: ReadonlySet<string>;
+  proofs: EffectDraftProofs;
+  siblingRenderCuts: ReadonlyMap<StateCandidate, unknown>;
+  sourceComponents: ReadonlySet<string>;
+  states: readonly StateCandidate[];
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>;
+}
+
+interface DraftEffect {
+  callback: ts.ArrowFunction | ts.FunctionExpression;
+  context: DraftContext;
+  effect: EffectCandidate;
+  owner: RuntimeFunctionLike;
+}
+
+interface DraftMatch {
+  draft: DraftEffect;
+  members: readonly StateCandidate[];
+}
+
+interface DraftSynchronization {
+  clusters: Map<StateCandidate, EffectDraftCluster>;
+  effects: Set<EffectCandidate>;
+  singletons: Set<StateCandidate>;
+}
+
+interface SetterMutation {
+  call: ts.CallExpression;
+  region: RuntimeFunctionLike;
+  state: StateCandidate;
+}
+
+const MIN_OWNER_JSX = 12;
+const MAX_CUT_SHARE = 0.4;
+
 export function findEffectSynchronizedDrafts(
   effects: readonly EffectCandidate[],
   states: readonly StateCandidate[],
@@ -95,103 +132,115 @@ export function findEffectSynchronizedDrafts(
   sourceComponents: ReadonlySet<string>,
   proofs: EffectDraftProofs,
 ): EffectDraftAnalysis {
-  const clusters = new Map<StateCandidate, EffectDraftCluster>();
-  const synchronizedEffects = new Set<EffectCandidate>();
-  const singletons = new Set<StateCandidate>();
-
+  const context: DraftContext = {
+    effects,
+    localComponents,
+    proofs,
+    siblingRenderCuts,
+    sourceComponents,
+    states,
+    usageByState,
+  };
+  const analysis: DraftSynchronization = {
+    clusters: new Map(),
+    effects: new Set(),
+    singletons: new Set(),
+  };
   for (const effect of effects) {
-    if (
-      !effect.owner ||
-      !effect.callback ||
-      !effect.dependencies ||
-      effect.dependencies.elements.length === 0 ||
-      proofs.isCustomHookOwner(effect.owner)
-    ) {
-      continue;
-    }
-    const scope = scopes.get(effect.owner);
-    if (!scope) {
-      continue;
-    }
-    const members = synchronousDraftSetters(effect.callback, scope.bySetter);
-    if (!members || members.length === 0) {
-      continue;
-    }
-    const ownerSetters = new Set(
-      states.flatMap((state) =>
-        state.owner === effect.owner && state.setterName ? [state.setterName] : [],
-      ),
-    );
-    const editProofs = new Map(
-      members.map(
-        (state) =>
-          [
-            state,
-            draftEditProof(state, usageByState.get(state), effect, ownerSetters, proofs),
-          ] as const,
-      ),
-    );
-    const complete = members.every((state) => {
-      const usage = usageByState.get(state);
-      return (
-        usage !== undefined &&
-        stateIsWrittenOnlyByEffect(usage, effect, effects) &&
-        usage.setterReferences > usage.effectWrites &&
-        usage.effectReads === 0 &&
-        !hasStaleUseCallbackCapture(state) &&
-        usage.localRenderReads + usage.transportedOccurrences > 0 &&
-        !usage.shadowed &&
-        !usage.escaped &&
-        !stateMayHoldCallable(state) &&
-        editProofs.get(state)?.reachable === true &&
-        !stateControlsHookOrRepeatedBoundary(state)
-      );
-    });
-    if (
-      !complete ||
-      !members.some((state) => editProofs.get(state)?.independent) ||
-      hasExternalCompanionWrites(effect.owner, members, states, proofs) ||
-      !hasDraftRenderCut(
-        effect.owner,
-        members,
-        usageByState,
-        siblingRenderCuts,
-        localComponents,
-        sourceComponents,
-        proofs,
-      )
-    ) {
-      continue;
-    }
-
-    synchronizedEffects.add(effect);
-    const ordered = [...members].toSorted(
-      (left, right) => left.call.getStart() - right.call.getStart(),
-    );
-    if (ordered.length === 1) {
-      singletons.add(ordered[0]!);
-      continue;
-    }
-    const names = ordered.map((state) => state.valueName);
-    const initialization = ordered.some((state) => hasLazyStateInitializer(state))
-      ? " Preserve every lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
-      : "";
-    const cluster: EffectDraftCluster = {
-      action: "use-observable",
-      id: `state-cluster:effect-draft:${effect.owner.getStart()}:${effect.call.getStart()}`,
-      members: ordered,
-      message: `Replace the effect-synchronized React draft cluster (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the React synchronization effect and its dependencies, assign the draft atomically there, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.${initialization}`,
-      primary: ordered[0]!,
-    };
-    for (const state of ordered) {
-      clusters.set(state, cluster);
+    const match = synchronizedDraftMatch(effect, scopes, context);
+    if (match) {
+      recordDraftCluster(analysis, match);
     }
   }
-  return { clusters, effects: synchronizedEffects, singletons };
+  return {
+    clusters: analysis.clusters,
+    effects: analysis.effects,
+    singletons: analysis.singletons,
+  };
+}
+
+function synchronizedDraftMatch(
+  effect: EffectCandidate,
+  scopes: ReadonlyMap<RuntimeFunctionLike, EffectDraftScope>,
+  context: DraftContext,
+): DraftMatch | null {
+  const { callback, dependencies, owner } = effect;
+  if (!owner || !callback || !dependencies || dependencies.elements.length === 0) {
+    return null;
+  }
+  const scope = scopes.get(owner);
+  const members = scope ? synchronousDraftSetters(callback, scope.bySetter) : null;
+  if (!members || members.length === 0 || context.proofs.isCustomHookOwner(owner)) {
+    return null;
+  }
+  const draft: DraftEffect = { callback, context, effect, owner };
+  return isCompleteDraftCluster(draft, members) ? { draft, members } : null;
+}
+
+function isCompleteDraftCluster(draft: DraftEffect, members: readonly StateCandidate[]): boolean {
+  const ownerSetters = new Set(
+    draft.context.states.flatMap((state) =>
+      state.owner === draft.owner && state.setterName ? [state.setterName] : [],
+    ),
+  );
+  const editProofs = members.map((state) => draftEditProof(state, draft, ownerSetters));
+  if (
+    !members.every((state) => isCompleteDraftMember(state, draft)) ||
+    !editProofs.every((proof) => proof.reachable) ||
+    !editProofs.some((proof) => proof.independent)
+  ) {
+    return false;
+  }
+  return !hasExternalCompanionWrites(draft, members) && hasDraftRenderCut(draft, members);
+}
+
+function isCompleteDraftMember(state: StateCandidate, draft: DraftEffect): boolean {
+  const usage = draft.context.usageByState.get(state);
+  return (
+    usage !== undefined &&
+    stateIsWrittenOnlyByEffect(usage, draft.effect, draft.context.effects) &&
+    usage.setterReferences > usage.effectWrites &&
+    usage.effectReads === 0 &&
+    !hasStaleUseCallbackCapture(state) &&
+    usage.localRenderReads + usage.transportedOccurrences > 0 &&
+    !usage.shadowed &&
+    !usage.escaped &&
+    !stateMayHoldCallable(state) &&
+    !stateControlsHookOrRepeatedBoundary(state)
+  );
+}
+
+function recordDraftCluster(analysis: DraftSynchronization, match: DraftMatch): void {
+  analysis.effects.add(match.draft.effect);
+  const ordered = [...match.members].toSorted(
+    (left, right) => left.call.getStart() - right.call.getStart(),
+  );
+  if (ordered.length === 1) {
+    analysis.singletons.add(ordered[0]!);
+    return;
+  }
+  const cluster = draftCluster(match.draft, ordered);
+  for (const state of ordered) {
+    analysis.clusters.set(state, cluster);
+  }
+}
+
+function draftCluster(draft: DraftEffect, ordered: readonly StateCandidate[]): EffectDraftCluster {
+  const names = ordered.map((state) => `\`${state.valueName}\``).join(", ");
+  const initialization = ordered.some((state) => hasLazyStateInitializer(state))
+    ? " Preserve every lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
+    : "";
+  return {
+    action: "use-observable",
+    id: `state-cluster:effect-draft:${draft.owner.getStart()}:${draft.effect.call.getStart()}`,
+    members: ordered,
+    message: `Replace the effect-synchronized React draft cluster (${names}) with one component-lifetime observable model; preserve the React synchronization effect and its dependencies, assign the draft atomically there, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.${initialization}`,
+    primary: ordered[0]!,
+  };
 }
 
 export function hasLazyStateInitializer(state: StateCandidate): boolean {
-  const initializer = state.call.arguments[0];
+  const [initializer] = state.call.arguments;
   return (
     initializer !== undefined &&
     (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
@@ -205,37 +254,52 @@ interface DraftEditProof {
 
 function draftEditProof(
   state: StateCandidate,
-  usage: StateUsage | undefined,
-  effect: EffectCandidate,
+  draft: DraftEffect,
   ownerSetters: ReadonlySet<string>,
-  proofs: EffectDraftProofs,
 ): DraftEditProof {
+  const usage = draft.context.usageByState.get(state);
   if (!usage) {
     return { independent: false, reachable: false };
   }
   const direct = hasDirectJsxEventSetter(state);
-  const edits = usage.setterCallNodes.filter((call) => !nodeWithin(call, effect.call));
-  const reachable = edits.filter((call) => {
-    const region = proofs.nearestMutationFunction(call, state.owner);
-    return (
-      region !== state.owner &&
-      (ts.isArrowFunction(region) ||
-        ts.isFunctionDeclaration(region) ||
-        ts.isFunctionExpression(region)) &&
-      callbackIsEventRooted(region, state.owner, "", new Set())
-    );
-  });
+  const edits = usage.setterCallNodes.filter((call) => !nodeWithin(call, draft.effect.call));
+  const reachable = edits.filter((call) =>
+    isEventRootedEditRegion(call, state, draft.context.proofs),
+  );
   const independent =
-    direct ||
-    reachable.some((call) => {
-      const region = proofs.nearestMutationFunction(call, state.owner);
-      return (
-        (mutationRegionOnlyCallsStateSetters(region, ownerSetters) ||
-          mutationRegionForwardsDraftValue(region, call, ownerSetters, state.owner)) &&
-        setterArgumentDiffersFromEffect(call, state, effect)
-      );
-    });
+    direct || reachable.some((call) => isIndependentEdit(call, state, { draft, ownerSetters }));
   return { independent, reachable: direct || reachable.length > 0 };
+}
+
+function isEventRootedEditRegion(
+  call: ts.CallExpression,
+  state: StateCandidate,
+  proofs: EffectDraftProofs,
+): boolean {
+  const region = proofs.nearestMutationFunction(call, state.owner);
+  return (
+    region !== state.owner &&
+    (ts.isArrowFunction(region) ||
+      ts.isFunctionDeclaration(region) ||
+      ts.isFunctionExpression(region)) &&
+    callbackIsEventRooted(region, state.owner, "", new Set())
+  );
+}
+
+function isIndependentEdit(
+  call: ts.CallExpression,
+  state: StateCandidate,
+  scope: { draft: DraftEffect; ownerSetters: ReadonlySet<string> },
+): boolean {
+  const region = scope.draft.context.proofs.nearestMutationFunction(call, state.owner);
+  return (
+    (mutationRegionOnlyCallsStateSetters(region, scope.ownerSetters) ||
+      mutationRegionForwardsDraftValue(region, call, {
+        owner: state.owner,
+        stateSetters: scope.ownerSetters,
+      })) &&
+    setterArgumentDiffersFromEffect(call, state, scope.draft.effect)
+  );
 }
 
 function stateIsWrittenOnlyByEffect(
@@ -254,7 +318,7 @@ function setterArgumentDiffersFromEffect(
   state: StateCandidate,
   effect: EffectCandidate,
 ): boolean {
-  const argument = edit.arguments[0];
+  const [argument] = edit.arguments;
   if (!argument || !state.setterName) {
     return false;
   }
@@ -328,10 +392,9 @@ export function mutationRegionOnlyCallsStateSetters(
 function mutationRegionForwardsDraftValue(
   region: RuntimeFunctionLike,
   edit: ts.CallExpression,
-  stateSetters: ReadonlySet<string>,
-  owner: RuntimeFunctionLike,
+  scope: { owner: RuntimeFunctionLike; stateSetters: ReadonlySet<string> },
 ): boolean {
-  const argument = edit.arguments[0];
+  const [argument] = edit.arguments;
   if (!region.body || !argument || !ts.isIdentifier(argument)) {
     return false;
   }
@@ -348,14 +411,15 @@ function mutationRegionForwardsDraftValue(
   let forwardedCalls = 0;
   let safe = true;
   visitSkippingNestedFunctions(region.body, region, (node) => {
-    if (!safe || !ts.isCallExpression(node)) {
-      return;
-    }
-    if (ts.isIdentifier(node.expression) && stateSetters.has(node.expression.text)) {
+    if (
+      !safe ||
+      !ts.isCallExpression(node) ||
+      (ts.isIdentifier(node.expression) && scope.stateSetters.has(node.expression.text))
+    ) {
       return;
     }
     if (nodeWithin(node, declaration.initializer!)) {
-      safe = !isLocalFunctionCall(node, owner);
+      safe = !isLocalFunctionCall(node, scope.owner);
       return;
     }
     if (
@@ -363,7 +427,7 @@ function mutationRegionForwardsDraftValue(
       !node.arguments.some((candidate) =>
         expressionDependsOnBinding(candidate, argument, region),
       ) ||
-      isLocalFunctionCall(node, owner)
+      isLocalFunctionCall(node, scope.owner)
     ) {
       safe = false;
       return;
@@ -387,41 +451,57 @@ function synchronousDraftSetters(
     return null;
   }
   const members = new Set<StateCandidate>();
-  const validStatement = (statement: ts.Statement): boolean => {
-    if (ts.isBlock(statement)) {
-      return statement.statements.every(validStatement);
-    }
-    if (ts.isIfStatement(statement)) {
-      return (
-        validStatement(statement.thenStatement) &&
-        (!statement.elseStatement || validStatement(statement.elseStatement))
-      );
-    }
-    if (ts.isReturnStatement(statement)) {
-      return statement.expression === undefined;
-    }
-    if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) {
-      return false;
-    }
-    const call = statement.expression;
-    if (!ts.isIdentifier(call.expression)) {
-      return false;
-    }
-    const state = stateBySetter.get(call.expression.text);
-    const argument = call.arguments[0];
-    if (
-      !state ||
-      call.arguments.length !== 1 ||
-      !argument ||
-      ts.isArrowFunction(argument) ||
-      ts.isFunctionExpression(argument)
-    ) {
-      return false;
-    }
-    members.add(state);
-    return true;
-  };
-  return callback.body.statements.every(validStatement) ? [...members] : null;
+  const synchronous = callback.body.statements.every((statement) =>
+    isDraftStatement(statement, stateBySetter, members),
+  );
+  return synchronous ? [...members] : null;
+}
+
+function isDraftStatement(
+  statement: ts.Statement,
+  stateBySetter: ReadonlyMap<string, StateCandidate>,
+  members: Set<StateCandidate>,
+): boolean {
+  if (ts.isBlock(statement)) {
+    return statement.statements.every((child) => isDraftStatement(child, stateBySetter, members));
+  }
+  if (ts.isIfStatement(statement)) {
+    return (
+      isDraftStatement(statement.thenStatement, stateBySetter, members) &&
+      (!statement.elseStatement ||
+        isDraftStatement(statement.elseStatement, stateBySetter, members))
+    );
+  }
+  if (ts.isReturnStatement(statement)) {
+    return statement.expression === undefined;
+  }
+  return isDraftSetterStatement(statement, stateBySetter, members);
+}
+
+function isDraftSetterStatement(
+  statement: ts.Statement,
+  stateBySetter: ReadonlyMap<string, StateCandidate>,
+  members: Set<StateCandidate>,
+): boolean {
+  if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) {
+    return false;
+  }
+  const call = statement.expression;
+  const [argument] = call.arguments;
+  const state = ts.isIdentifier(call.expression)
+    ? stateBySetter.get(call.expression.text)
+    : undefined;
+  if (
+    !state ||
+    call.arguments.length !== 1 ||
+    !argument ||
+    ts.isArrowFunction(argument) ||
+    ts.isFunctionExpression(argument)
+  ) {
+    return false;
+  }
+  members.add(state);
+  return true;
 }
 
 function stateControlsHookOrRepeatedBoundary(state: StateCandidate): boolean {
@@ -512,7 +592,7 @@ function referenceControlsHookOrRepeatedBoundary(
 }
 
 function isOneHopKeyedRenderAlias(reference: ts.Identifier, repeated: ts.CallExpression): boolean {
-  const callback = repeated.arguments[0];
+  const [callback] = repeated.arguments;
   if (
     !callback ||
     (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -534,15 +614,21 @@ function isOneHopKeyedRenderAlias(reference: ts.Identifier, repeated: ts.CallExp
   ) {
     return false;
   }
-  const aliasName = declaration.name.text;
+  return aliasStaysInKeyedRender(declaration.name, { callback, repeated });
+}
+
+function aliasStaysInKeyedRender(
+  declarationName: ts.Identifier,
+  scope: { callback: ts.ArrowFunction | ts.FunctionExpression; repeated: ts.CallExpression },
+): boolean {
   let found = false;
   let safe = true;
-  visit(callback.body, (node) => {
+  visit(scope.callback.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
-      node.text !== aliasName ||
-      node === declaration.name ||
+      node.text !== declarationName.text ||
+      node === declarationName ||
       isDeclarationName(node) ||
       isNonValueIdentifier(node)
     ) {
@@ -550,9 +636,9 @@ function isOneHopKeyedRenderAlias(reference: ts.Identifier, repeated: ts.CallExp
     }
     found = true;
     safe =
-      nearestRepeatedRenderCall(node, repeated.parent) === repeated &&
-      findAncestorUntil(node, isJsxNode, repeated) !== null &&
-      isSafeJsxProjectionReference(node, callback);
+      nearestRepeatedRenderCall(node, scope.repeated.parent) === scope.repeated &&
+      findAncestorUntil(node, isJsxNode, scope.repeated) !== null &&
+      isSafeJsxProjectionReference(node, scope.callback);
   });
   return found && safe;
 }
@@ -579,7 +665,7 @@ function hasStaleUseCallbackCapture(state: StateCandidate): boolean {
       hookCallName(call) === "useCallback" &&
       call.arguments[0] === callback
     ) {
-      const dependencies = call.arguments[1];
+      const [, dependencies] = call.arguments;
       stale =
         !dependencies ||
         !ts.isArrayLiteralExpression(dependencies) ||
@@ -626,33 +712,16 @@ function isHookCallOtherThan(call: ts.CallExpression, allowed: ReadonlySet<strin
 }
 
 function hasExternalCompanionWrites(
-  owner: RuntimeFunctionLike,
+  draft: DraftEffect,
   members: readonly StateCandidate[],
-  allStates: readonly StateCandidate[],
-  proofs: EffectDraftProofs,
 ): boolean {
   const memberSet = new Set(members);
   const stateBySetter = new Map(
-    allStates.flatMap((state) =>
-      state.owner === owner && state.setterName ? [[state.setterName, state] as const] : [],
+    draft.context.states.flatMap((state) =>
+      state.owner === draft.owner && state.setterName ? [[state.setterName, state] as const] : [],
     ),
   );
-  const mutations: {
-    call: ts.CallExpression;
-    region: RuntimeFunctionLike;
-    state: StateCandidate;
-  }[] = [];
-  visit(owner.body, (node) => {
-    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
-      return;
-    }
-    const state = stateBySetter.get(node.expression.text);
-    if (!state) {
-      return;
-    }
-    const region = proofs.nearestMutationFunction(node, owner);
-    mutations.push({ call: node, region, state });
-  });
+  const mutations = collectSetterMutations(draft.owner, stateBySetter, draft.context.proofs);
   return mutations.some(
     (memberMutation) =>
       memberSet.has(memberMutation.state) &&
@@ -660,9 +729,31 @@ function hasExternalCompanionWrites(
         (other) =>
           !memberSet.has(other.state) &&
           other.region === memberMutation.region &&
-          proofs.setterMutationsCanCooccur(other.call, memberMutation.call, memberMutation.region),
+          draft.context.proofs.setterMutationsCanCooccur(
+            other.call,
+            memberMutation.call,
+            memberMutation.region,
+          ),
       ),
   );
+}
+
+function collectSetterMutations(
+  owner: RuntimeFunctionLike,
+  stateBySetter: ReadonlyMap<string, StateCandidate>,
+  proofs: EffectDraftProofs,
+): SetterMutation[] {
+  const mutations: SetterMutation[] = [];
+  visit(owner.body, (node) => {
+    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
+      return;
+    }
+    const state = stateBySetter.get(node.expression.text);
+    if (state) {
+      mutations.push({ call: node, region: proofs.nearestMutationFunction(node, owner), state });
+    }
+  });
+  return mutations;
 }
 
 function expressionControlsRepeatedItems(node: ts.Node, repeated: ts.CallExpression): boolean {
@@ -672,87 +763,129 @@ function expressionControlsRepeatedItems(node: ts.Node, repeated: ts.CallExpress
   return receiver !== null && nodeWithin(node, receiver);
 }
 
-function hasDraftRenderCut(
-  owner: RuntimeFunctionLike,
-  members: readonly StateCandidate[],
-  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  siblingRenderCuts: ReadonlyMap<StateCandidate, unknown>,
-  localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>,
-  proofs: EffectDraftProofs,
-): boolean {
-  if (members.length === 1 && siblingRenderCuts.has(members[0]!)) {
+function hasDraftRenderCut(draft: DraftEffect, members: readonly StateCandidate[]): boolean {
+  if (members.length === 1 && draft.context.siblingRenderCuts.has(members[0]!)) {
     return true;
   }
-  const ownerJsx = jsxElementCount(owner);
-  const localUsages = members.map((member) => usageByState.get(member));
-  const localCuts: JsxSubtreeNode[] = [];
-  for (let index = 0; index < members.length; index += 1) {
-    const member = members[index]!;
-    const usage = localUsages[index];
-    const directSetterRead = hasDirectJsxEventSetter(member) ? 1 : 0;
-    if (
-      !usage ||
-      usage.transportedOccurrences !== 0 ||
-      usage.directRenderNodes.length === 0 ||
-      usage.localRenderReads !== usage.directRenderNodes.length + directSetterRead ||
-      usage.directRenderNodes.some(
-        (node) =>
-          nearestNestedFunction(node, owner) !== null || !isSafeJsxProjectionReference(node, owner),
-      )
-    ) {
-      localCuts.length = 0;
-      break;
-    }
-    const cut = lowestCommonJsxSubtree(usage.directRenderNodes, owner);
-    if (!cut || jsxElementCountIn(cut) / ownerJsx > 0.4) {
-      localCuts.length = 0;
-      break;
-    }
-    localCuts.push(cut);
-  }
-  if (localCuts.length === members.length && owner.body) {
-    const returned = proofs.uniqueReturnedExpression(owner);
-    if (
-      returned &&
-      proofs.hasIndependentRenderCutWitness(returned, localCuts, localComponents, sourceComponents)
-    ) {
-      return true;
-    }
+  const ownerJsx = jsxElementCount(draft.owner);
+  const usages = members.map((member) => draft.context.usageByState.get(member));
+  if (hasLocalRenderCutWitness(draft, members, ownerJsx)) {
+    return true;
   }
   if (
-    ownerJsx >= 12 &&
-    localUsages.every((usage) => usage && draftValueTransportsAreBounded(usage, owner, ownerJsx))
+    ownerJsx >= MIN_OWNER_JSX &&
+    usages.every((usage) => usage && draftValueTransportsAreBounded(usage, draft.owner, ownerJsx))
   ) {
     return true;
   }
-  if (localUsages.some((usage) => !usage || usage.localRenderReads > 0)) {
+  return hasSharedTransportRenderCut(draft, members, usages);
+}
+
+function hasLocalRenderCutWitness(
+  draft: DraftEffect,
+  members: readonly StateCandidate[],
+  ownerJsx: number,
+): boolean {
+  const localCuts = localRenderCuts(draft, members, ownerJsx);
+  if (!localCuts || !draft.owner.body) {
     return false;
   }
-  const sites = members.map((member) => usageByState.get(member)?.valueTransportSites);
-  if (sites.some((value) => !value || value.size !== 1)) {
+  const returned = draft.context.proofs.uniqueReturnedExpression(draft.owner);
+  return (
+    returned !== null &&
+    draft.context.proofs.hasIndependentRenderCutWitness(
+      returned,
+      localCuts,
+      draft.context.localComponents,
+      draft.context.sourceComponents,
+    )
+  );
+}
+
+function localRenderCuts(
+  draft: DraftEffect,
+  members: readonly StateCandidate[],
+  ownerJsx: number,
+): JsxSubtreeNode[] | null {
+  const cuts: JsxSubtreeNode[] = [];
+  for (const member of members) {
+    const cut = memberRenderCut(member, draft, ownerJsx);
+    if (!cut) {
+      return null;
+    }
+    cuts.push(cut);
+  }
+  return cuts;
+}
+
+function memberRenderCut(
+  member: StateCandidate,
+  draft: DraftEffect,
+  ownerJsx: number,
+): JsxSubtreeNode | null {
+  const usage = draft.context.usageByState.get(member);
+  if (!usage || !memberRenderReadsAreDirect(usage, member, draft.owner)) {
+    return null;
+  }
+  const cut = lowestCommonJsxSubtree(usage.directRenderNodes, draft.owner);
+  return cut && jsxElementCountIn(cut) / ownerJsx <= MAX_CUT_SHARE ? cut : null;
+}
+
+function memberRenderReadsAreDirect(
+  usage: StateUsage,
+  member: StateCandidate,
+  owner: RuntimeFunctionLike,
+): boolean {
+  const directSetterRead = hasDirectJsxEventSetter(member) ? 1 : 0;
+  return (
+    usage.transportedOccurrences === 0 &&
+    usage.directRenderNodes.length > 0 &&
+    usage.localRenderReads === usage.directRenderNodes.length + directSetterRead &&
+    usage.directRenderNodes.every(
+      (node) =>
+        nearestNestedFunction(node, owner) === null && isSafeJsxProjectionReference(node, owner),
+    )
+  );
+}
+
+function hasSharedTransportRenderCut(
+  draft: DraftEffect,
+  members: readonly StateCandidate[],
+  usages: readonly (StateUsage | undefined)[],
+): boolean {
+  if (usages.some((usage) => !usage || usage.localRenderReads > 0)) {
     return false;
   }
-  const site = [...sites[0]!][0];
-  if (site === undefined || !sites.every((value) => [...value!][0] === site)) {
+  const sites = usages.map((usage) => usage?.valueTransportSites);
+  const [first] = sites;
+  const site = first?.size === 1 ? [...first][0] : undefined;
+  if (
+    site === undefined ||
+    !sites.every((value) => value !== undefined && value.size === 1 && [...value][0] === site)
+  ) {
     return false;
   }
-  const callSite = proofs.directUniqueReturnCallSite(usageByState.get(members[0]!)!, owner);
-  if (!callSite) {
-    return false;
-  }
+  const usage = draft.context.usageByState.get(members[0]!);
+  const callSite = usage
+    ? draft.context.proofs.directUniqueReturnCallSite(usage, draft.owner)
+    : null;
+  return callSite !== null && hasIndependentSiblingSubtree(callSite);
+}
+
+function hasIndependentSiblingSubtree(callSite: DirectReturnCallSite): boolean {
   const target = callSite.opening;
   const targetSubtree: ts.Node = ts.isJsxOpeningElement(target) ? target.parent : target;
   let independent = false;
   visitSkippingNestedRuntimeFunctions(callSite.returned, (node) => {
     if (
-      !independent &&
-      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      node !== target
+      independent ||
+      (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) ||
+      node === target
     ) {
-      const subtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node;
-      independent = !nodeWithin(subtree, targetSubtree) && !nodeWithin(targetSubtree, subtree);
+      return;
     }
+    const subtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node;
+    independent = !nodeWithin(subtree, targetSubtree) && !nodeWithin(targetSubtree, subtree);
   });
   return independent;
 }
@@ -778,7 +911,7 @@ function draftValueTransportsAreBounded(
       }
       target = ts.isJsxOpeningElement(node) ? node.parent : node;
     });
-    if (!target || jsxElementCountIn(target) / ownerJsx > 0.4) {
+    if (!target || jsxElementCountIn(target) / ownerJsx > MAX_CUT_SHARE) {
       return false;
     }
   }

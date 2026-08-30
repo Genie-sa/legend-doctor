@@ -1,16 +1,23 @@
-import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import test from "node:test";
-
 import {
   analyzeLegendPractices,
   analyzeLegendPracticesFile,
 } from "../src/analyze-legend-practices.js";
 import { analyzePath, analyzePathDetailed, createAnalysisContext } from "../src/analyze-path.js";
 import { analyzeSource, analyzeSourceFile } from "../src/analyze-source.js";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { AnalysisProject } from "../src/analysis-project.js";
+import type { HookFinding } from "../src/types.js";
+import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+type FindingSignature = [
+  HookFinding["hook"],
+  HookFinding["name"],
+  HookFinding["action"],
+  HookFinding["disposition"],
+];
 
 const requireValue = <Value>(value: Value | undefined): Value => {
   assert.ok(value);
@@ -43,7 +50,7 @@ test("comments and blank lines never change findings", async (testContext) => {
     "export function Price({ amount }: { amount: number }) {",
     '  const [label, setLabel] = useState("");',
     "  useEffect(() => {",
-    "    setLabel(`$${amount}`);",
+    `    setLabel(\`$\${amount}\`);`,
     "  }, [amount]);",
     "  return <span>{label}</span>;",
     "}",
@@ -55,12 +62,12 @@ test("comments and blank lines never change findings", async (testContext) => {
     "",
     "// footer",
   ];
-  const signatures = async (source: string) => {
+  const signatures = async (source: string): Promise<FindingSignature[]> => {
     const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-trivia-"));
     testContext.after(() => rm(root, { force: true, recursive: true }));
     await writeFile(path.join(root, "price.tsx"), source, "utf8");
     const report = await analyzePath(root);
-    return report.findings.map((finding) => [
+    return report.findings.map((finding): FindingSignature => [
       finding.hook,
       finding.name,
       finding.action,

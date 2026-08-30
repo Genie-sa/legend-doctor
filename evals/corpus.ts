@@ -42,6 +42,19 @@ export interface GoldPracticeCase {
   target: string;
 }
 
+const UNENFORCED_LEAF_TARGETS: ReadonlySet<string> = new Set([
+  "expensify-biometrics-test",
+  "formbricks-edit-membership-role",
+]);
+
+function withLeafEnforcement(hookCase: GoldHookCase): GoldHookCase {
+  if (!UNENFORCED_LEAF_TARGETS.has(hookCase.target)) {
+    return hookCase;
+  }
+  const { action, ...rest } = hookCase;
+  return { action, enforced: false, ...rest };
+}
+
 export const repositories = [
   {
     commit: "f9ad8b52580bbee0efa94de31c54977132f68b1e",
@@ -3706,20 +3719,27 @@ export const goldCases = [
     rationale: "The async command changes only a small loading overlay inside the segment row.",
     target: "formbricks-load-segment",
   },
-  ...[
-    [44, "updateTagError"],
-    [45, "isMergingTags"],
-  ].map(([line, name]) => ({
-    action: "use-observable" as const,
-    ...(line === 45 ? { enforced: false as const } : {}),
+  {
+    action: "use-observable",
     file: "single-tag.tsx",
-    hook: "useState" as const,
-    line: line as number,
-    name: name as string,
+    hook: "useState",
+    line: 44,
+    name: "updateTagError",
     rationale:
       "Async tag commands update one input presentation or merge-control gate without invalidating the rest of the row.",
     target: "formbricks-single-tag",
-  })),
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "single-tag.tsx",
+    hook: "useState",
+    line: 45,
+    name: "isMergingTags",
+    rationale:
+      "Async tag commands update one input presentation or merge-control gate without invalidating the rest of the row.",
+    target: "formbricks-single-tag",
+  },
   ...[
     ["useState", 28, "isCopied", "review-state"],
     ["useEffect", 50, null, "review-effect"],
@@ -4345,26 +4365,47 @@ export const goldCases = [
       "The owner recomputes native form validity through a ref after each input update, so isolating the input would leave the Save button stale.",
     target: "outline-profile",
   },
-  ...[
-    [26, "publish", "use-observable"],
-    [27, "copying", "use-observable"],
-    [28, "recursive", "use-observable"],
-    [29, "selectedPath", "review-state"],
-  ].map(([line, name, action]) => ({
-    action: action as "review-state" | "use-observable",
-    ...(line === 27 ? { enforced: false as const } : {}),
+  {
+    action: "use-observable",
     file: "DocumentCopy.tsx",
-    hook: "useState" as const,
-    line: line as number,
-    name: name as string,
+    hook: "useState",
+    line: 26,
+    name: "publish",
     rationale:
-      line === 26 || line === 28
-        ? "The option has one conditionally mounted Switch subscriber and is otherwise read only by the Copy event command."
-        : line === 27
-          ? "The exact async copying lifecycle renders only the stable Copy button's disabled prop and conditional label, so one leaf subscription removes duplicate-workflow renders without changing command timing."
-          : "The selected destination drives the explorer callback, footer summary, and submit availability rather than one controlled leaf.",
+      "The option has one conditionally mounted Switch subscriber and is otherwise read only by the Copy event command.",
     target: "outline-document-copy",
-  })),
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "DocumentCopy.tsx",
+    hook: "useState",
+    line: 27,
+    name: "copying",
+    rationale:
+      "The exact async copying lifecycle renders only the stable Copy button's disabled prop and conditional label, so one leaf subscription removes duplicate-workflow renders without changing command timing.",
+    target: "outline-document-copy",
+  },
+  {
+    action: "use-observable",
+    file: "DocumentCopy.tsx",
+    hook: "useState",
+    line: 28,
+    name: "recursive",
+    rationale:
+      "The option has one conditionally mounted Switch subscriber and is otherwise read only by the Copy event command.",
+    target: "outline-document-copy",
+  },
+  {
+    action: "review-state",
+    file: "DocumentCopy.tsx",
+    hook: "useState",
+    line: 29,
+    name: "selectedPath",
+    rationale:
+      "The selected destination drives the explorer callback, footer summary, and submit availability rather than one controlled leaf.",
+    target: "outline-document-copy",
+  },
   ...[
     [44, "customSingleUseId", "use-observable"],
     [42, "singleUseEncryption", "review-state"],
@@ -4416,21 +4457,31 @@ export const goldCases = [
     target: "formbricks-delete-organization",
   },
   ...[
-    [144, "makeMeAdmin", "use-observable"],
-    [134, "workspaceNameFirstCharacter", "review-state"],
-    [148, null, "use-unmount"],
-  ].map(([line, name, action]) => ({
+    [
+      144,
+      "makeMeAdmin",
+      "use-observable",
+      "The conditional admin switch owns one presentation subscriber while confirmation reads its latest value as an event snapshot.",
+    ],
+    [
+      134,
+      "workspaceNameFirstCharacter",
+      "review-state",
+      "The workspace-name character drives avatar presentation and form coordination beyond one controlled leaf.",
+    ],
+    [
+      148,
+      null,
+      "use-unmount",
+      "The empty-dependency cleanup only clears the form draft on unmount.",
+    ],
+  ].map(([line, name, action, rationale]) => ({
     action: action as HookAction,
     file: "WorkspaceConfirmationForm.tsx",
     hook: (name === null ? "useEffect" : "useState") as "useEffect" | "useState",
     line: line as number,
     name: name as string | null,
-    rationale:
-      line === 144
-        ? "The conditional admin switch owns one presentation subscriber while confirmation reads its latest value as an event snapshot."
-        : line === 148
-          ? "The empty-dependency cleanup only clears the form draft on unmount."
-          : "The workspace-name character drives avatar presentation and form coordination beyond one controlled leaf.",
+    rationale: rationale as string,
     target: "expensify-workspace-confirmation",
   })),
   {
@@ -4444,44 +4495,67 @@ export const goldCases = [
     target: "expensify-tax-name",
   },
   ...[
-    [27, "authState", "review-state"],
-    [28, "isSubmitting", "review-state"],
-    [29, "email", "use-observable"],
-  ].map(([line, name, action]) => ({
+    [
+      27,
+      "authState",
+      "review-state",
+      "Authentication state selects the provider workflow branch and therefore owns component mounting rather than one presentation leaf.",
+    ],
+    [
+      28,
+      "isSubmitting",
+      "review-state",
+      "Submission status coordinates the asynchronous request, input availability, and submit button as one workflow.",
+    ],
+    [
+      29,
+      "email",
+      "use-observable",
+      "Email typing has one input and submit-validation subscription boundary beneath provider-kind early returns; ownership must remain above those branches.",
+    ],
+  ].map(([line, name, action, rationale]) => ({
     action: action as "review-state" | "use-observable",
     enforced: true,
     file: "AuthenticationProvider.tsx",
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale:
-      line === 29
-        ? "Email typing has one input and submit-validation subscription boundary beneath provider-kind early returns; ownership must remain above those branches."
-        : line === 27
-          ? "Authentication state selects the provider workflow branch and therefore owns component mounting rather than one presentation leaf."
-          : "Submission status coordinates the asynchronous request, input availability, and submit button as one workflow.",
+    rationale: rationale as string,
     target: "outline-authentication-provider",
   })),
   ...[
-    [40, "file", "review-state"],
-    [41, "isImporting", "review-state"],
-    [42, "uploadProgress", "review-state"],
-    [43, "permission", "use-observable"],
-  ].map(([line, name, action]) => ({
+    [
+      40,
+      "file",
+      "review-state",
+      "The selected file drives the dropzone summary, submit availability, and asynchronous upload command rather than one bounded leaf.",
+    ],
+    [
+      41,
+      "isImporting",
+      "review-state",
+      "Importing status coordinates the spinner, dropzone, submit button, and asynchronous workflow.",
+    ],
+    [
+      42,
+      "uploadProgress",
+      "review-state",
+      "Upload progress is owned by the asynchronous upload callback and submit presentation, so no independent state boundary is proven.",
+    ],
+    [
+      43,
+      "permission",
+      "use-observable",
+      "Permission has one selector subscription and a submit snapshot beneath a state-independent disabled return; observable ownership remains in DropToImport.",
+    ],
+  ].map(([line, name, action, rationale]) => ({
     action: action as "review-state" | "use-observable",
     enforced: true,
     file: "DropToImport.tsx",
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale:
-      line === 43
-        ? "Permission has one selector subscription and a submit snapshot beneath a state-independent disabled return; observable ownership remains in DropToImport."
-        : line === 40
-          ? "The selected file drives the dropzone summary, submit availability, and asynchronous upload command rather than one bounded leaf."
-          : line === 41
-            ? "Importing status coordinates the spinner, dropzone, submit button, and asynchronous workflow."
-            : "Upload progress is owned by the asynchronous upload callback and submit presentation, so no independent state boundary is proven.",
+    rationale: rationale as string,
     target: "outline-drop-to-import",
   })),
   ...[
@@ -4546,26 +4620,49 @@ export const goldCases = [
     target: "expensify-spend-rule-cards",
   },
   ...[
-    [106, "records", "review-state", true],
-    [113, "drawerRecordId", "use-observable", true],
-    [114, "isDrawerOpen", "use-observable", true],
-    [120, "selectedIds", "use-observable", true],
-    [122, "isDeleting", "use-observable", true],
-  ].map(([line, name, action, enforced]) => ({
+    [
+      106,
+      "records",
+      "review-state",
+      true,
+      "Records are the rendered list data and are replaced by refresh and pagination workflows, not a row-local selection model.",
+    ],
+    [
+      113,
+      "drawerRecordId",
+      "use-observable",
+      true,
+      "The undefined-initialized record cursor and visibility flag open together, stay mounted in one resolved drawer target, and must migrate as one observable model.",
+    ],
+    [
+      114,
+      "isDrawerOpen",
+      "use-observable",
+      true,
+      "The undefined-initialized record cursor and visibility flag open together, stay mounted in one resolved drawer target, and must migrate as one observable model.",
+    ],
+    [
+      120,
+      "selectedIds",
+      "use-observable",
+      true,
+      "Independent row toggles make this a real keyed selection model; row membership and toolbar summaries can subscribe separately while refresh commands reset it atomically.",
+    ],
+    [
+      122,
+      "isDeleting",
+      "use-observable",
+      true,
+      "The true pending transition reaches chunk deletion before any other owner state changes, and only the delete dialog subscribes; preserve its existing finally boundary.",
+    ],
+  ].map(([line, name, action, enforced, rationale]) => ({
     action: action as "review-state" | "use-observable",
     enforced: enforced as boolean,
     file: "feedback-records-table.tsx",
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale:
-      line === 113 || line === 114
-        ? "The undefined-initialized record cursor and visibility flag open together, stay mounted in one resolved drawer target, and must migrate as one observable model."
-        : line === 120
-          ? "Independent row toggles make this a real keyed selection model; row membership and toolbar summaries can subscribe separately while refresh commands reset it atomically."
-          : line === 106
-            ? "Records are the rendered list data and are replaced by refresh and pagination workflows, not a row-local selection model."
-            : "The true pending transition reaches chunk deletion before any other owner state changes, and only the delete dialog subscribes; preserve its existing finally boundary.",
+    rationale: rationale as string,
     target: "formbricks-feedback-records",
   })),
   {
@@ -6197,18 +6294,17 @@ export const goldCases = [
       "value",
       "The rename input and save-validity leaf subscribe to the editable value while the cancel action stays independent and save snapshots once.",
     ],
-  ].map(([target, file, line, name, rationale]) => ({
-    action: "use-observable" as const,
-    ...(target === "expensify-biometrics-test" || target === "formbricks-edit-membership-role"
-      ? { enforced: false as const }
-      : {}),
-    file: file as string,
-    hook: "useState" as const,
-    line: line as number,
-    name: name as string,
-    rationale: rationale as string,
-    target: target as string,
-  })),
+  ].map(([target, file, line, name, rationale]) =>
+    withLeafEnforcement({
+      action: "use-observable" as const,
+      file: file as string,
+      hook: "useState" as const,
+      line: line as number,
+      name: name as string,
+      rationale: rationale as string,
+      target: target as string,
+    }),
+  ),
   {
     action: "use-observable",
     file: "components/tree-actions/transfer-trees/account-selection.tsx",

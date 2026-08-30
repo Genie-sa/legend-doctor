@@ -1,5 +1,3 @@
-import ts from "typescript";
-
 import {
   bindingDeclarationCount,
   callRootIdentifier,
@@ -10,7 +8,6 @@ import {
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
-import type { StateCandidate } from "../analyze-source.js";
 import {
   findAncestorUntil,
   isRuntimeFunctionLike,
@@ -27,6 +24,8 @@ import {
   setterCallUsesPreviousValue,
 } from "./state-proofs.js";
 import type { RuntimeFunctionLike } from "../ast.js";
+import type { StateCandidate } from "../analyze-source.js";
+import ts from "typescript";
 
 export interface CommandOnlyCallableReads {
   effectSites: readonly ts.Identifier[];
@@ -139,11 +138,16 @@ export function functionalCounterUpdaterPreservesSnapshot(
   usage: CommandOnlyUsage,
   nearestMutationFunction: (node: ts.Node, owner: RuntimeFunctionLike) => RuntimeFunctionLike,
 ): boolean {
-  const call = usage.setterCallNodes[0];
-  const updater = call?.arguments[0];
+  const [call] = usage.setterCallNodes;
+  if (usage.setterCallNodes.length !== 1 || !call || !isInertCounterUpdater(call.arguments[0])) {
+    return false;
+  }
+  const region = nearestMutationFunction(call, state.owner);
+  return region.body !== undefined && snapshotReadsFollowCall(region.body, state.valueName, call);
+}
+
+function isInertCounterUpdater(updater: ts.Expression | undefined): boolean {
   if (
-    usage.setterCallNodes.length !== 1 ||
-    !call ||
     !updater ||
     !ts.isArrowFunction(updater) ||
     updater.parameters.length !== 1 ||
@@ -154,29 +158,29 @@ export function functionalCounterUpdaterPreservesSnapshot(
   }
   const expression = updater.body;
   const parameter = updater.parameters[0]!.name.text;
-  if (
-    !ts.isBinaryExpression(expression) ||
-    ![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken].includes(expression.operatorToken.kind) ||
-    !ts.isIdentifier(expression.left) ||
-    expression.left.text !== parameter ||
-    !isEvaluationInert(expression.right)
-  ) {
-    return false;
-  }
+  return (
+    ts.isBinaryExpression(expression) &&
+    [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken].includes(expression.operatorToken.kind) &&
+    ts.isIdentifier(expression.left) &&
+    expression.left.text === parameter &&
+    isEvaluationInert(expression.right)
+  );
+}
 
-  const region = nearestMutationFunction(call, state.owner);
-  if (!region.body) {
-    return false;
-  }
+function snapshotReadsFollowCall(
+  body: ts.Node,
+  valueName: string,
+  call: ts.CallExpression,
+): boolean {
   let readsAfter = 0;
   let unsafe = false;
-  visitSkippingNestedRuntimeFunctions(region.body, (node) => {
+  visitSkippingNestedRuntimeFunctions(body, (node) => {
     if (ts.isAwaitExpression(node) || ts.isYieldExpression(node)) {
       unsafe = true;
     }
     if (
       ts.isIdentifier(node) &&
-      node.text === state.valueName &&
+      node.text === valueName &&
       !isDeclarationName(node) &&
       !isNonValueIdentifier(node)
     ) {
@@ -199,6 +203,11 @@ export function stateReadCallbackEscapesThroughUnknownHook(
     property: string,
   ) => boolean,
 ): boolean {
+  const scan: UnknownHookScan = {
+    callbackPropertyIsDeferred,
+    deferredCallbackHooks,
+    owner: state.owner,
+  };
   let escaped = false;
   visit(state.owner.body, (node) => {
     if (
@@ -211,47 +220,80 @@ export function stateReadCallbackEscapesThroughUnknownHook(
     ) {
       return;
     }
-    for (
-      let current: ts.Node | undefined = node.parent;
-      current && current !== state.owner;
-      current = current.parent
-    ) {
-      if (
-        !ts.isCallExpression(current) ||
-        !current.arguments.some((argument) => nodeWithin(node, argument))
-      ) {
-        continue;
-      }
-      const hookName = ts.isIdentifier(current.expression)
-        ? current.expression.text
-        : ts.isPropertyAccessExpression(current.expression)
-          ? current.expression.name.text
-          : null;
-      if (
-        hookName &&
-        /^use[A-Z0-9]/u.test(hookName) &&
-        !["useCallback", "useMemo", "useEffect", "useLayoutEffect", "useInsertionEffect"].includes(
-          hookName,
-        ) &&
-        bindingDeclarationCount(state.owner, hookName) === 0
-      ) {
-        const argumentIndex = current.arguments.findIndex((argument) => nodeWithin(node, argument));
-        if (argumentIndex !== -1 && deferredCallbackHooks.get(hookName)?.has(argumentIndex)) {
-          continue;
-        }
-        const property =
-          argumentIndex === -1
-            ? null
-            : objectCallbackProperty(current.arguments[argumentIndex]!, node);
-        if (property && callbackPropertyIsDeferred?.(hookName, argumentIndex, property) === true) {
-          continue;
-        }
-        escaped = true;
-        return;
-      }
+    if (readEscapesThroughUnknownHook(node, scan)) {
+      escaped = true;
     }
   });
   return escaped;
+}
+
+interface UnknownHookScan {
+  readonly callbackPropertyIsDeferred:
+    | ((hookName: string, argumentIndex: number, property: string) => boolean)
+    | undefined;
+  readonly deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
+  readonly owner: RuntimeFunctionLike;
+}
+
+const HOOK_NAME_PATTERN = /^use[A-Z0-9]/u;
+const MINIMUM_COMMAND_SWITCH_CLAUSES = 2;
+const GUARDED_FALLBACK_BRANCH_STATEMENTS = 2;
+const DEFERRED_BY_DEFINITION_HOOKS = new Set([
+  "useCallback",
+  "useMemo",
+  "useEffect",
+  "useLayoutEffect",
+  "useInsertionEffect",
+]);
+
+function calleeHookName(expression: ts.Expression): string | null {
+  if (ts.isIdentifier(expression)) {
+    return expression.text;
+  }
+  return ts.isPropertyAccessExpression(expression) ? expression.name.text : null;
+}
+
+function readEscapesThroughUnknownHook(node: ts.Identifier, scan: UnknownHookScan): boolean {
+  for (
+    let current: ts.Node | undefined = node.parent;
+    current && current !== scan.owner;
+    current = current.parent
+  ) {
+    if (
+      ts.isCallExpression(current) &&
+      current.arguments.some((argument) => nodeWithin(node, argument)) &&
+      unknownHookCallEscapes(current, node, scan)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function unknownHookCallEscapes(
+  call: ts.CallExpression,
+  node: ts.Identifier,
+  scan: UnknownHookScan,
+): boolean {
+  const hookName = calleeHookName(call.expression);
+  if (
+    !hookName ||
+    !HOOK_NAME_PATTERN.test(hookName) ||
+    DEFERRED_BY_DEFINITION_HOOKS.has(hookName) ||
+    bindingDeclarationCount(scan.owner, hookName) !== 0
+  ) {
+    return false;
+  }
+  const argumentIndex = call.arguments.findIndex((argument) => nodeWithin(node, argument));
+  if (argumentIndex !== -1 && scan.deferredCallbackHooks.get(hookName)?.has(argumentIndex)) {
+    return false;
+  }
+  const property =
+    argumentIndex === -1 ? null : objectCallbackProperty(call.arguments[argumentIndex]!, node);
+  return !(
+    property !== null &&
+    scan.callbackPropertyIsDeferred?.(hookName, argumentIndex, property) === true
+  );
 }
 
 function objectCallbackProperty(argument: ts.Expression, node: ts.Node): string | null {
@@ -297,17 +339,32 @@ export function stateFeedsReturnedSwitchCommand(state: StateCandidate): boolean 
   if (bindingDeclarationCount(state.owner, state.valueName) !== 1) {
     return false;
   }
+  const callback = returnedSwitchCommandCallback(state);
+  const name = callback && localCallableName(callback);
+  if (!name || bindingDeclarationCount(state.owner, name) !== 1) {
+    return false;
+  }
+  const references = identifierReads(state.owner, name);
+  return references.length === 1 && isDirectReturnedObjectMember(references[0]!, state.owner);
+}
+
+function identifierReads(owner: RuntimeFunctionLike, name: string): readonly ts.Identifier[] {
   const reads: ts.Identifier[] = [];
-  visit(state.owner.body, (node) => {
+  visit(owner.body, (node) => {
     if (
       ts.isIdentifier(node) &&
-      node.text === state.valueName &&
+      node.text === name &&
       !isDeclarationName(node) &&
       !isNonValueIdentifier(node)
     ) {
       reads.push(node);
     }
   });
+  return reads;
+}
+
+function returnedSwitchCommandCallback(state: StateCandidate): ts.ArrowFunction | null {
+  const reads = identifierReads(state.owner, state.valueName);
   const read = reads.length === 1 ? reads[0]! : null;
   const callback = read ? nearestNestedFunction(read, state.owner) : null;
   if (
@@ -318,34 +375,23 @@ export function stateFeedsReturnedSwitchCommand(state: StateCandidate): boolean 
     callback.body.statements.length !== 1 ||
     callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
   ) {
-    return false;
+    return null;
   }
-  const statement = callback.body.statements[0]!;
-  if (
-    !ts.isSwitchStatement(statement) ||
-    unwrapTransparentExpression(statement.expression) !== read ||
-    statement.caseBlock.clauses.length < 2 ||
-    !statement.caseBlock.clauses.some(ts.isDefaultClause) ||
-    !statement.caseBlock.clauses.every((clause) => switchClauseIsCommandOnly(clause, state))
-  ) {
-    return false;
-  }
-  const name = localCallableName(callback);
-  if (!name || bindingDeclarationCount(state.owner, name) !== 1) {
-    return false;
-  }
-  const references: ts.Identifier[] = [];
-  visit(state.owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node.text === name &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node)
-    ) {
-      references.push(node);
-    }
-  });
-  return references.length === 1 && isDirectReturnedObjectMember(references[0]!, state.owner);
+  return isCommandOnlySwitch(callback.body.statements[0]!, read, state) ? callback : null;
+}
+
+function isCommandOnlySwitch(
+  statement: ts.Statement,
+  read: ts.Identifier,
+  state: StateCandidate,
+): boolean {
+  return (
+    ts.isSwitchStatement(statement) &&
+    unwrapTransparentExpression(statement.expression) === read &&
+    statement.caseBlock.clauses.length >= MINIMUM_COMMAND_SWITCH_CLAUSES &&
+    statement.caseBlock.clauses.some(ts.isDefaultClause) &&
+    statement.caseBlock.clauses.every((clause) => switchClauseIsCommandOnly(clause, state))
+  );
 }
 
 function switchClauseIsCommandOnly(clause: ts.CaseOrDefaultClause, state: StateCandidate): boolean {
@@ -383,7 +429,7 @@ function guardedFallbackIsCommandOnly(clause: ts.DefaultClause, state: StateCand
   const branch = guard.thenStatement;
   return (
     ts.isBlock(branch) &&
-    branch.statements.length === 2 &&
+    branch.statements.length === GUARDED_FALLBACK_BRANCH_STATEMENTS &&
     isImportedCommandStatement(branch.statements[0]!, state) &&
     ts.isReturnStatement(branch.statements[1]!) &&
     branch.statements[1]!.expression === undefined
@@ -510,23 +556,27 @@ function localCallableRenderSites(
       sites.push(node);
       return;
     }
-    if (
-      !ts.isCallExpression(node.parent) ||
-      node.parent.expression !== node ||
-      isInsideJsxEventCallback(node, state.owner)
-    ) {
-      return;
-    }
-    const callback = nearestNestedFunction(node, state.owner);
-    if (
-      findAncestorUntil(node.parent, isJsxNode, state.owner) !== null ||
-      callback === null ||
-      isSynchronousRenderCallback(callback)
-    ) {
+    if (isCallableInvocationSite(node, state.owner)) {
       sites.push(node);
     }
   });
   return sites;
+}
+
+function isCallableInvocationSite(node: ts.Identifier, owner: RuntimeFunctionLike): boolean {
+  if (
+    !ts.isCallExpression(node.parent) ||
+    node.parent.expression !== node ||
+    isInsideJsxEventCallback(node, owner)
+  ) {
+    return false;
+  }
+  const callback = nearestNestedFunction(node, owner);
+  return (
+    findAncestorUntil(node.parent, isJsxNode, owner) !== null ||
+    callback === null ||
+    isSynchronousRenderCallback(callback)
+  );
 }
 
 function localCallableEffectSites(
@@ -567,7 +617,7 @@ function localCallableCallback(
     ts.isIdentifier(initializer.expression) &&
     initializer.expression.text === "useCallback"
   ) {
-    const callback = initializer.arguments[0];
+    const [callback] = initializer.arguments;
     return callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))
       ? callback
       : null;
@@ -637,31 +687,38 @@ function localBindingReachesReturnedJsxValue(owner: RuntimeFunctionLike, name: s
       published = true;
       return;
     }
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
-    if (isContextValueAttribute(attribute)) {
+    if (isContextValueAttribute(findAncestorUntil(node, ts.isJsxAttribute, owner))) {
       published = true;
       return;
     }
-    const declaration = findAncestorUntil(node, ts.isVariableDeclaration, owner);
-    if (!declaration || !ts.isIdentifier(declaration.name)) {
+    if (aliasReachesContextValue(node, owner)) {
+      published = true;
+    }
+  });
+  return published;
+}
+
+function aliasReachesContextValue(node: ts.Identifier, owner: RuntimeFunctionLike): boolean {
+  const declaration = findAncestorUntil(node, ts.isVariableDeclaration, owner);
+  if (!declaration || !ts.isIdentifier(declaration.name)) {
+    return false;
+  }
+  const valueName = declaration.name.text;
+  let published = false;
+  visit(owner.body, (reference) => {
+    if (
+      published ||
+      !ts.isIdentifier(reference) ||
+      reference.text !== valueName ||
+      reference === declaration.name ||
+      isDeclarationName(reference) ||
+      isNonValueIdentifier(reference)
+    ) {
       return;
     }
-    const valueName = declaration.name.text;
-    visit(owner.body, (reference) => {
-      if (
-        published ||
-        !ts.isIdentifier(reference) ||
-        reference.text !== valueName ||
-        reference === declaration.name ||
-        isDeclarationName(reference) ||
-        isNonValueIdentifier(reference)
-      ) {
-        return;
-      }
-      if (isContextValueAttribute(findAncestorUntil(reference, ts.isJsxAttribute, owner))) {
-        published = true;
-      }
-    });
+    if (isContextValueAttribute(findAncestorUntil(reference, ts.isJsxAttribute, owner))) {
+      published = true;
+    }
   });
   return published;
 }

@@ -1,5 +1,3 @@
-import ts from "typescript";
-
 import {
   bindingDeclarationCount,
   isDeclarationName,
@@ -7,6 +5,7 @@ import {
   isPureExpression,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
+import { collectHookImports, isImportedHookCall } from "../imports.js";
 import {
   findAncestor,
   findAncestorUntil,
@@ -14,9 +13,10 @@ import {
   nodeWithin,
   visit,
 } from "../ast.js";
-import { collectHookImports, isImportedHookCall } from "../imports.js";
-import { uniqueVariableDeclaration } from "./state-proofs.js";
+
 import type { RuntimeFunctionLike } from "../ast.js";
+import ts from "typescript";
+import { uniqueVariableDeclaration } from "./state-proofs.js";
 
 export type HookConsumerResult = "none" | "safe" | "unsafe";
 
@@ -75,24 +75,12 @@ function callHasStableKeyedCursorConsumer(
   ) {
     return false;
   }
-  const element = declaration.name.elements.find((candidate) => {
-    const sourceName =
-      candidate.propertyName && ts.isIdentifier(candidate.propertyName)
-        ? candidate.propertyName.text
-        : ts.isIdentifier(candidate.name)
-          ? candidate.name.text
-          : null;
-    return sourceName === cursorProperty;
-  });
-  const setterEscapes = declaration.name.elements.some((candidate) => {
-    const sourceName =
-      candidate.propertyName && ts.isIdentifier(candidate.propertyName)
-        ? candidate.propertyName.text
-        : ts.isIdentifier(candidate.name)
-          ? candidate.name.text
-          : null;
-    return sourceName === setterProperty;
-  });
+  const element = declaration.name.elements.find(
+    (candidate) => bindingSourceName(candidate) === cursorProperty,
+  );
+  const setterEscapes = declaration.name.elements.some(
+    (candidate) => bindingSourceName(candidate) === setterProperty,
+  );
   if (
     !element ||
     setterEscapes ||
@@ -106,80 +94,132 @@ function callHasStableKeyedCursorConsumer(
   return cursorReferencesFormOneStableList(owner, element.name);
 }
 
+function bindingSourceName(candidate: ts.BindingElement): string | null {
+  if (candidate.propertyName) {
+    return ts.isIdentifier(candidate.propertyName) ? candidate.propertyName.text : null;
+  }
+  return ts.isIdentifier(candidate.name) ? candidate.name.text : null;
+}
+
 function cursorReferencesFormOneStableList(
   owner: RuntimeFunctionLike,
   cursor: ts.Identifier,
 ): boolean {
   const references = bindingReferences(owner, cursor);
-  const equalityReferences = references.filter((reference) => cursorEquality(reference) !== null);
-  if (equalityReferences.length !== 1) {
+  const equalityReference = soleReference(
+    references,
+    (reference) => cursorEquality(reference) !== null,
+  );
+  const renderer = equalityReference && memoizedRowRenderer(equalityReference, owner);
+  if (!equalityReference || !renderer) {
     return false;
   }
-  const equalityReference = equalityReferences[0]!;
-  const equality = cursorEquality(equalityReference)!;
+  return cursorFeedsStableList({ equalityReference, owner, references, renderer });
+}
+
+interface StableListCheck {
+  equalityReference: ts.Identifier;
+  owner: RuntimeFunctionLike;
+  references: readonly ts.Identifier[];
+  renderer: MemoizedRowRenderer;
+}
+
+function cursorFeedsStableList(check: StableListCheck): boolean {
+  const { equalityReference, owner, references, renderer } = check;
+  const dependencyReference = soleDependencyReference(references, renderer.dependency);
+  const extraDataReference = soleReference(
+    references,
+    (reference) => jsxAttributeContaining(reference, "extraData") !== null,
+  );
+  if (!dependencyReference || !extraDataReference) {
+    return false;
+  }
+  const cursorEscapes = references.some(
+    (reference) =>
+      reference !== equalityReference &&
+      reference !== dependencyReference &&
+      reference !== extraDataReference,
+  );
+  return !cursorEscapes && keyedListElementIsStable(owner, renderer.renderName, extraDataReference);
+}
+
+function soleReference(
+  references: readonly ts.Identifier[],
+  matches: (reference: ts.Identifier) => boolean,
+): ts.Identifier | null {
+  const matched = references.filter((reference) => matches(reference));
+  return matched.length === 1 ? matched[0]! : null;
+}
+
+function soleDependencyReference(
+  references: readonly ts.Identifier[],
+  dependency: ts.ArrayLiteralExpression,
+): ts.Identifier | null {
+  const reference = soleReference(references, (candidate) => nodeWithin(candidate, dependency));
+  if (!reference) {
+    return null;
+  }
+  return dependency.elements.some((element) => unwrapTransparentExpression(element) === reference)
+    ? reference
+    : null;
+}
+
+interface MemoizedRowRenderer {
+  dependency: ts.ArrayLiteralExpression;
+  renderName: ts.Identifier;
+}
+
+function memoizedRowRenderer(
+  equalityReference: ts.Identifier,
+  owner: RuntimeFunctionLike,
+): MemoizedRowRenderer | null {
+  const memo = rowEqualityMemo(equalityReference, owner);
+  if (!memo) {
+    return null;
+  }
+  const renderName = memoRenderBindingName(memo);
+  const [, dependency] = memo.arguments;
+  return renderName && dependency && ts.isArrayLiteralExpression(dependency)
+    ? { dependency, renderName }
+    : null;
+}
+
+function rowEqualityMemo(
+  equalityReference: ts.Identifier,
+  owner: RuntimeFunctionLike,
+): ts.CallExpression | null {
+  const equality = cursorEquality(equalityReference);
   const callback = nearestNestedFunction(equalityReference, owner);
   if (
+    !equality ||
     !callback ||
     (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
     !rowEqualityUsesIndex(equality, callback, equalityReference) ||
     !equalityOnlyFeedsRowAttributes(equality, callback)
   ) {
-    return false;
+    return null;
   }
   const memo = callback.parent;
-  if (
-    !ts.isCallExpression(memo) ||
-    memo.arguments[0] !== callback ||
-    !isImportedUseCallback(memo)
-  ) {
-    return false;
-  }
-  const renderDeclaration = findAncestor(memo, ts.isVariableDeclaration);
-  if (
-    !renderDeclaration ||
-    !renderDeclaration.initializer ||
-    unwrapTransparentExpression(renderDeclaration.initializer) !== memo ||
-    !ts.isIdentifier(renderDeclaration.name)
-  ) {
-    return false;
-  }
-  const dependency = memo.arguments[1];
-  if (!dependency || !ts.isArrayLiteralExpression(dependency)) {
-    return false;
-  }
-  const dependencyReferences = references.filter((reference) => nodeWithin(reference, dependency));
-  if (
-    dependencyReferences.length !== 1 ||
-    !dependency.elements.some(
-      (element) => unwrapTransparentExpression(element) === dependencyReferences[0],
-    )
-  ) {
-    return false;
-  }
+  return ts.isCallExpression(memo) && memo.arguments[0] === callback && isImportedUseCallback(memo)
+    ? memo
+    : null;
+}
 
-  const extraDataReferences = references.filter(
-    (reference) => jsxAttributeContaining(reference, "extraData") !== null,
-  );
-  if (extraDataReferences.length !== 1) {
-    return false;
+function memoRenderBindingName(memo: ts.CallExpression): ts.Identifier | null {
+  const declaration = findAncestor(memo, ts.isVariableDeclaration);
+  if (!declaration?.initializer || unwrapTransparentExpression(declaration.initializer) !== memo) {
+    return null;
   }
-  if (
-    references.some(
-      (reference) =>
-        reference !== equalityReference &&
-        reference !== dependencyReferences[0] &&
-        reference !== extraDataReferences[0],
-    )
-  ) {
-    return false;
-  }
+  return ts.isIdentifier(declaration.name) ? declaration.name : null;
+}
 
-  const renderAttribute = uniqueDirectJsxAttributeReference(
-    owner,
-    renderDeclaration.name,
-    "renderItem",
-  );
-  const extraAttribute = jsxAttributeContaining(extraDataReferences[0]!, "extraData");
+function keyedListElementIsStable(
+  owner: RuntimeFunctionLike,
+  renderName: ts.Identifier,
+  extraDataReference: ts.Identifier,
+): boolean {
+  const renderAttribute = uniqueDirectJsxAttributeReference(owner, renderName, "renderItem");
+  const extraAttribute = jsxAttributeContaining(extraDataReference, "extraData");
   if (!renderAttribute || !extraAttribute || renderAttribute.parent !== extraAttribute.parent) {
     return false;
   }
@@ -247,22 +287,29 @@ function equalityOnlyFeedsRowAttributes(
 }
 
 function keyExtractorIsStable(attribute: ts.JsxAttribute, owner: RuntimeFunctionLike): boolean {
+  const callback = keyExtractorCallback(attribute, owner);
+  const item = callback?.parameters[0]?.name;
+  if (!callback || !item || !ts.isIdentifier(item)) {
+    return false;
+  }
+  return returnsItemPropertyWithoutIndex(callback, item);
+}
+
+function keyExtractorCallback(
+  attribute: ts.JsxAttribute,
+  owner: RuntimeFunctionLike,
+): ts.ArrowFunction | ts.FunctionExpression | null {
   const expression =
     attribute.initializer && ts.isJsxExpression(attribute.initializer)
       ? attribute.initializer.expression
       : null;
-  if (!expression) {
-    return false;
-  }
-  const callback = callbackFromExpression(expression, owner);
-  if (
-    !callback ||
-    callback.parameters.length === 0 ||
-    !ts.isIdentifier(callback.parameters[0]!.name)
-  ) {
-    return false;
-  }
-  const item = callback.parameters[0]!.name;
+  return expression ? callbackFromExpression(expression, owner) : null;
+}
+
+function returnsItemPropertyWithoutIndex(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+  item: ts.Identifier,
+): boolean {
   const index = callback.parameters[1]?.name;
   const returned = callbackReturnExpression(callback);
   if (!returned || !isPureExpression(returned)) {
@@ -281,32 +328,36 @@ function keyExtractorIsStable(attribute: ts.JsxAttribute, owner: RuntimeFunction
   return itemProperty && !usesIndex;
 }
 
+function inlineCallback(value: ts.Expression): ts.ArrowFunction | ts.FunctionExpression | null {
+  return ts.isArrowFunction(value) || ts.isFunctionExpression(value) ? value : null;
+}
+
 function callbackFromExpression(
   expression: ts.Expression,
   owner: RuntimeFunctionLike,
 ): ts.ArrowFunction | ts.FunctionExpression | null {
   const value = unwrapTransparentExpression(expression);
-  if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) {
-    return value;
-  }
-  if (!ts.isIdentifier(value)) {
-    return null;
+  const inline = inlineCallback(value);
+  if (inline || !ts.isIdentifier(value)) {
+    return inline;
   }
   const declaration = uniqueVariableDeclaration(owner, value.text);
-  if (!declaration?.initializer) {
-    return null;
-  }
-  const initializer = unwrapTransparentExpression(declaration.initializer);
-  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
-    return initializer;
+  return declaration?.initializer ? callbackFromInitializer(declaration.initializer) : null;
+}
+
+function callbackFromInitializer(
+  source: ts.Expression,
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  const initializer = unwrapTransparentExpression(source);
+  const inline = inlineCallback(initializer);
+  if (inline) {
+    return inline;
   }
   if (!ts.isCallExpression(initializer) || !isImportedUseCallback(initializer)) {
     return null;
   }
-  const callback = initializer.arguments[0];
-  return callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))
-    ? callback
-    : null;
+  const [callback] = initializer.arguments;
+  return callback ? inlineCallback(callback) : null;
 }
 
 function callbackReturnExpression(
@@ -374,13 +425,19 @@ function propertyAccessRoot(expression: ts.PropertyAccessExpression): ts.Identif
   return ts.isIdentifier(current) ? current : null;
 }
 
+function callRootIdentifier(call: ts.CallExpression): ts.Identifier | null {
+  if (ts.isIdentifier(call.expression)) {
+    return call.expression;
+  }
+  return ts.isPropertyAccessExpression(call.expression) &&
+    ts.isIdentifier(call.expression.expression)
+    ? call.expression.expression
+    : null;
+}
+
 function isImportedUseCallback(call: ts.CallExpression): boolean {
   const imports = collectHookImports(call.getSourceFile());
-  const root = ts.isIdentifier(call.expression)
-    ? call.expression
-    : ts.isPropertyAccessExpression(call.expression) && ts.isIdentifier(call.expression.expression)
-      ? call.expression.expression
-      : null;
+  const root = callRootIdentifier(call);
   return (
     root !== null &&
     !bindingIsShadowed(call, root.text) &&

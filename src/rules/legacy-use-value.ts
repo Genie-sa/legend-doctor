@@ -1,11 +1,10 @@
-import ts from "typescript";
-
-import { collectBindingNames } from "../analysis-ast.js";
-import { visit } from "../ast.js";
 import type { HookImports } from "../imports.js";
 import type { InstalledLegendState } from "../legend-state-package.js";
 import type { LegendPracticeFinding } from "../types.js";
+import { collectBindingNames } from "../analysis-ast.js";
 import { directObservableSelectorPath } from "./observable-reads.js";
+import ts from "typescript";
+import { visit } from "../ast.js";
 
 const LEGACY_HOOKS = new Set(["useSelector", "use$"]);
 
@@ -28,37 +27,58 @@ export function findLegacyUseValuePractices(
     if (!ts.isCallExpression(node) || !isLegacyHookCall(node, imports, shadowed)) {
       return;
     }
-    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-    const current = node.expression.getText(sourceFile);
-    const directObservable =
-      node.arguments.length === 1
-        ? directObservableSelectorPath(node.arguments[0]!, observableBindings)
-        : null;
-    const preservedArguments = node.arguments
-      .map((argument) => argument.getText(sourceFile))
-      .join(", ");
-    const replacement = directObservable
-      ? `useValue(${directObservable.getText(sourceFile)})`
-      : `useValue(${preservedArguments})`;
-    findings.push({
-      action: "replace-legacy-use-value",
-      confidence: "certain",
-      disposition: installedLegendState?.useValueExport === "alias" ? "style" : "change",
-      evidence: [
-        `\`${current}\` resolves to a legacy hook imported from @legendapp/state/react`,
-        "Legend State documents useValue as the replacement for useSelector and use$",
-        ...installedUseValueEvidence(installedLegendState),
-      ],
-      location: { column: character + 1, file: fileName, line: line + 1 },
-      message: directObservable
-        ? `Replace \`${current}(...)\` with \`${replacement}\` and update its ` +
-          "@legendapp/state/react import; pass the proven observable path directly."
-        : `Replace \`${current}(...)\` with \`${replacement}\` and update its ` +
-          "@legendapp/state/react import; preserve the selector arguments.",
-      practice: "reactivity",
-    });
+    findings.push(
+      legacyUseValueFinding({
+        call: node,
+        fileName,
+        installedLegendState,
+        observableBindings,
+        sourceFile,
+      }),
+    );
   });
   return findings;
+}
+
+interface LegacyUseValueCall {
+  readonly call: ts.CallExpression;
+  readonly fileName: string;
+  readonly installedLegendState: InstalledLegendState | null;
+  readonly observableBindings: ReadonlySet<string>;
+  readonly sourceFile: ts.SourceFile;
+}
+
+function legacyUseValueFinding(context: LegacyUseValueCall): LegendPracticeFinding {
+  const { call, fileName, installedLegendState, observableBindings, sourceFile } = context;
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
+  const current = call.expression.getText(sourceFile);
+  const directObservable =
+    call.arguments.length === 1
+      ? directObservableSelectorPath(call.arguments[0]!, observableBindings)
+      : null;
+  const preservedArguments = call.arguments
+    .map((argument) => argument.getText(sourceFile))
+    .join(", ");
+  const replacement = directObservable
+    ? `useValue(${directObservable.getText(sourceFile)})`
+    : `useValue(${preservedArguments})`;
+  return {
+    action: "replace-legacy-use-value",
+    confidence: "certain",
+    disposition: installedLegendState?.useValueExport === "alias" ? "style" : "change",
+    evidence: [
+      `\`${current}\` resolves to a legacy hook imported from @legendapp/state/react`,
+      "Legend State documents useValue as the replacement for useSelector and use$",
+      ...installedUseValueEvidence(installedLegendState),
+    ],
+    location: { column: character + 1, file: fileName, line: line + 1 },
+    message: directObservable
+      ? `Replace \`${current}(...)\` with \`${replacement}\` and update its ` +
+        "@legendapp/state/react import; pass the proven observable path directly."
+      : `Replace \`${current}(...)\` with \`${replacement}\` and update its ` +
+        "@legendapp/state/react import; preserve the selector arguments.",
+    practice: "reactivity",
+  };
 }
 
 function installedUseValueEvidence(installed: InstalledLegendState | null): string[] {

@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 
 const COMPILER_PACKAGES = ["babel-plugin-react-compiler", "react-compiler-runtime"];
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
@@ -35,7 +35,7 @@ const CONFIG_FILES = [
 // ReactCompilerPreset, and the `reactCompiler: true | {...}` config key used by
 // Next.js and Expo `experiments`. `reactCompiler: false` stays unmatched.
 const CONFIG_MARKER =
-  /babel-plugin-react-compiler|react-compiler-runtime|reactCompilerPreset|\breactCompiler\b['"]?\s*:\s*(?:true|\{)/;
+  /babel-plugin-react-compiler|react-compiler-runtime|reactCompilerPreset|\breactCompiler\b['"]?\s*:\s*(?:true|\{)/u;
 
 export class ReactCompilerResolver {
   private readonly directories = new Map<string, Promise<boolean>>();
@@ -66,45 +66,63 @@ export class ReactCompilerResolver {
   }
 }
 
+interface ManifestFacts {
+  readonly declaresCompilerDependency: boolean;
+  readonly babelConfigText: string;
+}
+
 async function manifestDeclaresReactCompiler(manifestPath: string): Promise<boolean> {
   const text = await readText(manifestPath);
-  if (!text) {
+  if (text === null) {
     return false;
   }
-  const manifest = parseJson(text);
-  if (!manifest) {
+  const facts = readManifestFacts(text);
+  if (facts === null) {
     return false;
   }
-  const declared = DEPENDENCY_FIELDS.some((field) => {
-    const dependencies = manifest[field];
-    if (typeof dependencies !== "object" || dependencies === null) {
-      return false;
-    }
-    return COMPILER_PACKAGES.some((name) => name in (dependencies as Record<string, unknown>));
-  });
-  if (declared) {
+  return facts.declaresCompilerDependency || CONFIG_MARKER.test(facts.babelConfigText);
+}
+
+function readManifestFacts(text: string): ManifestFacts | null {
+  const manifest = parseJsonObject(text);
+  if (manifest === null) {
+    return null;
+  }
+  const babel = manifest.get("babel");
+  return {
+    babelConfigText: babel === undefined ? "" : JSON.stringify(babel),
+    declaresCompilerDependency: DEPENDENCY_FIELDS.some((field) => {
+      const dependencies = manifest.get(field);
+      const names = dependencies instanceof Object ? Object.keys(dependencies) : [];
+      return COMPILER_PACKAGES.some((packageName) => names.includes(packageName));
+    }),
+  };
+}
+
+function configEnablesReactCompiler(directory: string): Promise<boolean> {
+  return anyFileMarksCompiler(CONFIG_FILES.map((name) => path.join(directory, name)));
+}
+
+async function anyFileMarksCompiler(filePaths: readonly string[]): Promise<boolean> {
+  const [head, ...rest] = filePaths;
+  if (head === undefined) {
+    return false;
+  }
+  const text = await readText(head);
+  if (text !== null && CONFIG_MARKER.test(text)) {
     return true;
   }
-  const { babel } = manifest;
-  return babel !== undefined && CONFIG_MARKER.test(JSON.stringify(babel));
+  return anyFileMarksCompiler(rest);
 }
 
-async function configEnablesReactCompiler(directory: string): Promise<boolean> {
-  for (const name of CONFIG_FILES) {
-    const text = await readText(path.join(directory, name));
-    if (text && CONFIG_MARKER.test(text)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function parseJson(text: string): Record<string, unknown> | null {
+function parseJsonObject(text: string): ReadonlyMap<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(text);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : null;
+    if (!(parsed instanceof Object)) {
+      return null;
+    }
+    const entries: readonly (readonly [string, unknown])[] = Object.entries(parsed);
+    return new Map(entries);
   } catch {
     return null;
   }

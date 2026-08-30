@@ -1,8 +1,7 @@
+import type { AnalysisCoverageEntry, AnalysisCoverageOutcome } from "../src/analysis-coverage.js";
+import { AnalysisCoverageLedger } from "../src/analysis-coverage.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { AnalysisCoverageLedger } from "../src/analysis-coverage.js";
-import type { AnalysisCoverageEntry, AnalysisCoverageOutcome } from "../src/analysis-coverage.js";
 
 const requireValue = <Value>(value: Value | undefined): Value => {
   assert.ok(value);
@@ -127,17 +126,19 @@ test("rejects impossible detector coverage and duplicate function ranges", () =>
 });
 
 test("rejects omitted stages and blank reasons instead of treating them as unknown", () => {
-  const missingStage = entry({ file: "src/missing.tsx", kind: "file" }) as unknown as {
-    target: AnalysisCoverageEntry["target"];
-    stages: Record<string, AnalysisCoverageOutcome>;
-  };
-  delete missingStage.stages.semantic;
+  // SAFETY: The `semantic` stage is deliberately absent so that `record` is exercised on input
+  // AnalysisCoverageEntry cannot express; every other field matches a well-formed file entry.
+  const missingStage = {
+    stages: {
+      parser: outcome("analyzed", "parsed"),
+      lowering: outcome("skipped", "lowering-not-requested"),
+      detector: outcome("analyzed", "detector-complete"),
+    },
+    target: { file: "src/missing.tsx", kind: "file" },
+  } as AnalysisCoverageEntry;
 
   const ledger = new AnalysisCoverageLedger();
-  assert.throws(
-    () => ledger.record(missingStage as unknown as AnalysisCoverageEntry),
-    /must explicitly report/u,
-  );
+  assert.throws(() => ledger.record(missingStage), /must explicitly report/u);
 
   const blankReason = entry({ file: "src/blank.tsx", kind: "file" });
   const invalid = globalThis.structuredClone(blankReason);

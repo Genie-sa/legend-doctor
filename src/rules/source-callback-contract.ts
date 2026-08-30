@@ -1,5 +1,3 @@
-import ts from "typescript";
-
 import {
   bindingDeclarationCount,
   hookCallName,
@@ -8,6 +6,7 @@ import {
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import { findAncestorUntil, nearestNestedFunction, nodeWithin, visit } from "../ast.js";
+import ts from "typescript";
 
 export interface SourceHookDeclaration {
   readonly file: string;
@@ -29,6 +28,35 @@ interface StoredCallbackRef {
   readonly property: string;
 }
 
+/** The callback input of one resolved hook, identified the way a caller passes it in. */
+interface DeferredCallbackQuery {
+  readonly argumentIndex: number;
+  readonly property: string | null;
+  readonly source: SourceHookDeclaration;
+}
+
+/** How far the trace has recursed, which hook inputs it already entered, and how to resolve more. */
+interface ResolverTrace {
+  readonly depth: number;
+  readonly resolver: SourceHookResolver;
+  readonly visited: ReadonlySet<string>;
+}
+
+/** The hook body being walked, together with the React imports of its source file. */
+interface HookBody {
+  readonly hooks: ReactHookImports;
+  readonly source: SourceHookDeclaration;
+}
+
+/** Everything one deferral step needs: the hook body plus the trace state carried into it. */
+interface CallbackTrace {
+  readonly depth: number;
+  readonly hooks: ReactHookImports;
+  readonly resolver: SourceHookResolver;
+  readonly source: SourceHookDeclaration;
+  readonly visited: ReadonlySet<string>;
+}
+
 const MAX_CALLBACK_DEPTH = 8;
 const REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "useLayoutEffect"]);
 const reactHookImportsCache = new WeakMap<ts.SourceFile, ReactHookImports>();
@@ -45,121 +73,128 @@ export function sourceHookDefersCallback(
   property: string | null,
   resolver: SourceHookResolver,
 ): boolean {
-  return hookDefersCallback(source, argumentIndex, property, resolver, new Set(), 0);
+  return hookDefersCallback(
+    { argumentIndex, property, source },
+    { depth: 0, resolver, visited: new Set() },
+  );
 }
 
-function hookDefersCallback(
-  source: SourceHookDeclaration,
-  argumentIndex: number,
-  property: string | null,
-  resolver: SourceHookResolver,
-  visited: ReadonlySet<string>,
-  depth: number,
-): boolean {
-  if (depth > MAX_CALLBACK_DEPTH || !source.owner.body) {
+function hookDefersCallback(query: DeferredCallbackQuery, trace: ResolverTrace): boolean {
+  const key = hookCallbackKey(query);
+  if (trace.depth > MAX_CALLBACK_DEPTH || !query.source.owner.body || trace.visited.has(key)) {
     return false;
   }
-  const key = `${source.file}\0${source.owner.pos}\0${argumentIndex}\0${property ?? ""}`;
-  if (visited.has(key)) {
-    return false;
-  }
+  const { argumentIndex, property, source } = query;
   const binding = callbackBinding(source.owner, argumentIndex, property);
   if (!binding || bindingDeclarationCount(source.owner, binding.name.text) !== 1) {
     return false;
   }
-  const nextVisited = new Set(visited).add(key);
-  const hooks = reactHookImports(source.sourceFile);
-  const storedRef = storedCallbackRef(source, binding.name, hooks);
-  if (storedRef && !refRefreshesCallback(source, binding.name, storedRef, hooks)) {
+  return bindingIsDeferred(binding.name, {
+    depth: trace.depth,
+    hooks: reactHookImports(source.sourceFile),
+    resolver: trace.resolver,
+    source,
+    visited: new Set(trace.visited).add(key),
+  });
+}
+
+/** Identifies one callback input of one hook declaration, so a trace never re-enters it. */
+function hookCallbackKey(query: DeferredCallbackQuery): string {
+  const { argumentIndex, property, source } = query;
+  return `${source.file}\0${source.owner.pos}\0${argumentIndex}\0${property ?? ""}`;
+}
+
+/** The binding is refreshed through at most one latest-callback ref and never runs on render. */
+function bindingIsDeferred(binding: ts.Identifier, trace: CallbackTrace): boolean {
+  const storedRef = storedCallbackRef(binding, trace);
+  if (storedRef && !refRefreshesCallback(binding, storedRef, trace)) {
     return false;
   }
+  return (
+    callbackBindingOnlyDefers(binding, storedRef, trace) &&
+    (!storedRef || storedRefExecutesDeferred(storedRef, trace))
+  );
+}
+
+/** Every value reference to the callback parameter either stores it in the ref or defers it. */
+function callbackBindingOnlyDefers(
+  binding: ts.Identifier,
+  storedRef: StoredCallbackRef | null,
+  trace: CallbackTrace,
+): boolean {
   let references = 0;
   let safe = true;
-  visit(source.owner.body, (node) => {
+  visit(trace.source.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
-      node.text !== binding.name.text ||
-      node === binding.name ||
+      node.text !== binding.text ||
+      node === binding ||
       isDeclarationName(node) ||
       isNonValueIdentifier(node)
     ) {
       return;
     }
     references += 1;
-    if (storedRef && callbackReferenceIsRefStorage(node, storedRef, source.owner, hooks)) {
+    if (storedRef && callbackReferenceIsRefStorage(node, storedRef, trace)) {
       return;
     }
-    if (!referenceExecutesDeferred(node, source, resolver, hooks, nextVisited, depth)) {
+    if (!referenceExecutesDeferred(node, trace)) {
       safe = false;
     }
   });
-  return (
-    safe &&
-    references > 0 &&
-    (!storedRef ||
-      storedRefExecutesDeferred(storedRef, source, resolver, hooks, nextVisited, depth))
-  );
+  return safe && references > 0;
 }
 
-function referenceExecutesDeferred(
-  reference: ts.Identifier,
-  source: SourceHookDeclaration,
-  resolver: SourceHookResolver,
-  hooks: ReactHookImports,
-  visited: ReadonlySet<string>,
-  depth: number,
-): boolean {
-  const callback = nearestNestedFunction(reference, source.owner);
-  if (
-    callback &&
-    (ts.isArrowFunction(callback) ||
-      ts.isFunctionDeclaration(callback) ||
-      ts.isFunctionExpression(callback))
-  ) {
-    return callbackExecutesDeferred(callback, source, resolver, hooks, visited, depth + 1);
-  }
-  return referenceIsDirectDeferredHookArgument(reference, source, resolver, visited, depth + 1);
+function referenceExecutesDeferred(reference: ts.Identifier, trace: CallbackTrace): boolean {
+  const callback = nearestNestedFunction(reference, trace.source.owner);
+  const deeper: CallbackTrace = { ...trace, depth: trace.depth + 1 };
+  return callback && isTracedFunction(callback)
+    ? callbackExecutesDeferred(callback, deeper)
+    : referenceIsDirectDeferredHookArgument(reference, deeper);
 }
 
 function callbackExecutesDeferred(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  source: SourceHookDeclaration,
-  resolver: SourceHookResolver,
-  hooks: ReactHookImports,
-  visited: ReadonlySet<string>,
-  depth: number,
+  trace: CallbackTrace,
 ): boolean {
-  if (depth > MAX_CALLBACK_DEPTH) {
+  if (trace.depth > MAX_CALLBACK_DEPTH) {
     return false;
   }
-  if (callbackIsWithinReactEffect(callback, source.owner, hooks)) {
+  if (callbackIsWithinReactEffect(callback, trace.source.owner, trace.hooks)) {
     return true;
   }
-  if (!ts.isFunctionDeclaration(callback)) {
-    const call = callback.parent;
-    if (ts.isCallExpression(call)) {
-      const argumentIndex = call.arguments.indexOf(callback);
-      if (argumentIndex !== -1) {
-        if (isImportedReactEffect(call, hooks)) {
-          return true;
-        }
-        const name = hookCallName(call);
-        const target = name ? resolver.resolveHook(source.file, name) : null;
-        if (target && hookDefersCallback(target, argumentIndex, null, resolver, visited, depth)) {
-          return true;
-        }
-      }
-    }
+  if (callbackIsDeferredHookArgument(callback, trace)) {
+    return true;
   }
-
   const name = localCallbackName(callback);
-  if (!name || !source.owner.body) {
+  if (!name || !trace.source.owner.body) {
     return false;
   }
+  return localCallbackOnlyDefers(name, trace);
+}
+
+/** The callback is written inline as an argument of a React effect or of a deferring hook. */
+function callbackIsDeferredHookArgument(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+  trace: CallbackTrace,
+): boolean {
+  if (ts.isFunctionDeclaration(callback)) {
+    return false;
+  }
+  const call = callback.parent;
+  if (!ts.isCallExpression(call)) {
+    return false;
+  }
+  const argumentIndex = call.arguments.indexOf(callback);
+  return argumentIndex !== -1 && callDefersArgument(call, argumentIndex, trace);
+}
+
+/** Every reference to the named local callback is reached only from deferred code. */
+function localCallbackOnlyDefers(name: string, trace: CallbackTrace): boolean {
   let references = 0;
   let safe = true;
-  visit(source.owner.body, (node) => {
+  visit(trace.source.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -170,80 +205,89 @@ function callbackExecutesDeferred(
       return;
     }
     references += 1;
-    if (referenceIsDirectDeferredHookArgument(node, source, resolver, visited, depth)) {
-      return;
+    if (!localCallbackReferenceDefers(node, trace)) {
+      safe = false;
     }
-    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
-      const caller = nearestNestedFunction(node, source.owner);
-      if (
-        caller &&
-        (ts.isArrowFunction(caller) ||
-          ts.isFunctionDeclaration(caller) ||
-          ts.isFunctionExpression(caller)) &&
-        callbackExecutesDeferred(caller, source, resolver, hooks, visited, depth + 1)
-      ) {
-        return;
-      }
-    }
-    safe = false;
   });
   return safe && references > 0;
 }
 
+function localCallbackReferenceDefers(reference: ts.Identifier, trace: CallbackTrace): boolean {
+  if (referenceIsDirectDeferredHookArgument(reference, trace)) {
+    return true;
+  }
+  if (!ts.isCallExpression(reference.parent) || reference.parent.expression !== reference) {
+    return false;
+  }
+  const caller = nearestNestedFunction(reference, trace.source.owner);
+  if (!caller || !isTracedFunction(caller)) {
+    return false;
+  }
+  return callbackExecutesDeferred(caller, { ...trace, depth: trace.depth + 1 });
+}
+
 function referenceIsDirectDeferredHookArgument(
   reference: ts.Identifier,
-  source: SourceHookDeclaration,
-  resolver: SourceHookResolver,
-  visited: ReadonlySet<string>,
-  depth: number,
+  trace: CallbackTrace,
 ): boolean {
-  const call = findAncestorUntil(reference, ts.isCallExpression, source.owner);
+  const call = findAncestorUntil(reference, ts.isCallExpression, trace.source.owner);
   if (!call) {
     return false;
   }
   const argumentIndex = call.arguments.findIndex((argument) => nodeWithin(reference, argument));
-  if (argumentIndex === -1) {
-    return false;
-  }
-  const hooks = reactHookImports(source.sourceFile);
-  if (isImportedReactEffect(call, hooks)) {
+  return argumentIndex !== -1 && callDefersArgument(call, argumentIndex, trace);
+}
+
+/** The call is a React effect, or a resolved project hook that itself defers that argument. */
+function callDefersArgument(
+  call: ts.CallExpression,
+  argumentIndex: number,
+  trace: CallbackTrace,
+): boolean {
+  if (isImportedReactEffect(call, trace.hooks)) {
     return true;
   }
   const name = hookCallName(call);
-  const target = name ? resolver.resolveHook(source.file, name) : null;
+  const target = name ? trace.resolver.resolveHook(trace.source.file, name) : null;
   return (
-    target !== null && hookDefersCallback(target, argumentIndex, null, resolver, visited, depth)
+    target !== null && hookDefersCallback({ argumentIndex, property: null, source: target }, trace)
   );
 }
 
-function storedCallbackRef(
-  source: SourceHookDeclaration,
-  callback: ts.Identifier,
-  hooks: ReactHookImports,
-): StoredCallbackRef | null {
+function storedCallbackRef(callback: ts.Identifier, body: HookBody): StoredCallbackRef | null {
   const matches: StoredCallbackRef[] = [];
-  visit(source.owner.body, (node) => {
-    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) {
-      return;
-    }
-    const initializer = unwrapTransparentExpression(node.initializer);
-    if (
-      !ts.isCallExpression(initializer) ||
-      !isImportedReactRef(initializer, hooks) ||
-      !initializer.arguments[0]
-    ) {
-      return;
-    }
-    const object = unwrapTransparentExpression(initializer.arguments[0]!);
-    if (!ts.isObjectLiteralExpression(object)) {
-      return;
-    }
-    const property = objectPropertyForBinding(object, callback.text);
-    if (property) {
-      matches.push({ declaration: node, name: node.name.text, property });
+  visit(body.source.owner.body, (node) => {
+    const stored = refStoringCallback(node, callback.text, body.hooks);
+    if (stored) {
+      matches.push(stored);
     }
   });
   return matches.length === 1 ? matches[0]! : null;
+}
+
+/** A `useRef({ ... })` declaration whose literal captures the given binding under one property. */
+function refStoringCallback(
+  node: ts.Node,
+  binding: string,
+  hooks: ReactHookImports,
+): StoredCallbackRef | null {
+  if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) {
+    return null;
+  }
+  const initializer = unwrapTransparentExpression(node.initializer);
+  if (
+    !ts.isCallExpression(initializer) ||
+    !isImportedReactRef(initializer, hooks) ||
+    !initializer.arguments[0]
+  ) {
+    return null;
+  }
+  const object = unwrapTransparentExpression(initializer.arguments[0]!);
+  if (!ts.isObjectLiteralExpression(object)) {
+    return null;
+  }
+  const property = objectPropertyForBinding(object, binding);
+  return property ? { declaration: node, name: node.name.text, property } : null;
 }
 
 function objectPropertyForBinding(
@@ -274,28 +318,72 @@ function objectPropertyForBinding(
 function callbackReferenceIsRefStorage(
   reference: ts.Identifier,
   storedRef: StoredCallbackRef,
-  owner: SourceHookDeclaration["owner"],
-  hooks: ReactHookImports,
+  body: HookBody,
 ): boolean {
-  const property = reference.parent;
-  if (
-    !(
-      (ts.isShorthandPropertyAssignment(property) && property.name === reference) ||
-      (ts.isPropertyAssignment(property) && nodeWithin(reference, property.initializer))
-    ) ||
-    property.parent.kind !== ts.SyntaxKind.ObjectLiteralExpression
-  ) {
+  const member = objectLiteralMemberFor(reference);
+  if (!member || objectPropertyName(member.property) !== storedRef.property) {
     return false;
   }
-  // SAFETY: The parent kind check above proves this node is an object literal.
-  const object = property.parent as ts.ObjectLiteralExpression;
-  const propertyName = objectPropertyName(property);
-  if (propertyName !== storedRef.property) {
-    return false;
-  }
-  if (nodeWithin(object, storedRef.declaration.initializer!)) {
+  if (nodeWithin(member.object, storedRef.declaration.initializer!)) {
     return true;
   }
+  return refObjectIsAssignedInEffect(member.object, storedRef, body);
+}
+
+function refRefreshesCallback(
+  callback: ts.Identifier,
+  storedRef: StoredCallbackRef,
+  body: HookBody,
+): boolean {
+  let refreshes = 0;
+  visit(body.source.owner.body, (node) => {
+    if (
+      !ts.isIdentifier(node) ||
+      node.text !== callback.text ||
+      isDeclarationName(node) ||
+      isNonValueIdentifier(node)
+    ) {
+      return;
+    }
+    const member = objectLiteralMemberFor(node);
+    if (
+      member &&
+      objectPropertyName(member.property) === storedRef.property &&
+      refObjectIsAssignedInEffect(member.object, storedRef, body)
+    ) {
+      refreshes += 1;
+    }
+  });
+  return refreshes === 1;
+}
+
+interface ObjectLiteralMember {
+  readonly object: ts.ObjectLiteralExpression;
+  readonly property: ts.ObjectLiteralElementLike;
+}
+
+/** The object literal member that carries this reference, either shorthand or as the value. */
+function objectLiteralMemberFor(reference: ts.Node): ObjectLiteralMember | null {
+  const property = reference.parent;
+  if (ts.isShorthandPropertyAssignment(property) && property.name === reference) {
+    return ts.isObjectLiteralExpression(property.parent)
+      ? { object: property.parent, property }
+      : null;
+  }
+  if (ts.isPropertyAssignment(property) && nodeWithin(reference, property.initializer)) {
+    return ts.isObjectLiteralExpression(property.parent)
+      ? { object: property.parent, property }
+      : null;
+  }
+  return null;
+}
+
+/** The literal is the right side of a `ref.current = { ... }` written inside a React effect. */
+function refObjectIsAssignedInEffect(
+  object: ts.ObjectLiteralExpression,
+  storedRef: StoredCallbackRef,
+  body: HookBody,
+): boolean {
   const assignment = object.parent;
   if (
     !ts.isBinaryExpression(assignment) ||
@@ -305,60 +393,10 @@ function callbackReferenceIsRefStorage(
   ) {
     return false;
   }
-  const callback = nearestNestedFunction(assignment, owner);
+  const effect = nearestNestedFunction(assignment, body.source.owner);
   return (
-    callback !== null &&
-    (ts.isArrowFunction(callback) ||
-      ts.isFunctionDeclaration(callback) ||
-      ts.isFunctionExpression(callback)) &&
-    callbackIsReactEffectArgument(callback, hooks)
+    effect !== null && isTracedFunction(effect) && callbackIsReactEffectArgument(effect, body.hooks)
   );
-}
-
-function refRefreshesCallback(
-  source: SourceHookDeclaration,
-  callback: ts.Identifier,
-  storedRef: StoredCallbackRef,
-  hooks: ReactHookImports,
-): boolean {
-  let refreshes = 0;
-  visit(source.owner.body, (node) => {
-    if (
-      !ts.isIdentifier(node) ||
-      node.text !== callback.text ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
-    const property = node.parent;
-    if (
-      !(
-        (ts.isShorthandPropertyAssignment(property) && property.name === node) ||
-        (ts.isPropertyAssignment(property) && nodeWithin(node, property.initializer))
-      ) ||
-      !ts.isObjectLiteralExpression(property.parent) ||
-      objectPropertyName(property) !== storedRef.property
-    ) {
-      return;
-    }
-    const assignment = property.parent.parent;
-    const effect = nearestNestedFunction(assignment, source.owner);
-    if (
-      ts.isBinaryExpression(assignment) &&
-      assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-      assignment.right === property.parent &&
-      isRefCurrent(assignment.left, storedRef.name) &&
-      effect &&
-      (ts.isArrowFunction(effect) ||
-        ts.isFunctionDeclaration(effect) ||
-        ts.isFunctionExpression(effect)) &&
-      callbackIsReactEffectArgument(effect, hooks)
-    ) {
-      refreshes += 1;
-    }
-  });
-  return refreshes === 1;
 }
 
 function objectPropertyName(property: ts.ObjectLiteralElementLike): string | null {
@@ -368,20 +406,13 @@ function objectPropertyName(property: ts.ObjectLiteralElementLike): string | nul
   return ts.isPropertyAssignment(property) ? staticPropertyName(property.name) : null;
 }
 
-function storedRefExecutesDeferred(
-  storedRef: StoredCallbackRef,
-  source: SourceHookDeclaration,
-  resolver: SourceHookResolver,
-  hooks: ReactHookImports,
-  visited: ReadonlySet<string>,
-  depth: number,
-): boolean {
-  if (bindingDeclarationCount(source.owner, storedRef.name) !== 1) {
+function storedRefExecutesDeferred(storedRef: StoredCallbackRef, trace: CallbackTrace): boolean {
+  if (bindingDeclarationCount(trace.source.owner, storedRef.name) !== 1) {
     return false;
   }
   let calls = 0;
   let safe = true;
-  visit(source.owner.body, (node) => {
+  visit(trace.source.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -391,37 +422,49 @@ function storedRefExecutesDeferred(
     ) {
       return;
     }
-    if (refCurrentAssignment(node, storedRef.name)) {
-      return;
-    }
-    const callbackAccess = refObjectPropertyAccess(node);
-    if (!callbackAccess) {
+    const outcome = storedRefReferenceOutcome(node, storedRef, trace);
+    if (outcome === "unsafe") {
       safe = false;
       return;
     }
-    if (callbackAccess.name.text !== storedRef.property) {
-      return;
-    }
-    if (
-      !ts.isCallExpression(callbackAccess.parent) ||
-      callbackAccess.parent.expression !== callbackAccess
-    ) {
-      safe = false;
-      return;
-    }
-    calls += 1;
-    const callback = nearestNestedFunction(callbackAccess, source.owner);
-    if (
-      !callback ||
-      (!ts.isArrowFunction(callback) &&
-        !ts.isFunctionDeclaration(callback) &&
-        !ts.isFunctionExpression(callback)) ||
-      !callbackExecutesDeferred(callback, source, resolver, hooks, visited, depth + 1)
-    ) {
-      safe = false;
+    if (outcome === "deferred-call") {
+      calls += 1;
     }
   });
   return safe && calls > 0;
+}
+
+type StoredRefReferenceOutcome = "deferred-call" | "ignored" | "unsafe";
+
+/** Classifies one use of the latest-callback ref binding inside the hook body. */
+function storedRefReferenceOutcome(
+  reference: ts.Identifier,
+  storedRef: StoredCallbackRef,
+  trace: CallbackTrace,
+): StoredRefReferenceOutcome {
+  if (refCurrentAssignment(reference, storedRef.name)) {
+    return "ignored";
+  }
+  const callbackAccess = refObjectPropertyAccess(reference);
+  if (!callbackAccess) {
+    return "unsafe";
+  }
+  if (callbackAccess.name.text !== storedRef.property) {
+    return "ignored";
+  }
+  return storedRefCallDefers(callbackAccess, trace) ? "deferred-call" : "unsafe";
+}
+
+/** The stored callback is invoked here, and the function holding that call is itself deferred. */
+function storedRefCallDefers(access: ts.PropertyAccessExpression, trace: CallbackTrace): boolean {
+  if (!ts.isCallExpression(access.parent) || access.parent.expression !== access) {
+    return false;
+  }
+  const callback = nearestNestedFunction(access, trace.source.owner);
+  if (!callback || !isTracedFunction(callback)) {
+    return false;
+  }
+  return callbackExecutesDeferred(callback, { ...trace, depth: trace.depth + 1 });
 }
 
 function refCurrentAssignment(reference: ts.Identifier, refName: string): boolean {
@@ -461,6 +504,14 @@ function isRefCurrent(expression: ts.Expression, refName: string): boolean {
   );
 }
 
+function isTracedFunction(
+  node: ts.Node,
+): node is ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression {
+  return (
+    ts.isArrowFunction(node) || ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)
+  );
+}
+
 function callbackIsWithinReactEffect(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   owner: SourceHookDeclaration["owner"],
@@ -471,12 +522,7 @@ function callbackIsWithinReactEffect(
     current && current !== owner;
     current = current.parent
   ) {
-    if (
-      (ts.isArrowFunction(current) ||
-        ts.isFunctionDeclaration(current) ||
-        ts.isFunctionExpression(current)) &&
-      callbackIsReactEffectArgument(current, hooks)
-    ) {
+    if (isTracedFunction(current) && callbackIsReactEffectArgument(current, hooks)) {
       return true;
     }
   }
@@ -511,10 +557,17 @@ function callbackBinding(
   if (property === null) {
     return ts.isIdentifier(parameter.name) ? { name: parameter.name } : null;
   }
-  if (!ts.isObjectBindingPattern(parameter.name)) {
-    return null;
-  }
-  for (const element of parameter.name.elements) {
+  return ts.isObjectBindingPattern(parameter.name)
+    ? destructuredBinding(parameter.name, property)
+    : null;
+}
+
+/** The plain element of an object binding pattern that reads the named source property. */
+function destructuredBinding(
+  pattern: ts.ObjectBindingPattern,
+  property: string,
+): CallbackBinding | null {
+  for (const element of pattern.elements) {
     if (
       !ts.isBindingElement(element) ||
       element.dotDotDotToken ||
@@ -551,44 +604,72 @@ interface ReactHookImports {
   readonly refNames: ReadonlySet<string>;
 }
 
+interface MutableReactHookImports {
+  readonly effectNames: Set<string>;
+  readonly namespaces: Set<string>;
+  readonly refNames: Set<string>;
+}
+
 function reactHookImports(sourceFile: ts.SourceFile): ReactHookImports {
   const cached = reactHookImportsCache.get(sourceFile);
   if (cached) {
     return cached;
   }
-  const effectNames = new Set<string>();
-  const namespaces = new Set<string>();
-  const refNames = new Set<string>();
-  for (const statement of sourceFile.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      statement.moduleSpecifier.text !== "react"
-    ) {
-      continue;
-    }
-    const clause = statement.importClause;
-    if (clause?.name) {
-      namespaces.add(clause.name.text);
-    }
-    const bindings = clause?.namedBindings;
-    if (bindings && ts.isNamespaceImport(bindings)) {
-      namespaces.add(bindings.name.text);
-    } else if (bindings && ts.isNamedImports(bindings)) {
-      for (const element of bindings.elements) {
-        const imported = element.propertyName?.text ?? element.name.text;
-        if (REACT_EFFECT_HOOKS.has(imported)) {
-          effectNames.add(element.name.text);
-        }
-        if (imported === "useRef") {
-          refNames.add(element.name.text);
-        }
-      }
-    }
-  }
-  const imports = { effectNames, namespaces, refNames };
+  const imports = collectReactHookImports(sourceFile);
   reactHookImportsCache.set(sourceFile, imports);
   return imports;
+}
+
+function collectReactHookImports(sourceFile: ts.SourceFile): ReactHookImports {
+  const collected = {
+    effectNames: new Set<string>(),
+    namespaces: new Set<string>(),
+    refNames: new Set<string>(),
+  };
+  for (const statement of sourceFile.statements) {
+    if (isReactImportDeclaration(statement)) {
+      addReactImportBindings(statement.importClause, collected);
+    }
+  }
+  return collected;
+}
+
+function isReactImportDeclaration(statement: ts.Statement): statement is ts.ImportDeclaration {
+  return (
+    ts.isImportDeclaration(statement) &&
+    ts.isStringLiteral(statement.moduleSpecifier) &&
+    statement.moduleSpecifier.text === "react"
+  );
+}
+
+function addReactImportBindings(
+  clause: ts.ImportClause | undefined,
+  into: MutableReactHookImports,
+): void {
+  if (clause?.name) {
+    into.namespaces.add(clause.name.text);
+  }
+  const bindings = clause?.namedBindings;
+  if (!bindings) {
+    return;
+  }
+  if (ts.isNamespaceImport(bindings)) {
+    into.namespaces.add(bindings.name.text);
+  } else if (ts.isNamedImports(bindings)) {
+    addNamedReactHookImports(bindings, into);
+  }
+}
+
+function addNamedReactHookImports(bindings: ts.NamedImports, into: MutableReactHookImports): void {
+  for (const element of bindings.elements) {
+    const imported = element.propertyName?.text ?? element.name.text;
+    if (REACT_EFFECT_HOOKS.has(imported)) {
+      into.effectNames.add(element.name.text);
+    }
+    if (imported === "useRef") {
+      into.refNames.add(element.name.text);
+    }
+  }
 }
 
 function isImportedReactEffect(call: ts.CallExpression, imports: ReactHookImports): boolean {

@@ -1,5 +1,8 @@
-import ts from "typescript";
-
+import {
+  RESERVED_OBSERVABLE_MEMBERS,
+  findObservableReadPractices,
+} from "./rules/observable-reads.js";
+import { collectHookImports, isImportedHookCall } from "./imports.js";
 import {
   containsElementAccess,
   exactObjectLiteralKeys,
@@ -10,19 +13,17 @@ import {
   unwrapTransparentExpression,
 } from "./analysis-ast.js";
 import { isNonProductionHarness, visit } from "./ast.js";
-import { collectHookImports, isImportedHookCall } from "./imports.js";
-import type { HookImports } from "./imports.js";
 import type { AnalysisFile } from "./analysis-project.js";
-import type { InstalledLegendState } from "./legend-state-package.js";
 import type { ChildContractResolver } from "./rules/child-contract.js";
+import type { HookImports } from "./imports.js";
+import type { InstalledLegendState } from "./legend-state-package.js";
+import type { LegendPracticeFinding } from "./types.js";
 import { findLegacyUseValuePractices } from "./rules/legacy-use-value.js";
 import { findObservableCloneWritePractices } from "./rules/observable-clone-writes.js";
-import {
-  RESERVED_OBSERVABLE_MEMBERS,
-  findObservableReadPractices,
-} from "./rules/observable-reads.js";
 import { findObservableTogglePractices } from "./rules/observable-toggle.js";
-import type { LegendPracticeFinding } from "./types.js";
+import ts from "typescript";
+
+const MINIMUM_BATCH_WRITES = 2;
 
 interface ObservableWrite {
   argument: ts.Expression;
@@ -32,6 +33,64 @@ interface ObservableWrite {
   property: string | null;
   root: string;
 }
+
+interface LegendPracticesRequest {
+  childContracts: ChildContractResolver | null;
+  fileName: string;
+  importedObservableFactories: ReadonlySet<string>;
+  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>;
+  importedObservables: ReadonlySet<string>;
+  installedLegendState: InstalledLegendState | null;
+  reactCompilerPackage: boolean;
+  sourceFile: ts.SourceFile;
+}
+
+interface TransactionScan {
+  fileName: string;
+  imports: HookImports;
+  observableBindings: ReadonlySet<string>;
+  sourceFile: ts.SourceFile;
+}
+
+interface TransactionRun {
+  conditionalWrites: ObservableWrite[];
+  writes: ObservableWrite[];
+}
+
+interface RunAccumulator extends TransactionRun {
+  findings: LegendPracticeFinding[];
+  isComplete: boolean;
+}
+
+interface BindingAlias {
+  initializer: ts.Expression;
+  name: string;
+}
+
+interface BindingTypeQuery {
+  name: string;
+  type: ts.TypeNode;
+}
+
+interface BindingScan {
+  aliases: BindingAlias[];
+  declarations: Map<string, number>;
+  directCandidates: Set<string>;
+  factoryBindings: Set<string>;
+  factoryCalls: BindingAlias[];
+  imports: HookImports;
+  typeQueries: BindingTypeQuery[];
+  useValueInputs: Set<string>;
+}
+
+interface SetCall {
+  argument: ts.Expression;
+  call: ts.CallExpression;
+  receiver: ts.Expression;
+}
+
+type NamedVariableDeclaration = ts.VariableDeclaration & { name: ts.Identifier };
+type NamedParameter = ts.ParameterDeclaration & { name: ts.Identifier };
 
 export function analyzeLegendPractices(
   sourceText: string,
@@ -48,15 +107,16 @@ export function analyzeLegendPractices(
     true,
     fileName.endsWith(".tsx") || fileName.endsWith(".jsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
-  return analyzeParsedLegendPractices(
-    sourceFile,
+  return analyzeParsedLegendPractices({
+    childContracts: null,
     fileName,
-    importedObservables,
     importedObservableFactories,
-    installedLegendState,
     importedObservableKeys,
-    null,
-  );
+    importedObservables,
+    installedLegendState,
+    reactCompilerPackage: false,
+    sourceFile,
+  });
 }
 
 export function analyzeLegendPracticesFile(
@@ -70,119 +130,55 @@ export function analyzeLegendPracticesFile(
   childContracts: ChildContractResolver | null = null,
   reactCompilerPackage = false,
 ): LegendPracticeFinding[] {
-  const findings = analyzeParsedLegendPractices(
-    file.sourceFile,
-    reportFileName,
-    importedObservables,
-    importedObservableFactories,
-    installedLegendState,
-    importedObservableKeys,
+  const findings = analyzeParsedLegendPractices({
     childContracts,
+    fileName: reportFileName,
+    importedObservableFactories,
+    importedObservableKeys,
+    importedObservables,
+    installedLegendState,
     reactCompilerPackage,
-  );
+    sourceFile: file.sourceFile,
+  });
   return includeFindings ? findings : [];
 }
 
-function analyzeParsedLegendPractices(
-  sourceFile: ts.SourceFile,
-  fileName: string,
-  importedObservables: ReadonlySet<string>,
-  importedObservableFactories: ReadonlySet<string>,
-  installedLegendState: InstalledLegendState | null,
-  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>,
-  childContracts: ChildContractResolver | null,
-  reactCompilerPackage = false,
-): LegendPracticeFinding[] {
+function analyzeParsedLegendPractices(request: LegendPracticesRequest): LegendPracticeFinding[] {
+  const { fileName, sourceFile } = request;
   if (isNonProductionHarness(fileName)) {
     return [];
   }
   const imports = collectHookImports(sourceFile);
-  const lacksObservableSources =
-    imports.observable.size === 0 &&
-    imports.useObservable.size === 0 &&
-    imports.observableTypes.size === 0 &&
-    importedObservables.size === 0 &&
-    importedObservableFactories.size === 0;
-  const observableBindings = lacksObservableSources
-    ? new Set<string>()
-    : collectObservableBindings(
-        sourceFile,
-        imports,
-        importedObservables,
-        importedObservableFactories,
-      );
-  const findings = [
-    ...findLegacyUseValuePractices(
-      sourceFile,
-      fileName,
-      imports,
-      observableBindings,
-      installedLegendState,
-    ),
-  ];
-  if (lacksObservableSources) {
-    return findings;
-  }
-  if (observableBindings.size === 0) {
-    return findings;
-  }
-  const observableKeys = collectObservableKeys(
+  const observableBindings = resolveObservableBindings(request, imports);
+  const legacyFindings = findLegacyUseValuePractices(
     sourceFile,
+    fileName,
     imports,
     observableBindings,
-    importedObservableFactories,
-    importedObservableKeys,
+    request.installedLegendState,
   );
+  if (observableBindings.size === 0) {
+    return [...legacyFindings];
+  }
+  return [
+    ...legacyFindings,
+    ...collectTransactionFindings({ fileName, imports, observableBindings, sourceFile }),
+    ...collectMemberFindings(request, imports, observableBindings),
+  ].toSorted(compareFindingLocation);
+}
 
-  visit(sourceFile, (node) => {
-    if (!ts.isBlock(node) && !ts.isSourceFile(node)) {
-      return;
-    }
-    let run: ObservableWrite[] = [];
-    let conditionalWrites: ObservableWrite[] = [];
-    let runIsComplete = true;
-    const flush = (): void => {
-      if (runIsComplete && run.length >= 2) {
-        const finding = transactionFinding(run, conditionalWrites, sourceFile, fileName);
-        if (finding) {
-          findings.push(finding);
-        }
-      }
-      run = [];
-      conditionalWrites = [];
-      runIsComplete = true;
-    };
+function compareFindingLocation(left: LegendPracticeFinding, right: LegendPracticeFinding): number {
+  return left.location.line - right.location.line || left.location.column - right.location.column;
+}
 
-    for (const statement of node.statements) {
-      const write = observableWrite(statement, observableBindings, sourceFile);
-      if (write && !isInsideBatch(write.call, imports)) {
-        run.push(write);
-        continue;
-      }
-      const branchWrites = conditionalObservableWrites(
-        statement,
-        observableBindings,
-        sourceFile,
-        imports,
-      );
-      if (
-        branchWrites &&
-        run.length > 0 &&
-        branchWrites.every((branchWrite) => run.some((member) => member.root === branchWrite.root))
-      ) {
-        conditionalWrites.push(...branchWrites);
-        continue;
-      }
-      if (isSetStatement(statement)) {
-        runIsComplete = false;
-      } else {
-        flush();
-      }
-    }
-    flush();
-  });
-
-  findings.push(
+function collectMemberFindings(
+  request: LegendPracticesRequest,
+  imports: HookImports,
+  observableBindings: ReadonlySet<string>,
+): LegendPracticeFinding[] {
+  const { childContracts, fileName, sourceFile } = request;
+  const observableKeys = collectObservableKeys(request, imports, observableBindings);
+  const findings = [
     ...findObservableReadPractices(
       sourceFile,
       fileName,
@@ -191,27 +187,21 @@ function analyzeParsedLegendPractices(
       observableKeys,
       childContracts,
     ),
-  );
-  if (!reactCompilerPackage) {
+  ];
+  if (!request.reactCompilerPackage) {
     findings.push(...findObservableCloneWritePractices(sourceFile, fileName, observableBindings));
   }
   findings.push(...findObservableTogglePractices(sourceFile, fileName, observableBindings));
-
-  return findings.sort(
-    (left, right) =>
-      left.location.line - right.location.line || left.location.column - right.location.column,
-  );
+  return findings;
 }
 
 function collectObservableKeys(
-  sourceFile: ts.SourceFile,
+  request: LegendPracticesRequest,
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
-  importedObservableFactories: ReadonlySet<string>,
-  importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>,
 ): ReadonlyMap<string, ReadonlySet<string>> {
-  const keys = new Map(importedObservableKeys);
-  visit(sourceFile, (node) => {
+  const keys = new Map(request.importedObservableKeys);
+  visit(request.sourceFile, (node) => {
     if (
       !ts.isVariableDeclaration(node) ||
       !ts.isIdentifier(node.name) ||
@@ -223,7 +213,7 @@ function collectObservableKeys(
     const initializer = unwrapTransparentExpression(node.initializer);
     if (
       !ts.isCallExpression(initializer) ||
-      !isObservableFactoryCall(initializer, imports, importedObservableFactories) ||
+      !isObservableFactoryCall(initializer, imports, request.importedObservableFactories) ||
       !initializer.arguments[0]
     ) {
       return;
@@ -234,6 +224,78 @@ function collectObservableKeys(
     }
   });
   return keys;
+}
+
+function collectTransactionFindings(scan: TransactionScan): LegendPracticeFinding[] {
+  const findings: LegendPracticeFinding[] = [];
+  visit(scan.sourceFile, (node) => {
+    if (ts.isBlock(node) || ts.isSourceFile(node)) {
+      findings.push(...blockTransactionFindings(node, scan));
+    }
+  });
+  return findings;
+}
+
+function blockTransactionFindings(
+  block: ts.Block | ts.SourceFile,
+  scan: TransactionScan,
+): LegendPracticeFinding[] {
+  const accumulator: RunAccumulator = {
+    conditionalWrites: [],
+    findings: [],
+    isComplete: true,
+    writes: [],
+  };
+  for (const statement of block.statements) {
+    applyStatementToRun(accumulator, statement, scan);
+  }
+  flushRun(accumulator, scan);
+  return accumulator.findings;
+}
+
+function applyStatementToRun(
+  accumulator: RunAccumulator,
+  statement: ts.Statement,
+  scan: TransactionScan,
+): void {
+  const write = unbatchedWrite(statement, scan);
+  const branchWrites = conditionalObservableWrites(statement, scan);
+  if (write) {
+    accumulator.writes.push(write);
+  } else if (branchWrites && continuesRun(accumulator.writes, branchWrites)) {
+    accumulator.conditionalWrites.push(...branchWrites);
+  } else if (isSetStatement(statement)) {
+    accumulator.isComplete = false;
+  } else {
+    flushRun(accumulator, scan);
+  }
+}
+
+function unbatchedWrite(statement: ts.Statement, scan: TransactionScan): ObservableWrite | null {
+  const write = observableWrite(statement, scan.observableBindings, scan.sourceFile);
+  return write && !isInsideBatch(write.call, scan.imports) ? write : null;
+}
+
+function continuesRun(
+  writes: readonly ObservableWrite[],
+  branchWrites: readonly ObservableWrite[],
+): boolean {
+  return (
+    writes.length > 0 &&
+    branchWrites.every((branchWrite) => writes.some((member) => member.root === branchWrite.root))
+  );
+}
+
+function flushRun(accumulator: RunAccumulator, scan: TransactionScan): void {
+  if (accumulator.isComplete && accumulator.writes.length >= MINIMUM_BATCH_WRITES) {
+    const finding = transactionFinding(accumulator, scan);
+    if (finding) {
+      accumulator.findings.push(finding);
+    }
+  }
+  accumulator.writes = [];
+  accumulator.conditionalWrites = [];
+  accumulator.isComplete = true;
 }
 
 function isSetStatement(statement: ts.Statement): boolean {
@@ -248,126 +310,202 @@ function isSetStatement(statement: ts.Statement): boolean {
   );
 }
 
-function collectObservableBindings(
-  sourceFile: ts.SourceFile,
+function resolveObservableBindings(
+  request: LegendPracticesRequest,
   imports: HookImports,
-  importedObservables: ReadonlySet<string>,
-  importedObservableFactories: ReadonlySet<string>,
 ): ReadonlySet<string> {
-  const declarations = new Map<string, number>();
-  const directCandidates = new Set(importedObservables);
-  const factoryBindings = new Set(importedObservableFactories);
-  const aliases: { initializer: ts.Expression; name: string }[] = [];
-  const factoryCalls: { initializer: ts.Expression; name: string }[] = [];
-  const useValueInputs = new Set<string>();
-  const typeQueries: { name: string; type: ts.TypeNode }[] = [];
+  const lacksObservableSources =
+    imports.observable.size === 0 &&
+    imports.useObservable.size === 0 &&
+    imports.observableTypes.size === 0 &&
+    request.importedObservables.size === 0 &&
+    request.importedObservableFactories.size === 0;
+  if (lacksObservableSources) {
+    return new Set<string>();
+  }
+  return collectObservableBindings(request, imports);
+}
 
-  visit(sourceFile, (node) => {
-    if (
-      ts.isCallExpression(node) &&
-      isImportedHookCall(node, imports.useValue, imports.legendReactNamespaces, "useValue") &&
-      node.arguments.length > 0
-    ) {
-      const input = unwrapTransparentExpression(node.arguments[0]!);
-      if (ts.isIdentifier(input)) {
-        useValueInputs.add(input.text);
-      }
-    }
-    if (
-      ts.isFunctionDeclaration(node) &&
-      node.name &&
-      node.type &&
-      typeNamesObservable(node.type, imports.observableTypes)
-    ) {
-      factoryBindings.add(node.name.text);
-    }
-    if (ts.isImportClause(node) && node.name) {
-      recordDeclaration(declarations, node.name.text);
-      return;
-    }
-    if (ts.isImportSpecifier(node)) {
-      recordDeclaration(declarations, node.name.text);
-      return;
-    }
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
-      recordDeclaration(declarations, node.name.text);
-      if (node.type && typeNamesObservable(node.type, imports.observableTypes)) {
-        directCandidates.add(node.name.text);
-      } else if (node.type) {
-        typeQueries.push({ name: node.name.text, type: node.type });
-      }
-      if (node.initializer) {
-        factoryCalls.push({ initializer: node.initializer, name: node.name.text });
-      }
-      if (!node.type && node.initializer && declarationIsConst(node)) {
-        aliases.push({ initializer: node.initializer, name: node.name.text });
-      }
-      return;
-    }
-    if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
-      recordDeclaration(declarations, node.name.text);
-      if (node.type && typeNamesObservable(node.type, imports.observableTypes)) {
-        directCandidates.add(node.name.text);
-      } else if (node.type) {
-        typeQueries.push({ name: node.name.text, type: node.type });
-      }
-      return;
-    }
-    if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name) {
-      recordDeclaration(declarations, node.name.text);
-    }
+function collectObservableBindings(
+  request: LegendPracticesRequest,
+  imports: HookImports,
+): ReadonlySet<string> {
+  const scan: BindingScan = {
+    aliases: [],
+    declarations: new Map(),
+    directCandidates: new Set(request.importedObservables),
+    factoryBindings: new Set(request.importedObservableFactories),
+    factoryCalls: [],
+    imports,
+    typeQueries: [],
+    useValueInputs: new Set(),
+  };
+  visit(request.sourceFile, (node) => {
+    recordBindingNode(node, scan);
   });
+  const candidates = seedCandidates(scan);
+  resolveAliasCandidates(scan, candidates);
+  return candidates;
+}
 
+function recordBindingNode(node: ts.Node, scan: BindingScan): void {
+  recordUseValueInput(node, scan);
+  recordObservableFactoryDeclaration(node, scan);
+  recordDeclaredName(node, scan);
+}
+
+function recordUseValueInput(node: ts.Node, scan: BindingScan): void {
+  if (
+    !ts.isCallExpression(node) ||
+    !isImportedHookCall(
+      node,
+      scan.imports.useValue,
+      scan.imports.legendReactNamespaces,
+      "useValue",
+    ) ||
+    node.arguments.length === 0
+  ) {
+    return;
+  }
+  const input = unwrapTransparentExpression(node.arguments[0]!);
+  if (ts.isIdentifier(input)) {
+    scan.useValueInputs.add(input.text);
+  }
+}
+
+function recordObservableFactoryDeclaration(node: ts.Node, scan: BindingScan): void {
+  if (
+    ts.isFunctionDeclaration(node) &&
+    node.name &&
+    node.type &&
+    typeNamesObservable(node.type, scan.imports.observableTypes)
+  ) {
+    scan.factoryBindings.add(node.name.text);
+  }
+}
+
+function recordDeclaredName(node: ts.Node, scan: BindingScan): void {
+  if (ts.isImportClause(node) && node.name) {
+    recordDeclaration(scan.declarations, node.name.text);
+  } else if (ts.isImportSpecifier(node)) {
+    recordDeclaration(scan.declarations, node.name.text);
+  } else if (isNamedVariableDeclaration(node)) {
+    recordVariableBinding(node, scan);
+  } else if (isNamedParameter(node)) {
+    recordParameterBinding(node, scan);
+  } else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name) {
+    recordDeclaration(scan.declarations, node.name.text);
+  }
+}
+
+function isNamedVariableDeclaration(node: ts.Node): node is NamedVariableDeclaration {
+  return ts.isVariableDeclaration(node) && ts.isIdentifier(node.name);
+}
+
+function isNamedParameter(node: ts.Node): node is NamedParameter {
+  return ts.isParameter(node) && ts.isIdentifier(node.name);
+}
+
+function recordVariableBinding(declaration: NamedVariableDeclaration, scan: BindingScan): void {
+  const name = declaration.name.text;
+  recordDeclaration(scan.declarations, name);
+  recordAnnotatedBinding(declaration.type, name, scan);
+  if (declaration.initializer) {
+    scan.factoryCalls.push({ initializer: declaration.initializer, name });
+    if (!declaration.type && declarationIsConst(declaration)) {
+      scan.aliases.push({ initializer: declaration.initializer, name });
+    }
+  }
+}
+
+function recordParameterBinding(parameter: NamedParameter, scan: BindingScan): void {
+  const name = parameter.name.text;
+  recordDeclaration(scan.declarations, name);
+  recordAnnotatedBinding(parameter.type, name, scan);
+}
+
+function recordAnnotatedBinding(
+  type: ts.TypeNode | undefined,
+  name: string,
+  scan: BindingScan,
+): void {
+  if (!type) {
+    return;
+  }
+  if (typeNamesObservable(type, scan.imports.observableTypes)) {
+    scan.directCandidates.add(name);
+  } else {
+    scan.typeQueries.push({ name, type });
+  }
+}
+
+function seedCandidates(scan: BindingScan): Set<string> {
   const uniqueFactories = new Set(
-    [...factoryBindings].filter((name) => declarations.get(name) === 1),
+    [...scan.factoryBindings].filter((name) => scan.declarations.get(name) === 1),
   );
   const candidates = new Set(
-    [...directCandidates].filter((name) => declarations.get(name.split(".")[0]!) === 1),
+    [...scan.directCandidates].filter((name) => scan.declarations.get(name.split(".")[0]!) === 1),
   );
-  for (const candidate of factoryCalls) {
+  for (const candidate of scan.factoryCalls) {
     if (
-      declarations.get(candidate.name) === 1 &&
-      isObservableFactoryCall(candidate.initializer, imports, uniqueFactories)
+      scan.declarations.get(candidate.name) === 1 &&
+      isObservableFactoryCall(candidate.initializer, scan.imports, uniqueFactories)
     ) {
       candidates.add(candidate.name);
     }
   }
+  return candidates;
+}
 
+function resolveAliasCandidates(scan: BindingScan, candidates: Set<string>): void {
   let changed = true;
   while (changed) {
-    changed = false;
-    for (const alias of aliases) {
-      if (
-        useValueInputs.has(alias.name) &&
-        declarations.get(alias.name) === 1 &&
-        !candidates.has(alias.name) &&
-        observablePathWithElementAccess(alias.initializer, candidates)
-      ) {
-        candidates.add(alias.name);
-        changed = true;
-        continue;
-      }
-      if (
-        declarations.get(alias.name) === 1 &&
-        !candidates.has(alias.name) &&
-        expressionIsObservablePath(alias.initializer, candidates)
-      ) {
-        candidates.add(alias.name);
-        changed = true;
-      }
-    }
-    for (const alias of typeQueries) {
-      if (
-        declarations.get(alias.name) === 1 &&
-        !candidates.has(alias.name) &&
-        typeQueriesObservable(alias.type, candidates)
-      ) {
-        candidates.add(alias.name);
-        changed = true;
-      }
-    }
+    changed = resolveCandidatePass(scan, candidates);
   }
-  return candidates;
+}
+
+function resolveCandidatePass(scan: BindingScan, candidates: Set<string>): boolean {
+  let changed = false;
+  for (const alias of scan.aliases) {
+    changed = resolveAliasCandidate(alias, scan, candidates) || changed;
+  }
+  for (const query of scan.typeQueries) {
+    changed = resolveTypeQueryCandidate(query, scan, candidates) || changed;
+  }
+  return changed;
+}
+
+function resolveAliasCandidate(
+  alias: BindingAlias,
+  scan: BindingScan,
+  candidates: Set<string>,
+): boolean {
+  if (scan.declarations.get(alias.name) !== 1 || candidates.has(alias.name)) {
+    return false;
+  }
+  const readsDynamicKey =
+    scan.useValueInputs.has(alias.name) &&
+    observablePathWithElementAccess(alias.initializer, candidates);
+  if (readsDynamicKey || expressionIsObservablePath(alias.initializer, candidates)) {
+    candidates.add(alias.name);
+    return true;
+  }
+  return false;
+}
+
+function resolveTypeQueryCandidate(
+  query: BindingTypeQuery,
+  scan: BindingScan,
+  candidates: Set<string>,
+): boolean {
+  if (scan.declarations.get(query.name) !== 1 || candidates.has(query.name)) {
+    return false;
+  }
+  if (!typeQueriesObservable(query.type, candidates)) {
+    return false;
+  }
+  candidates.add(query.name);
+  return true;
 }
 
 function observablePathWithElementAccess(
@@ -377,26 +515,26 @@ function observablePathWithElementAccess(
   let current = unwrapTransparentExpression(expression);
   let hasDynamicKey = false;
   while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
-    if (current.questionDotToken) {
+    if (current.questionDotToken || accessesReservedMember(current)) {
       return false;
     }
-    if (ts.isPropertyAccessExpression(current)) {
-      if (RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) {
-        return false;
-      }
-    } else {
-      if (!current.argumentExpression) {
-        return false;
-      }
-      const member = unwrapTransparentExpression(current.argumentExpression);
-      if (ts.isStringLiteralLike(member) && RESERVED_OBSERVABLE_MEMBERS.has(member.text)) {
-        return false;
-      }
-      hasDynamicKey = true;
-    }
+    hasDynamicKey ||= ts.isElementAccessExpression(current);
     current = unwrapTransparentExpression(current.expression);
   }
   return hasDynamicKey && ts.isIdentifier(current) && observableBindings.has(current.text);
+}
+
+function accessesReservedMember(
+  access: ts.ElementAccessExpression | ts.PropertyAccessExpression,
+): boolean {
+  if (ts.isPropertyAccessExpression(access)) {
+    return RESERVED_OBSERVABLE_MEMBERS.has(access.name.text);
+  }
+  if (!access.argumentExpression) {
+    return true;
+  }
+  const member = unwrapTransparentExpression(access.argumentExpression);
+  return ts.isStringLiteralLike(member) && RESERVED_OBSERVABLE_MEMBERS.has(member.text);
 }
 
 function recordDeclaration(counts: Map<string, number>, name: string): void {
@@ -464,17 +602,22 @@ function typeQueriesObservable(
   if (!ts.isTypeQueryNode(type)) {
     return false;
   }
+  const path = unreservedEntityNamePath(type.exprName);
+  return path !== null && propertyPathHasBinding(path, observableBindings);
+}
+
+function unreservedEntityNamePath(exprName: ts.EntityName): string[] | null {
   const path: string[] = [];
-  let current: ts.EntityName = type.exprName;
+  let current: ts.EntityName = exprName;
   while (ts.isQualifiedName(current)) {
     if (RESERVED_OBSERVABLE_MEMBERS.has(current.right.text)) {
-      return false;
+      return null;
     }
     path.unshift(current.right.text);
     current = current.left;
   }
   path.unshift(current.text);
-  return propertyPathHasBinding(path, observableBindings);
+  return path;
 }
 
 function typeNamesObservable(type: ts.TypeNode, names: ReadonlySet<string>): boolean {
@@ -489,36 +632,44 @@ function typeNamesObservable(type: ts.TypeNode, names: ReadonlySet<string>): boo
   );
 }
 
+function setCallStatement(statement: ts.Statement): SetCall | null {
+  if (!ts.isExpressionStatement(statement)) {
+    return null;
+  }
+  const expression = unwrapTransparentExpression(statement.expression);
+  if (!ts.isCallExpression(expression) || !ts.isPropertyAccessExpression(expression.expression)) {
+    return null;
+  }
+  const [argument] = expression.arguments;
+  if (
+    expression.expression.name.text !== "set" ||
+    expression.arguments.length !== 1 ||
+    !argument ||
+    containsAwaitOrYield(argument)
+  ) {
+    return null;
+  }
+  return { argument, call: expression, receiver: expression.expression.expression };
+}
+
 function observableWrite(
   statement: ts.Statement,
   observableBindings: ReadonlySet<string>,
   sourceFile: ts.SourceFile,
 ): ObservableWrite | null {
-  if (!ts.isExpressionStatement(statement)) {
+  const setCall = setCallStatement(statement);
+  if (!setCall || containsElementAccess(setCall.receiver)) {
     return null;
   }
-  const expression = unwrapTransparentExpression(statement.expression);
-  if (
-    !ts.isCallExpression(expression) ||
-    !ts.isPropertyAccessExpression(expression.expression) ||
-    expression.expression.name.text !== "set" ||
-    expression.arguments.length !== 1 ||
-    containsAwaitOrYield(expression.arguments[0]!)
-  ) {
-    return null;
-  }
-  const receiver = expression.expression.expression;
-  if (containsElementAccess(receiver)) {
-    return null;
-  }
+  const { receiver } = setCall;
   const root = rootIdentifier(receiver);
   if (!root || !expressionIsObservablePath(receiver, observableBindings)) {
     return null;
   }
   const field = ts.isPropertyAccessExpression(receiver) ? receiver : null;
   return {
-    argument: expression.arguments[0]!,
-    call: expression,
+    argument: setCall.argument,
+    call: setCall.call,
     parentPath: field ? field.expression.getText(sourceFile) : null,
     path: receiver.getText(sourceFile),
     property: field?.name.text ?? null,
@@ -574,9 +725,7 @@ function hasDistinctNonOverlappingPaths(writes: readonly ObservableWrite[]): boo
 
 function conditionalObservableWrites(
   statement: ts.Statement,
-  observableBindings: ReadonlySet<string>,
-  sourceFile: ts.SourceFile,
-  imports: HookImports,
+  scan: TransactionScan,
 ): ObservableWrite[] | null {
   if (!ts.isIfStatement(statement) || !isEvaluationInert(statement.expression)) {
     return null;
@@ -587,52 +736,86 @@ function conditionalObservableWrites(
   ];
   const writes: ObservableWrite[] = [];
   for (const branch of branches) {
-    const statements = ts.isBlock(branch) ? branch.statements : [branch];
-    for (const branchStatement of statements) {
-      const write = observableWrite(branchStatement, observableBindings, sourceFile);
-      if (!write || isInsideBatch(write.call, imports)) {
-        return null;
-      }
-      writes.push(write);
+    const branchWrites = branchObservableWrites(branch, scan);
+    if (!branchWrites) {
+      return null;
     }
+    writes.push(...branchWrites);
   }
   return writes.length > 0 ? writes : null;
 }
 
+function branchObservableWrites(
+  branch: ts.Statement,
+  scan: TransactionScan,
+): ObservableWrite[] | null {
+  const statements = ts.isBlock(branch) ? branch.statements : [branch];
+  const writes: ObservableWrite[] = [];
+  for (const statement of statements) {
+    const write = unbatchedWrite(statement, scan);
+    if (!write) {
+      return null;
+    }
+    writes.push(write);
+  }
+  return writes;
+}
+
+function writeLocation(
+  write: ObservableWrite,
+  scan: TransactionScan,
+): LegendPracticeFinding["location"] {
+  const { character, line } = scan.sourceFile.getLineAndCharacterOfPosition(
+    write.call.getStart(scan.sourceFile),
+  );
+  return { column: character + 1, file: scan.fileName, line: line + 1 };
+}
+
 function transactionFinding(
-  writes: readonly ObservableWrite[],
-  conditionalWrites: readonly ObservableWrite[],
-  sourceFile: ts.SourceFile,
-  fileName: string,
+  run: TransactionRun,
+  scan: TransactionScan,
 ): LegendPracticeFinding | null {
+  const { conditionalWrites, writes } = run;
   if (conditionalWrites.length > 0) {
     return hasDistinctNonOverlappingPaths([...writes, ...conditionalWrites])
-      ? conditionalBatchFinding(writes, conditionalWrites, sourceFile, fileName)
+      ? conditionalBatchFinding(run, scan)
       : null;
   }
   if (!hasDistinctNonOverlappingPaths(writes)) {
     return null;
   }
-  const first = writes[0]!;
-  const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-    first.call.getStart(sourceFile),
-  );
+  const location = writeLocation(writes[0]!, scan);
   const assignTarget = commonAssignTarget(writes);
   if (assignTarget) {
-    const fields = writes.map((write) => `\`${write.property}\``).join(", ");
-    return {
-      action: "assign-observable-fields",
-      confidence: "probable",
-      disposition: "change",
-      evidence: [
-        `${writes.length} consecutive writes target direct fields of ${assignTarget}`,
-        "each value is independent of the updated observable and no control-flow boundary splits the writes",
-      ],
-      location: { column: character + 1, file: fileName, line: line + 1 },
-      message: `Replace ${writes.length} \`.set()\` calls with one \`${assignTarget}.assign(...)\` for ${fields}; observers publish once.`,
-      practice: "assign",
-    };
+    return assignFieldsFinding(writes, assignTarget, location);
   }
+  return batchWritesFinding(writes, location);
+}
+
+function assignFieldsFinding(
+  writes: readonly ObservableWrite[],
+  assignTarget: string,
+  location: LegendPracticeFinding["location"],
+): LegendPracticeFinding {
+  const fields = writes.map((write) => `\`${write.property}\``).join(", ");
+  return {
+    action: "assign-observable-fields",
+    confidence: "probable",
+    disposition: "change",
+    evidence: [
+      `${writes.length} consecutive writes target direct fields of ${assignTarget}`,
+      "each value is independent of the updated observable and no control-flow boundary splits the writes",
+    ],
+    location,
+    message: `Replace ${writes.length} \`.set()\` calls with one \`${assignTarget}.assign(...)\` for ${fields}; observers publish once.`,
+    practice: "assign",
+  };
+}
+
+function batchWritesFinding(
+  writes: readonly ObservableWrite[],
+  location: LegendPracticeFinding["location"],
+): LegendPracticeFinding {
   return {
     action: "batch-observable-writes",
     confidence: "probable",
@@ -641,22 +824,17 @@ function transactionFinding(
       `${writes.length} consecutive writes target distinct proven Legend observable paths`,
       "no await, yield, control-flow boundary, or existing batch surrounds the writes",
     ],
-    location: { column: character + 1, file: fileName, line: line + 1 },
+    location,
     message: `Wrap these ${writes.length} consecutive Legend observable writes in \`batch(() => { ... })\` so observers publish the transaction once.`,
     practice: "batch",
   };
 }
 
 function conditionalBatchFinding(
-  writes: readonly ObservableWrite[],
-  conditionalWrites: readonly ObservableWrite[],
-  sourceFile: ts.SourceFile,
-  fileName: string,
+  run: TransactionRun,
+  scan: TransactionScan,
 ): LegendPracticeFinding {
-  const first = writes[0]!;
-  const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-    first.call.getStart(sourceFile),
-  );
+  const { conditionalWrites, writes } = run;
   const assignTarget = commonAssignTarget(writes);
   const conditionalPaths = conditionalWrites.map((write) => `\`${write.path}\``).join(", ");
   const assignHint = assignTarget
@@ -670,7 +848,7 @@ function conditionalBatchFinding(
       `${writes.length} consecutive writes and a conditional write to ${conditionalPaths} target the same proven Legend observable`,
       "replacing only the unconditional writes would still let the conditional write publish a separate, torn transaction",
     ],
-    location: { column: character + 1, file: fileName, line: line + 1 },
+    location: writeLocation(writes[0]!, scan),
     message: `Wrap these ${writes.length} \`.set()\` calls and the conditional write to ${conditionalPaths} in one \`batch(() => { ... })\`;${assignHint} observers publish the transaction once.`,
     practice: "batch",
   };
