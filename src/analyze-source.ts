@@ -24,22 +24,21 @@ import {
   isRuntimeFunctionLike,
   nearestNestedFunction,
   nodeWithin,
-  type RuntimeFunctionLike,
   scriptKindForFile,
   visit,
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "./ast.js";
-import { collectHookImports, isImportedHookCall, isLocalHookCall, type HookImports } from "./imports.js";
+import type { RuntimeFunctionLike } from "./ast.js";
+import { collectHookImports, isImportedHookCall, isLocalHookCall } from "./imports.js";
+import type { HookImports } from "./imports.js";
 import type { AnalysisFile } from "./analysis-project.js";
 import {
   directReactHookFormEventCallbacks,
   findAsyncLeafStatuses,
 } from "./rules/async-leaf-status.js";
-import {
-  type ChildContractResolver,
-  propIsLeafRenderConsumer,
-} from "./rules/child-contract.js";
+import { propIsLeafRenderConsumer } from "./rules/child-contract.js";
+import type { ChildContractResolver } from "./rules/child-contract.js";
 import {
   collectCommandOnlyCallableReads,
   functionalCounterUpdaterPreservesSnapshot,
@@ -56,14 +55,14 @@ import {
   isRenderGateReference,
   isSafeProjectionExpression,
   jsxSubtreeAncestors,
-  type JsxSubtreeNode,
 } from "./rules/deferred-reveal.js";
+import type { JsxSubtreeNode } from "./rules/deferred-reveal.js";
 import {
   findEffectSynchronizedDrafts,
   hasLazyStateInitializer,
   mutationRegionOnlyCallsStateSetters,
-  type EffectDraftProofs,
 } from "./rules/effect-drafts.js";
+import type { EffectDraftProofs } from "./rules/effect-drafts.js";
 import { callbackHasCleanup, classifyEffect } from "./rules/effects.js";
 import {
   isReactiveHostPropScalarState,
@@ -82,16 +81,12 @@ import {
 } from "./rules/literal-boolean-leaf.js";
 import { findListenerRefStateClusters } from "./rules/listener-ref-state.js";
 import { isPropertyLocalObjectDraftState } from "./rules/object-draft.js";
+import { collectReactCommitContext } from "./rules/react-commit-sensitivity.js";
+import { findLazyCallbackLeaf } from "./rules/lazy-callback-leaf.js";
+import type { LazyCallbackLeafProofs } from "./rules/lazy-callback-leaf.js";
 import {
-  collectReactCommitContext,
-} from "./rules/react-commit-sensitivity.js";
-import {
-  findLazyCallbackLeaf,
-  type LazyCallbackLeafProofs,
-} from "./rules/lazy-callback-leaf.js";
-import {
-  callbackIsEventRooted,
   boundedRenderProjectionReferences,
+  callbackIsEventRooted,
   expressionDependsOnBinding,
   hasDirectPrimitiveInitializer,
   hasIndependentRenderCutWitness,
@@ -103,9 +98,9 @@ import {
   isInsideJsxEventCallback,
   isJsxEventHandlerReference,
   isJsxNode,
-  isUniquelySelectedRepeatedProjection,
   isSafeJsxProjectionReference,
   isSynchronousRenderCallback,
+  isUniquelySelectedRepeatedProjection,
   isUnshadowedMathCall,
   jsxElementCount,
   jsxElementCountIn,
@@ -234,14 +229,14 @@ function effectDraftProofs(stateFlow: StateFlowIndex): EffectDraftProofs {
 export function analyzeSource(
   sourceText: string,
   fileName: string,
-  sourceComponents: ReadonlySet<string> = new Set()
+  sourceComponents: ReadonlySet<string> = new Set(),
 ): HookFinding[] {
   const sourceFile = ts.createSourceFile(
     fileName,
     sourceText,
     ts.ScriptTarget.Latest,
     true,
-    scriptKindForFile(fileName)
+    scriptKindForFile(fileName),
   );
   return analyzeParsedSource(
     sourceFile,
@@ -250,7 +245,7 @@ export function analyzeSource(
     new StateFlowIndex(),
     null,
     new Map(),
-    new Map()
+    new Map(),
   );
 }
 
@@ -262,7 +257,7 @@ export function analyzeSourceFile(
   childContracts: ChildContractResolver | null = null,
   legendValueBridges: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>> = new Map(),
-  hookImports: HookImports = collectHookImports(file.sourceFile)
+  hookImports: HookImports = collectHookImports(file.sourceFile),
 ): HookFinding[] {
   return analyzeParsedSource(
     file.sourceFile,
@@ -272,7 +267,7 @@ export function analyzeSourceFile(
     childContracts,
     legendValueBridges,
     deferredCallbackHooks,
-    hookImports
+    hookImports,
   );
 }
 
@@ -284,14 +279,14 @@ export function findingHookImports(file: AnalysisFile): HookImports | null {
 function containsFindingHookCall(node: ts.Node, imports: HookImports): boolean {
   if (
     ts.isCallExpression(node) &&
-    (
-      isImportedHookCall(node, imports.useState, imports.reactNamespaces, "useState") ||
-      isImportedHookCall(node, imports.useEffect, imports.reactNamespaces, "useEffect")
-    )
+    (isImportedHookCall(node, imports.useState, imports.reactNamespaces, "useState") ||
+      isImportedHookCall(node, imports.useEffect, imports.reactNamespaces, "useEffect"))
   ) {
     return true;
   }
-  return node.forEachChild(child => containsFindingHookCall(child, imports) || undefined) === true;
+  return (
+    node.forEachChild((child) => containsFindingHookCall(child, imports) || undefined) === true
+  );
 }
 
 function analyzeParsedSource(
@@ -302,77 +297,82 @@ function analyzeParsedSource(
   childContracts: ChildContractResolver | null,
   legendValueBridges: ReadonlyMap<string, ReadonlySet<string>>,
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
-  imports: HookImports = collectHookImports(sourceFile)
+  imports: HookImports = collectHookImports(sourceFile),
 ): HookFinding[] {
   const pureProjectionImports = new Set([
-    ...collectPureProjectionImports(sourceFile),
-    ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
-  ]);
-  const reactCommit = collectReactCommitContext(sourceFile, imports);
-  const localComponents = collectLocalComponents(sourceFile, imports);
-  const states: StateCandidate[] = [];
-  const unmatchedStateCalls: ts.CallExpression[] = [];
-  const effects = reactCommit.effectCalls.map(call => effectCandidate(call, imports));
-  const useValueBindingsByOwner = collectUseValueBindings(sourceFile, imports);
-  const observableSubscriptionsByOwner = collectObservableSubscriptionCounts(sourceFile, imports);
-  const useObservableBindingsByOwner = collectStableUseObservableBindings(sourceFile, imports);
-  const moduleScopeBindings = collectModuleScopeBindings(sourceFile);
-  const reactiveMutationsByOwner = collectReactiveMutationBindings(sourceFile);
-  const nonProductionHarness = isNonProductionHarness(fileName);
-  const commitSensitiveOwners = reactCommit.sensitiveOwners;
+      ...collectPureProjectionImports(sourceFile),
+      ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
+    ]),
+    reactCommit = collectReactCommitContext(sourceFile, imports),
+    localComponents = collectLocalComponents(sourceFile, imports),
+    states: StateCandidate[] = [],
+    unmatchedStateCalls: ts.CallExpression[] = [],
+    effects = reactCommit.effectCalls.map((call) => effectCandidate(call, imports)),
+    useValueBindingsByOwner = collectUseValueBindings(sourceFile, imports),
+    observableSubscriptionsByOwner = collectObservableSubscriptionCounts(sourceFile, imports),
+    useObservableBindingsByOwner = collectStableUseObservableBindings(sourceFile, imports),
+    moduleScopeBindings = collectModuleScopeBindings(sourceFile),
+    reactiveMutationsByOwner = collectReactiveMutationBindings(sourceFile),
+    nonProductionHarness = isNonProductionHarness(fileName),
+    commitSensitiveOwners = reactCommit.sensitiveOwners;
 
-  visit(sourceFile, node => {
-    if (!ts.isCallExpression(node)) return;
+  visit(sourceFile, (node) => {
+    if (!ts.isCallExpression(node)) {
+      return;
+    }
     if (isImportedHookCall(node, imports.useState, imports.reactNamespaces, "useState")) {
       const state = stateCandidate(node);
-      if (state) states.push(state);
-      else unmatchedStateCalls.push(node);
+      if (state) {
+        states.push(state);
+      } else {
+        unmatchedStateCalls.push(node);
+      }
       return;
     }
   });
 
-  const lifecycleRegions = reactCommit.lifecycleRegions;
-  const directEffectCalls = new Set(reactCommit.effectCalls);
-  const directEffectCallbacks = new Set<RuntimeFunctionLike>(
-    effects.flatMap(effect => effect.callback ? [effect.callback] : []),
-  );
-  const knownComponents = new Set([...localComponents, ...sourceComponents]);
-  const usageByState = new Map(states.map(state => [state, collectStateUsage(state, lifecycleRegions, imports)]));
-  const eventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
-  const sourceEventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
-  const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
+  const { lifecycleRegions } = reactCommit;
+  const directEffectCalls = new Set(reactCommit.effectCalls),
+    directEffectCallbacks = new Set<RuntimeFunctionLike>(
+      effects.flatMap((effect) => (effect.callback ? [effect.callback] : [])),
+    ),
+    knownComponents = new Set([...localComponents, ...sourceComponents]),
+    usageByState = new Map(
+      states.map((state) => [state, collectStateUsage(state, lifecycleRegions, imports)]),
+    ),
+    eventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>(),
+    sourceEventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>(),
+    statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
     const owned = statesByOwner.get(state.owner) ?? [];
     owned.push(state);
     statesByOwner.set(state.owner, owned);
   }
   for (const [owner, ownedStates] of statesByOwner) {
-    const callbacks = new Set(reactCommit.eventTransitionCallbacks.get(owner) ?? EMPTY_RUNTIME_FUNCTIONS);
-    if (ownedStates.some(state => (usageByState.get(state)?.deferredReads ?? 0) > 0)) {
+    const callbacks = new Set(
+      reactCommit.eventTransitionCallbacks.get(owner) ?? EMPTY_RUNTIME_FUNCTIONS,
+    );
+    if (ownedStates.some((state) => (usageByState.get(state)?.deferredReads ?? 0) > 0)) {
       for (const callback of directReactHookFormEventCallbacks(owner)) {
         callbacks.add(callback);
       }
     }
-    const needsDeferredCallbackProof = ownedStates.some(state => {
+    const needsDeferredCallbackProof = ownedStates.some((state) => {
       const usage = usageByState.get(state);
-      return usage !== undefined &&
-        (
-          (
-            usage.localRenderReads === 0 &&
-            usage.effectReads === 0 &&
-            usage.deferredReads > 0 &&
-            usage.transportedOccurrences === 0 &&
-            (usage.eventReads > 0 || usage.effectWrites > 0) &&
-            !hasOnlyEventCommandReads(state, EMPTY_NODES, callbacks)
-          ) ||
-          (
-            hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) &&
+      return (
+        usage !== undefined &&
+        ((usage.localRenderReads === 0 &&
+          usage.effectReads === 0 &&
+          usage.deferredReads > 0 &&
+          usage.transportedOccurrences === 0 &&
+          (usage.eventReads > 0 || usage.effectWrites > 0) &&
+          !hasOnlyEventCommandReads(state, EMPTY_NODES, callbacks)) ||
+          (hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) &&
             usage.effectReads === 0 &&
             usage.effectWrites === 0 &&
             usage.setterCallNodes.length >= 2 &&
-            (usage.localRenderReads > 0 || usage.valueTransportSites.size >= 1)
-          )
-        );
+            (usage.localRenderReads > 0 || usage.valueTransportSites.size >= 1)))
+      );
     });
     if (needsDeferredCallbackProof) {
       for (const callback of directReactHookFormEventCallbacks(owner)) {
@@ -387,8 +387,10 @@ function analyzeParsedSource(
         for (const callback of sourceProvenOptionEventCallbacks(owner, imports, childContracts)) {
           callbacks.add(callback);
           if (callback.body) {
-            visit(callback.body, node => {
-              if (isRuntimeFunctionLike(node)) callbacks.add(node);
+            visit(callback.body, (node) => {
+              if (isRuntimeFunctionLike(node)) {
+                callbacks.add(node);
+              }
             });
           }
         }
@@ -396,51 +398,49 @@ function analyzeParsedSource(
     }
     eventCallbacksByOwner.set(owner, callbacks);
   }
-  const subtreeByState = new Map<StateCandidate, StateSubtree>();
-  const safeCommandStates = new Set<StateCandidate>();
-  const selfRefreshingCommandStates = new Set<StateCandidate>();
-  const memoizedOptionCommandStates = new Set<StateCandidate>();
-  const returnedKeyedCursorStates = new Set<StateCandidate>();
-  const reactiveMutationAffectedStates = new Set<StateCandidate>();
+  const subtreeByState = new Map<StateCandidate, StateSubtree>(),
+    safeCommandStates = new Set<StateCandidate>(),
+    selfRefreshingCommandStates = new Set<StateCandidate>(),
+    memoizedOptionCommandStates = new Set<StateCandidate>(),
+    returnedKeyedCursorStates = new Set<StateCandidate>(),
+    reactiveMutationAffectedStates = new Set<StateCandidate>();
   for (const state of states) {
     const usage = usageByState.get(state);
-    if (!usage) continue;
+    if (!usage) {
+      continue;
+    }
     const reactiveMutationPaths = setterReactiveMutationPaths(
       state,
       usage,
-      reactiveMutationsByOwner.get(state.owner) ?? EMPTY_BINDINGS
+      reactiveMutationsByOwner.get(state.owner) ?? EMPTY_BINDINGS,
     );
-    if (reactiveMutationPaths.any) reactiveMutationAffectedStates.add(state);
+    if (reactiveMutationPaths.any) {
+      reactiveMutationAffectedStates.add(state);
+    }
     const effectOwnedMemoizedCommand = isEffectOwnedMemoizedPresentationState(
       state,
       usage,
       directEffectCalls,
-      imports
+      imports,
     );
-    if (
-      isEffectOwnedSelfRefreshingCommandState(
-        state,
-        usage,
-        directEffectCalls,
-        imports
-      )
-    ) {
+    if (isEffectOwnedSelfRefreshingCommandState(state, usage, directEffectCalls, imports)) {
       selfRefreshingCommandStates.add(state);
     }
-    const memoizedOptionCommand = childContracts !== null &&
-      isSourceProvenMemoizedOptionCommand(
-        state,
-        usage,
-        imports,
-        childContracts
-      );
-    if (memoizedOptionCommand) memoizedOptionCommandStates.add(state);
-    const projectionAllowed = !reactiveMutationPaths.all &&
+    const memoizedOptionCommand =
+      childContracts !== null &&
+      isSourceProvenMemoizedOptionCommand(state, usage, imports, childContracts);
+    if (memoizedOptionCommand) {
+      memoizedOptionCommandStates.add(state);
+    }
+    const projectionAllowed =
+      !reactiveMutationPaths.all &&
       (!setterCallbackEscapesThroughUnknownHook(state, usage) ||
         effectOwnedMemoizedCommand ||
         memoizedOptionCommand) &&
       primitiveSetterUpdatersArePure(state, usage);
-    if (projectionAllowed) safeCommandStates.add(state);
+    if (projectionAllowed) {
+      safeCommandStates.add(state);
+    }
     const subtree = analyzeStateSubtree(
       state,
       usage,
@@ -448,9 +448,11 @@ function analyzeParsedSource(
       pureProjectionImports,
       directEffectCalls,
       effectOwnedMemoizedCommand,
-      childContracts
+      childContracts,
     );
-    if (subtree) subtreeByState.set(state, subtree);
+    if (subtree) {
+      subtreeByState.set(state, subtree);
+    }
     if (
       childContracts &&
       isEffectOwnedReturnedKeyedCursor(state, usage, directEffectCalls, childContracts)
@@ -458,340 +460,337 @@ function analyzeParsedSource(
       returnedKeyedCursorStates.add(state);
     }
   }
-  const effectStateScopes = collectEffectStateScopes(states, usageByState);
-  const observableSelectionOwners = new Set(
-    states
-      .filter(state => {
+  const effectStateScopes = collectEffectStateScopes(states, usageByState),
+    observableSelectionOwners = new Set(
+      states
+        .filter((state) => {
+          const usage = usageByState.get(state);
+          return (
+            isSetOrMapState(state.call) &&
+            isCustomHookOwner(state.owner) &&
+            isSelectionStateName(state.valueName) &&
+            usage !== undefined &&
+            usage.effectWrites === 0
+          );
+        })
+        .map((state) => state.owner),
+    ),
+    deferredRevealStates = findDeferredRevealStates(effects, states, usageByState),
+    companionWrites = findStateCompanionWrites(states, stateFlow),
+    statesWithCompanionWrites = companionWrites.all,
+    propertyLocalObjectDrafts = new Set(
+      states.filter((state) => {
         const usage = usageByState.get(state);
         return (
-          isSetOrMapState(state.call) &&
-          isCustomHookOwner(state.owner) &&
-          isSelectionStateName(state.valueName) &&
           usage !== undefined &&
-          usage.effectWrites === 0
+          isPropertyLocalObjectDraftState(state, usage, {
+            childContracts,
+            eventCallbacks: eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
+            hasCompanionWrites: statesWithCompanionWrites.has(state),
+            hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+            hasSafeCommands: safeCommandStates.has(state),
+            localComponents,
+            sourceComponents,
+          })
         );
-      })
-      .map(state => state.owner)
-  );
-  const deferredRevealStates = findDeferredRevealStates(
-    effects,
-    states,
-    usageByState
-  );
-  const companionWrites = findStateCompanionWrites(states, stateFlow);
-  const statesWithCompanionWrites = companionWrites.all;
-  const propertyLocalObjectDrafts = new Set(
-    states.filter(state => {
-      const usage = usageByState.get(state);
-      return usage !== undefined && isPropertyLocalObjectDraftState(state, usage, {
-        childContracts,
-        eventCallbacks: eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
-        hasCompanionWrites: statesWithCompanionWrites.has(state),
-        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-        hasSafeCommands: safeCommandStates.has(state),
-        localComponents,
-        sourceComponents,
-      });
-    })
-  );
-  const dialogPayloadCuts = new Map<StateCandidate, DialogPayloadCut>();
+      }),
+    ),
+    dialogPayloadCuts = new Map<StateCandidate, DialogPayloadCut>();
   for (const state of states) {
     const usage = usageByState.get(state);
-    if (
-      !usage ||
-      statesWithCompanionWrites.has(state) ||
-      !safeCommandStates.has(state)
-    ) {
+    if (!usage || statesWithCompanionWrites.has(state) || !safeCommandStates.has(state)) {
       continue;
     }
-    const cut = nullableDialogPayloadCut(
-      state,
-      usage,
-      knownComponents,
-      childContracts,
-      imports
-    );
-    if (cut) dialogPayloadCuts.set(state, cut);
+    const cut = nullableDialogPayloadCut(state, usage, knownComponents, childContracts, imports);
+    if (cut) {
+      dialogPayloadCuts.set(state, cut);
+    }
   }
   const multiSurfaceBooleanStates = new Set(
-    states.filter(state => {
-      const usage = usageByState.get(state);
-      return usage !== undefined && isMultiSurfaceLiteralBooleanState(state, usage, {
-        hasCompanionWrites: statesWithCompanionWrites.has(state),
-        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-        hasSafeCommands: safeCommandStates.has(state),
-        isCustomHookOwner: isCustomHookOwner(state.owner),
-        pureProjectionImports,
-      });
-    })
-  );
-  const sourceEventScalarStates = new Set(
-    states.filter(state => {
-      const usage = usageByState.get(state);
-      if (!usage || !childContracts || isCustomHookOwner(state.owner)) return false;
-      let callbacks = sourceEventCallbacksByOwner.get(state.owner);
-      if (!callbacks) {
-        callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
-        sourceEventCallbacksByOwner.set(state.owner, callbacks);
-      }
-      return isSourceEventScalarLeafState(state, usage, {
-        eventCallbacks: callbacks,
-        hasCompanionWrites: statesWithCompanionWrites.has(state),
-        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-        hasSafeCommands: safeCommandStates.has(state),
-        localComponents,
-        pureProjectionImports,
-        sourceComponents,
-        useCallbackNames: imports.useCallback,
-      });
-    })
-  );
-  const reactiveHostPropScalarStates = new Set(
-    states.filter(state => {
-      const usage = usageByState.get(state);
-      if (!usage || !childContracts || isCustomHookOwner(state.owner)) return false;
-      let callbacks = sourceEventCallbacksByOwner.get(state.owner);
-      if (!callbacks) {
-        callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
-        sourceEventCallbacksByOwner.set(state.owner, callbacks);
-      }
-      return isReactiveHostPropScalarState(state, usage, {
-        eventCallbacks: callbacks,
-        hasCompanionWrites: statesWithCompanionWrites.has(state),
-        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-        hasSafeCommands: safeCommandStates.has(state),
-        hostComponents: imports.hostComponents,
-        pureProjectionImports,
-        useCallbackNames: imports.useCallback,
-      });
-    })
-  );
-  const adjacentEventBooleanStates = new Set(
-    states.filter(state => {
-      const usage = usageByState.get(state);
-      return usage !== undefined && isAdjacentEventBooleanLeafState(state, usage, {
-        hasCompanionWrites: statesWithCompanionWrites.has(state),
-        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-        hasSafeCommands: safeCommandStates.has(state),
-        isCustomHookOwner: isCustomHookOwner(state.owner),
-        pureProjectionImports,
-      });
-    })
-  );
-  const adjacentEffectBooleanStates = new Set(
-    states.filter(state => {
-      const usage = usageByState.get(state);
-      return usage !== undefined && isAdjacentEffectBooleanLeafState(state, usage, {
-        effectWritesAreDirect: usage.setterCallNodes.every(call => {
-          const callback = nearestNestedFunction(call, state.owner);
-          return callback !== null && directEffectCallbacks.has(callback);
-        }),
-        hasCompanionWrites: statesWithCompanionWrites.has(state),
-        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-        hasSafeCommands: safeCommandStates.has(state),
-        isCustomHookOwner: isCustomHookOwner(state.owner),
-        pureProjectionImports,
-      });
-    })
-  );
-  const independentStateWrites = findIndependentStateWrites(states);
-  const branchUnmountMoves = findBranchUnmountMoves(
-    states,
-    usageByState,
-    safeCommandStates,
-    stateFlow
-  );
-  const asyncLeafStatuses = findAsyncLeafStatuses(
-    states,
-    usageByState,
-    safeCommandStates,
-    reactiveMutationAffectedStates,
-    localComponents,
-    sourceComponents,
-    childContracts,
-    eventCallbacksByOwner
-  );
-  const siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();
+      states.filter((state) => {
+        const usage = usageByState.get(state);
+        return (
+          usage !== undefined &&
+          isMultiSurfaceLiteralBooleanState(state, usage, {
+            hasCompanionWrites: statesWithCompanionWrites.has(state),
+            hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+            hasSafeCommands: safeCommandStates.has(state),
+            isCustomHookOwner: isCustomHookOwner(state.owner),
+            pureProjectionImports,
+          })
+        );
+      }),
+    ),
+    sourceEventScalarStates = new Set(
+      states.filter((state) => {
+        const usage = usageByState.get(state);
+        if (!usage || !childContracts || isCustomHookOwner(state.owner)) {
+          return false;
+        }
+        let callbacks = sourceEventCallbacksByOwner.get(state.owner);
+        if (!callbacks) {
+          callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
+          sourceEventCallbacksByOwner.set(state.owner, callbacks);
+        }
+        return isSourceEventScalarLeafState(state, usage, {
+          eventCallbacks: callbacks,
+          hasCompanionWrites: statesWithCompanionWrites.has(state),
+          hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+          hasSafeCommands: safeCommandStates.has(state),
+          localComponents,
+          pureProjectionImports,
+          sourceComponents,
+          useCallbackNames: imports.useCallback,
+        });
+      }),
+    ),
+    reactiveHostPropScalarStates = new Set(
+      states.filter((state) => {
+        const usage = usageByState.get(state);
+        if (!usage || !childContracts || isCustomHookOwner(state.owner)) {
+          return false;
+        }
+        let callbacks = sourceEventCallbacksByOwner.get(state.owner);
+        if (!callbacks) {
+          callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
+          sourceEventCallbacksByOwner.set(state.owner, callbacks);
+        }
+        return isReactiveHostPropScalarState(state, usage, {
+          eventCallbacks: callbacks,
+          hasCompanionWrites: statesWithCompanionWrites.has(state),
+          hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+          hasSafeCommands: safeCommandStates.has(state),
+          hostComponents: imports.hostComponents,
+          pureProjectionImports,
+          useCallbackNames: imports.useCallback,
+        });
+      }),
+    ),
+    adjacentEventBooleanStates = new Set(
+      states.filter((state) => {
+        const usage = usageByState.get(state);
+        return (
+          usage !== undefined &&
+          isAdjacentEventBooleanLeafState(state, usage, {
+            hasCompanionWrites: statesWithCompanionWrites.has(state),
+            hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+            hasSafeCommands: safeCommandStates.has(state),
+            isCustomHookOwner: isCustomHookOwner(state.owner),
+            pureProjectionImports,
+          })
+        );
+      }),
+    ),
+    adjacentEffectBooleanStates = new Set(
+      states.filter((state) => {
+        const usage = usageByState.get(state);
+        return (
+          usage !== undefined &&
+          isAdjacentEffectBooleanLeafState(state, usage, {
+            effectWritesAreDirect: usage.setterCallNodes.every((call) => {
+              const callback = nearestNestedFunction(call, state.owner);
+              return callback !== null && directEffectCallbacks.has(callback);
+            }),
+            hasCompanionWrites: statesWithCompanionWrites.has(state),
+            hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+            hasSafeCommands: safeCommandStates.has(state),
+            isCustomHookOwner: isCustomHookOwner(state.owner),
+            pureProjectionImports,
+          })
+        );
+      }),
+    ),
+    independentStateWrites = findIndependentStateWrites(states),
+    branchUnmountMoves = findBranchUnmountMoves(states, usageByState, safeCommandStates, stateFlow),
+    asyncLeafStatuses = findAsyncLeafStatuses(
+      states,
+      usageByState,
+      safeCommandStates,
+      reactiveMutationAffectedStates,
+      localComponents,
+      sourceComponents,
+      childContracts,
+      eventCallbacksByOwner,
+    ),
+    siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();
   for (const state of states) {
     const usage = usageByState.get(state);
-    if (
-      !usage ||
-      !safeCommandStates.has(state) ||
-      statesWithCompanionWrites.has(state)
-    ) {
+    if (!usage || !safeCommandStates.has(state) || statesWithCompanionWrites.has(state)) {
       continue;
     }
     const cut = siblingProducerConsumerCut(state, usage, lifecycleRegions);
-    if (cut) siblingRenderCuts.set(state, cut);
+    if (cut) {
+      siblingRenderCuts.set(state, cut);
+    }
   }
   const effectDrafts = findEffectSynchronizedDrafts(
-    effects,
-    states,
-    effectStateScopes,
-    usageByState,
-    siblingRenderCuts,
-    localComponents,
-    sourceComponents,
-    effectDraftProofs(stateFlow)
-  );
-  const keyedSelections = analyzeKeyedSelections(
-    states,
-    usageByState,
-    safeCommandStates,
-    statesWithCompanionWrites,
-    imports,
-    childContracts
-  );
-  const observableClusters = findObservableStateClusters(
-    states,
-    usageByState,
-    knownComponents,
-    sourceFile,
-    stateFlow,
-    childContracts
-  );
-  const subtreeClusters = findStateSubtreeClusters(
-    subtreeByState,
-    statesWithCompanionWrites
-  );
-  const listenerRefClusters = findListenerRefStateClusters(
-    states,
-    usageByState,
-    effects,
-    imports,
-  );
-  const effectClassifications = new Map<EffectCandidate, ClassifiedEffect>();
-  const derivedStates = new Set<StateCandidate>();
+      effects,
+      states,
+      effectStateScopes,
+      usageByState,
+      siblingRenderCuts,
+      localComponents,
+      sourceComponents,
+      effectDraftProofs(stateFlow),
+    ),
+    keyedSelections = analyzeKeyedSelections(
+      states,
+      usageByState,
+      safeCommandStates,
+      statesWithCompanionWrites,
+      imports,
+      childContracts,
+    ),
+    observableClusters = findObservableStateClusters(
+      states,
+      usageByState,
+      knownComponents,
+      sourceFile,
+      stateFlow,
+      childContracts,
+    ),
+    subtreeClusters = findStateSubtreeClusters(subtreeByState, statesWithCompanionWrites),
+    listenerRefClusters = findListenerRefStateClusters(states, usageByState, effects, imports),
+    effectClassifications = new Map<EffectCandidate, ClassifiedEffect>(),
+    derivedStates = new Set<StateCandidate>();
   for (const effect of effects) {
-    const scope = effect.owner ? effectStateScopes.get(effect.owner) : undefined;
-    const classification = classifyEffect(
-      effect,
-      scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
-      scope?.byValue ?? EMPTY_STATE_CANDIDATES,
-      scope?.usageBySetter ?? EMPTY_STATE_USAGES,
-      effect.owner ? useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS : EMPTY_BINDINGS,
-      effect.owner ? useObservableBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS : EMPTY_BINDINGS,
-      imports.useRef,
-      imports.reactNamespaces,
-      moduleScopeBindings,
-      nonProductionHarness,
-      childContracts
-    );
+    const scope = effect.owner ? effectStateScopes.get(effect.owner) : undefined,
+      classification = classifyEffect(
+        effect,
+        scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
+        scope?.byValue ?? EMPTY_STATE_CANDIDATES,
+        scope?.usageBySetter ?? EMPTY_STATE_USAGES,
+        effect.owner
+          ? (useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)
+          : EMPTY_BINDINGS,
+        effect.owner
+          ? (useObservableBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)
+          : EMPTY_BINDINGS,
+        imports.useRef,
+        imports.reactNamespaces,
+        moduleScopeBindings,
+        nonProductionHarness,
+        childContracts,
+      );
     effectClassifications.set(effect, classification);
-    if (classification.derivedState) derivedStates.add(classification.derivedState);
+    if (classification.derivedState) {
+      derivedStates.add(classification.derivedState);
+    }
   }
-  const legendValueMirrors = findLegendValueMirrors(
-    states,
-    usageByState,
-    legendValueBridges
-  );
-
-  const findings: HookFinding[] = [];
+  const legendValueMirrors = findLegendValueMirrors(states, usageByState, legendValueBridges),
+    findings: HookFinding[] = [];
   for (const state of states) {
     const usage = usageByState.get(state);
-    if (!usage) continue;
-    const cluster = effectDrafts.clusters.get(state) ??
-      listenerRefClusters.get(state) ??
-      observableClusters.get(state) ??
-      subtreeClusters.get(state);
-    const siblingCut = siblingRenderCuts.get(state);
-    const directTransitionCallbacks = reactCommit.directTransitionCallbacks.get(state.owner);
-    const transitionTouchesState = directTransitionCallbacks?.some(callback =>
-      usage.setterCallNodes.some(call => nodeWithin(call, callback))
-    ) ?? true;
-    const commitSensitive = commitSensitiveOwners.has(state.owner) &&
-      transitionTouchesState &&
-      state.setterName !== null &&
-      !nonProductionHarness;
-    const baseClassification = nonProductionHarness
-      ? {
-          action: "keep-state" as const,
-          confidence: "certain" as const,
-          message: `Keep \`${state.valueName}\` in this test, story, or demo harness; production render-boundary migrations do not apply here.`,
-        }
-      : cluster
-      ? {
-          action: cluster.action,
-          confidence: "probable" as const,
-          message: cluster.message,
-        }
-      : effectDrafts.singletons.has(state)
-      ? {
-          action: "use-observable" as const,
-          confidence: "probable" as const,
-          message: (siblingCut
-            ? `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, keep producer commands non-tracking, subscribe only in the sibling ${siblingCut.consumerLabel} boundary at line ${siblingCut.consumerLine}, and pass state-independent fallback inputs as ordinary snapshots.`
-            : `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.`) +
-            (hasLazyStateInitializer(state)
-              ? " Preserve its lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
-              : ""),
-        }
-      : derivedStates.has(state)
-      ? {
-          action: "delete-derived-state" as const,
-          confidence: "certain" as const,
-          message: `Delete React state \`${state.valueName}\`; it is assigned only by a derivation effect and should be calculated directly.`,
-        }
-      : legendValueMirrors.get(state) ??
-        classifyState(
-          state,
-          usage,
-          localComponents,
-          sourceComponents,
-          sourceFile,
-          propertyLocalObjectDrafts.has(state),
-          subtreeByState.get(state) ?? null,
-          dialogPayloadCuts.get(state) ?? null,
-          safeCommandStates.has(state),
-          selfRefreshingCommandStates.has(state),
-          observableSelectionOwners.has(state.owner),
-          statesWithCompanionWrites.has(state),
-          companionWrites.nonClosing.has(state),
-          independentStateWrites.directEventWrites.has(state),
-          independentStateWrites.visibilitySetterTransports.has(state),
-          reactiveMutationAffectedStates.has(state),
-          asyncLeafStatuses.isolated.has(state),
-          asyncLeafStatuses.cohesive.has(state),
-          asyncLeafStatuses.unproven.has(state),
-          deferredRevealStates.has(state),
-          keyedSelections.collectionStates.has(state),
-          keyedSelections.recordStates.has(state),
-          keyedSelections.scalarStates.has(state),
-          keyedSelections.secondaryLeafStates.has(state),
-          observableSubscriptionsByOwner.get(state.owner) ?? 0,
-          siblingCut ?? null,
-          branchUnmountMoves.get(state) ?? null,
-          childContracts,
-          deferredCallbackHooks,
-          eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
-          memoizedOptionCommandStates.has(state),
-          returnedKeyedCursorStates.has(state),
-          adjacentEventBooleanStates.has(state),
-          adjacentEffectBooleanStates.has(state),
-          multiSurfaceBooleanStates.has(state),
-          sourceEventScalarStates.has(state),
-          reactiveHostPropScalarStates.has(state)
-        );
-    const commitSensitiveOverride = commitSensitive &&
-      baseClassification.action !== "review-state" &&
-      baseClassification.action !== "keep-state";
-    const classification = commitSensitiveOverride
-      ? commitSensitiveStateClassification(state)
-      : baseClassification;
-    const finding = findingFor(
-      state.call,
-      sourceFile,
-      fileName,
-      "useState",
-      state.valueName,
-      classification,
-      stateEvidence(state, usage, sourceFile)
-    );
+    if (!usage) {
+      continue;
+    }
+    const cluster =
+        effectDrafts.clusters.get(state) ??
+        listenerRefClusters.get(state) ??
+        observableClusters.get(state) ??
+        subtreeClusters.get(state),
+      siblingCut = siblingRenderCuts.get(state),
+      directTransitionCallbacks = reactCommit.directTransitionCallbacks.get(state.owner),
+      transitionTouchesState =
+        directTransitionCallbacks?.some((callback) =>
+          usage.setterCallNodes.some((call) => nodeWithin(call, callback)),
+        ) ?? true,
+      commitSensitive =
+        commitSensitiveOwners.has(state.owner) &&
+        transitionTouchesState &&
+        state.setterName !== null &&
+        !nonProductionHarness,
+      baseClassification = nonProductionHarness
+        ? {
+            action: "keep-state" as const,
+            confidence: "certain" as const,
+            message: `Keep \`${state.valueName}\` in this test, story, or demo harness; production render-boundary migrations do not apply here.`,
+          }
+        : cluster
+          ? {
+              action: cluster.action,
+              confidence: "probable" as const,
+              message: cluster.message,
+            }
+          : effectDrafts.singletons.has(state)
+            ? {
+                action: "use-observable" as const,
+                confidence: "probable" as const,
+                message:
+                  (siblingCut
+                    ? `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, keep producer commands non-tracking, subscribe only in the sibling ${siblingCut.consumerLabel} boundary at line ${siblingCut.consumerLine}, and pass state-independent fallback inputs as ordinary snapshots.`
+                    : `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.`) +
+                  (hasLazyStateInitializer(state)
+                    ? " Preserve its lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
+                    : ""),
+              }
+            : derivedStates.has(state)
+              ? {
+                  action: "delete-derived-state" as const,
+                  confidence: "certain" as const,
+                  message: `Delete React state \`${state.valueName}\`; it is assigned only by a derivation effect and should be calculated directly.`,
+                }
+              : (legendValueMirrors.get(state) ??
+                classifyState(
+                  state,
+                  usage,
+                  localComponents,
+                  sourceComponents,
+                  sourceFile,
+                  propertyLocalObjectDrafts.has(state),
+                  subtreeByState.get(state) ?? null,
+                  dialogPayloadCuts.get(state) ?? null,
+                  safeCommandStates.has(state),
+                  selfRefreshingCommandStates.has(state),
+                  observableSelectionOwners.has(state.owner),
+                  statesWithCompanionWrites.has(state),
+                  companionWrites.nonClosing.has(state),
+                  independentStateWrites.directEventWrites.has(state),
+                  independentStateWrites.visibilitySetterTransports.has(state),
+                  reactiveMutationAffectedStates.has(state),
+                  asyncLeafStatuses.isolated.has(state),
+                  asyncLeafStatuses.cohesive.has(state),
+                  asyncLeafStatuses.unproven.has(state),
+                  deferredRevealStates.has(state),
+                  keyedSelections.collectionStates.has(state),
+                  keyedSelections.recordStates.has(state),
+                  keyedSelections.scalarStates.has(state),
+                  keyedSelections.secondaryLeafStates.has(state),
+                  observableSubscriptionsByOwner.get(state.owner) ?? 0,
+                  siblingCut ?? null,
+                  branchUnmountMoves.get(state) ?? null,
+                  childContracts,
+                  deferredCallbackHooks,
+                  eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
+                  memoizedOptionCommandStates.has(state),
+                  returnedKeyedCursorStates.has(state),
+                  adjacentEventBooleanStates.has(state),
+                  adjacentEffectBooleanStates.has(state),
+                  multiSurfaceBooleanStates.has(state),
+                  sourceEventScalarStates.has(state),
+                  reactiveHostPropScalarStates.has(state),
+                )),
+      commitSensitiveOverride =
+        commitSensitive &&
+        baseClassification.action !== "review-state" &&
+        baseClassification.action !== "keep-state",
+      classification = commitSensitiveOverride
+        ? commitSensitiveStateClassification(state)
+        : baseClassification,
+      finding = findingFor(
+        state.call,
+        sourceFile,
+        fileName,
+        "useState",
+        state.valueName,
+        classification,
+        stateEvidence(state, usage, sourceFile),
+      );
     if (cluster && !commitSensitiveOverride) {
       finding.group = {
         id: cluster.id,
         kind: "state-cluster",
-        members: cluster.members.map(member => member.valueName),
+        members: cluster.members.map((member) => member.valueName),
         primary: state === cluster.primary,
       };
     }
@@ -803,21 +802,26 @@ function analyzeParsedSource(
       findingFor(call, sourceFile, fileName, "useState", null, {
         action: "review-state",
         confidence: "probable",
-        message: "Review this React state; its binding shape is not a standard `[value, setter]` tuple.",
-      })
+        message:
+          "Review this React state; its binding shape is not a standard `[value, setter]` tuple.",
+      }),
     );
   }
 
   for (const effect of effects) {
-    const classification = !nonProductionHarness && effectDrafts.effects.has(effect)
-      ? {
-          action: "review-effect" as const,
-          confidence: "probable" as const,
-          derivedState: null,
-          message: "Preserve this React synchronization effect and its dependency timing; when migrating the paired draft, replace only its setter calls with one atomic observable assignment.",
-        }
-      : effectClassifications.get(effect);
-    if (!classification) continue;
+    const classification =
+      !nonProductionHarness && effectDrafts.effects.has(effect)
+        ? {
+            action: "review-effect" as const,
+            confidence: "probable" as const,
+            derivedState: null,
+            message:
+              "Preserve this React synchronization effect and its dependency timing; when migrating the paired draft, replace only its setter calls with one atomic observable assignment.",
+          }
+        : effectClassifications.get(effect);
+    if (!classification) {
+      continue;
+    }
     const scope = effect.owner ? effectStateScopes.get(effect.owner) : undefined;
     findings.push(
       findingFor(
@@ -827,8 +831,8 @@ function analyzeParsedSource(
         "useEffect",
         null,
         classification,
-        effectEvidence(effect, sourceFile, scope?.bySetter ?? EMPTY_STATE_CANDIDATES)
-      )
+        effectEvidence(effect, sourceFile, scope?.bySetter ?? EMPTY_STATE_CANDIDATES),
+      ),
     );
   }
 
@@ -836,7 +840,7 @@ function analyzeParsedSource(
     (left, right) =>
       left.location.line - right.location.line ||
       left.location.column - right.location.column ||
-      left.hook.localeCompare(right.hook)
+      left.hook.localeCompare(right.hook),
   );
 }
 
@@ -850,15 +854,28 @@ function commitSensitiveStateClassification(state: StateCandidate): ClassifiedSt
 
 function stateCandidate(call: ts.CallExpression): StateCandidate | null {
   const declaration = call.parent;
-  if (!ts.isVariableDeclaration(declaration) || declaration.initializer !== call) return null;
-  if (!ts.isArrayBindingPattern(declaration.name)) return null;
-  const value = declaration.name.elements[0];
-  const setter = declaration.name.elements[1];
-  if (!value || ts.isOmittedExpression(value) || !ts.isIdentifier(value.name)) return null;
-  if (setter && !ts.isOmittedExpression(setter) && !ts.isIdentifier(setter.name)) return null;
+  if (!ts.isVariableDeclaration(declaration) || declaration.initializer !== call) {
+    return null;
+  }
+  if (!ts.isArrayBindingPattern(declaration.name)) {
+    return null;
+  }
+  const value = declaration.name.elements[0],
+    setter = declaration.name.elements[1];
+  if (!value || ts.isOmittedExpression(value) || !ts.isIdentifier(value.name)) {
+    return null;
+  }
+  if (setter && !ts.isOmittedExpression(setter) && !ts.isIdentifier(setter.name)) {
+    return null;
+  }
   const owner = findAncestor(call, isRuntimeFunctionLike);
-  if (!owner) return null;
-  const setterName = setter && !ts.isOmittedExpression(setter) && ts.isIdentifier(setter.name) ? setter.name.text : null;
+  if (!owner) {
+    return null;
+  }
+  const setterName =
+    setter && !ts.isOmittedExpression(setter) && ts.isIdentifier(setter.name)
+      ? setter.name.text
+      : null;
   return {
     call,
     owner,
@@ -868,15 +885,14 @@ function stateCandidate(call: ts.CallExpression): StateCandidate | null {
 }
 
 function effectCandidate(call: ts.CallExpression, imports: HookImports): EffectCandidate {
-  const callbackArg = call.arguments[0];
-  const dependenciesArg = call.arguments[1];
-  const owner = findAncestor(call, isRuntimeFunctionLike);
+  const callbackArg = call.arguments[0],
+    dependenciesArg = call.arguments[1],
+    owner = findAncestor(call, isRuntimeFunctionLike);
   return {
     call,
-    callback: callbackArg
-      ? resolveEffectCallback(callbackArg, owner, imports)
-      : null,
-    dependencies: dependenciesArg && ts.isArrayLiteralExpression(dependenciesArg) ? dependenciesArg : null,
+    callback: callbackArg ? resolveEffectCallback(callbackArg, owner, imports) : null,
+    dependencies:
+      dependenciesArg && ts.isArrayLiteralExpression(dependenciesArg) ? dependenciesArg : null,
     owner,
   };
 }
@@ -884,11 +900,15 @@ function effectCandidate(call: ts.CallExpression, imports: HookImports): EffectC
 function resolveEffectCallback(
   expression: ts.Expression,
   owner: RuntimeFunctionLike | null,
-  imports: HookImports
+  imports: HookImports,
 ): ts.ArrowFunction | ts.FunctionExpression | null {
   const callback = unwrapTransparentExpression(expression);
-  if (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) return callback;
-  if (!owner?.body || !ts.isIdentifier(callback)) return null;
+  if (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) {
+    return callback;
+  }
+  if (!owner?.body || !ts.isIdentifier(callback)) {
+    return null;
+  }
 
   const declaration = uniqueVariableDeclaration(owner.body, callback.text);
   if (
@@ -900,7 +920,9 @@ function resolveEffectCallback(
     return null;
   }
   const initializer = unwrapTransparentExpression(declaration.initializer);
-  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) return initializer;
+  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+    return initializer;
+  }
   if (
     !ts.isCallExpression(initializer) ||
     !isImportedHookCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback") ||
@@ -910,24 +932,27 @@ function resolveEffectCallback(
   }
   const hookRoot = ts.isIdentifier(initializer.expression)
     ? initializer.expression
-    : ts.isPropertyAccessExpression(initializer.expression) && ts.isIdentifier(initializer.expression.expression)
+    : ts.isPropertyAccessExpression(initializer.expression) &&
+        ts.isIdentifier(initializer.expression.expression)
       ? initializer.expression.expression
       : null;
-  if (!hookRoot || bindingDeclarationCount(owner, hookRoot.text) !== 0) return null;
+  if (!hookRoot || bindingDeclarationCount(owner, hookRoot.text) !== 0) {
+    return null;
+  }
   const inner = initializer.arguments[0];
   return inner && (ts.isArrowFunction(inner) || ts.isFunctionExpression(inner)) ? inner : null;
 }
 
-const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
-const PURE_MATH_METHODS: ReadonlySet<string> = new Set(["abs", "max", "min"]);
-const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
-const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
-const EMPTY_STATE_CANDIDATES: ReadonlyMap<string, StateCandidate> = new Map();
-const EMPTY_STATE_USAGES: ReadonlyMap<string, StateUsage> = new Map();
+const EMPTY_BINDINGS: ReadonlySet<string> = new Set(),
+  PURE_MATH_METHODS: ReadonlySet<string> = new Set(["abs", "max", "min"]),
+  EMPTY_NODES: ReadonlySet<ts.Node> = new Set(),
+  EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set(),
+  EMPTY_STATE_CANDIDATES: ReadonlyMap<string, StateCandidate> = new Map(),
+  EMPTY_STATE_USAGES: ReadonlyMap<string, StateUsage> = new Map();
 
 function collectEffectStateScopes(
   states: readonly StateCandidate[],
-  usageByState: ReadonlyMap<StateCandidate, StateUsage>
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
 ): ReadonlyMap<RuntimeFunctionLike, EffectStateScope> {
   const scopes = new Map<RuntimeFunctionLike, EffectStateScope>();
   for (const state of states) {
@@ -937,24 +962,37 @@ function collectEffectStateScopes(
       scopes.set(state.owner, scope);
     }
     scope.byValue.set(state.valueName, state);
-    if (!state.setterName) continue;
+    if (!state.setterName) {
+      continue;
+    }
     scope.bySetter.set(state.setterName, state);
     const usage = usageByState.get(state);
-    if (usage) scope.usageBySetter.set(state.setterName, usage);
+    if (usage) {
+      scope.usageBySetter.set(state.setterName, usage);
+    }
   }
   return scopes;
 }
 
 function collectUseValueBindings(
   sourceFile: ts.SourceFile,
-  imports: HookImports
+  imports: HookImports,
 ): ReadonlyMap<RuntimeFunctionLike, ReadonlySet<string>> {
   const bindings = new Map<RuntimeFunctionLike, Set<string>>();
-  visit(sourceFile, node => {
-    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) return;
-    if (!ts.isCallExpression(node.initializer) || !isLocalHookCall(node.initializer, imports.useValue)) return;
+  visit(sourceFile, (node) => {
+    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) {
+      return;
+    }
+    if (
+      !ts.isCallExpression(node.initializer) ||
+      !isLocalHookCall(node.initializer, imports.useValue)
+    ) {
+      return;
+    }
     const owner = findAncestor(node, isRuntimeFunctionLike);
-    if (!owner || bindingDeclarationCount(owner, node.name.text) !== 1) return;
+    if (!owner || bindingDeclarationCount(owner, node.name.text) !== 1) {
+      return;
+    }
     const ownerBindings = bindings.get(owner) ?? new Set<string>();
     ownerBindings.add(node.name.text);
     bindings.set(owner, ownerBindings);
@@ -966,23 +1004,24 @@ const OBSERVABLE_SUBSCRIPTION_HOOKS = new Set(["useValue", "useSelector", "use$"
 
 function collectObservableSubscriptionCounts(
   sourceFile: ts.SourceFile,
-  imports: HookImports
+  imports: HookImports,
 ): ReadonlyMap<RuntimeFunctionLike, number> {
   const counts = new Map<RuntimeFunctionLike, number>();
-  visit(sourceFile, node => {
-    if (!ts.isCallExpression(node) || !isObservableSubscriptionHookCall(node, imports)) return;
+  visit(sourceFile, (node) => {
+    if (!ts.isCallExpression(node) || !isObservableSubscriptionHookCall(node, imports)) {
+      return;
+    }
     const owner = findAncestor(node, isRuntimeFunctionLike);
-    if (!owner) return;
+    if (!owner) {
+      return;
+    }
     counts.set(owner, (counts.get(owner) ?? 0) + 1);
   });
   return counts;
 }
 
-function isObservableSubscriptionHookCall(
-  call: ts.CallExpression,
-  imports: HookImports
-): boolean {
-  const expression = call.expression;
+function isObservableSubscriptionHookCall(call: ts.CallExpression, imports: HookImports): boolean {
+  const { expression } = call;
   if (ts.isIdentifier(expression)) {
     return imports.useValue.has(expression.text) || imports.legacyUseValue.has(expression.text);
   }
@@ -996,17 +1035,30 @@ function isObservableSubscriptionHookCall(
 
 function collectStableUseObservableBindings(
   sourceFile: ts.SourceFile,
-  imports: HookImports
+  imports: HookImports,
 ): ReadonlyMap<RuntimeFunctionLike, ReadonlySet<string>> {
   const bindings = new Map<RuntimeFunctionLike, Set<string>>();
-  visit(sourceFile, node => {
-    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) return;
-    if (!ts.isCallExpression(node.initializer) || !isLocalHookCall(node.initializer, imports.useObservable)) return;
+  visit(sourceFile, (node) => {
+    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) {
+      return;
+    }
+    if (
+      !ts.isCallExpression(node.initializer) ||
+      !isLocalHookCall(node.initializer, imports.useObservable)
+    ) {
+      return;
+    }
     const declarationList = node.parent;
-    if (!ts.isVariableDeclarationList(declarationList)) return;
-    if ((declarationList.flags & ts.NodeFlags.Const) === 0) return;
+    if (!ts.isVariableDeclarationList(declarationList)) {
+      return;
+    }
+    if ((declarationList.flags & ts.NodeFlags.Const) === 0) {
+      return;
+    }
     const owner = findAncestor(node, isRuntimeFunctionLike);
-    if (!owner || bindingDeclarationCount(owner, node.name.text) !== 1) return;
+    if (!owner || bindingDeclarationCount(owner, node.name.text) !== 1) {
+      return;
+    }
     const ownerBindings = bindings.get(owner) ?? new Set<string>();
     ownerBindings.add(node.name.text);
     bindings.set(owner, ownerBindings);
@@ -1014,17 +1066,22 @@ function collectStableUseObservableBindings(
   return bindings;
 }
 
-
 function collectModuleScopeBindings(sourceFile: ts.SourceFile): ReadonlySet<string> {
   const bindings = new Set<string>();
   for (const statement of sourceFile.statements) {
     if (ts.isImportDeclaration(statement)) {
       const clause = statement.importClause;
-      if (clause?.name) bindings.add(clause.name.text);
+      if (clause?.name) {
+        bindings.add(clause.name.text);
+      }
       const named = clause?.namedBindings;
-      if (named && ts.isNamespaceImport(named)) bindings.add(named.name.text);
+      if (named && ts.isNamespaceImport(named)) {
+        bindings.add(named.name.text);
+      }
       if (named && ts.isNamedImports(named)) {
-        for (const element of named.elements) bindings.add(element.name.text);
+        for (const element of named.elements) {
+          bindings.add(element.name.text);
+        }
       }
     } else if (ts.isFunctionDeclaration(statement) && statement.name) {
       bindings.add(statement.name.text);
@@ -1040,10 +1097,10 @@ function collectModuleScopeBindings(sourceFile: ts.SourceFile): ReadonlySet<stri
 }
 
 function collectReactiveMutationBindings(
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ReadonlyMap<RuntimeFunctionLike, ReadonlySet<string>> {
   const result = new Map<RuntimeFunctionLike, Set<string>>();
-  visit(sourceFile, node => {
+  visit(sourceFile, (node) => {
     if (
       !ts.isVariableDeclaration(node) ||
       !node.initializer ||
@@ -1054,7 +1111,9 @@ function collectReactiveMutationBindings(
       return;
     }
     const owner = findAncestor(node, isRuntimeFunctionLike);
-    if (!owner) return;
+    if (!owner) {
+      return;
+    }
     const bindings = result.get(owner) ?? new Set<string>();
     if (ts.isIdentifier(node.name)) {
       bindings.add(`${node.name.text}.mutate`);
@@ -1062,11 +1121,17 @@ function collectReactiveMutationBindings(
       result.set(owner, bindings);
       return;
     }
-    if (!ts.isObjectBindingPattern(node.name)) return;
+    if (!ts.isObjectBindingPattern(node.name)) {
+      return;
+    }
     for (const element of node.name.elements) {
-      if (!ts.isIdentifier(element.name)) continue;
+      if (!ts.isIdentifier(element.name)) {
+        continue;
+      }
       const property = element.propertyName?.getText() ?? element.name.text;
-      if (property !== "mutate" && property !== "mutateAsync") continue;
+      if (property !== "mutate" && property !== "mutateAsync") {
+        continue;
+      }
       bindings.add(element.name.text);
       result.set(owner, bindings);
     }
@@ -1077,39 +1142,46 @@ function collectReactiveMutationBindings(
 function collectStateUsage(
   state: StateCandidate,
   effectNodes: ReadonlySet<ts.Node>,
-  imports: HookImports
+  imports: HookImports,
 ): StateUsage {
   const usage: StateUsage = {
-    directRenderNodes: [],
     deferredReads: 0,
+    directRenderNodes: [],
     effectReads: 0,
     effectWrites: 0,
     escaped: false,
     eventReads: 0,
     jsxTargets: new Set<string>(),
-    localRenderReads: 0,
     legendReactionWrites: 0,
+    localRenderReads: 0,
     repeatedTransport: false,
     repeatedValueTransport: false,
-    setterTargets: new Set<string>(),
-    setterCalls: 0,
     setterCallNodes: [],
+    setterCalls: 0,
     setterReferences: 0,
+    setterTargets: new Set<string>(),
     setterTransportSites: new Set<number>(),
     setterUsesPreviousValue: false,
     shadowed: false,
     transportedOccurrences: 0,
     unstableTransport: false,
-    valueTransportSites: new Set<number>(),
-    valueTargets: new Set<string>(),
     valueProps: new Map<string, Set<string>>(),
+    valueTargets: new Set<string>(),
+    valueTransportSites: new Set<number>(),
   };
 
   for (const node of stateBindingIdentifiers(state)) {
-    if (isNonValueIdentifier(node)) continue;
+    if (isNonValueIdentifier(node)) {
+      continue;
+    }
     if (isDeclarationName(node)) {
-      if (node.text === state.valueName || (state.setterName !== null && node.text === state.setterName)) {
-        if (!isOriginalStateBinding(node, state.call)) usage.shadowed = true;
+      if (
+        node.text === state.valueName ||
+        (state.setterName !== null && node.text === state.setterName)
+      ) {
+        if (!isOriginalStateBinding(node, state.call)) {
+          usage.shadowed = true;
+        }
       }
       continue;
     }
@@ -1123,8 +1195,8 @@ function collectStateUsage(
     }
   }
 
-  const callableReads = collectCommandOnlyCallableReads(state, effectNodes);
-  const renderCallableSites = callableReads.renderSites;
+  const callableReads = collectCommandOnlyCallableReads(state, effectNodes),
+    renderCallableSites = callableReads.renderSites;
   if (renderCallableSites.length > 0) {
     usage.localRenderReads += renderCallableSites.length;
     usage.directRenderNodes.push(...renderCallableSites);
@@ -1138,17 +1210,23 @@ function collectStateUsage(
 
 function stateBindingIdentifiers(state: StateCandidate): readonly ts.Identifier[] {
   const values = identifiersNamed(state.owner.body, state.valueName);
-  if (!state.setterName || state.setterName === state.valueName) return values;
+  if (!state.setterName || state.setterName === state.valueName) {
+    return values;
+  }
   const setters = identifiersNamed(state.owner.body, state.setterName);
-  if (values.length === 0) return setters;
-  if (setters.length === 0) return values;
+  if (values.length === 0) {
+    return setters;
+  }
+  if (setters.length === 0) {
+    return values;
+  }
 
   const ordered: ts.Identifier[] = [];
-  let valueIndex = 0;
-  let setterIndex = 0;
+  let valueIndex = 0,
+    setterIndex = 0;
   while (valueIndex < values.length && setterIndex < setters.length) {
-    const value = values[valueIndex]!;
-    const setter = setters[setterIndex]!;
+    const value = values[valueIndex]!,
+      setter = setters[setterIndex]!;
     if (value.pos < setter.pos) {
       ordered.push(value);
       valueIndex += 1;
@@ -1170,21 +1248,23 @@ function addMapSet<Key, Value>(map: Map<Key, Set<Value>>, key: Key, value: Value
 function siblingProducerConsumerCut(
   state: StateCandidate,
   usage: StateUsage,
-  effectNodes: ReadonlySet<ts.Node>
+  effectNodes: ReadonlySet<ts.Node>,
 ): SiblingRenderCut | null {
-  const localConsumer = usage.transportedOccurrences === 0 &&
-    usage.localRenderReads > 0 &&
-    usage.localRenderReads === usage.directRenderNodes.length;
-  const transportedConsumer = usage.localRenderReads === 0 &&
-    usage.valueTransportSites.size === 1 &&
-    usage.valueTargets.size === 1 &&
-    usage.setterTransportSites.size === 1 &&
-    usage.setterTargets.size === 1 &&
-    usage.setterCalls === 0 &&
-    usage.setterReferences === 1 &&
-    usage.transportedOccurrences === 2 &&
-    !usage.repeatedTransport &&
-    !usage.unstableTransport;
+  const localConsumer =
+      usage.transportedOccurrences === 0 &&
+      usage.localRenderReads > 0 &&
+      usage.localRenderReads === usage.directRenderNodes.length,
+    transportedConsumer =
+      usage.localRenderReads === 0 &&
+      usage.valueTransportSites.size === 1 &&
+      usage.valueTargets.size === 1 &&
+      usage.setterTransportSites.size === 1 &&
+      usage.setterTargets.size === 1 &&
+      usage.setterCalls === 0 &&
+      usage.setterReferences === 1 &&
+      usage.transportedOccurrences === 2 &&
+      !usage.repeatedTransport &&
+      !usage.unstableTransport;
   if (
     !state.setterName ||
     isCustomHookOwner(state.owner) ||
@@ -1201,24 +1281,30 @@ function siblingProducerConsumerCut(
   }
 
   const consumer = siblingProjectionConsumer(state, usage);
-  if (!consumer) return null;
-  const commandCalls = usage.setterCallNodes.filter(call => !hasAncestorInSet(call, effectNodes));
-  const commandProducers = commandCalls.map(call => jsxProducerForSetterCall(call, state.owner));
-  const producer = commandCalls.length > 0
-    ? commandProducers[0]
-    : directTransportProducer(usage, state.owner);
+  if (!consumer) {
+    return null;
+  }
+  const commandCalls = usage.setterCallNodes.filter((call) => !hasAncestorInSet(call, effectNodes)),
+    commandProducers = commandCalls.map((call) => jsxProducerForSetterCall(call, state.owner)),
+    producer =
+      commandCalls.length > 0 ? commandProducers[0] : directTransportProducer(usage, state.owner);
   if (
     !producer ||
-    commandProducers.some(candidate => candidate !== producer) ||
-    commandCalls.some(call => !mutationRegionOnlyCallsStateSetters(
-      nearestMutationFunction(call, state.owner),
-      new Set([state.setterName!])
-    ))
+    commandProducers.some((candidate) => candidate !== producer) ||
+    commandCalls.some(
+      (call) =>
+        !mutationRegionOnlyCallsStateSetters(
+          nearestMutationFunction(call, state.owner),
+          new Set([state.setterName!]),
+        ),
+    )
   ) {
     return null;
   }
 
-  const producerSubtree: JsxSubtreeNode = ts.isJsxOpeningElement(producer) ? producer.parent : producer;
+  const producerSubtree: JsxSubtreeNode = ts.isJsxOpeningElement(producer)
+    ? producer.parent
+    : producer;
   if (
     producerSubtree === consumer ||
     nodeWithin(producerSubtree, consumer) ||
@@ -1233,40 +1319,46 @@ function siblingProducerConsumerCut(
 
   return {
     consumerLabel: jsxSubtreeLabel(consumer),
-    consumerLine: consumer.getSourceFile().getLineAndCharacterOfPosition(consumer.getStart()).line + 1,
+    consumerLine:
+      consumer.getSourceFile().getLineAndCharacterOfPosition(consumer.getStart()).line + 1,
   };
 }
 
 function siblingProjectionConsumer(
   state: StateCandidate,
-  usage: StateUsage
+  usage: StateUsage,
 ): JsxSubtreeNode | null {
   if (usage.localRenderReads === 0) {
-    const callSite = directUniqueReturnCallSite(usage, state.owner);
-    const opening = callSite?.opening;
-    if (!opening) return null;
+    const callSite = directUniqueReturnCallSite(usage, state.owner),
+      opening = callSite?.opening;
+    if (!opening) {
+      return null;
+    }
     return ts.isJsxOpeningElement(opening) ? opening.parent : opening;
   }
   const references = oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes);
 
   if (
     !references ||
-    references.some(reference =>
-      (isRenderGateReference(reference, state.owner) &&
-        !findAncestorUntil(reference, ts.isJsxAttribute, state.owner)) ||
-      !findAncestorUntil(reference, isJsxNode, state.owner) ||
-      (!isSafeJsxProjectionReference(reference, state.owner, new Set(["cn"])) &&
-        !isSnapshotFallbackReference(reference, state.owner))
+    references.some(
+      (reference) =>
+        (isRenderGateReference(reference, state.owner) &&
+          !findAncestorUntil(reference, ts.isJsxAttribute, state.owner)) ||
+        !findAncestorUntil(reference, isJsxNode, state.owner) ||
+        (!isSafeJsxProjectionReference(reference, state.owner, new Set(["cn"])) &&
+          !isSnapshotFallbackReference(reference, state.owner)),
     )
   ) {
     return null;
   }
 
-  const repeated = references.map(reference => nearestRepeatedRenderCall(reference, state.owner));
-  const repeatedCall = repeated[0];
-  if (repeated.some(call => call !== repeatedCall)) return null;
+  const repeated = references.map((reference) => nearestRepeatedRenderCall(reference, state.owner)),
+    repeatedCall = repeated[0];
+  if (repeated.some((call) => call !== repeatedCall)) {
+    return null;
+  }
   const consumer = repeatedCall
-    ? jsxSubtreeAncestors(repeatedCall, state.owner)[0] ?? null
+    ? (jsxSubtreeAncestors(repeatedCall, state.owner)[0] ?? null)
     : lowestCommonJsxSubtree(references, state.owner);
   return consumer && jsxElementCountIn(consumer) / jsxElementCount(state.owner) <= 0.4
     ? consumer
@@ -1274,13 +1366,9 @@ function siblingProjectionConsumer(
 }
 
 function isSnapshotFallbackReference(reference: ts.Identifier, boundary: ts.Node): boolean {
-  const attribute = findAncestorUntil(reference, ts.isJsxAttribute, boundary);
-  const initializer = attribute?.initializer;
-  if (
-    !initializer ||
-    !ts.isJsxExpression(initializer) ||
-    !initializer.expression
-  ) {
+  const attribute = findAncestorUntil(reference, ts.isJsxAttribute, boundary),
+    initializer = attribute?.initializer;
+  if (!initializer || !ts.isJsxExpression(initializer) || !initializer.expression) {
     return false;
   }
   const expression = unwrapTransparentExpression(initializer.expression);
@@ -1292,22 +1380,25 @@ function isSnapshotFallbackReference(reference: ts.Identifier, boundary: ts.Node
     return false;
   }
   let readsStateAgain = false;
-  visit(expression.right, node => {
-    if (ts.isIdentifier(node) && node.text === reference.text) readsStateAgain = true;
+  visit(expression.right, (node) => {
+    if (ts.isIdentifier(node) && node.text === reference.text) {
+      readsStateAgain = true;
+    }
   });
   return !readsStateAgain;
 }
 
-
 function directTransportProducer(
   usage: StateUsage,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  const site = [...usage.setterTransportSites][0];
-  const valueCallSite = directUniqueReturnCallSite(usage, owner);
-  if (site === undefined || !valueCallSite) return null;
-  const openings: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
-  visitSkippingNestedRuntimeFunctions(valueCallSite.returned, node => {
+  const site = [...usage.setterTransportSites][0],
+    valueCallSite = directUniqueReturnCallSite(usage, owner);
+  if (site === undefined || !valueCallSite) {
+    return null;
+  }
+  const openings: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
+  visitSkippingNestedRuntimeFunctions(valueCallSite.returned, (node) => {
     if (
       (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
       node.getStart() === site
@@ -1320,7 +1411,7 @@ function directTransportProducer(
 
 function jsxProducerForSetterCall(
   call: ts.CallExpression,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
   const directAttribute = findAncestorUntil(call, ts.isJsxAttribute, owner);
   if (directAttribute && /^on[A-Z]/.test(directAttribute.name.getText())) {
@@ -1337,10 +1428,12 @@ function jsxProducerForSetterCall(
     return null;
   }
   const name = localCallbackBindingName(callback);
-  if (!name || bindingDeclarationCount(owner, name) !== 1) return null;
-  const openings: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
+  if (!name || bindingDeclarationCount(owner, name) !== 1) {
+    return null;
+  }
+  const openings: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
   let unsafeReference = false;
-  visit(owner.body, node => {
+  visit(owner.body, (node) => {
     if (
       unsafeReference ||
       !ts.isIdentifier(node) ||
@@ -1350,22 +1443,28 @@ function jsxProducerForSetterCall(
     ) {
       return;
     }
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
-    const opening = attribute &&
-      /^on[A-Z]/.test(attribute.name.getText()) &&
-      isDirectJsxAttributeExpression(attribute, node)
-      ? jsxOpeningForAttribute(attribute)
-      : null;
-    if (opening) openings.push(opening);
-    else unsafeReference = true;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner),
+      opening =
+        attribute &&
+        /^on[A-Z]/.test(attribute.name.getText()) &&
+        isDirectJsxAttributeExpression(attribute, node)
+          ? jsxOpeningForAttribute(attribute)
+          : null;
+    if (opening) {
+      openings.push(opening);
+    } else {
+      unsafeReference = true;
+    }
   });
   return !unsafeReference && openings.length === 1 ? openings[0]! : null;
 }
 
 function localCallbackBindingName(
-  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
 ): string | null {
-  if (ts.isFunctionDeclaration(callback)) return callback.name?.text ?? null;
+  if (ts.isFunctionDeclaration(callback)) {
+    return callback.name?.text ?? null;
+  }
   if (
     ts.isVariableDeclaration(callback.parent) &&
     callback.parent.initializer === callback &&
@@ -1386,15 +1485,14 @@ function localCallbackBindingName(
 function sourceProvenDirectEventCallbacks(
   owner: RuntimeFunctionLike,
   imports: HookImports,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): ReadonlySet<RuntimeFunctionLike> {
   const callbacks = new Set<RuntimeFunctionLike>();
-  if (!owner.body) return callbacks;
-  visitDirectOwnerNodes(owner.body, node => {
-    if (
-      node !== owner &&
-      (ts.isArrowFunction(node) || ts.isFunctionExpression(node))
-    ) {
+  if (!owner.body) {
+    return callbacks;
+  }
+  visitDirectOwnerNodes(owner.body, (node) => {
+    if (node !== owner && (ts.isArrowFunction(node) || ts.isFunctionExpression(node))) {
       const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
       if (
         attribute?.initializer &&
@@ -1406,29 +1504,31 @@ function sourceProvenDirectEventCallbacks(
         callbacks.add(node);
       }
     }
-    const binding = ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
-      ? node.name.text
-      : ts.isFunctionDeclaration(node) && node.name
+    const binding =
+      ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)
         ? node.name.text
-        : null;
-    if (!binding) return;
+        : ts.isFunctionDeclaration(node) && node.name
+          ? node.name.text
+          : null;
+    if (!binding) {
+      return;
+    }
     const callback = localCallbackByBinding(owner, binding, imports);
-    if (!callback) return;
+    if (!callback) {
+      return;
+    }
     const publications = jsxComponentPublications(owner, binding);
     if (
       publications.length > 0 &&
-      publications.every(publication =>
-        (
-          /^on[A-Z]/.test(publication.prop) &&
-          (publication.intrinsic ||
-            childContracts?.frameworkEventComponent(publication.component) === true)
-        ) ||
-        (
+      publications.every(
+        (publication) =>
+          (/^on[A-Z]/.test(publication.prop) &&
+            (publication.intrinsic ||
+              childContracts?.frameworkEventComponent(publication.component) === true)) ||
           childContracts?.componentCallbackPropIsDeferred(
             publication.component,
-            publication.prop
-          ) === true
-        )
+            publication.prop,
+          ) === true,
       )
     ) {
       callbacks.add(callback);
@@ -1440,11 +1540,13 @@ function sourceProvenDirectEventCallbacks(
 function sourceProvenOptionEventCallbacks(
   owner: RuntimeFunctionLike,
   imports: HookImports,
-  childContracts: ChildContractResolver
+  childContracts: ChildContractResolver,
 ): ReadonlySet<RuntimeFunctionLike> {
   const callbacks = new Set<RuntimeFunctionLike>();
-  if (!owner.body) return callbacks;
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+  if (!owner.body) {
+    return callbacks;
+  }
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
     if (
       !ts.isVariableDeclaration(node) ||
       !ts.isIdentifier(node.name) ||
@@ -1454,37 +1556,37 @@ function sourceProvenOptionEventCallbacks(
       return;
     }
     const memo = memoizedObjectLiteral(node.initializer, imports);
-    if (!memo || memo.object.properties.some(ts.isSpreadAssignment)) return;
-    const publications = jsxComponentPublications(
-      owner,
-      node.name.text
-    );
-    if (publications.length === 0) return;
+    if (!memo || memo.object.properties.some(ts.isSpreadAssignment)) {
+      return;
+    }
+    const publications = jsxComponentPublications(owner, node.name.text);
+    if (publications.length === 0) {
+      return;
+    }
     for (const property of memo.object.properties) {
-      if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) continue;
-      const propertyName = staticPropertyName(property.name);
-      const callbackName = ts.isShorthandPropertyAssignment(property)
-        ? property.name
-        : unwrapTransparentExpression(property.initializer);
-      if (!propertyName || !ts.isIdentifier(callbackName)) continue;
+      if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) {
+        continue;
+      }
+      const propertyName = staticPropertyName(property.name),
+        callbackName = ts.isShorthandPropertyAssignment(property)
+          ? property.name
+          : unwrapTransparentExpression(property.initializer);
+      if (!propertyName || !ts.isIdentifier(callbackName)) {
+        continue;
+      }
       const callback = localCallbackByBinding(owner, callbackName.text, imports);
       if (
         !callback ||
-        !memo.dependencies.elements.some(element =>
-          ts.isIdentifier(element) && element.text === callbackName.text
+        !memo.dependencies.elements.some(
+          (element) => ts.isIdentifier(element) && element.text === callbackName.text,
         ) ||
-        !callbackPublishedOnlyThroughMemo(
-          owner,
-          callbackName.text,
-          property,
-          memo.call
-        ) ||
-        !publications.every(publication =>
+        !callbackPublishedOnlyThroughMemo(owner, callbackName.text, property, memo.call) ||
+        !publications.every((publication) =>
           childContracts.componentPropCallbackIsDeferred(
             publication.component,
             publication.prop,
-            propertyName
-          )
+            propertyName,
+          ),
         )
       ) {
         continue;
@@ -1503,7 +1605,7 @@ interface MemoizedObjectLiteral {
 
 function memoizedObjectLiteral(
   initializer: ts.Expression,
-  imports: HookImports
+  imports: HookImports,
 ): MemoizedObjectLiteral | null {
   const call = unwrapTransparentExpression(initializer);
   if (
@@ -1513,8 +1615,8 @@ function memoizedObjectLiteral(
   ) {
     return null;
   }
-  const factory = call.arguments[0];
-  const dependencies = call.arguments[1];
+  const factory = call.arguments[0],
+    dependencies = call.arguments[1];
   if (
     !factory ||
     (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
@@ -1525,12 +1627,14 @@ function memoizedObjectLiteral(
   }
   let expression: ts.Expression | null = ts.isBlock(factory.body)
     ? factory.body.statements.length === 1 &&
-        ts.isReturnStatement(factory.body.statements[0]!) &&
-        factory.body.statements[0]!.expression
+      ts.isReturnStatement(factory.body.statements[0]!) &&
+      factory.body.statements[0]!.expression
       ? factory.body.statements[0]!.expression
       : null
     : factory.body;
-  if (!expression) return null;
+  if (!expression) {
+    return null;
+  }
   expression = unwrapTransparentExpression(expression);
   return ts.isObjectLiteralExpression(expression)
     ? { call, dependencies, object: expression }
@@ -1545,20 +1649,20 @@ interface ComponentPublication {
 
 function jsxComponentPublications(
   owner: RuntimeFunctionLike,
-  binding: string
+  binding: string,
 ): readonly ComponentPublication[] {
   const publications: ComponentPublication[] = [];
   let safe = true;
   for (const node of identifiersNamed(owner.body, binding)) {
-    if (!safe) break;
-    if (isDeclarationName(node) || isNonValueIdentifier(node)) continue;
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
-    const component = attribute ? jsxTargetName(attribute) : null;
-    if (
-      !attribute ||
-      !component ||
-      !isJsxEventHandlerReference(attribute, node)
-    ) {
+    if (!safe) {
+      break;
+    }
+    if (isDeclarationName(node) || isNonValueIdentifier(node)) {
+      continue;
+    }
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner),
+      component = attribute ? jsxTargetName(attribute) : null;
+    if (!attribute || !component || !isJsxEventHandlerReference(attribute, node)) {
       safe = false;
       continue;
     }
@@ -1575,20 +1679,26 @@ function callbackPublishedOnlyThroughMemo(
   owner: RuntimeFunctionLike,
   binding: string,
   property: ts.PropertyAssignment | ts.ShorthandPropertyAssignment,
-  memoCall: ts.CallExpression
+  memoCall: ts.CallExpression,
 ): boolean {
-  let propertyReferences = 0;
-  let safe = true;
+  let propertyReferences = 0,
+    safe = true;
   for (const node of identifiersNamed(owner.body, binding)) {
-    if (!safe) break;
-    if (isDeclarationName(node) || isNonValueIdentifier(node)) continue;
+    if (!safe) {
+      break;
+    }
+    if (isDeclarationName(node) || isNonValueIdentifier(node)) {
+      continue;
+    }
     if (nodeWithin(node, property)) {
       propertyReferences += 1;
       continue;
     }
     if (isHookDependencyReference(node, new Set(["useMemo"]))) {
       const call = findAncestorUntil(node, ts.isCallExpression, owner);
-      if (call === memoCall) continue;
+      if (call === memoCall) {
+        continue;
+      }
     }
     safe = false;
   }
@@ -1598,13 +1708,15 @@ function callbackPublishedOnlyThroughMemo(
 function localCallbackByBinding(
   owner: RuntimeFunctionLike,
   binding: string,
-  imports: HookImports
+  imports: HookImports,
 ): RuntimeFunctionLike | null {
-  if (!owner.body || bindingDeclarationCount(owner, binding) !== 1) return null;
+  if (!owner.body || bindingDeclarationCount(owner, binding) !== 1) {
+    return null;
+  }
   let callbacks = localCallbacksByOwner.get(owner);
   if (!callbacks) {
     const collected = new Map<string, RuntimeFunctionLike>();
-    visitDirectOwnerNodes(owner.body, node => {
+    visitDirectOwnerNodes(owner.body, (node) => {
       if (ts.isFunctionDeclaration(node) && node.name) {
         collected.set(node.name.text, node);
         return;
@@ -1617,10 +1729,11 @@ function localCallbackByBinding(
         collected.set(node.name.text, initializer);
         return;
       }
-      const callback = ts.isCallExpression(initializer) &&
+      const callback =
+        ts.isCallExpression(initializer) &&
         isImportedHookCall(initializer, imports.useCallback, imports.reactNamespaces, "useCallback")
-        ? initializer.arguments[0]
-        : null;
+          ? initializer.arguments[0]
+          : null;
       if (callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {
         collected.set(node.name.text, callback);
       }
@@ -1636,18 +1749,17 @@ const localCallbacksByOwner = new WeakMap<
   ReadonlyMap<string, RuntimeFunctionLike>
 >();
 
-function visitDirectOwnerNodes(
-  node: ts.Node,
-  callback: (node: ts.Node) => void
-): void {
-  node.forEachChild(child => {
+function visitDirectOwnerNodes(node: ts.Node, callback: (node: ts.Node) => void): void {
+  node.forEachChild((child) => {
     callback(child);
-    if (!isRuntimeFunctionLike(child)) visitDirectOwnerNodes(child, callback);
+    if (!isRuntimeFunctionLike(child)) {
+      visitDirectOwnerNodes(child, callback);
+    }
   });
 }
 
 function jsxOpeningForAttribute(
-  attribute: ts.JsxAttribute
+  attribute: ts.JsxAttribute,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
   const opening = attribute.parent.parent;
   return ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening) ? opening : null;
@@ -1656,7 +1768,7 @@ function jsxOpeningForAttribute(
 function shareUniqueOwnerReturn(
   left: ts.Node,
   right: ts.Node,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): boolean {
   const returned = uniqueReturnedExpression(owner);
   return !!returned && nodeWithin(left, returned) && nodeWithin(right, returned);
@@ -1668,10 +1780,10 @@ function findObservableStateClusters(
   knownComponents: ReadonlySet<string>,
   sourceFile: ts.SourceFile,
   stateFlow: StateFlowIndex,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): ReadonlyMap<StateCandidate, StateCluster> {
-  const result = new Map<StateCandidate, StateCluster>();
-  const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
+  const result = new Map<StateCandidate, StateCluster>(),
+    statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
     const ownerStates = statesByOwner.get(state.owner) ?? [];
     ownerStates.push(state);
@@ -1680,23 +1792,26 @@ function findObservableStateClusters(
 
   for (const [owner, ownerStates] of statesByOwner) {
     const ownerElements = jsxElementCount(owner);
-    if (ownerElements < 8) continue;
-    const hasLargeSourceOwner = ownerLineSpan(owner, sourceFile) >= 100;
-    const broadOwner = ownerElements >= 12;
-    const mutableStates: StateCandidate[] = ownerStates.filter(state => state.setterName !== null);
-    const stateBySetter = new Map(
-      mutableStates.flatMap(state => state.setterName ? [[state.setterName, state] as const] : [])
-    );
-    const calls: SetterMutation[] = [];
-    visit(owner.body, node => {
-      if (
-        !ts.isCallExpression(node) ||
-        !ts.isIdentifier(node.expression)
-      ) {
+    if (ownerElements < 8) {
+      continue;
+    }
+    const hasLargeSourceOwner = ownerLineSpan(owner, sourceFile) >= 100,
+      broadOwner = ownerElements >= 12,
+      mutableStates: StateCandidate[] = ownerStates.filter((state) => state.setterName !== null),
+      stateBySetter = new Map(
+        mutableStates.flatMap((state) =>
+          state.setterName ? [[state.setterName, state] as const] : [],
+        ),
+      ),
+      calls: SetterMutation[] = [];
+    visit(owner.body, (node) => {
+      if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
         return;
       }
       const state = stateBySetter.get(node.expression.text);
-      if (!state) return;
+      if (!state) {
+        return;
+      }
       calls.push({
         call: node,
         region: nearestMutationFunction(node, owner),
@@ -1707,99 +1822,119 @@ function findObservableStateClusters(
     const union = new DisjointSet(mutableStates.length);
     for (let leftIndex = 0; leftIndex < calls.length; leftIndex += 1) {
       const left = calls[leftIndex];
-      if (!left) continue;
+      if (!left) {
+        continue;
+      }
       for (let rightIndex = leftIndex + 1; rightIndex < calls.length; rightIndex += 1) {
         const right = calls[rightIndex];
-        if (!right || left.state === right.state) continue;
+        if (!right || left.state === right.state) {
+          continue;
+        }
         if (
           left.region !== right.region ||
           !mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow)
-        ) continue;
-        const leftStateIndex = mutableStates.indexOf(left.state);
-        const rightStateIndex = mutableStates.indexOf(right.state);
-        if (leftStateIndex >= 0 && rightStateIndex >= 0) union.join(leftStateIndex, rightStateIndex);
+        ) {
+          continue;
+        }
+        const leftStateIndex = mutableStates.indexOf(left.state),
+          rightStateIndex = mutableStates.indexOf(right.state);
+        if (leftStateIndex !== -1 && rightStateIndex !== -1) {
+          union.join(leftStateIndex, rightStateIndex);
+        }
       }
     }
 
     const components = new Map<number, StateCandidate[]>();
     for (let index = 0; index < mutableStates.length; index += 1) {
       const state = mutableStates[index];
-      if (!state) continue;
-      const root = union.find(index);
-      const members = components.get(root) ?? [];
+      if (!state) {
+        continue;
+      }
+      const root = union.find(index),
+        members = components.get(root) ?? [];
       members.push(state);
       components.set(root, members);
     }
 
     for (const members of components.values()) {
-      const dialogMembers = broadOwner && hasLargeSourceOwner
-        ? normalizeObservableDialogClusterMembers(
-            members,
-            usageByState,
-            knownComponents,
-            calls,
-            stateFlow
-          ) ?? normalizePersistentScalarDialogClusterMembers(
-            members,
-            usageByState,
-            knownComponents,
-            calls,
-            stateFlow,
-            childContracts
-          )
-        : null;
-      const gatedFeedbackMembers = broadOwner && !dialogMembers
-        ? normalizeGatedFeedbackClusterMembers(
-            members,
-            usageByState,
-            calls,
-            stateFlow
-          )
-        : null;
-      const textDraftMembers = broadOwner && hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers
-        ? normalizeObservableTextDraftClusterMembers(members, usageByState, calls, stateFlow)
-        : null;
-      const selectionMembers = hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers && !textDraftMembers
-        ? normalizeObservableSelectionClusterMembers(members, usageByState, calls, stateFlow)
-        : null;
-      const clusterMembers = dialogMembers ?? gatedFeedbackMembers ?? textDraftMembers ?? selectionMembers;
-      if (!clusterMembers) continue;
-      const hasBoundedDialogGate = dialogMembers?.some(
-        state => stateHasBoundedDialogGate(state, dialogMembers, usageByState, knownComponents)
-      ) ?? false;
+      const dialogMembers =
+          broadOwner && hasLargeSourceOwner
+            ? (normalizeObservableDialogClusterMembers(
+                members,
+                usageByState,
+                knownComponents,
+                calls,
+                stateFlow,
+              ) ??
+              normalizePersistentScalarDialogClusterMembers(
+                members,
+                usageByState,
+                knownComponents,
+                calls,
+                stateFlow,
+                childContracts,
+              ))
+            : null,
+        gatedFeedbackMembers =
+          broadOwner && !dialogMembers
+            ? normalizeGatedFeedbackClusterMembers(members, usageByState, calls, stateFlow)
+            : null,
+        textDraftMembers =
+          broadOwner && hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers
+            ? normalizeObservableTextDraftClusterMembers(members, usageByState, calls, stateFlow)
+            : null,
+        selectionMembers =
+          hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers && !textDraftMembers
+            ? normalizeObservableSelectionClusterMembers(members, usageByState, calls, stateFlow)
+            : null,
+        clusterMembers =
+          dialogMembers ?? gatedFeedbackMembers ?? textDraftMembers ?? selectionMembers;
+      if (!clusterMembers) {
+        continue;
+      }
+      const hasBoundedDialogGate =
+        dialogMembers?.some((state) =>
+          stateHasBoundedDialogGate(state, dialogMembers, usageByState, knownComponents),
+        ) ?? false;
       if (
         dialogMembers &&
         !hasBoundedDialogGate &&
-        clusterMembers.some(member => {
+        clusterMembers.some((member) => {
           const usage = usageByState.get(member);
           return usage !== undefined && usage.localRenderReads > 0 && usage.jsxTargets.size === 0;
         })
       ) {
         continue;
       }
-      const sortedMembers = [...clusterMembers].sort((left, right) => left.call.getStart() - right.call.getStart());
-      const primary = sortedMembers[0];
-      if (!primary) continue;
-      const names = sortedMembers.map(state => state.valueName);
-      const targets = new Set(
-        sortedMembers.flatMap(state => [...(usageByState.get(state)?.jsxTargets ?? [])])
-      );
-      const cluster: StateCluster = {
-        action: "use-observable",
-        id: `state-cluster:${owner.getStart(sourceFile)}:${names.join(",")}`,
-        members: sortedMembers,
-        message: selectionMembers
-          ? `Replace the co-written selection mode (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve mode-and-clear transitions with atomic \`assign\` calls, keep independent collection edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at header, control, and keyed-row leaves.`
-          : gatedFeedbackMembers
-          ? `Replace the payload and timed feedback state (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the timer and command timing, batch the paired reset, read the payload command with \`peek\`, subscribe to the payload-gated content at its stable call site, and subscribe to feedback again only in its nested feedback leaf.`
-          : textDraftMembers
-          ? `Replace the co-written editable draft (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
-          : hasBoundedDialogGate
-          ? `Replace the persistent dialog state (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable model; atomically assign the payload and open flag, keep close transitions as leaf writes, and move the complete payload gate plus ${[...targets].sort().join(", ")} into one always-mounted stable leaf wrapper. Subscribe there with \`useValue\` so the existing payload gate and dialog mount behavior stay unchanged.`
-          : `Replace the co-written React state cluster (${names.map(name => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; preserve paired payload/open transitions with atomic \`assign\` calls, keep independent close updates as leaf writes, and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
-        primary,
-      };
-      for (const member of sortedMembers) result.set(member, cluster);
+      const sortedMembers = [...clusterMembers].sort(
+          (left, right) => left.call.getStart() - right.call.getStart(),
+        ),
+        primary = sortedMembers[0];
+      if (!primary) {
+        continue;
+      }
+      const names = sortedMembers.map((state) => state.valueName),
+        targets = new Set(
+          sortedMembers.flatMap((state) => [...(usageByState.get(state)?.jsxTargets ?? [])]),
+        ),
+        cluster: StateCluster = {
+          action: "use-observable",
+          id: `state-cluster:${owner.getStart(sourceFile)}:${names.join(",")}`,
+          members: sortedMembers,
+          message: selectionMembers
+            ? `Replace the co-written selection mode (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve mode-and-clear transitions with atomic \`assign\` calls, keep independent collection edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at header, control, and keyed-row leaves.`
+            : gatedFeedbackMembers
+              ? `Replace the payload and timed feedback state (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the timer and command timing, batch the paired reset, read the payload command with \`peek\`, subscribe to the payload-gated content at its stable call site, and subscribe to feedback again only in its nested feedback leaf.`
+              : textDraftMembers
+                ? `Replace the co-written editable draft (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
+                : hasBoundedDialogGate
+                  ? `Replace the persistent dialog state (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; atomically assign the payload and open flag, keep close transitions as leaf writes, and move the complete payload gate plus ${[...targets].sort().join(", ")} into one always-mounted stable leaf wrapper. Subscribe there with \`useValue\` so the existing payload gate and dialog mount behavior stay unchanged.`
+                  : `Replace the co-written React state cluster (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; preserve paired payload/open transitions with atomic \`assign\` calls, keep independent close updates as leaf writes, and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
+          primary,
+        };
+      for (const member of sortedMembers) {
+        result.set(member, cluster);
+      }
     }
   }
 
@@ -1810,20 +1945,24 @@ function normalizeObservableSelectionClusterMembers(
   members: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   mutations: readonly SetterMutation[],
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): readonly StateCandidate[] | null {
-  if (members.length !== 2) return null;
-  const mode = members.find(state => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
-  const selection = members.find(hasEmptyArrayStateInitializer);
-  if (!mode || !selection || mode === selection) return null;
+  if (members.length !== 2) {
+    return null;
+  }
+  const mode = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword)),
+    selection = members.find(hasEmptyArrayStateInitializer);
+  if (!mode || !selection || mode === selection) {
+    return null;
+  }
 
-  const modeUsage = usageByState.get(mode);
-  const selectionUsage = usageByState.get(selection);
+  const modeUsage = usageByState.get(mode),
+    selectionUsage = usageByState.get(selection);
   if (
     !modeUsage ||
     !selectionUsage ||
-    [modeUsage, selectionUsage].some(usage =>
-      usage.shadowed || usage.escaped || usage.effectReads > 0 || usage.effectWrites > 0
+    [modeUsage, selectionUsage].some(
+      (usage) => usage.shadowed || usage.escaped || usage.effectReads > 0 || usage.effectWrites > 0,
     ) ||
     modeUsage.setterUsesPreviousValue ||
     stateMayHoldCallable(mode) ||
@@ -1836,17 +1975,17 @@ function normalizeObservableSelectionClusterMembers(
     return null;
   }
 
-  const modeMutations = mutations.filter(mutation => mutation.state === mode);
-  const selectionMutations = mutations.filter(mutation => mutation.state === selection);
-  const resets = selectionMutations.filter(mutation => callSetsEmptyArray(mutation));
-  const edits = selectionMutations.filter(mutation => !callSetsEmptyArray(mutation));
+  const modeMutations = mutations.filter((mutation) => mutation.state === mode),
+    selectionMutations = mutations.filter((mutation) => mutation.state === selection),
+    resets = selectionMutations.filter((mutation) => callSetsEmptyArray(mutation)),
+    edits = selectionMutations.filter((mutation) => !callSetsEmptyArray(mutation));
   if (
     modeMutations.length < 2 ||
     resets.length < 1 ||
     edits.length < 1 ||
-    !modeMutations.some(mutation => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)) ||
-    !modeMutations.some(mutation => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) ||
-    edits.some(mutation => !setterCallUsesPreviousValue(mutation.call))
+    !modeMutations.some((mutation) => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)) ||
+    !modeMutations.some((mutation) => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) ||
+    edits.some((mutation) => !setterCallUsesPreviousValue(mutation.call))
   ) {
     return null;
   }
@@ -1855,7 +1994,7 @@ function normalizeObservableSelectionClusterMembers(
     left.region === right.region &&
     (callsAreAdjacentDraftWrites(left.call, right.call) ||
       mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow));
-  if (modeMutations.some(modeMutation => !resets.some(reset => paired(modeMutation, reset)))) {
+  if (modeMutations.some((modeMutation) => !resets.some((reset) => paired(modeMutation, reset)))) {
     return null;
   }
   return [mode, selection];
@@ -1863,50 +2002,58 @@ function normalizeObservableSelectionClusterMembers(
 
 function hasEmptyArrayStateInitializer(state: StateCandidate): boolean {
   const initializer = state.call.arguments[0];
-  if (!initializer) return false;
+  if (!initializer) {
+    return false;
+  }
   const value = unwrapTransparentExpression(initializer);
   return ts.isArrayLiteralExpression(value) && value.elements.length === 0;
 }
 
 function callSetsEmptyArray(mutation: SetterMutation): boolean {
   const argument = mutation.call.arguments[0];
-  if (!argument) return false;
+  if (!argument) {
+    return false;
+  }
   const value = unwrapTransparentExpression(argument);
   return ts.isArrayLiteralExpression(value) && value.elements.length === 0;
 }
 
-function renderReadsStayInJsxAttributes(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
-  return usage.localRenderReads + usage.transportedOccurrences > 0 &&
-    usage.directRenderNodes.every(node =>
-      findAncestorUntil(node, ts.isJsxAttribute, state.owner) !== null
-    );
+function renderReadsStayInJsxAttributes(state: StateCandidate, usage: StateUsage): boolean {
+  return (
+    usage.localRenderReads + usage.transportedOccurrences > 0 &&
+    usage.directRenderNodes.every(
+      (node) => findAncestorUntil(node, ts.isJsxAttribute, state.owner) !== null,
+    )
+  );
 }
 
 function normalizeObservableTextDraftClusterMembers(
   members: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   mutations: readonly SetterMutation[],
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): readonly StateCandidate[] | null {
-  if (members.length !== 2) return null;
-  const cursor = members.find(state => hasStateInitializer(state, ts.SyntaxKind.NullKeyword));
-  const draft = members.find(state => hasEmptyStringStateInitializer(state));
-  if (!cursor || !draft || cursor === draft) return null;
+  if (members.length !== 2) {
+    return null;
+  }
+  const cursor = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.NullKeyword)),
+    draft = members.find((state) => hasEmptyStringStateInitializer(state));
+  if (!cursor || !draft || cursor === draft) {
+    return null;
+  }
 
-  const cursorUsage = usageByState.get(cursor);
-  const draftUsage = usageByState.get(draft);
+  const cursorUsage = usageByState.get(cursor),
+    draftUsage = usageByState.get(draft);
   if (
     !cursorUsage ||
     !draftUsage ||
-    [cursorUsage, draftUsage].some(usage =>
-      usage.shadowed ||
-      usage.escaped ||
-      usage.effectReads > 0 ||
-      usage.effectWrites > 0 ||
-      usage.setterUsesPreviousValue
+    [cursorUsage, draftUsage].some(
+      (usage) =>
+        usage.shadowed ||
+        usage.escaped ||
+        usage.effectReads > 0 ||
+        usage.effectWrites > 0 ||
+        usage.setterUsesPreviousValue,
     ) ||
     stateMayHoldCallable(cursor) ||
     stateMayHoldCallable(draft) ||
@@ -1918,14 +2065,14 @@ function normalizeObservableTextDraftClusterMembers(
     return null;
   }
 
-  const cursorMutations = mutations.filter(mutation => mutation.state === cursor);
-  const draftMutations = mutations.filter(mutation => mutation.state === draft);
-  const cursorClears = cursorMutations.filter(mutation =>
-    callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)
-  );
-  const cursorOpens = cursorMutations.filter(mutation =>
-    !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)
-  );
+  const cursorMutations = mutations.filter((mutation) => mutation.state === cursor),
+    draftMutations = mutations.filter((mutation) => mutation.state === draft),
+    cursorClears = cursorMutations.filter((mutation) =>
+      callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
+    ),
+    cursorOpens = cursorMutations.filter(
+      (mutation) => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
+    );
   if (
     cursorMutations.length < 2 ||
     draftMutations.length < 1 ||
@@ -1939,9 +2086,13 @@ function normalizeObservableTextDraftClusterMembers(
     left.region === right.region &&
     (callsAreAdjacentDraftWrites(left.call, right.call) ||
       mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow));
-  if (cursorOpens.some(cursorMutation =>
-    !draftMutations.some(draftMutation => coexecutes(cursorMutation, draftMutation))
-  ) || cursorClears.some(mutation => !mutationIsEventRooted(mutation, cursor))) {
+  if (
+    cursorOpens.some(
+      (cursorMutation) =>
+        !draftMutations.some((draftMutation) => coexecutes(cursorMutation, draftMutation)),
+    ) ||
+    cursorClears.some((mutation) => !mutationIsEventRooted(mutation, cursor))
+  ) {
     return null;
   }
   for (const cursorMutation of cursorMutations) {
@@ -1952,7 +2103,7 @@ function normalizeObservableTextDraftClusterMembers(
           cursorMutation.call,
           draftMutation.call,
           cursorMutation.region,
-          stateFlow
+          stateFlow,
         ) &&
         !coexecutes(cursorMutation, draftMutation)
       ) {
@@ -1960,22 +2111,22 @@ function normalizeObservableTextDraftClusterMembers(
       }
     }
   }
-  if (draftMutations.some(draftMutation =>
-    !cursorMutations.some(cursorMutation => coexecutes(draftMutation, cursorMutation)) &&
-    !controlledValueSetterCall(draftMutation.call, draft) &&
-    !mutationIsEventRooted(draftMutation, draft)
-  )) {
+  if (
+    draftMutations.some(
+      (draftMutation) =>
+        !cursorMutations.some((cursorMutation) => coexecutes(draftMutation, cursorMutation)) &&
+        !controlledValueSetterCall(draftMutation.call, draft) &&
+        !mutationIsEventRooted(draftMutation, draft),
+    )
+  ) {
     return null;
   }
   return [cursor, draft];
 }
 
-function callsAreAdjacentDraftWrites(
-  left: ts.CallExpression,
-  right: ts.CallExpression
-): boolean {
-  const leftStatement = left.parent;
-  const rightStatement = right.parent;
+function callsAreAdjacentDraftWrites(left: ts.CallExpression, right: ts.CallExpression): boolean {
+  const leftStatement = left.parent,
+    rightStatement = right.parent;
   if (
     !ts.isExpressionStatement(leftStatement) ||
     leftStatement.expression !== left ||
@@ -1985,26 +2136,33 @@ function callsAreAdjacentDraftWrites(
   ) {
     return false;
   }
-  const parent = leftStatement.parent;
-  const statements = ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent)
-    ? parent.statements
-    : null;
-  return !!statements &&
-    Math.abs(statements.indexOf(leftStatement) - statements.indexOf(rightStatement)) === 1;
+  const { parent } = leftStatement;
+  const statements =
+    ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent)
+      ? parent.statements
+      : null;
+  return (
+    !!statements &&
+    Math.abs(statements.indexOf(leftStatement) - statements.indexOf(rightStatement)) === 1
+  );
 }
 
 function hasEmptyStringStateInitializer(state: StateCandidate): boolean {
   const initializer = state.call.arguments[0];
-  if (!initializer) return false;
+  if (!initializer) {
+    return false;
+  }
   const value = unwrapTransparentExpression(initializer);
   return ts.isStringLiteral(value) && value.text === "";
 }
 
 function setterReferencesAreCallsOrControlledValueWrites(state: StateCandidate): boolean {
-  if (!state.setterName) return false;
-  let controlledWrites = 0;
-  let safe = true;
-  visit(state.owner.body, node => {
+  if (!state.setterName) {
+    return false;
+  }
+  let controlledWrites = 0,
+    safe = true;
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -2014,16 +2172,15 @@ function setterReferencesAreCallsOrControlledValueWrites(state: StateCandidate):
     ) {
       return;
     }
-    const setterCall = ts.isCallExpression(node.parent) && node.parent.expression === node;
-    const attribute = controlledValueWriteAttribute(node, state);
+    const setterCall = ts.isCallExpression(node.parent) && node.parent.expression === node,
+      attribute = controlledValueWriteAttribute(node, state);
     if (setterCall) {
-      if (attribute) controlledWrites += 1;
+      if (attribute) {
+        controlledWrites += 1;
+      }
       return;
     }
-    if (
-      !attribute ||
-      !isDirectJsxAttributeExpression(attribute, node)
-    ) {
+    if (!attribute || !isDirectJsxAttributeExpression(attribute, node)) {
       safe = false;
       return;
     }
@@ -2034,59 +2191,61 @@ function setterReferencesAreCallsOrControlledValueWrites(state: StateCandidate):
 
 function controlledValueWriteAttribute(
   node: ts.Identifier,
-  state: StateCandidate
+  state: StateCandidate,
 ): ts.JsxAttribute | null {
   const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
-  if (!attribute || !isControlledInteractionProp(attribute.name.getText())) return null;
-  const opening = jsxOpeningForAttribute(attribute);
-  const hasValue = opening?.attributes.properties.some(property => {
-    if (
-      !ts.isJsxAttribute(property) ||
-      property.name.getText() !== "value" ||
-      !property.initializer ||
-      !ts.isJsxExpression(property.initializer) ||
-      !property.initializer.expression
-    ) {
-      return false;
-    }
-    const value = unwrapTransparentExpression(property.initializer.expression);
-    return ts.isIdentifier(value) && value.text === state.valueName;
-  });
+  if (!attribute || !isControlledInteractionProp(attribute.name.getText())) {
+    return null;
+  }
+  const opening = jsxOpeningForAttribute(attribute),
+    hasValue = opening?.attributes.properties.some((property) => {
+      if (
+        !ts.isJsxAttribute(property) ||
+        property.name.getText() !== "value" ||
+        !property.initializer ||
+        !ts.isJsxExpression(property.initializer) ||
+        !property.initializer.expression
+      ) {
+        return false;
+      }
+      const value = unwrapTransparentExpression(property.initializer.expression);
+      return ts.isIdentifier(value) && value.text === state.valueName;
+    });
   return hasValue ? attribute : null;
 }
 
-function controlledValueSetterCall(
-  call: ts.CallExpression,
-  state: StateCandidate
-): boolean {
-  return ts.isIdentifier(call.expression) &&
-    controlledValueWriteAttribute(call.expression, state) !== null;
+function controlledValueSetterCall(call: ts.CallExpression, state: StateCandidate): boolean {
+  return (
+    ts.isIdentifier(call.expression) &&
+    controlledValueWriteAttribute(call.expression, state) !== null
+  );
 }
 
-function mutationIsEventRooted(
-  mutation: SetterMutation,
-  state: StateCandidate
-): boolean {
-  const region = mutation.region;
-  return region !== state.owner &&
+function mutationIsEventRooted(mutation: SetterMutation, state: StateCandidate): boolean {
+  const { region } = mutation;
+  return (
+    region !== state.owner &&
     (ts.isArrowFunction(region) ||
       ts.isFunctionDeclaration(region) ||
       ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted(region, state.owner, "", new Set());
+    callbackIsEventRooted(region, state.owner, "", new Set())
+  );
 }
 
 function findStateCompanionWrites(
   states: readonly StateCandidate[],
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): {
   all: ReadonlySet<StateCandidate>;
   nonClosing: ReadonlySet<StateCandidate>;
 } {
-  const all = new Set<StateCandidate>();
-  const nonClosing = new Set<StateCandidate>();
-  const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
+  const all = new Set<StateCandidate>(),
+    nonClosing = new Set<StateCandidate>(),
+    statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
-    if (!state.setterName) continue;
+    if (!state.setterName) {
+      continue;
+    }
     const ownerStates = statesByOwner.get(state.owner) ?? [];
     ownerStates.push(state);
     statesByOwner.set(state.owner, ownerStates);
@@ -2094,25 +2253,28 @@ function findStateCompanionWrites(
 
   for (const [owner, ownerStates] of statesByOwner) {
     const stateBySetter = new Map(
-      ownerStates.flatMap(state => state.setterName ? [[state.setterName, state] as const] : [])
-    );
-    const mutations: SetterMutation[] = [];
-    visit(owner.body, node => {
-      if (
-        !ts.isCallExpression(node) ||
-        !ts.isIdentifier(node.expression)
-      ) {
+        ownerStates.flatMap((state) =>
+          state.setterName ? [[state.setterName, state] as const] : [],
+        ),
+      ),
+      mutations: SetterMutation[] = [];
+    visit(owner.body, (node) => {
+      if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
         return;
       }
       const state = stateBySetter.get(node.expression.text);
-      if (!state) return;
+      if (!state) {
+        return;
+      }
       const region = nearestMutationFunction(node, owner);
       mutations.push({ call: node, region, state });
     });
 
     for (let leftIndex = 0; leftIndex < mutations.length; leftIndex += 1) {
       const left = mutations[leftIndex];
-      if (!left) continue;
+      if (!left) {
+        continue;
+      }
       for (let rightIndex = leftIndex + 1; rightIndex < mutations.length; rightIndex += 1) {
         const right = mutations[rightIndex];
         if (
@@ -2125,8 +2287,12 @@ function findStateCompanionWrites(
         }
         all.add(left.state);
         all.add(right.state);
-        if (!mutationIsProvenCloseDuringCompanion(left, right)) nonClosing.add(left.state);
-        if (!mutationIsProvenCloseDuringCompanion(right, left)) nonClosing.add(right.state);
+        if (!mutationIsProvenCloseDuringCompanion(left, right)) {
+          nonClosing.add(left.state);
+        }
+        if (!mutationIsProvenCloseDuringCompanion(right, left)) {
+          nonClosing.add(right.state);
+        }
       }
     }
   }
@@ -2136,9 +2302,11 @@ function findStateCompanionWrites(
 
 function mutationIsProvenCloseDuringCompanion(
   mutation: SetterMutation,
-  companion: SetterMutation
+  companion: SetterMutation,
 ): boolean {
-  if (callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) return true;
+  if (callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) {
+    return true;
+  }
   const argument = mutation.call.arguments[0];
   if (
     mutation.call.arguments.length !== 1 ||
@@ -2170,13 +2338,17 @@ function mutationIsProvenCloseDuringCompanion(
 function parameterIsBooleanVisibilityTransition(
   owner: RuntimeFunctionLike,
   state: StateCandidate,
-  name: string
+  name: string,
 ): boolean {
-  const parameter = owner.parameters.find(candidate =>
-    ts.isIdentifier(candidate.name) && candidate.name.text === name
+  const parameter = owner.parameters.find(
+    (candidate) => ts.isIdentifier(candidate.name) && candidate.name.text === name,
   );
-  if (!parameter) return false;
-  if (parameter.type?.kind === ts.SyntaxKind.BooleanKeyword) return true;
+  if (!parameter) {
+    return false;
+  }
+  if (parameter.type?.kind === ts.SyntaxKind.BooleanKeyword) {
+    return true;
+  }
   const attribute = findAncestorUntil(owner, ts.isJsxAttribute, state.owner);
   if (
     !attribute?.initializer ||
@@ -2186,15 +2358,21 @@ function parameterIsBooleanVisibilityTransition(
     return false;
   }
   const opening = attribute.parent.parent;
-  return (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
-    isVisibilityTransitionAttribute(opening, attribute.name.getText(), state.valueName);
+  return (
+    (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
+    isVisibilityTransitionAttribute(opening, attribute.name.getText(), state.valueName)
+  );
 }
 
 function runtimeParameterIsReassigned(owner: RuntimeFunctionLike, name: string): boolean {
-  if (!owner.body) return true;
+  if (!owner.body) {
+    return true;
+  }
   let reassigned = false;
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (!ts.isBinaryExpression(node)) return;
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (!ts.isBinaryExpression(node)) {
+      return;
+    }
     const left = unwrapTransparentExpression(node.left);
     if (
       node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
@@ -2210,10 +2388,7 @@ function runtimeParameterIsReassigned(owner: RuntimeFunctionLike, name: string):
 
 function isNegatedIdentifier(expression: ts.Expression, name: string): boolean {
   const value = unwrapTransparentExpression(expression);
-  if (
-    !ts.isPrefixUnaryExpression(value) ||
-    value.operator !== ts.SyntaxKind.ExclamationToken
-  ) {
+  if (!ts.isPrefixUnaryExpression(value) || value.operator !== ts.SyntaxKind.ExclamationToken) {
     return false;
   }
   const operand = unwrapTransparentExpression(value.operand);
@@ -2224,7 +2399,7 @@ function findBranchUnmountMoves(
   states: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   safeCommandStates: ReadonlySet<StateCandidate>,
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): ReadonlyMap<StateCandidate, BranchUnmountMove> {
   const result = new Map<StateCandidate, BranchUnmountMove>();
   for (const state of states) {
@@ -2249,14 +2424,18 @@ function findBranchUnmountMoves(
       continue;
     }
 
-    const callSite = directBranchReturnCallSite(usage, state.owner);
-    const target = [...usage.valueTargets][0];
-    if (!callSite || !target) continue;
+    const callSite = directBranchReturnCallSite(usage, state.owner),
+      target = [...usage.valueTargets][0];
+    if (!callSite || !target) {
+      continue;
+    }
     const subtree: ts.Node = ts.isJsxOpeningElement(callSite.opening)
-      ? callSite.opening.parent
-      : callSite.opening;
-    const gate = exactDiscriminatedBranchGate(callSite.opening, state.owner, states);
-    if (!gate) continue;
+        ? callSite.opening.parent
+        : callSite.opening,
+      gate = exactDiscriminatedBranchGate(callSite.opening, state.owner, states);
+    if (!gate) {
+      continue;
+    }
     const controllerUsage = usageByState.get(gate.controller);
     if (
       !gate.controller.setterName ||
@@ -2267,20 +2446,14 @@ function findBranchUnmountMoves(
       continue;
     }
 
-    const branchCalls = usage.setterCallNodes.filter(call => nodeWithin(call, subtree));
-    const outsideCalls = usage.setterCallNodes.filter(call => !nodeWithin(call, subtree));
+    const branchCalls = usage.setterCallNodes.filter((call) => nodeWithin(call, subtree)),
+      outsideCalls = usage.setterCallNodes.filter((call) => !nodeWithin(call, subtree));
     if (
       branchCalls.length === 0 ||
       outsideCalls.length === 0 ||
-      !branchCalls.every(call => isDirectBranchInteractionWrite(call, callSite.opening, state)) ||
-      !outsideCalls.every(call =>
-        isBranchUnmountReset(
-          call,
-          state,
-          gate,
-          controllerUsage,
-          stateFlow
-        )
+      !branchCalls.every((call) => isDirectBranchInteractionWrite(call, callSite.opening, state)) ||
+      !outsideCalls.every((call) =>
+        isBranchUnmountReset(call, state, gate, controllerUsage, stateFlow),
       )
     ) {
       continue;
@@ -2299,10 +2472,14 @@ interface DiscriminatedBranchGate {
 function exactDiscriminatedBranchGate(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   owner: RuntimeFunctionLike,
-  states: readonly StateCandidate[]
+  states: readonly StateCandidate[],
 ): DiscriminatedBranchGate | null {
   let conditional: ts.ConditionalExpression | null = null;
-  for (let current: ts.Node | undefined = opening.parent; current && current !== owner; current = current.parent) {
+  for (
+    let current: ts.Node | undefined = opening.parent;
+    current && current !== owner;
+    current = current.parent
+  ) {
     if (
       ts.isConditionalExpression(current) &&
       nodeWithin(opening, current.whenTrue) &&
@@ -2312,7 +2489,9 @@ function exactDiscriminatedBranchGate(
       break;
     }
   }
-  if (!conditional) return null;
+  if (!conditional) {
+    return null;
+  }
   const condition = unwrapTransparentExpression(conditional.condition);
   if (
     !ts.isBinaryExpression(condition) ||
@@ -2320,8 +2499,8 @@ function exactDiscriminatedBranchGate(
   ) {
     return null;
   }
-  const left = unwrapTransparentExpression(condition.left);
-  const right = unwrapTransparentExpression(condition.right);
+  const left = unwrapTransparentExpression(condition.left),
+    right = unwrapTransparentExpression(condition.right);
   if (
     !ts.isPropertyAccessExpression(left) ||
     !ts.isIdentifier(left.expression) ||
@@ -2329,10 +2508,8 @@ function exactDiscriminatedBranchGate(
   ) {
     return null;
   }
-  const controllerName = left.expression.text;
-  const matches = states.filter(state =>
-    state.owner === owner && state.valueName === controllerName
-  );
+  const controllerName = left.expression.text,
+    matches = states.filter((state) => state.owner === owner && state.valueName === controllerName);
   return matches.length === 1
     ? { controller: matches[0]!, property: left.name.text, value: right.text }
     : null;
@@ -2341,16 +2518,18 @@ function exactDiscriminatedBranchGate(
 function isDirectBranchInteractionWrite(
   call: ts.CallExpression,
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
-  state: StateCandidate
+  state: StateCandidate,
 ): boolean {
-  const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner);
-  const callback = nearestMutationFunction(call, state.owner);
-  return !!state.setterName &&
+  const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner),
+    callback = nearestMutationFunction(call, state.owner);
+  return (
+    !!state.setterName &&
     !!attribute &&
     /^on[A-Z]/.test(attribute.name.getText()) &&
     attribute.parent.parent === opening &&
     callback !== state.owner &&
-    mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName]));
+    mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName]))
+  );
 }
 
 function isBranchUnmountReset(
@@ -2358,7 +2537,7 @@ function isBranchUnmountReset(
   state: StateCandidate,
   gate: DiscriminatedBranchGate,
   controllerUsage: StateUsage,
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): boolean {
   if (reset.arguments.length !== 1 || reset.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword) {
     return false;
@@ -2373,13 +2552,16 @@ function isBranchUnmountReset(
   ) {
     return false;
   }
-  const closeCalls = controllerUsage.setterCallNodes.filter(call =>
-    callsAreAdjacentStatements(reset, call) &&
-    callSetsDifferentDiscriminant(call, gate.property, gate.value)
-  );
-  const close = closeCalls.length === 1 ? closeCalls[0] : null;
-  if (!close) return false;
-  return !controllerUsage.setterCallNodes.some(call => {
+  const closeCalls = controllerUsage.setterCallNodes.filter(
+      (call) =>
+        callsAreAdjacentStatements(reset, call) &&
+        callSetsDifferentDiscriminant(call, gate.property, gate.value),
+    ),
+    close = closeCalls.length === 1 ? closeCalls[0] : null;
+  if (!close) {
+    return false;
+  }
+  return !controllerUsage.setterCallNodes.some((call) => {
     if (
       call === close ||
       nearestMutationFunction(call, state.owner) !== region ||
@@ -2392,12 +2574,9 @@ function isBranchUnmountReset(
   });
 }
 
-function callsAreAdjacentStatements(
-  left: ts.CallExpression,
-  right: ts.CallExpression
-): boolean {
-  const leftStatement = left.parent;
-  const rightStatement = right.parent;
+function callsAreAdjacentStatements(left: ts.CallExpression, right: ts.CallExpression): boolean {
+  const leftStatement = left.parent,
+    rightStatement = right.parent;
   if (
     !ts.isExpressionStatement(leftStatement) ||
     leftStatement.expression !== left ||
@@ -2408,73 +2587,76 @@ function callsAreAdjacentStatements(
   ) {
     return false;
   }
-  const statements = leftStatement.parent.statements;
+  const { statements } = leftStatement.parent;
   return Math.abs(statements.indexOf(leftStatement) - statements.indexOf(rightStatement)) === 1;
 }
 
 function callSetsDifferentDiscriminant(
   call: ts.CallExpression,
   property: string,
-  activeValue: string
+  activeValue: string,
 ): boolean {
   const value = callDiscriminantValue(call, property);
   return value !== null && value !== activeValue;
 }
 
-function callDiscriminantValue(
-  call: ts.CallExpression,
-  property: string
-): string | null {
-  if (call.arguments.length !== 1 || !call.arguments[0]) return null;
+function callDiscriminantValue(call: ts.CallExpression, property: string): string | null {
+  if (call.arguments.length !== 1 || !call.arguments[0]) {
+    return null;
+  }
   const value = unwrapTransparentExpression(call.arguments[0]);
   if (
     !ts.isObjectLiteralExpression(value) ||
-    value.properties.some(candidate =>
-      (ts.isShorthandPropertyAssignment(candidate) && candidate.name.text === property) ||
-      (!ts.isShorthandPropertyAssignment(candidate) &&
-        (!ts.isPropertyAssignment(candidate) ||
-          (!ts.isIdentifier(candidate.name) && !ts.isStringLiteral(candidate.name))))
+    value.properties.some(
+      (candidate) =>
+        (ts.isShorthandPropertyAssignment(candidate) && candidate.name.text === property) ||
+        (!ts.isShorthandPropertyAssignment(candidate) &&
+          (!ts.isPropertyAssignment(candidate) ||
+            (!ts.isIdentifier(candidate.name) && !ts.isStringLiteral(candidate.name)))),
     )
   ) {
     return null;
   }
-  const matches = value.properties.filter(candidate => {
-    if (!ts.isPropertyAssignment(candidate)) return false;
-    const name = ts.isIdentifier(candidate.name) || ts.isStringLiteral(candidate.name)
-      ? candidate.name.text
-      : null;
-    return name === property;
-  });
-  const assignment = matches.length === 1 && ts.isPropertyAssignment(matches[0]!)
-    ? matches[0]!
-    : null;
-  const discriminator = assignment
-    ? unwrapTransparentExpression(assignment.initializer)
-    : null;
+  const matches = value.properties.filter((candidate) => {
+      if (!ts.isPropertyAssignment(candidate)) {
+        return false;
+      }
+      const name =
+        ts.isIdentifier(candidate.name) || ts.isStringLiteral(candidate.name)
+          ? candidate.name.text
+          : null;
+      return name === property;
+    }),
+    assignment = matches.length === 1 && ts.isPropertyAssignment(matches[0]!) ? matches[0]! : null,
+    discriminator = assignment ? unwrapTransparentExpression(assignment.initializer) : null;
   return discriminator && ts.isStringLiteral(discriminator) ? discriminator.text : null;
 }
 
-function findIndependentStateWrites(
-  states: readonly StateCandidate[]
-): {
+function findIndependentStateWrites(states: readonly StateCandidate[]): {
   directEventWrites: ReadonlySet<StateCandidate>;
   visibilitySetterTransports: ReadonlySet<StateCandidate>;
 } {
-  const directEventWrites = new Set<StateCandidate>();
-  const visibilitySetterTransports = new Set<StateCandidate>();
-  const byOwner = new Map<RuntimeFunctionLike, Map<string, StateCandidate>>();
+  const directEventWrites = new Set<StateCandidate>(),
+    visibilitySetterTransports = new Set<StateCandidate>(),
+    byOwner = new Map<RuntimeFunctionLike, Map<string, StateCandidate>>();
   for (const state of states) {
-    if (!state.setterName) continue;
+    if (!state.setterName) {
+      continue;
+    }
     const bySetter = byOwner.get(state.owner) ?? new Map<string, StateCandidate>();
     bySetter.set(state.setterName, state);
     byOwner.set(state.owner, bySetter);
   }
 
   for (const [owner, bySetter] of byOwner) {
-    if (!owner.body) continue;
+    if (!owner.body) {
+      continue;
+    }
     const returned = uniqueReturnedExpression(owner);
-    if (!returned) continue;
-    visitSkippingNestedRuntimeFunctions(returned, node => {
+    if (!returned) {
+      continue;
+    }
+    visitSkippingNestedRuntimeFunctions(returned, (node) => {
       if (
         !ts.isJsxAttribute(node) ||
         !node.initializer ||
@@ -2484,8 +2666,8 @@ function findIndependentStateWrites(
         return;
       }
       if (ts.isIdentifier(node.initializer.expression)) {
-        const state = bySetter.get(node.initializer.expression.text);
-        const opening = node.parent.parent;
+        const state = bySetter.get(node.initializer.expression.text),
+          opening = node.parent.parent;
         if (
           state &&
           hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) &&
@@ -2496,7 +2678,9 @@ function findIndependentStateWrites(
         }
         return;
       }
-      if (!/^on[A-Z]/.test(node.name.getText())) return;
+      if (!/^on[A-Z]/.test(node.name.getText())) {
+        return;
+      }
       const controlledInteraction = isControlledInteractionProp(node.name.getText());
       if (
         !ts.isArrowFunction(node.initializer.expression) &&
@@ -2504,24 +2688,28 @@ function findIndependentStateWrites(
       ) {
         return;
       }
-      const callback = node.initializer.expression;
-      const expression = ts.isBlock(callback.body)
-        ? callback.body.statements.length === 1 && ts.isExpressionStatement(callback.body.statements[0]!)
-          ? callback.body.statements[0]!.expression
-          : null
-        : callback.body;
+      const callback = node.initializer.expression,
+        expression = ts.isBlock(callback.body)
+          ? callback.body.statements.length === 1 &&
+            ts.isExpressionStatement(callback.body.statements[0]!)
+            ? callback.body.statements[0]!.expression
+            : null
+          : callback.body;
       if (
         !expression ||
         !ts.isCallExpression(expression) ||
         !ts.isIdentifier(expression.expression) ||
         expression.arguments.length !== 1 ||
         (!isDirectPrimitiveExpression(expression.arguments[0]!) &&
-          (!controlledInteraction || expression.arguments.some(argument => containsCallExpression(argument))))
+          (!controlledInteraction ||
+            expression.arguments.some((argument) => containsCallExpression(argument))))
       ) {
         return;
       }
       const state = bySetter.get(expression.expression.text);
-      if (state) directEventWrites.add(state);
+      if (state) {
+        directEventWrites.add(state);
+      }
     });
   }
   return { directEventWrites, visibilitySetterTransports };
@@ -2529,11 +2717,13 @@ function findIndependentStateWrites(
 
 function findStateSubtreeClusters(
   subtreeByState: ReadonlyMap<StateCandidate, StateSubtree>,
-  statesWithCompanionWrites: ReadonlySet<StateCandidate>
+  statesWithCompanionWrites: ReadonlySet<StateCandidate>,
 ): ReadonlyMap<StateCandidate, StateCluster> {
-  const bySubtree = new Map<JsxSubtreeNode, Array<{ state: StateCandidate; subtree: StateSubtree }>>();
+  const bySubtree = new Map<JsxSubtreeNode, { state: StateCandidate; subtree: StateSubtree }[]>();
   for (const [state, subtree] of subtreeByState) {
-    if (statesWithCompanionWrites.has(state)) continue;
+    if (statesWithCompanionWrites.has(state)) {
+      continue;
+    }
     const members = bySubtree.get(subtree.node) ?? [];
     members.push({ state, subtree });
     bySubtree.set(subtree.node, members);
@@ -2541,30 +2731,34 @@ function findStateSubtreeClusters(
 
   const result = new Map<StateCandidate, StateCluster>();
   for (const candidates of bySubtree.values()) {
-    if (candidates.length < 2) continue;
-    const first = candidates[0]!;
-    const members = candidates.map(candidate => candidate.state);
-    const names = members.map(member => member.valueName);
-    const repeated = candidates.some(candidate => candidate.subtree.repeated);
-    const needsObservable = repeated || candidates.some(
-      candidate => candidate.subtree.unstable || candidate.subtree.kind !== "direct"
-    );
-    const action: StateAction = needsObservable
-      ? "use-observable"
-      : "move-state-down";
-    const ownership = repeated
-      ? "replace them with one component-lifetime observable model and subscribe with per-item `useValue` selectors in the repeated row leaf"
-      : needsObservable
-      ? "replace them with one component-lifetime observable model and subscribe in the extracted leaf with `useValue`"
-      : "move their ownership into the extracted leaf component";
+    if (candidates.length < 2) {
+      continue;
+    }
+    const first = candidates[0]!,
+      members = candidates.map((candidate) => candidate.state),
+      names = members.map((member) => member.valueName),
+      repeated = candidates.some((candidate) => candidate.subtree.repeated),
+      needsObservable =
+        repeated ||
+        candidates.some(
+          (candidate) => candidate.subtree.unstable || candidate.subtree.kind !== "direct",
+        ),
+      action: StateAction = needsObservable ? "use-observable" : "move-state-down",
+      ownership = repeated
+        ? "replace them with one component-lifetime observable model and subscribe with per-item `useValue` selectors in the repeated row leaf"
+        : needsObservable
+          ? "replace them with one component-lifetime observable model and subscribe in the extracted leaf with `useValue`"
+          : "move their ownership into the extracted leaf component";
     const cluster: StateCluster = {
       action,
       id: `state-cluster:subtree:${first.state.owner.getStart()}:${first.subtree.node.getStart()}:${names.join(",")}`,
       members,
-      message: `Extract the ${first.subtree.label} subtree at line ${first.subtree.line}; ${ownership} for the confined state cluster (${names.map(name => `\`${name}\``).join(", ")}).`,
+      message: `Extract the ${first.subtree.label} subtree at line ${first.subtree.line}; ${ownership} for the confined state cluster (${names.map((name) => `\`${name}\``).join(", ")}).`,
       primary: members[0]!,
     };
-    for (const member of members) result.set(member, cluster);
+    for (const member of members) {
+      result.set(member, cluster);
+    }
   }
   return result;
 }
@@ -2580,7 +2774,7 @@ function nullableDialogPayloadCut(
   usage: StateUsage,
   knownComponents: ReadonlySet<string>,
   childContracts: ChildContractResolver | null,
-  imports: HookImports
+  imports: HookImports,
 ): DialogPayloadCut | null {
   if (
     !state.setterName ||
@@ -2597,57 +2791,58 @@ function nullableDialogPayloadCut(
     usage.setterUsesPreviousValue ||
     usage.shadowed ||
     usage.escaped ||
-    !usage.setterCallNodes.some(call => setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword)) ||
-    !usage.setterCallNodes.some(call => !setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword)) ||
-    usage.setterCallNodes.some(call => {
+    !usage.setterCallNodes.some((call) => setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword)) ||
+    !usage.setterCallNodes.some(
+      (call) => !setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword),
+    ) ||
+    usage.setterCallNodes.some((call) => {
       const argument = call.arguments[0];
-      return call.arguments.length !== 1 ||
+      return (
+        call.arguments.length !== 1 ||
         !argument ||
         ts.isArrowFunction(argument) ||
-        ts.isFunctionExpression(argument);
+        ts.isFunctionExpression(argument)
+      );
     })
   ) {
     return null;
   }
 
-  const ownerJsx = jsxElementCount(state.owner);
-  const conditionalBoundary = conditionalNullablePayloadBoundary(
-    state,
-    usage,
-    knownComponents
-  );
-  const dialog = conditionalBoundary?.dialog ??
-    lowestCommonJsxSubtree(usage.directRenderNodes, state.owner);
+  const ownerJsx = jsxElementCount(state.owner),
+    conditionalBoundary = conditionalNullablePayloadBoundary(state, usage, knownComponents),
+    dialog =
+      conditionalBoundary?.dialog ?? lowestCommonJsxSubtree(usage.directRenderNodes, state.owner);
   if (
     !dialog ||
     ts.isJsxFragment(dialog) ||
     ownerJsx < 12 ||
     nearestRepeatedRenderCall(dialog, state.owner) ||
     (!conditionalBoundary && hasUnstableSubtreeLifetime(dialog, state.owner)) ||
-    !usage.directRenderNodes.every(read =>
-      nodeWithin(read, conditionalBoundary?.gate ?? dialog)
-    )
+    !usage.directRenderNodes.every((read) => nodeWithin(read, conditionalBoundary?.gate ?? dialog))
   ) {
     return null;
   }
   const dialogJsx = jsxElementCountIn(dialog);
-  if (dialogJsx > 12 || dialogJsx / ownerJsx > 0.4) return null;
+  if (dialogJsx > 12 || dialogJsx / ownerJsx > 0.4) {
+    return null;
+  }
 
-  const returned = uniqueReturnedExpression(state.owner);
-  const opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog;
-  const target = opening.tagName.getText();
+  const returned = uniqueReturnedExpression(state.owner),
+    opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog,
+    target = opening.tagName.getText();
   if (
     !returned ||
     !nodeWithin(conditionalBoundary?.gate ?? dialog, returned) ||
     (isCustomJsxTarget(target) && !knownComponents.has(target)) ||
     (!conditionalBoundary &&
-      !opening.attributes.properties.some(attribute =>
-        ts.isJsxAttribute(attribute) &&
-        attribute.name.getText() === "open" &&
-        attribute.initializer !== undefined &&
-        ts.isJsxExpression(attribute.initializer) &&
-        attribute.initializer.expression !== undefined &&
-        isNullablePayloadOpenExpression(attribute.initializer.expression, state.valueName)
+      !opening.attributes.properties.some(
+        (attribute) =>
+          ts.isJsxAttribute(attribute) &&
+          attribute.name.getText() === "open" &&
+          attribute.initializer !== undefined &&
+          ts.isJsxExpression(attribute.initializer) &&
+          attribute.initializer.expression !== undefined &&
+          isNullablePayloadOpenExpression(attribute.initializer.expression, state.valueName),
       ))
   ) {
     return null;
@@ -2661,9 +2856,10 @@ function nullableDialogPayloadCut(
   }
   if (
     !stateReadsOutsideRenderAreEventRooted(state, usage, provenEventRoots, childContracts) ||
-    !usage.setterCallNodes.every(call =>
-      setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword) ||
-      nodeIsDirectDeferredEvent(call, state, provenEventRoots, childContracts)
+    !usage.setterCallNodes.every(
+      (call) =>
+        setterCallSetsLiteral(call, ts.SyntaxKind.NullKeyword) ||
+        nodeIsDirectDeferredEvent(call, state, provenEventRoots, childContracts),
     )
   ) {
     return null;
@@ -2672,25 +2868,26 @@ function nullableDialogPayloadCut(
   return {
     conditional: conditionalBoundary !== null,
     consumerLabel: jsxSubtreeLabel(dialog),
-    consumerLine: dialog.getSourceFile().getLineAndCharacterOfPosition(
-      (conditionalBoundary?.gate ?? dialog).getStart()
-    ).line + 1,
+    consumerLine:
+      dialog
+        .getSourceFile()
+        .getLineAndCharacterOfPosition((conditionalBoundary?.gate ?? dialog).getStart()).line + 1,
   };
 }
 
 function conditionalNullablePayloadBoundary(
   state: StateCandidate,
   usage: StateUsage,
-  knownComponents: ReadonlySet<string>
+  knownComponents: ReadonlySet<string>,
 ): { dialog: ts.JsxElement | ts.JsxSelfClosingElement; gate: ts.JsxExpression } | null {
-  if (usage.directRenderNodes.length < 2) return null;
+  if (usage.directRenderNodes.length < 2) {
+    return null;
+  }
 
   for (const read of usage.directRenderNodes) {
-    const gate = findAncestorUntil(read, ts.isJsxExpression, state.owner);
-    const expression = gate?.expression && unwrapTransparentExpression(gate.expression);
-    const dialog = expression
-      ? directDialogPayloadGateBranch(expression, state.valueName)
-      : null;
+    const gate = findAncestorUntil(read, ts.isJsxExpression, state.owner),
+      expression = gate?.expression && unwrapTransparentExpression(gate.expression),
+      dialog = expression ? directDialogPayloadGateBranch(expression, state.valueName) : null;
     if (
       !gate ||
       !expression ||
@@ -2698,17 +2895,17 @@ function conditionalNullablePayloadBoundary(
       (!ts.isJsxElement(dialog) && !ts.isJsxSelfClosingElement(dialog)) ||
       !nodeWithin(read, dialogGateCondition(expression)) ||
       nearestRepeatedRenderCall(gate, state.owner) ||
-      !usage.directRenderNodes.every(node => nodeWithin(node, gate))
+      !usage.directRenderNodes.every((node) => nodeWithin(node, gate))
     ) {
       continue;
     }
 
-    const opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog;
-    const target = opening.tagName.getText();
+    const opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog,
+      target = opening.tagName.getText();
     if (
       (isCustomJsxTarget(target) && !knownComponents.has(target)) ||
-      usage.directRenderNodes.some(node =>
-        nodeWithin(node, dialog) && !isSafeJsxProjectionReference(node, state.owner)
+      usage.directRenderNodes.some(
+        (node) => nodeWithin(node, dialog) && !isSafeJsxProjectionReference(node, state.owner),
       )
     ) {
       continue;
@@ -2720,16 +2917,18 @@ function conditionalNullablePayloadBoundary(
 
 function dialogGateCondition(expression: ts.Expression): ts.Expression {
   const value = unwrapTransparentExpression(expression);
-  return ts.isConditionalExpression(value) ? value.condition :
-    ts.isBinaryExpression(value) ? value.left : value;
+  return ts.isConditionalExpression(value)
+    ? value.condition
+    : ts.isBinaryExpression(value)
+      ? value.left
+      : value;
 }
 
-function isNullablePayloadOpenExpression(
-  expression: ts.Expression,
-  stateName: string
-): boolean {
+function isNullablePayloadOpenExpression(expression: ts.Expression, stateName: string): boolean {
   const value = unwrapTransparentExpression(expression);
-  if (isDirectTruthyStateCondition(value, stateName)) return true;
+  if (isDirectTruthyStateCondition(value, stateName)) {
+    return true;
+  }
   if (
     !ts.isBinaryExpression(value) ||
     (value.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsToken &&
@@ -2737,16 +2936,17 @@ function isNullablePayloadOpenExpression(
   ) {
     return false;
   }
-  const left = unwrapTransparentExpression(value.left);
-  const right = unwrapTransparentExpression(value.right);
-  return (ts.isIdentifier(left) && left.text === stateName && right.kind === ts.SyntaxKind.NullKeyword) ||
-    (left.kind === ts.SyntaxKind.NullKeyword && ts.isIdentifier(right) && right.text === stateName);
+  const left = unwrapTransparentExpression(value.left),
+    right = unwrapTransparentExpression(value.right);
+  return (
+    (ts.isIdentifier(left) &&
+      left.text === stateName &&
+      right.kind === ts.SyntaxKind.NullKeyword) ||
+    (left.kind === ts.SyntaxKind.NullKeyword && ts.isIdentifier(right) && right.text === stateName)
+  );
 }
 
-function setterCallSetsLiteral(
-  call: ts.CallExpression,
-  kind: ts.SyntaxKind
-): boolean {
+function setterCallSetsLiteral(call: ts.CallExpression, kind: ts.SyntaxKind): boolean {
   return call.arguments.length === 1 && call.arguments[0]?.kind === kind;
 }
 
@@ -2754,11 +2954,11 @@ function stateReadsOutsideRenderAreEventRooted(
   state: StateCandidate,
   usage: StateUsage,
   eventRoots: ReadonlySet<RuntimeFunctionLike>,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): boolean {
   const renderReads = new Set(usage.directRenderNodes);
   let safe = true;
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -2778,17 +2978,13 @@ function nodeIsDirectDeferredEvent(
   node: ts.Node,
   state: StateCandidate,
   eventRoots: ReadonlySet<RuntimeFunctionLike>,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): boolean {
   const callback = nearestNestedFunction(node, state.owner);
-  return callback !== null &&
-    callbackResolvesToDeferredEvent(
-      callback,
-      state.owner,
-      eventRoots,
-      childContracts,
-      new Set()
-    );
+  return (
+    callback !== null &&
+    callbackResolvesToDeferredEvent(callback, state.owner, eventRoots, childContracts, new Set())
+  );
 }
 
 function callbackResolvesToDeferredEvent(
@@ -2796,7 +2992,7 @@ function callbackResolvesToDeferredEvent(
   owner: RuntimeFunctionLike,
   eventRoots: ReadonlySet<RuntimeFunctionLike>,
   childContracts: ChildContractResolver | null,
-  seen: ReadonlySet<string>
+  seen: ReadonlySet<string>,
 ): boolean {
   if (
     !ts.isArrowFunction(callback) &&
@@ -2805,36 +3001,34 @@ function callbackResolvesToDeferredEvent(
   ) {
     return false;
   }
-  if (
-    eventRoots.has(callback) ||
-    callbackHasDirectJsxEventRoot(callback, owner, childContracts)
-  ) {
+  if (eventRoots.has(callback) || callbackHasDirectJsxEventRoot(callback, owner, childContracts)) {
     return true;
   }
   const name = localCallbackBindingName(callback);
-  if (!name || seen.has(name) || bindingDeclarationCount(owner, name) !== 1) return false;
+  if (!name || seen.has(name) || bindingDeclarationCount(owner, name) !== 1) {
+    return false;
+  }
 
   const nextSeen = new Set(seen).add(name);
-  let referenced = false;
-  let safe = true;
+  let referenced = false,
+    safe = true;
   for (const node of identifiersNamed(owner.body, name)) {
-    if (!safe) break;
-    if (isDeclarationName(node) || isNonValueIdentifier(node)) continue;
+    if (!safe) {
+      break;
+    }
+    if (isDeclarationName(node) || isNonValueIdentifier(node)) {
+      continue;
+    }
     referenced = true;
     if (!ts.isCallExpression(node.parent) || node.parent.expression !== node) {
       safe = false;
       continue;
     }
     const caller = nearestNestedFunction(node, owner);
-    safe = caller !== null &&
+    safe =
+      caller !== null &&
       caller !== callback &&
-      callbackResolvesToDeferredEvent(
-        caller,
-        owner,
-        eventRoots,
-        childContracts,
-        nextSeen
-      );
+      callbackResolvesToDeferredEvent(caller, owner, eventRoots, childContracts, nextSeen);
   }
   return referenced && safe;
 }
@@ -2842,7 +3036,7 @@ function callbackResolvesToDeferredEvent(
 function callbackHasDirectJsxEventRoot(
   callback: RuntimeFunctionLike,
   owner: RuntimeFunctionLike,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): boolean {
   if (
     !ts.isArrowFunction(callback) &&
@@ -2864,15 +3058,22 @@ function callbackHasDirectJsxEventRoot(
   }
 
   const name = localCallbackBindingName(callback);
-  if (!name || bindingDeclarationCount(owner, name) !== 1) return false;
-  let referenced = false;
-  let safe = true;
+  if (!name || bindingDeclarationCount(owner, name) !== 1) {
+    return false;
+  }
+  let referenced = false,
+    safe = true;
   for (const node of identifiersNamed(owner.body, name)) {
-    if (!safe) break;
-    if (isDeclarationName(node) || isNonValueIdentifier(node)) continue;
+    if (!safe) {
+      break;
+    }
+    if (isDeclarationName(node) || isNonValueIdentifier(node)) {
+      continue;
+    }
     referenced = true;
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
-    safe = attribute !== null &&
+    safe =
+      attribute !== null &&
       isDirectJsxAttributeExpression(attribute, node) &&
       jsxEventAttributeIsDeferred(attribute, childContracts);
   }
@@ -2881,14 +3082,18 @@ function callbackHasDirectJsxEventRoot(
 
 function jsxEventAttributeIsDeferred(
   attribute: ts.JsxAttribute,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): boolean {
-  const prop = attribute.name.getText();
-  const target = jsxTargetName(attribute);
-  if (!target || !/^on[A-Z]/.test(prop)) return false;
-  return !isCustomJsxTarget(target) ||
+  const prop = attribute.name.getText(),
+    target = jsxTargetName(attribute);
+  if (!target || !/^on[A-Z]/.test(prop)) {
+    return false;
+  }
+  return (
+    !isCustomJsxTarget(target) ||
     childContracts?.frameworkEventComponent(target) === true ||
-    childContracts?.componentCallbackPropIsDeferred(target, prop) === true;
+    childContracts?.componentCallbackPropIsDeferred(target, prop) === true
+  );
 }
 
 function normalizeObservableDialogClusterMembers(
@@ -2896,27 +3101,40 @@ function normalizeObservableDialogClusterMembers(
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   knownComponents: ReadonlySet<string>,
   mutations: readonly SetterMutation[],
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): readonly StateCandidate[] | null {
-  if (members.length < 2) return null;
-  const payloads = members.filter(hasDialogPayloadInitializer);
-  const flags = members.filter(state => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
-  if (payloads.length !== 1 || flags.length < 1 || payloads.length + flags.length !== members.length) {
+  if (members.length < 2) {
+    return null;
+  }
+  const payloads = members.filter(hasDialogPayloadInitializer),
+    flags = members.filter((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  if (
+    payloads.length !== 1 ||
+    flags.length < 1 ||
+    payloads.length + flags.length !== members.length
+  ) {
     return null;
   }
 
   const payload = payloads[0];
-  if (!payload) return null;
-  const payloadMutations = mutations.filter(mutation => mutation.state === payload);
-  const payloadOpenMutations = payloadMutations.filter(mutation => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword));
-  if (payloadOpenMutations.length === 0) return null;
-  const latches = flags.filter(flag =>
-    isMonotonicDialogLatch(flag, usageByState, mutations, payloadOpenMutations, stateFlow)
+  if (!payload) {
+    return null;
+  }
+  const payloadMutations = mutations.filter((mutation) => mutation.state === payload),
+    payloadOpenMutations = payloadMutations.filter(
+      (mutation) => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
+    );
+  if (payloadOpenMutations.length === 0) {
+    return null;
+  }
+  const latches = flags.filter((flag) =>
+    isMonotonicDialogLatch(flag, usageByState, mutations, payloadOpenMutations, stateFlow),
   );
-  if (latches.length > 1) return null;
-  const latch = latches[0] ?? null;
-
-  const targetSets: ReadonlySet<string>[] = [];
+  if (latches.length > 1) {
+    return null;
+  }
+  const latch = latches[0] ?? null,
+    targetSets: ReadonlySet<string>[] = [];
   for (const member of members) {
     const usage = usageByState.get(member);
     if (
@@ -2930,45 +3148,56 @@ function normalizeObservableDialogClusterMembers(
     ) {
       return null;
     }
-    const targets = new Set([...usage.jsxTargets].filter(target => knownComponents.has(target)));
-    if (
-      targets.size === 0 &&
-      member !== payload &&
-      member !== latch
-    ) {
+    const targets = new Set([...usage.jsxTargets].filter((target) => knownComponents.has(target)));
+    if (targets.size === 0 && member !== payload && member !== latch) {
       return null;
     }
-    if (member === payload && targets.size === 0 && usage.localRenderReads === 0 && usage.deferredReads === 0) {
+    if (
+      member === payload &&
+      targets.size === 0 &&
+      usage.localRenderReads === 0 &&
+      usage.deferredReads === 0
+    ) {
       return null;
     }
     targetSets.push(targets);
   }
 
   for (const flag of flags) {
-    if (flag === latch) continue;
-    const flagMutations = mutations.filter(mutation => mutation.state === flag);
-    const openMutations = flagMutations.filter(mutation => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword));
-    const flagUsage = usageByState.get(flag);
-    const canClose =
-      flagMutations.some(mutation => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) ||
-      flagMutations.some(isControlledBooleanTransition) ||
-      (flagUsage?.setterTargets.size ?? 0) > 0;
-    if (openMutations.length === 0 || !canClose) return null;
-    const pairedOpen = openMutations.some(flagMutation =>
+    if (flag === latch) {
+      continue;
+    }
+    const flagMutations = mutations.filter((mutation) => mutation.state === flag),
+      openMutations = flagMutations.filter((mutation) =>
+        callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
+      ),
+      flagUsage = usageByState.get(flag),
+      canClose =
+        flagMutations.some((mutation) => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) ||
+        flagMutations.some(isControlledBooleanTransition) ||
+        (flagUsage?.setterTargets.size ?? 0) > 0;
+    if (openMutations.length === 0 || !canClose) {
+      return null;
+    }
+    const pairedOpen = openMutations.some((flagMutation) =>
       payloadOpenMutations.some(
-        payloadMutation =>
+        (payloadMutation) =>
           flagMutation.region === payloadMutation.region &&
           mutationsAreProvenCoexecuting(
             flagMutation.call,
             payloadMutation.call,
             flagMutation.region,
-            stateFlow
-          )
-      )
+            stateFlow,
+          ),
+      ),
     );
-    if (!pairedOpen) return null;
+    if (!pairedOpen) {
+      return null;
+    }
   }
-  if (!targetSets.some(targets => targets.size > 0)) return null;
+  if (!targetSets.some((targets) => targets.size > 0)) {
+    return null;
+  }
 
   const ownerGuardedPayload = payloadControlsOwnerJsx(payload, knownComponents);
   if (
@@ -2977,10 +3206,7 @@ function normalizeObservableDialogClusterMembers(
   ) {
     return null;
   }
-  if (
-    latch &&
-    !stateHasBoundedDialogGate(latch, members, usageByState, knownComponents)
-  ) {
+  if (latch && !stateHasBoundedDialogGate(latch, members, usageByState, knownComponents)) {
     return null;
   }
   return members;
@@ -2992,28 +3218,33 @@ function normalizePersistentScalarDialogClusterMembers(
   knownComponents: ReadonlySet<string>,
   mutations: readonly SetterMutation[],
   stateFlow: StateFlowIndex,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): readonly StateCandidate[] | null {
-  if (!childContracts || members.length !== 2) return null;
-  const payload = members.find(hasLiteralScalarDialogPayloadInitializer);
-  const flag = members.find(state => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
-  if (!payload || !flag || payload === flag) return null;
+  if (!childContracts || members.length !== 2) {
+    return null;
+  }
+  const payload = members.find(hasLiteralScalarDialogPayloadInitializer),
+    flag = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  if (!payload || !flag || payload === flag) {
+    return null;
+  }
 
-  const payloadUsage = usageByState.get(payload);
-  const flagUsage = usageByState.get(flag);
+  const payloadUsage = usageByState.get(payload),
+    flagUsage = usageByState.get(flag);
   if (
     !payloadUsage ||
     !flagUsage ||
-    [payloadUsage, flagUsage].some(usage =>
-      usage.localRenderReads !== 0 ||
-      usage.effectReads !== 0 ||
-      usage.effectWrites !== 0 ||
-      usage.deferredReads !== 0 ||
-      usage.repeatedTransport ||
-      usage.unstableTransport ||
-      usage.setterUsesPreviousValue ||
-      usage.shadowed ||
-      usage.escaped
+    [payloadUsage, flagUsage].some(
+      (usage) =>
+        usage.localRenderReads !== 0 ||
+        usage.effectReads !== 0 ||
+        usage.effectWrites !== 0 ||
+        usage.deferredReads !== 0 ||
+        usage.repeatedTransport ||
+        usage.unstableTransport ||
+        usage.setterUsesPreviousValue ||
+        usage.shadowed ||
+        usage.escaped,
     ) ||
     stateMayHoldCallable(payload) ||
     stateMayHoldCallable(flag) ||
@@ -3031,10 +3262,10 @@ function normalizePersistentScalarDialogClusterMembers(
     return null;
   }
 
-  const target = [...payloadUsage.valueTargets][0];
-  const payloadCallSite = directUniqueReturnCallSite(payloadUsage, payload.owner)?.opening;
-  const flagCallSite = directUniqueReturnCallSite(flagUsage, flag.owner)?.opening;
-  const closeTransport = directSetterTransport(flag);
+  const target = [...payloadUsage.valueTargets][0],
+    payloadCallSite = directUniqueReturnCallSite(payloadUsage, payload.owner)?.opening,
+    flagCallSite = directUniqueReturnCallSite(flagUsage, flag.owner)?.opening,
+    closeTransport = directSetterTransport(flag);
   if (
     !target ||
     !knownComponents.has(target) ||
@@ -3044,36 +3275,35 @@ function normalizePersistentScalarDialogClusterMembers(
     !closeTransport ||
     closeTransport.target !== target ||
     closeTransport.attribute.parent.parent !== payloadCallSite ||
-    !childContracts.componentCallbackPropIsDeferred(
-      target,
-      closeTransport.attribute.name.getText()
-    )
+    !childContracts.componentCallbackPropIsDeferred(target, closeTransport.attribute.name.getText())
   ) {
     return null;
   }
 
-  const payloadMutations = mutations.filter(mutation => mutation.state === payload);
-  const flagMutations = mutations.filter(mutation => mutation.state === flag);
-  const opens = flagMutations.filter(mutation => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword));
-  const closes = flagMutations.filter(mutation => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword));
-  const paired = (left: SetterMutation, right: SetterMutation) =>
-    left.region === right.region &&
-    mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow);
+  const payloadMutations = mutations.filter((mutation) => mutation.state === payload),
+    flagMutations = mutations.filter((mutation) => mutation.state === flag),
+    opens = flagMutations.filter((mutation) =>
+      callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
+    ),
+    closes = flagMutations.filter((mutation) =>
+      callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword),
+    ),
+    paired = (left: SetterMutation, right: SetterMutation) =>
+      left.region === right.region &&
+      mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow);
   if (
     payloadMutations.length === 0 ||
     opens.length === 0 ||
     flagMutations.length !== opens.length + closes.length ||
-    payloadMutations.some(mutation =>
-      !mutationIsEventRooted(mutation, payload) ||
-      !mutationWritesTypedPrimitive(mutation)
+    payloadMutations.some(
+      (mutation) =>
+        !mutationIsEventRooted(mutation, payload) || !mutationWritesTypedPrimitive(mutation),
     ) ||
-    flagMutations.some(mutation => !mutationIsEventRooted(mutation, flag)) ||
-    payloadMutations.some(payloadMutation =>
-      !opens.some(open => paired(payloadMutation, open))
+    flagMutations.some((mutation) => !mutationIsEventRooted(mutation, flag)) ||
+    payloadMutations.some(
+      (payloadMutation) => !opens.some((open) => paired(payloadMutation, open)),
     ) ||
-    opens.some(open =>
-      !payloadMutations.some(payloadMutation => paired(open, payloadMutation))
-    )
+    opens.some((open) => !payloadMutations.some((payloadMutation) => paired(open, payloadMutation)))
   ) {
     return null;
   }
@@ -3082,27 +3312,38 @@ function normalizePersistentScalarDialogClusterMembers(
 
 function hasLiteralScalarDialogPayloadInitializer(state: StateCandidate): boolean {
   const initializer = state.call.arguments[0];
-  if (!initializer) return false;
+  if (!initializer) {
+    return false;
+  }
   const value = unwrapTransparentExpression(initializer);
   return ts.isStringLiteralLike(value) || ts.isNumericLiteral(value);
 }
 
 function mutationWritesTypedPrimitive(mutation: SetterMutation): boolean {
   const argument = mutation.call.arguments[0];
-  if (!argument || mutation.call.arguments.length !== 1) return false;
+  if (!argument || mutation.call.arguments.length !== 1) {
+    return false;
+  }
   const value = unwrapTransparentExpression(argument);
-  if (ts.isStringLiteralLike(value) || ts.isNumericLiteral(value)) return true;
-  if (!ts.isIdentifier(value) || !isRuntimeFunctionLike(mutation.region)) return false;
-  return mutation.region.parameters.some(parameter =>
-    ts.isIdentifier(parameter.name) &&
-    parameter.name.text === value.text &&
-    parameter.type !== undefined &&
-    primitiveDialogPayloadType(parameter.type)
+  if (ts.isStringLiteralLike(value) || ts.isNumericLiteral(value)) {
+    return true;
+  }
+  if (!ts.isIdentifier(value) || !isRuntimeFunctionLike(mutation.region)) {
+    return false;
+  }
+  return mutation.region.parameters.some(
+    (parameter) =>
+      ts.isIdentifier(parameter.name) &&
+      parameter.name.text === value.text &&
+      parameter.type !== undefined &&
+      primitiveDialogPayloadType(parameter.type),
   );
 }
 
 function primitiveDialogPayloadType(type: ts.TypeNode): boolean {
-  if (ts.isParenthesizedTypeNode(type)) return primitiveDialogPayloadType(type.type);
+  if (ts.isParenthesizedTypeNode(type)) {
+    return primitiveDialogPayloadType(type.type);
+  }
   if (ts.isUnionTypeNode(type)) {
     return type.types.length > 0 && type.types.every(primitiveDialogPayloadType);
   }
@@ -3117,58 +3358,65 @@ function isMonotonicDialogLatch(
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   mutations: readonly SetterMutation[],
   payloadOpenMutations: readonly SetterMutation[],
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): boolean {
-  const usage = usageByState.get(flag);
-  const flagMutations = mutations.filter(mutation => mutation.state === flag);
-  return usage !== undefined &&
+  const usage = usageByState.get(flag),
+    flagMutations = mutations.filter((mutation) => mutation.state === flag);
+  return (
+    usage !== undefined &&
     usage.localRenderReads > 0 &&
     usage.transportedOccurrences === 0 &&
     usage.deferredReads === 0 &&
     usage.setterReferences === usage.setterCalls &&
     flagMutations.length > 0 &&
-    flagMutations.every(mutation => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)) &&
-    flagMutations.every(flagMutation =>
-      payloadOpenMutations.some(payloadMutation =>
-        flagMutation.region === payloadMutation.region &&
-        mutationsAreProvenCoexecuting(
-          flagMutation.call,
-          payloadMutation.call,
-          flagMutation.region,
-          stateFlow
-        )
-      )
-    );
+    flagMutations.every((mutation) => callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)) &&
+    flagMutations.every((flagMutation) =>
+      payloadOpenMutations.some(
+        (payloadMutation) =>
+          flagMutation.region === payloadMutation.region &&
+          mutationsAreProvenCoexecuting(
+            flagMutation.call,
+            payloadMutation.call,
+            flagMutation.region,
+            stateFlow,
+          ),
+      ),
+    )
+  );
 }
 
 function hasDialogPayloadInitializer(state: StateCandidate): boolean {
-  return state.call.arguments.length === 0 ||
-    hasStateInitializer(state, ts.SyntaxKind.NullKeyword);
+  return state.call.arguments.length === 0 || hasStateInitializer(state, ts.SyntaxKind.NullKeyword);
 }
 
 function normalizeGatedFeedbackClusterMembers(
   members: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
   mutations: readonly SetterMutation[],
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): readonly StateCandidate[] | null {
-  if (members.length !== 2) return null;
-  const payload = members.find(state => hasStateInitializer(state, ts.SyntaxKind.NullKeyword));
-  const feedback = members.find(state => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
-  if (!payload || !feedback || payload === feedback) return null;
+  if (members.length !== 2) {
+    return null;
+  }
+  const payload = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.NullKeyword)),
+    feedback = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  if (!payload || !feedback || payload === feedback) {
+    return null;
+  }
 
-  const payloadUsage = usageByState.get(payload);
-  const feedbackUsage = usageByState.get(feedback);
+  const payloadUsage = usageByState.get(payload),
+    feedbackUsage = usageByState.get(feedback);
   if (
     !payloadUsage ||
     !feedbackUsage ||
-    [payloadUsage, feedbackUsage].some(usage =>
-      usage.shadowed ||
-      usage.escaped ||
-      usage.effectReads > 0 ||
-      usage.effectWrites > 0 ||
-      usage.setterUsesPreviousValue ||
-      usage.transportedOccurrences > 0
+    [payloadUsage, feedbackUsage].some(
+      (usage) =>
+        usage.shadowed ||
+        usage.escaped ||
+        usage.effectReads > 0 ||
+        usage.effectWrites > 0 ||
+        usage.setterUsesPreviousValue ||
+        usage.transportedOccurrences > 0,
     ) ||
     stateMayHoldCallable(payload) ||
     stateMayHoldCallable(feedback) ||
@@ -3181,21 +3429,21 @@ function normalizeGatedFeedbackClusterMembers(
     return null;
   }
 
-  const payloadMutations = mutations.filter(mutation => mutation.state === payload);
-  const feedbackMutations = mutations.filter(mutation => mutation.state === feedback);
-  const payloadResets = payloadMutations.filter(mutation =>
-    callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)
-  );
-  const feedbackResets = feedbackMutations.filter(mutation =>
-    callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)
-  );
-  const feedbackStarts = feedbackMutations.filter(mutation =>
-    callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword)
-  );
+  const payloadMutations = mutations.filter((mutation) => mutation.state === payload),
+    feedbackMutations = mutations.filter((mutation) => mutation.state === feedback),
+    payloadResets = payloadMutations.filter((mutation) =>
+      callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
+    ),
+    feedbackResets = feedbackMutations.filter((mutation) =>
+      callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword),
+    ),
+    feedbackStarts = feedbackMutations.filter((mutation) =>
+      callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
+    );
   if (
     payloadMutations.length < 2 ||
     payloadResets.length === 0 ||
-    !payloadMutations.some(mutation => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)) ||
+    !payloadMutations.some((mutation) => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword)) ||
     feedbackStarts.length === 0 ||
     feedbackResets.length < 2 ||
     !feedbackHasTimedReset(feedbackStarts, feedbackResets, feedback.owner, stateFlow)
@@ -3203,17 +3451,18 @@ function normalizeGatedFeedbackClusterMembers(
     return null;
   }
 
-  const hasPairedReset = payloadResets.some(payloadReset =>
-    feedbackResets.some(feedbackReset =>
-      payloadReset.region === feedbackReset.region &&
-      (callsAreAdjacentDraftWrites(payloadReset.call, feedbackReset.call) ||
-        mutationsAreProvenCoexecuting(
-          payloadReset.call,
-          feedbackReset.call,
-          payloadReset.region,
-          stateFlow
-        ))
-    )
+  const hasPairedReset = payloadResets.some((payloadReset) =>
+    feedbackResets.some(
+      (feedbackReset) =>
+        payloadReset.region === feedbackReset.region &&
+        (callsAreAdjacentDraftWrites(payloadReset.call, feedbackReset.call) ||
+          mutationsAreProvenCoexecuting(
+            payloadReset.call,
+            feedbackReset.call,
+            payloadReset.region,
+            stateFlow,
+          )),
+    ),
   );
   return hasPairedReset ? [payload, feedback] : null;
 }
@@ -3221,7 +3470,7 @@ function normalizeGatedFeedbackClusterMembers(
 function feedbackRenderIsConfinedToPayloadGate(
   payload: StateCandidate,
   payloadUsage: StateUsage,
-  feedbackUsage: StateUsage
+  feedbackUsage: StateUsage,
 ): boolean {
   if (
     payloadUsage.directRenderNodes.length === 0 ||
@@ -3231,16 +3480,17 @@ function feedbackRenderIsConfinedToPayloadGate(
   ) {
     return false;
   }
-  const feedbackLeaf = lowestCommonJsxSubtree(
-    feedbackUsage.directRenderNodes,
-    payload.owner
-  );
-  if (!feedbackLeaf || jsxElementCountIn(feedbackLeaf) > 4) return false;
-  const returned = uniqueReturnedExpression(payload.owner) ??
-    uniqueJsxReturnAllowingNullGuard(payload.owner);
-  if (!returned) return false;
+  const feedbackLeaf = lowestCommonJsxSubtree(feedbackUsage.directRenderNodes, payload.owner);
+  if (!feedbackLeaf || jsxElementCountIn(feedbackLeaf) > 4) {
+    return false;
+  }
+  const returned =
+    uniqueReturnedExpression(payload.owner) ?? uniqueJsxReturnAllowingNullGuard(payload.owner);
+  if (!returned) {
+    return false;
+  }
   let confined = false;
-  visit(returned, node => {
+  visit(returned, (node) => {
     if (
       confined ||
       !ts.isConditionalExpression(node) ||
@@ -3248,27 +3498,32 @@ function feedbackRenderIsConfinedToPayloadGate(
     ) {
       return;
     }
-    confined = payloadUsage.directRenderNodes.every(read => nodeWithin(read, node)) &&
-      feedbackUsage.directRenderNodes.every(read => nodeWithin(read, node.whenTrue)) &&
+    confined =
+      payloadUsage.directRenderNodes.every((read) => nodeWithin(read, node)) &&
+      feedbackUsage.directRenderNodes.every((read) => nodeWithin(read, node.whenTrue)) &&
       nodeWithin(feedbackLeaf, node.whenTrue);
   });
   return confined;
 }
 
-function uniqueJsxReturnAllowingNullGuard(
-  owner: RuntimeFunctionLike
-): ts.Expression | null {
-  if (!owner.body) return null;
+function uniqueJsxReturnAllowingNullGuard(owner: RuntimeFunctionLike): ts.Expression | null {
+  if (!owner.body) {
+    return null;
+  }
   const returned: ts.Expression[] = [];
   let unsafe = false;
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (unsafe || !ts.isReturnStatement(node)) return;
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (unsafe || !ts.isReturnStatement(node)) {
+      return;
+    }
     if (!node.expression) {
       unsafe = true;
       return;
     }
     const expression = unwrapTransparentExpression(node.expression);
-    if (expression.kind === ts.SyntaxKind.NullKeyword) return;
+    if (expression.kind === ts.SyntaxKind.NullKeyword) {
+      return;
+    }
     if (
       !ts.isJsxElement(expression) &&
       !ts.isJsxSelfClosingElement(expression) &&
@@ -3282,28 +3537,31 @@ function uniqueJsxReturnAllowingNullGuard(
   return !unsafe && returned.length === 1 ? returned[0]! : null;
 }
 
-function isDirectTruthyStateCondition(
-  expression: ts.Expression,
-  stateName: string
-): boolean {
+function isDirectTruthyStateCondition(expression: ts.Expression, stateName: string): boolean {
   const value = unwrapTransparentExpression(expression);
-  if (ts.isIdentifier(value)) return value.text === stateName;
-  return ts.isPrefixUnaryExpression(value) &&
+  if (ts.isIdentifier(value)) {
+    return value.text === stateName;
+  }
+  return (
+    ts.isPrefixUnaryExpression(value) &&
     value.operator === ts.SyntaxKind.ExclamationToken &&
     ts.isPrefixUnaryExpression(value.operand) &&
     value.operand.operator === ts.SyntaxKind.ExclamationToken &&
     ts.isIdentifier(value.operand.operand) &&
-    value.operand.operand.text === stateName;
+    value.operand.operand.text === stateName
+  );
 }
 
 function feedbackHasTimedReset(
   starts: readonly SetterMutation[],
   resets: readonly SetterMutation[],
   owner: RuntimeFunctionLike,
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): boolean {
-  if (bindingDeclarationCount(owner, "setTimeout") > 0) return false;
-  return resets.some(reset => {
+  if (bindingDeclarationCount(owner, "setTimeout") > 0) {
+    return false;
+  }
+  return resets.some((reset) => {
     const timer = findAncestorUntil(
       reset.call,
       (node): node is ts.CallExpression =>
@@ -3312,32 +3570,41 @@ function feedbackHasTimedReset(
         node.expression.text === "setTimeout" &&
         !!node.arguments[0] &&
         nodeWithin(reset.call, node.arguments[0]),
-      owner
+      owner,
     );
-    if (!timer) return false;
+    if (!timer) {
+      return false;
+    }
     const command = nearestMutationFunction(timer, owner);
-    return starts.some(start =>
-      start.region === command &&
-      start.call.getStart() < timer.getStart() &&
-      (callsAreAdjacentDraftWrites(start.call, timer) ||
-        mutationsAreProvenCoexecuting(start.call, timer, command, stateFlow))
+    return starts.some(
+      (start) =>
+        start.region === command &&
+        start.call.getStart() < timer.getStart() &&
+        (callsAreAdjacentDraftWrites(start.call, timer) ||
+          mutationsAreProvenCoexecuting(start.call, timer, command, stateFlow)),
     );
   });
 }
 
 function payloadControlsOwnerJsx(
   payload: StateCandidate,
-  knownComponents: ReadonlySet<string>
+  knownComponents: ReadonlySet<string>,
 ): boolean {
   let controls = false;
-  visit(payload.owner.body, node => {
-    if (!ts.isIdentifier(node) || node.text !== payload.valueName || isNonValueIdentifier(node)) return;
+  visit(payload.owner.body, (node) => {
+    if (!ts.isIdentifier(node) || node.text !== payload.valueName || isNonValueIdentifier(node)) {
+      return;
+    }
     const jsx = findAncestorUntil(node, isJsxNode, payload.owner);
-    if (!jsx) return;
+    if (!jsx) {
+      return;
+    }
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, payload.owner);
     if (attribute) {
       const target = jsxTargetName(attribute);
-      if (target && knownComponents.has(target)) return;
+      if (target && knownComponents.has(target)) {
+        return;
+      }
     }
     controls = true;
   });
@@ -3348,7 +3615,7 @@ function stateHasBoundedDialogGate(
   state: StateCandidate,
   members: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  knownComponents: ReadonlySet<string>
+  knownComponents: ReadonlySet<string>,
 ): boolean {
   const stateUsage = usageByState.get(state);
   if (
@@ -3360,12 +3627,12 @@ function stateHasBoundedDialogGate(
   }
 
   const firstRead = stateUsage.directRenderNodes[0];
-  if (!firstRead) return false;
-  const gate = findAncestorUntil(firstRead, ts.isJsxExpression, state.owner);
-  const expression = gate?.expression && unwrapTransparentExpression(gate.expression);
-  const trueBranch = expression
-    ? directDialogPayloadGateBranch(expression, state.valueName)
-    : null;
+  if (!firstRead) {
+    return false;
+  }
+  const gate = findAncestorUntil(firstRead, ts.isJsxExpression, state.owner),
+    expression = gate?.expression && unwrapTransparentExpression(gate.expression),
+    trueBranch = expression ? directDialogPayloadGateBranch(expression, state.valueName) : null;
   if (
     !gate ||
     !expression ||
@@ -3376,30 +3643,40 @@ function stateHasBoundedDialogGate(
     nearestRepeatedRenderCall(gate, state.owner) ||
     jsxElementCountIn(trueBranch) > 12 ||
     jsxElementCountIn(trueBranch) / jsxElementCount(state.owner) > 0.4 ||
-    !stateUsage.directRenderNodes.every(read => nodeWithin(read, gate))
+    !stateUsage.directRenderNodes.every((read) => nodeWithin(read, gate))
   ) {
     return false;
   }
 
   const targetSites = new Set<number>();
-  visit(trueBranch, node => {
-    if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) return;
-    if (knownComponents.has(node.tagName.getText())) targetSites.add(node.getStart());
+  visit(trueBranch, (node) => {
+    if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) {
+      return;
+    }
+    if (knownComponents.has(node.tagName.getText())) {
+      targetSites.add(node.getStart());
+    }
   });
-  if (targetSites.size === 0) return false;
+  if (targetSites.size === 0) {
+    return false;
+  }
 
-  return members.every(member => {
+  return members.every((member) => {
     const usage = usageByState.get(member);
-    return usage !== undefined &&
-      [...usage.jsxTargets].every(target => knownComponents.has(target)) &&
-      [...usage.valueTransportSites, ...usage.setterTransportSites].every(site => targetSites.has(site)) &&
-      usage.directRenderNodes.every(read => nodeWithin(read, gate));
+    return (
+      usage !== undefined &&
+      [...usage.jsxTargets].every((target) => knownComponents.has(target)) &&
+      [...usage.valueTransportSites, ...usage.setterTransportSites].every((site) =>
+        targetSites.has(site),
+      ) &&
+      usage.directRenderNodes.every((read) => nodeWithin(read, gate))
+    );
   });
 }
 
 function directDialogPayloadGateBranch(
   expression: ts.Expression,
-  payloadName: string
+  payloadName: string,
 ): ts.Expression | null {
   const value = unwrapTransparentExpression(expression);
   if (
@@ -3421,17 +3698,22 @@ function directDialogPayloadGateBranch(
 
 function isControlledBooleanTransition(mutation: SetterMutation): boolean {
   const argument = mutation.call.arguments[0];
-  if (!argument || !ts.isIdentifier(argument)) return false;
-  const callback = isInlineRuntimeCallback(mutation.region) ? mutation.region : null;
-  const parameter = callback?.parameters[0];
-  if (!parameter || !ts.isIdentifier(parameter.name) || parameter.name.text !== argument.text) return false;
+  if (!argument || !ts.isIdentifier(argument)) {
+    return false;
+  }
+  const callback = isInlineRuntimeCallback(mutation.region) ? mutation.region : null,
+    parameter = callback?.parameters[0];
+  if (!parameter || !ts.isIdentifier(parameter.name) || parameter.name.text !== argument.text) {
+    return false;
+  }
   const attribute = callback ? findAncestor(callback, ts.isJsxAttribute) : null;
-  return attribute !== null && /^(?:onOpen|onVisible|onExpanded)Change(?:Complete)?$/.test(attribute.name.getText());
+  return (
+    attribute !== null &&
+    /^(?:onOpen|onVisible|onExpanded)Change(?:Complete)?$/.test(attribute.name.getText())
+  );
 }
 
-function isInlineRuntimeCallback(
-  node: ts.Node
-): node is ts.ArrowFunction | ts.FunctionExpression {
+function isInlineRuntimeCallback(node: ts.Node): node is ts.ArrowFunction | ts.FunctionExpression {
   return ts.isArrowFunction(node) || ts.isFunctionExpression(node);
 }
 
@@ -3439,24 +3721,21 @@ function callSetsLiteral(mutation: SetterMutation, kind: ts.SyntaxKind): boolean
   return mutation.call.arguments.length === 1 && mutation.call.arguments[0]?.kind === kind;
 }
 
-function primitiveSetterUpdatersArePure(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
-  if (!hasDirectPrimitiveInitializer(state)) return true;
-  return usage.setterCallNodes.every(call => {
+function primitiveSetterUpdatersArePure(state: StateCandidate, usage: StateUsage): boolean {
+  if (!hasDirectPrimitiveInitializer(state)) {
+    return true;
+  }
+  return usage.setterCallNodes.every((call) => {
     const argument = call.arguments[0];
-    return !argument ||
+    return (
+      !argument ||
       (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument)) ||
-      isPureExpression(
-        argument,
-        call => isUnshadowedMathCall(state.owner, call, PURE_MATH_METHODS)
-      );
+      isPureExpression(argument, (call) =>
+        isUnshadowedMathCall(state.owner, call, PURE_MATH_METHODS),
+      )
+    );
   });
 }
-
-
-
 
 function nearestMutationFunction(node: ts.Node, owner: RuntimeFunctionLike): RuntimeFunctionLike {
   return findAncestorUntil(node, isRuntimeFunctionLike, owner) ?? owner;
@@ -3466,7 +3745,7 @@ function mutationsAreProvenCoexecuting(
   left: ts.CallExpression,
   right: ts.CallExpression,
   region: RuntimeFunctionLike,
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): boolean {
   return stateFlow.proveSynchronousCoexecution(region, left, right) === "proven";
 }
@@ -3475,7 +3754,7 @@ function mutationsMayCoexecute(
   left: ts.CallExpression,
   right: ts.CallExpression,
   region: RuntimeFunctionLike,
-  stateFlow: StateFlowIndex
+  stateFlow: StateFlowIndex,
 ): boolean {
   return stateFlow.proveSynchronousCoexecution(region, left, right) !== "disproven";
 }
@@ -3489,16 +3768,20 @@ class DisjointSet {
 
   find(index: number): number {
     const parent = this.parents[index];
-    if (parent === undefined || parent === index) return index;
+    if (parent === undefined || parent === index) {
+      return index;
+    }
     const root = this.find(parent);
     this.parents[index] = root;
     return root;
   }
 
   join(left: number, right: number): void {
-    const leftRoot = this.find(left);
-    const rightRoot = this.find(right);
-    if (leftRoot !== rightRoot) this.parents[rightRoot] = leftRoot;
+    const leftRoot = this.find(left),
+      rightRoot = this.find(right);
+    if (leftRoot !== rightRoot) {
+      this.parents[rightRoot] = leftRoot;
+    }
   }
 }
 
@@ -3507,16 +3790,24 @@ function classifySetterReference(
   state: StateCandidate,
   effectNodes: ReadonlySet<ts.Node>,
   imports: HookImports,
-  usage: StateUsage
+  usage: StateUsage,
 ): void {
-  if (node.parent === state.call.parent) return;
+  if (node.parent === state.call.parent) {
+    return;
+  }
   usage.setterReferences += 1;
   if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
     usage.setterCalls += 1;
     usage.setterCallNodes.push(node.parent);
-    if (setterCallUsesPreviousValue(node.parent)) usage.setterUsesPreviousValue = true;
-    if (hasAncestorInSet(node, effectNodes)) usage.effectWrites += 1;
-    if (isInsideImportedCallback(node, imports.useObserveEffect)) usage.legendReactionWrites += 1;
+    if (setterCallUsesPreviousValue(node.parent)) {
+      usage.setterUsesPreviousValue = true;
+    }
+    if (hasAncestorInSet(node, effectNodes)) {
+      usage.effectWrites += 1;
+    }
+    if (isInsideImportedCallback(node, imports.useObserveEffect)) {
+      usage.legendReactionWrites += 1;
+    }
     return;
   }
   const jsxAttribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
@@ -3532,8 +3823,12 @@ function classifySetterReference(
         usage.setterTargets.add(target);
         usage.setterTransportSites.add(jsxTransportSite(jsxAttribute));
         usage.transportedOccurrences += 1;
-        if (nearestRepeatedRenderCall(jsxAttribute, state.owner)) usage.repeatedTransport = true;
-        if (hasUnstableJsxLifetime(jsxAttribute, state.owner)) usage.unstableTransport = true;
+        if (nearestRepeatedRenderCall(jsxAttribute, state.owner)) {
+          usage.repeatedTransport = true;
+        }
+        if (hasUnstableJsxLifetime(jsxAttribute, state.owner)) {
+          usage.unstableTransport = true;
+        }
         return;
       }
     }
@@ -3548,9 +3843,11 @@ function classifyValueReference(
   state: StateCandidate,
   effectNodes: ReadonlySet<ts.Node>,
   imports: HookImports,
-  usage: StateUsage
+  usage: StateUsage,
 ): void {
-  if (node.parent === state.call.parent) return;
+  if (node.parent === state.call.parent) {
+    return;
+  }
   if (isHookDependencyReference(node, new Set(["useCallback"]))) {
     usage.deferredReads += 1;
     return;
@@ -3582,8 +3879,12 @@ function classifyValueReference(
           usage.repeatedTransport = true;
           usage.repeatedValueTransport = true;
         }
-        if (isInsideJsxCallback(jsxAttribute, state.owner)) usage.repeatedValueTransport = true;
-        if (hasUnstableJsxLifetime(jsxAttribute, state.owner)) usage.unstableTransport = true;
+        if (isInsideJsxCallback(jsxAttribute, state.owner)) {
+          usage.repeatedValueTransport = true;
+        }
+        if (hasUnstableJsxLifetime(jsxAttribute, state.owner)) {
+          usage.unstableTransport = true;
+        }
         return;
       }
     }
@@ -3615,13 +3916,15 @@ function classifyValueReference(
 function findLegendValueMirrors(
   states: readonly StateCandidate[],
   usageByState: ReadonlyMap<StateCandidate, StateUsage>,
-  bridges: ReadonlyMap<string, ReadonlySet<string>>
+  bridges: ReadonlyMap<string, ReadonlySet<string>>,
 ): ReadonlyMap<StateCandidate, ClassifiedState> {
   const mirrors = new Map<StateCandidate, ClassifiedState>();
-  if (bridges.size === 0) return mirrors;
+  if (bridges.size === 0) {
+    return mirrors;
+  }
   for (const state of states) {
-    const usage = usageByState.get(state);
-    const initial = state.call.arguments[0];
+    const usage = usageByState.get(state),
+      initial = state.call.arguments[0];
     if (
       !usage ||
       !state.setterName ||
@@ -3639,11 +3942,9 @@ function findLegendValueMirrors(
     ) {
       continue;
     }
-    const sourceName = initial.text;
-    const source = uniqueVariableDeclaration(state.owner, sourceName);
-    const hookCall = source?.initializer
-      ? unwrapTransparentExpression(source.initializer)
-      : null;
+    const sourceName = initial.text,
+      source = uniqueVariableDeclaration(state.owner, sourceName),
+      hookCall = source?.initializer ? unwrapTransparentExpression(source.initializer) : null;
     if (
       !source ||
       !hookCall ||
@@ -3657,7 +3958,7 @@ function findLegendValueMirrors(
     if (
       !writers ||
       !sourceBindingOnlySeedsState(source, state) ||
-      !usage.setterCallNodes.every(call => hasAdjacentBridgeWrite(call, writers))
+      !usage.setterCallNodes.every((call) => hasAdjacentBridgeWrite(call, writers))
     ) {
       continue;
     }
@@ -3672,14 +3973,16 @@ function findLegendValueMirrors(
 
 function sourceBindingOnlySeedsState(
   source: ts.VariableDeclaration,
-  state: StateCandidate
+  state: StateCandidate,
 ): boolean {
-  if (!ts.isIdentifier(source.name) || !state.owner.body) return false;
-  const binding = source.name;
-  const initial = state.call.arguments[0];
-  let safe = true;
-  let references = 0;
-  visit(state.owner.body, node => {
+  if (!ts.isIdentifier(source.name) || !state.owner.body) {
+    return false;
+  }
+  const binding = source.name,
+    initial = state.call.arguments[0];
+  let safe = true,
+    references = 0;
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -3690,14 +3993,16 @@ function sourceBindingOnlySeedsState(
       return;
     }
     references += 1;
-    if (node !== initial) safe = false;
+    if (node !== initial) {
+      safe = false;
+    }
   });
   return safe && references === 1;
 }
 
 function hasAdjacentBridgeWrite(
   setterCall: ts.CallExpression,
-  writers: ReadonlySet<string>
+  writers: ReadonlySet<string>,
 ): boolean {
   const statement = setterCall.parent;
   if (
@@ -3710,17 +4015,21 @@ function hasAdjacentBridgeWrite(
   ) {
     return false;
   }
-  const statements = statement.parent.statements;
+  const { statements } = statement.parent;
   const index = statements.indexOf(statement);
-  return [statements[index - 1], statements[index + 1]].some(candidate => {
-    if (!candidate || !ts.isExpressionStatement(candidate)) return false;
+  return [statements[index - 1], statements[index + 1]].some((candidate) => {
+    if (!candidate || !ts.isExpressionStatement(candidate)) {
+      return false;
+    }
     const expression = unwrapTransparentExpression(candidate.expression);
-    return ts.isCallExpression(expression) &&
+    return (
+      ts.isCallExpression(expression) &&
       expression.arguments.length === 1 &&
       !!expression.arguments[0] &&
       ts.isIdentifier(expression.expression) &&
       writers.has(expression.expression.text) &&
-      expression.arguments[0].getText() === setterCall.arguments[0]!.getText();
+      expression.arguments[0].getText() === setterCall.arguments[0]!.getText()
+    );
   });
 }
 
@@ -3761,7 +4070,7 @@ function classifyState(
   hasAdjacentEffectBooleanConsumers: boolean,
   hasMultiSurfaceBooleanConsumers: boolean,
   hasSourceEventScalarConsumers: boolean,
-  hasReactiveHostPropScalarConsumer: boolean
+  hasReactiveHostPropScalarConsumer: boolean,
 ): ClassifiedState {
   if (state.setterName === null) {
     return {
@@ -3859,7 +4168,8 @@ function classifyState(
   }
   if (
     branchUnmountMove &&
-    (localComponents.has(branchUnmountMove.target) || sourceComponents.has(branchUnmountMove.target))
+    (localComponents.has(branchUnmountMove.target) ||
+      sourceComponents.has(branchUnmountMove.target))
   ) {
     return {
       action: "move-state-down",
@@ -3867,8 +4177,8 @@ function classifyState(
       message: `Move React state \`${state.valueName}\` into \`${branchUnmountMove.target}\`; every read and interactive write belongs to that branch, and the owner resets it only when that branch unmounts.`,
     };
   }
-  const unusedStateDeletionConfidence = setterCallsDiscardConfidence(usage.setterCallNodes);
-  const onlyCalculatesOwnSetter = stateReadsOnlyCalculateOwnSetter(state, usage);
+  const unusedStateDeletionConfidence = setterCallsDiscardConfidence(usage.setterCallNodes),
+    onlyCalculatesOwnSetter = stateReadsOnlyCalculateOwnSetter(state, usage);
   if (
     usage.setterCalls > 0 &&
     usage.setterReferences === usage.setterCalls &&
@@ -3887,50 +4197,54 @@ function classifyState(
     return {
       action: "delete-unused-state",
       confidence: unusedStateDeletionConfidence ?? "certain",
-      message: unusedStateDeletionConfidence === "probable"
-        ? `Delete React state \`${state.valueName}\`; replace each setter call with a \`void\` expression that evaluates the same argument at the same position, because the assigned value is never consumed but property evaluation must be preserved.`
-        : `Delete React state \`${state.valueName}\` and its setter calls; assigned values are never consumed.`,
+      message:
+        unusedStateDeletionConfidence === "probable"
+          ? `Delete React state \`${state.valueName}\`; replace each setter call with a \`void\` expression that evaluates the same argument at the same position, because the assigned value is never consumed but property evaluation must be preserved.`
+          : `Delete React state \`${state.valueName}\` and its setter calls; assigned values are never consumed.`,
     };
   }
-  const directCallSite = directUniqueReturnCallSite(usage, state.owner);
-  const branchCallSite = directBranchReturnCallSite(usage, state.owner);
-  const branchSubtree = branchCallSite
-    ? ts.isJsxOpeningElement(branchCallSite.opening)
-      ? branchCallSite.opening.parent
-      : branchCallSite.opening
-    : null;
-  const hasIndependentTransportRenderCut = branchCallSite !== null &&
-    branchSubtree !== null &&
-    hasIndependentRenderCutWitness(
-      branchCallSite.returned,
-      [branchSubtree],
+  const directCallSite = directUniqueReturnCallSite(usage, state.owner),
+    branchCallSite = directBranchReturnCallSite(usage, state.owner),
+    branchSubtree = branchCallSite
+      ? ts.isJsxOpeningElement(branchCallSite.opening)
+        ? branchCallSite.opening.parent
+        : branchCallSite.opening
+      : null,
+    hasIndependentTransportRenderCut =
+      branchCallSite !== null &&
+      branchSubtree !== null &&
+      hasIndependentRenderCutWitness(
+        branchCallSite.returned,
+        [branchSubtree],
+        localComponents,
+        sourceComponents,
+      ),
+    hasRepeatedOwnerRenderCut =
+      branchSubtree !== null && hasRepeatedJsxRenderWorkOutside(state.owner, branchSubtree),
+    hasVisibilityValueTransport = [...usage.valueProps.values()].some((props) =>
+      [...props].some((prop) => /^(?:isOpen|isVisible|open|visible)$/.test(prop)),
+    ),
+    hasCompactBooleanTransportCut =
+      hasIndependentTransportRenderCut &&
+      !hasCompanionWrites &&
+      !hasReactiveMutationPath &&
+      usage.setterTargets.size === 0 &&
+      usage.setterCallNodes.every((call) => setterCallEndsCommand(call, state.owner)) &&
+      (hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
+        hasStateInitializer(state, ts.SyntaxKind.TrueKeyword)),
+    descendantControlledCut =
+      branchCallSite !== null &&
+      branchSubtree !== null &&
+      hasIndependentVisibilitySetterTransport &&
+      setterOwnedByValueCallSite(usage, state.owner) &&
+      hasIndependentTransportRenderCut,
+    callbackLeaf = findLazyCallbackLeaf(
+      state,
+      usage,
       localComponents,
-      sourceComponents
+      sourceComponents,
+      LAZY_CALLBACK_LEAF_PROOFS,
     );
-  const hasRepeatedOwnerRenderCut = branchSubtree !== null &&
-    hasRepeatedJsxRenderWorkOutside(state.owner, branchSubtree);
-  const hasVisibilityValueTransport = [...usage.valueProps.values()].some(props =>
-    [...props].some(prop => /^(?:isOpen|isVisible|open|visible)$/.test(prop))
-  );
-  const hasCompactBooleanTransportCut = hasIndependentTransportRenderCut &&
-    !hasCompanionWrites &&
-    !hasReactiveMutationPath &&
-    usage.setterTargets.size === 0 &&
-    usage.setterCallNodes.every(call => setterCallEndsCommand(call, state.owner)) &&
-    (hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
-      hasStateInitializer(state, ts.SyntaxKind.TrueKeyword));
-  const descendantControlledCut = branchCallSite !== null &&
-    branchSubtree !== null &&
-    hasIndependentVisibilitySetterTransport &&
-    setterOwnedByValueCallSite(usage, state.owner) &&
-    hasIndependentTransportRenderCut;
-  const callbackLeaf = findLazyCallbackLeaf(
-    state,
-    usage,
-    localComponents,
-    sourceComponents,
-    LAZY_CALLBACK_LEAF_PROOFS
-  );
   if (
     callbackLeaf &&
     usage.effectReads === 0 &&
@@ -3940,11 +4254,11 @@ function classifyState(
     !hasReactiveMutationPath &&
     hasSafeCommands &&
     state.setterName !== null &&
-    usage.setterCallNodes.some(call =>
+    usage.setterCallNodes.some((call) =>
       mutationRegionOnlyCallsStateSetters(
         nearestMutationFunction(call, state.owner),
-        new Set([state.setterName!])
-      )
+        new Set([state.setterName!]),
+      ),
     ) &&
     usage.setterReferences > 0 &&
     !usage.setterUsesPreviousValue &&
@@ -3958,13 +4272,14 @@ function classifyState(
     };
   }
   if (isAsyncLeafStatus) {
-    const target = [...usage.valueTargets][0];
-    const callSiteCount = usage.valueTransportSites.size;
-    const boundary = callSiteCount > 1
-      ? `${callSiteCount === 2 ? "two" : "three"} stable status call sites`
-      : target
-        ? `the stable \`${target}\` call site`
-        : "the stable pending-control call site";
+    const target = [...usage.valueTargets][0],
+      callSiteCount = usage.valueTransportSites.size,
+      boundary =
+        callSiteCount > 1
+          ? `${callSiteCount === 2 ? "two" : "three"} stable status call sites`
+          : target
+            ? `the stable \`${target}\` call site`
+            : "the stable pending-control call site";
     return {
       action: "use-observable",
       confidence: "probable",
@@ -3987,15 +4302,13 @@ function classifyState(
   }
   if (
     !isCustomHookOwner(state.owner) &&
-    (
-      jsxElementCount(state.owner) >= 12 ||
+    (jsxElementCount(state.owner) >= 12 ||
       hasCompactBooleanTransportCut ||
-      (
-        hasRepeatedOwnerRenderCut &&
+      (hasRepeatedOwnerRenderCut &&
         !usage.repeatedTransport &&
-        usage.setterCallNodes.every(call => nearestRepeatedRenderCall(call, state.owner) === null)
-      )
-    ) &&
+        usage.setterCallNodes.every(
+          (call) => nearestRepeatedRenderCall(call, state.owner) === null,
+        ))) &&
     usage.localRenderReads === 0 &&
     usage.effectReads === 0 &&
     usage.effectWrites === 0 &&
@@ -4005,14 +4318,10 @@ function classifyState(
     usage.valueTargets.size === 1 &&
     branchCallSite !== null &&
     !usage.repeatedValueTransport &&
-    (
-      !hasCompanionWrites ||
-      (
-        hasVisibilityValueTransport &&
+    (!hasCompanionWrites ||
+      (hasVisibilityValueTransport &&
         !hasNonClosingCompanionWrites &&
-        (hasIndependentDirectEventWrite || hasIndependentVisibilitySetterTransport)
-      )
-    ) &&
+        (hasIndependentDirectEventWrite || hasIndependentVisibilitySetterTransport))) &&
     (!hasReactiveMutationPath ||
       hasIndependentDirectEventWrite ||
       hasIndependentVisibilitySetterTransport) &&
@@ -4065,19 +4374,15 @@ function classifyState(
     };
   }
   if (
-    isLiteralBooleanLeafState(
-      state,
-      usage,
-      {
-        branchCallSiteExists: branchCallSite !== null,
-        hasCompanionWrites,
-        hasReactiveMutationPath,
-        isCustomHookOwner: isCustomHookOwner(state.owner),
-        localComponents,
-        sourceComponents,
-        hasMemoizedOptionCommand,
-      }
-    )
+    isLiteralBooleanLeafState(state, usage, {
+      branchCallSiteExists: branchCallSite !== null,
+      hasCompanionWrites,
+      hasMemoizedOptionCommand,
+      hasReactiveMutationPath,
+      isCustomHookOwner: isCustomHookOwner(state.owner),
+      localComponents,
+      sourceComponents,
+    })
   ) {
     const target = [...usage.valueTargets][0] ?? "the receiving child";
     return {
@@ -4100,17 +4405,13 @@ function classifyState(
     !usage.escaped &&
     (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
     hasSafeCommands &&
-    hasOnlyEventCommandReads(
-      state,
-      EMPTY_NODES,
-      eventTransitionCallbacks
-    ) &&
+    hasOnlyEventCommandReads(state, EMPTY_NODES, eventTransitionCallbacks) &&
     controlledLeafRenderCut(state, usage, localComponents, sourceComponents);
   if (controlledLeafCut) {
-    const target = [...usage.valueTargets][0] ?? "the controlled child";
-    const controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlledLeafCut.opening)
-      ? controlledLeafCut.opening.parent
-      : controlledLeafCut.opening;
+    const target = [...usage.valueTargets][0] ?? "the controlled child",
+      controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlledLeafCut.opening)
+        ? controlledLeafCut.opening.parent
+        : controlledLeafCut.opening;
     if (stateReferencesConfinedTo(state, controlledSubtree)) {
       return {
         action: "move-state-down",
@@ -4132,7 +4433,8 @@ function classifyState(
       message: `Keep controlled state \`${state.valueName}\` in React; its value and setter are already confined to the cohesive \`${cohesiveControlledLeaf}\` leaf owner, so another observable subscriber would not narrow rendering.`,
     };
   }
-  const controlledCallSiteProjection = !isCustomHookOwner(state.owner) &&
+  const controlledCallSiteProjection =
+    !isCustomHookOwner(state.owner) &&
     !stateMayHoldCallable(state) &&
     usage.localRenderReads > 0 &&
     usage.localRenderReads === usage.directRenderNodes.length &&
@@ -4146,17 +4448,8 @@ function classifyState(
     !usage.escaped &&
     (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
     hasSafeCommands &&
-    hasOnlyEventCommandReads(
-      state,
-      new Set(usage.directRenderNodes),
-      eventTransitionCallbacks
-    )
-      ? controlledSameCallSiteProjectionCut(
-          state,
-          usage,
-          localComponents,
-          sourceComponents
-        )
+    hasOnlyEventCommandReads(state, new Set(usage.directRenderNodes), eventTransitionCallbacks)
+      ? controlledSameCallSiteProjectionCut(state, usage, localComponents, sourceComponents)
       : null;
   if (controlledCallSiteProjection) {
     const target = [...usage.valueTargets][0] ?? "the controlled child";
@@ -4166,7 +4459,8 @@ function classifyState(
       message: `Replace controlled state \`${state.valueName}\` with an owner-scoped observable and wrap \`${target}\` in one stable leaf subscriber; derive every state-dependent prop inside that wrapper, keep the callback API unchanged, and preserve the owner's state lifetime.`,
     };
   }
-  const controlledProjectionCut = !isCustomHookOwner(state.owner) &&
+  const controlledProjectionCut =
+    !isCustomHookOwner(state.owner) &&
     !stateMayHoldCallable(state) &&
     usage.localRenderReads > 0 &&
     usage.localRenderReads === usage.directRenderNodes.length &&
@@ -4179,17 +4473,8 @@ function classifyState(
     !usage.escaped &&
     (!hasCompanionWrites || hasIndependentDirectEventWrite) &&
     hasSafeCommands &&
-    hasOnlyEventCommandReads(
-      state,
-      new Set(usage.directRenderNodes),
-      eventTransitionCallbacks
-    )
-      ? controlledLeafProjectionCut(
-          state,
-          usage,
-          localComponents,
-          sourceComponents
-        )
+    hasOnlyEventCommandReads(state, new Set(usage.directRenderNodes), eventTransitionCallbacks)
+      ? controlledLeafProjectionCut(state, usage, localComponents, sourceComponents)
       : null;
   if (controlledProjectionCut) {
     const target = [...usage.valueTargets][0] ?? "the controlled child";
@@ -4200,22 +4485,23 @@ function classifyState(
     };
   }
   const hasFunctionalSnapshotHazard = functionalUpdaterPrecedesSnapshotRead(
-    state,
-    usage,
-    nearestMutationFunction
-  );
-  const preservesFunctionalSnapshot = hasFunctionalSnapshotHazard &&
-    functionalCounterUpdaterPreservesSnapshot(state, usage, nearestMutationFunction);
-  const hasEventCommandReadProof = hasOnlyEventCommandReads(
-    state,
-    EMPTY_NODES,
-    eventTransitionCallbacks
-  );
-  const hasCommandSnapshotHazard = refWouldChangeCommandSnapshot(
-    state,
-    usage,
-    hasEventCommandReadProof
-  );
+      state,
+      usage,
+      nearestMutationFunction,
+    ),
+    preservesFunctionalSnapshot =
+      hasFunctionalSnapshotHazard &&
+      functionalCounterUpdaterPreservesSnapshot(state, usage, nearestMutationFunction),
+    hasEventCommandReadProof = hasOnlyEventCommandReads(
+      state,
+      EMPTY_NODES,
+      eventTransitionCallbacks,
+    ),
+    hasCommandSnapshotHazard = refWouldChangeCommandSnapshot(
+      state,
+      usage,
+      hasEventCommandReadProof,
+    );
   if (
     isCustomHookOwner(state.owner) &&
     usage.localRenderReads === 0 &&
@@ -4249,8 +4535,8 @@ function classifyState(
       deferredCallbackHooks,
       childContracts
         ? (hookName, argumentIndex, property) =>
-          childContracts.callbackPropertyIsDeferred(hookName, argumentIndex, property)
-        : undefined
+            childContracts.callbackPropertyIsDeferred(hookName, argumentIndex, property)
+        : undefined,
     ) &&
     !statePublishesReadOnlyGetter(state) &&
     !usage.shadowed &&
@@ -4265,7 +4551,8 @@ function classifyState(
         : `Replace \`${state.valueName}\` with a ref; preserve any existing React lifecycle hook timing and statement order, write \`.current\` at the same setter positions${usage.setterUsesPreviousValue ? ", evaluate functional updaters against the current handle value" : ""}, read \`.current\` inside deferred commands, and remove only this value from their dependency arrays.`,
     };
   }
-  const effectCommandProjectionSubtree = subtree?.kind === "effect-command-projection" ? subtree : null;
+  const effectCommandProjectionSubtree =
+    subtree?.kind === "effect-command-projection" ? subtree : null;
   if (effectCommandProjectionSubtree && !hasCompanionWrites) {
     return {
       action: "use-observable",
@@ -4362,8 +4649,8 @@ function classifyState(
       message: `Extract the ${directSubtree.label} subtree at line ${directSubtree.line} into a leaf component and move \`${state.valueName}\` into it; every read and command is confined to that stable subtree.`,
     };
   }
-  const projectionSubtree = subtree?.kind === "projection" ? subtree : null;
-  const gateSubtree = subtree?.kind === "gate" ? subtree : null;
+  const projectionSubtree = subtree?.kind === "projection" ? subtree : null,
+    gateSubtree = subtree?.kind === "gate" ? subtree : null;
   if (gateSubtree && !hasCompanionWrites) {
     return {
       action: "use-observable",
@@ -4371,17 +4658,15 @@ function classifyState(
       message: `Replace \`${state.valueName}\` with a component-lifetime observable and replace the full state-controlled render expression at the ${gateSubtree.label} boundary on line ${gateSubtree.line} with one always-mounted leaf subscriber; evaluate the complete gate and its selected content inside that wrapper so an initially hidden child can still open.`,
     };
   }
-  if (
-    projectionSubtree &&
-    !hasCompanionWrites
-  ) {
+  if (projectionSubtree && !hasCompanionWrites) {
     const selector = repeatedSubscriptionSuffix(projectionSubtree);
     return {
       action: "use-observable",
       confidence: "probable",
-      message: usage.transportedOccurrences > 0
-        ? `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; subscribe to the raw value once, pass that snapshot unchanged, derive every existing projection from the same snapshot, and leave the child API unchanged.`
-        : `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; evaluate its existing pure projections inside that wrapper and leave the child API unchanged.`,
+      message:
+        usage.transportedOccurrences > 0
+          ? `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; subscribe to the raw value once, pass that snapshot unchanged, derive every existing projection from the same snapshot, and leave the child API unchanged.`
+          : `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the ${projectionSubtree.label} call site at line ${projectionSubtree.line} in a leaf subscriber${selector}; evaluate its existing pure projections inside that wrapper and leave the child API unchanged.`,
     };
   }
   if (hasAdjacentEventBooleanConsumers) {
@@ -4432,13 +4717,14 @@ function classifyState(
   if (usage.localRenderReads > 0) {
     if (isCustomHookOwner(state.owner) || jsxElementCount(state.owner) >= 5) {
       const boundary = isCustomHookOwner(state.owner)
-        ? "its unknown hook consumers"
-        : `this owner with ${jsxElementCount(state.owner)} JSX elements`;
-      const competing = ownerObservableSubscriptions === 0
-        ? ""
-        : ownerObservableSubscriptions === 1
-          ? " The owner also re-renders through an existing observable subscription; isolate this state only if it updates less often than that subscription."
-          : ` The owner also re-renders through ${ownerObservableSubscriptions} existing observable subscriptions; isolate this state only if it updates less often than they do.`;
+          ? "its unknown hook consumers"
+          : `this owner with ${jsxElementCount(state.owner)} JSX elements`,
+        competing =
+          ownerObservableSubscriptions === 0
+            ? ""
+            : ownerObservableSubscriptions === 1
+              ? " The owner also re-renders through an existing observable subscription; isolate this state only if it updates less often than that subscription."
+              : ` The owner also re-renders through ${ownerObservableSubscriptions} existing observable subscriptions; isolate this state only if it updates less often than they do.`;
       return {
         action: "review-state",
         confidence: "probable",
@@ -4515,17 +4801,18 @@ function classifyState(
     !usage.escaped &&
     !stateMayHoldCallable(state) &&
     !callSiteIsKeyed(stableOwnerLevelCallSite(usage, state.owner)) &&
-    usage.setterCallNodes.every(call =>
-      call.arguments.length === 1 &&
-      !!call.arguments[0] &&
-      (call.arguments[0].kind === ts.SyntaxKind.TrueKeyword ||
-        call.arguments[0].kind === ts.SyntaxKind.FalseKeyword)
+    usage.setterCallNodes.every(
+      (call) =>
+        call.arguments.length === 1 &&
+        !!call.arguments[0] &&
+        (call.arguments[0].kind === ts.SyntaxKind.TrueKeyword ||
+          call.arguments[0].kind === ts.SyntaxKind.FalseKeyword),
     )
   ) {
-    const [target] = [...usage.jsxTargets];
-    const propNames = target ? usage.valueProps.get(target) : undefined;
-    const propName = propNames && propNames.size === 1 ? [...propNames][0]! : null;
-    const child = target ? childContracts.resolveComponent(target) : null;
+    const [target] = [...usage.jsxTargets],
+      propNames = target ? usage.valueProps.get(target) : undefined,
+      propName = propNames && propNames.size === 1 ? [...propNames][0]! : null,
+      child = target ? childContracts.resolveComponent(target) : null;
     if (target && propName && child && propIsLeafRenderConsumer(child, propName)) {
       return {
         action: "use-observable",
@@ -4539,7 +4826,7 @@ function classifyState(
     confidence: "probable",
     message:
       isStructuralLegendCandidate(state, usage, sourceFile) ||
-      [...usage.jsxTargets].some(target => sourceComponents.has(target))
+      [...usage.jsxTargets].some((target) => sourceComponents.has(target))
         ? legendCandidateMessage(state, usage, sourceComponents)
         : `Review React state \`${state.valueName}\`; local evidence does not prove a render-boundary improvement.`,
   };
@@ -4548,7 +4835,7 @@ function classifyState(
 function controlledFilterLeafCut(
   state: StateCandidate,
   usage: StateUsage,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): ControlledFilterLeafCut | null {
   if (
     !state.setterName ||
@@ -4572,36 +4859,41 @@ function controlledFilterLeafCut(
     !setterTransport ||
     !childContracts.componentCallbackPropIsDeferred(
       setterTransport.target,
-      setterTransport.attribute.name.getText()
+      setterTransport.attribute.name.getText(),
     )
   ) {
     return null;
   }
 
-  const reads = stateValueReferences(state);
-  const filter = reads.length === 1 ? exactStringFilter(reads[0]!, state.owner) : null;
-  if (!filter || !collectionBindingIsReadOnly(filter.sourceName, state.owner)) return null;
+  const reads = stateValueReferences(state),
+    filter = reads.length === 1 ? exactStringFilter(reads[0]!, state.owner) : null;
+  if (!filter || !collectionBindingIsReadOnly(filter.sourceName, state.owner)) {
+    return null;
+  }
 
-  const resultReferences = bindingReferences(state.owner, filter.resultName.text, filter.resultName);
+  const resultReferences = bindingReferences(
+    state.owner,
+    filter.resultName.text,
+    filter.resultName,
+  );
   if (
     resultReferences.length === 0 ||
-    resultReferences.some(reference => !isReadOnlyFilteredResultReference(reference, state.owner))
+    resultReferences.some((reference) => !isReadOnlyFilteredResultReference(reference, state.owner))
   ) {
     return null;
   }
   const repeated = commonContainingRepeatedRender(
-    [setterTransport.reference, ...resultReferences],
-    state.owner
-  );
-  const producer = repeated ? repeatedRenderBinding(repeated, state.owner) : null;
-  const producerReferences = producer
-    ? bindingReferences(state.owner, producer.text, producer)
-    : [];
-  const slot = producerReferences.length === 1
-    ? directReturnedJsxSlot(producerReferences[0]!, state.owner)
-    : null;
-  const ownerElements = jsxElementCount(state.owner);
-  const producerElements = repeated ? jsxElementCountIn(repeated) : ownerElements;
+      [setterTransport.reference, ...resultReferences],
+      state.owner,
+    ),
+    producer = repeated ? repeatedRenderBinding(repeated, state.owner) : null,
+    producerReferences = producer ? bindingReferences(state.owner, producer.text, producer) : [],
+    slot =
+      producerReferences.length === 1
+        ? directReturnedJsxSlot(producerReferences[0]!, state.owner)
+        : null,
+    ownerElements = jsxElementCount(state.owner),
+    producerElements = repeated ? jsxElementCountIn(repeated) : ownerElements;
   if (
     !repeated ||
     !producer ||
@@ -4624,13 +4916,15 @@ function directSetterTransport(state: StateCandidate): {
   reference: ts.Identifier;
   target: string;
 } | null {
-  if (!state.setterName || !state.owner.body) return null;
-  const matches: Array<{
+  if (!state.setterName || !state.owner.body) {
+    return null;
+  }
+  const matches: {
     attribute: ts.JsxAttribute;
     reference: ts.Identifier;
     target: string;
-  }> = [];
-  visit(state.owner.body, node => {
+  }[] = [];
+  visit(state.owner.body, (node) => {
     if (
       !ts.isIdentifier(node) ||
       node.text !== state.setterName ||
@@ -4639,8 +4933,8 @@ function directSetterTransport(state: StateCandidate): {
     ) {
       return;
     }
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
-    const target = attribute ? jsxTargetName(attribute) : null;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner),
+      target = attribute ? jsxTargetName(attribute) : null;
     if (attribute && target && isDirectJsxAttributeExpression(attribute, node)) {
       matches.push({ attribute, reference: node, target });
     }
@@ -4650,7 +4944,7 @@ function directSetterTransport(state: StateCandidate): {
 
 function stateValueReferences(state: StateCandidate): ts.Identifier[] {
   const references: ts.Identifier[] = [];
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       ts.isIdentifier(node) &&
       node.text === state.valueName &&
@@ -4666,7 +4960,7 @@ function stateValueReferences(state: StateCandidate): ts.Identifier[] {
 
 function exactStringFilter(
   stateRead: ts.Identifier,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): { call: ts.CallExpression; resultName: ts.Identifier; sourceName: ts.Identifier } | null {
   const includesCall = stateRead.parent;
   if (
@@ -4687,8 +4981,8 @@ function exactStringFilter(
   ) {
     return null;
   }
-  const callback = findAncestorUntil(includesCall, isRuntimeFunctionLike, owner);
-  const parameter = callback?.parameters[0]?.name;
+  const callback = findAncestorUntil(includesCall, isRuntimeFunctionLike, owner),
+    parameter = callback?.parameters[0]?.name;
   if (
     !callback ||
     !ts.isArrowFunction(callback) ||
@@ -4696,15 +4990,15 @@ function exactStringFilter(
     !parameter ||
     !ts.isIdentifier(parameter) ||
     !staticPropertyChainStartsAt(lowerCall.expression.expression, parameter) ||
-    !isPureExpression(callback.body, call => call === includesCall || call === lowerCall)
+    !isPureExpression(callback.body, (call) => call === includesCall || call === lowerCall)
   ) {
     return null;
   }
-  const filterCall = callback.parent;
-  const source = ts.isCallExpression(filterCall) &&
-    ts.isPropertyAccessExpression(filterCall.expression)
-    ? unwrapTransparentExpression(filterCall.expression.expression)
-    : null;
+  const filterCall = callback.parent,
+    source =
+      ts.isCallExpression(filterCall) && ts.isPropertyAccessExpression(filterCall.expression)
+        ? unwrapTransparentExpression(filterCall.expression.expression)
+        : null;
   if (
     !ts.isCallExpression(filterCall) ||
     filterCall.arguments.length !== 1 ||
@@ -4729,75 +5023,75 @@ function exactStringFilter(
 }
 
 const READ_ONLY_COLLECTION_METHODS = new Set([
-  "at",
-  "concat",
-  "entries",
-  "every",
-  "filter",
-  "find",
-  "findIndex",
-  "findLast",
-  "findLastIndex",
-  "flat",
-  "flatMap",
-  "forEach",
-  "includes",
-  "indexOf",
-  "join",
-  "keys",
-  "lastIndexOf",
-  "map",
-  "reduce",
-  "reduceRight",
-  "slice",
-  "some",
-  "toReversed",
-  "toSorted",
-  "toSpliced",
-  "values",
-]);
-
-const RENDER_COLLECTION_WORK_METHODS = new Set([
-  "concat",
-  "every",
-  "filter",
-  "find",
-  "findIndex",
-  "findLast",
-  "findLastIndex",
-  "flat",
-  "flatMap",
-  "forEach",
-  "map",
-  "reduce",
-  "reduceRight",
-  "slice",
-  "some",
-  "toReversed",
-  "toSorted",
-  "toSpliced",
-]);
+    "at",
+    "concat",
+    "entries",
+    "every",
+    "filter",
+    "find",
+    "findIndex",
+    "findLast",
+    "findLastIndex",
+    "flat",
+    "flatMap",
+    "forEach",
+    "includes",
+    "indexOf",
+    "join",
+    "keys",
+    "lastIndexOf",
+    "map",
+    "reduce",
+    "reduceRight",
+    "slice",
+    "some",
+    "toReversed",
+    "toSorted",
+    "toSpliced",
+    "values",
+  ]),
+  RENDER_COLLECTION_WORK_METHODS = new Set([
+    "concat",
+    "every",
+    "filter",
+    "find",
+    "findIndex",
+    "findLast",
+    "findLastIndex",
+    "flat",
+    "flatMap",
+    "forEach",
+    "map",
+    "reduce",
+    "reduceRight",
+    "slice",
+    "some",
+    "toReversed",
+    "toSorted",
+    "toSpliced",
+  ]);
 
 function collectionBindingIsReadOnly(
   declaration: ts.Identifier,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): boolean {
-  return bindingReferences(owner, declaration.text, declaration).every(reference => {
+  return bindingReferences(owner, declaration.text, declaration).every((reference) => {
     const access = reference.parent;
     if (!ts.isPropertyAccessExpression(access) || access.expression !== reference) {
       return false;
     }
-    if (access.name.text === "length" || access.name.text === "size") return true;
-    return READ_ONLY_COLLECTION_METHODS.has(access.name.text) &&
+    if (access.name.text === "length" || access.name.text === "size") {
+      return true;
+    }
+    return (
+      READ_ONLY_COLLECTION_METHODS.has(access.name.text) &&
       ts.isCallExpression(access.parent) &&
-      access.parent.expression === access;
+      access.parent.expression === access
+    );
   });
 }
 
-function staticPropertyChainStartsAt(
-  expression: ts.Expression,
-  root: ts.Identifier
-): boolean {
+function staticPropertyChainStartsAt(expression: ts.Expression, root: ts.Identifier): boolean {
   let current = unwrapTransparentExpression(expression);
   while (ts.isPropertyAccessExpression(current)) {
     current = unwrapTransparentExpression(current.expression);
@@ -4807,16 +5101,22 @@ function staticPropertyChainStartsAt(
 
 function commonContainingRepeatedRender(
   nodes: readonly ts.Node[],
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): ts.CallExpression | null {
   const first = nodes[0];
-  if (!first) return null;
-  for (let current: ts.Node | undefined = first; current && current !== owner; current = current.parent) {
+  if (!first) {
+    return null;
+  }
+  for (
+    let current: ts.Node | undefined = first;
+    current && current !== owner;
+    current = current.parent
+  ) {
     if (
       ts.isCallExpression(current) &&
       ts.isPropertyAccessExpression(current.expression) &&
       ["map", "flatMap"].includes(current.expression.name.text) &&
-      nodes.every(node => nodeWithin(node, current))
+      nodes.every((node) => nodeWithin(node, current))
     ) {
       return current;
     }
@@ -4826,7 +5126,7 @@ function commonContainingRepeatedRender(
 
 function repeatedRenderBinding(
   repeated: ts.CallExpression,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): ts.Identifier | null {
   const declaration = repeated.parent;
   return ts.isVariableDeclaration(declaration) &&
@@ -4841,10 +5141,10 @@ function repeatedRenderBinding(
 
 function directReturnedJsxSlot(
   reference: ts.Identifier,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): ts.Identifier | null {
-  const expression = findAncestorUntil(reference, ts.isJsxExpression, owner);
-  const returned = uniqueReturnedExpression(owner);
+  const expression = findAncestorUntil(reference, ts.isJsxExpression, owner),
+    returned = uniqueReturnedExpression(owner);
   return expression?.expression &&
     (ts.isJsxElement(expression.parent) || ts.isJsxFragment(expression.parent)) &&
     unwrapTransparentExpression(expression.expression) === reference &&
@@ -4858,16 +5158,18 @@ function directReturnedJsxSlot(
 function renderCollectionWorkOutside(
   owner: RuntimeFunctionLike,
   repeated: ts.CallExpression,
-  movedFilter: ts.CallExpression
+  movedFilter: ts.CallExpression,
 ): number {
-  const body = owner.body;
-  if (!body || !ts.isBlock(body)) return 0;
+  const { body } = owner;
+  if (!body || !ts.isBlock(body)) {
+    return 0;
+  }
   let count = 0;
-  visitSkippingNestedRuntimeFunctions(body, node => {
+  visitSkippingNestedRuntimeFunctions(body, (node) => {
     const declaration = ts.isCallExpression(node)
-      ? findAncestorUntil(node, ts.isVariableDeclaration, owner)
-      : null;
-    const statement = declaration?.parent.parent;
+        ? findAncestorUntil(node, ts.isVariableDeclaration, owner)
+        : null,
+      statement = declaration?.parent.parent;
     if (
       !ts.isCallExpression(node) ||
       node === movedFilter ||
@@ -4882,10 +5184,10 @@ function renderCollectionWorkOutside(
     ) {
       return;
     }
-    const callee = node.expression;
-    const receiver = ts.isPropertyAccessExpression(callee)
-      ? unwrapTransparentExpression(callee.expression)
-      : null;
+    const callee = node.expression,
+      receiver = ts.isPropertyAccessExpression(callee)
+        ? unwrapTransparentExpression(callee.expression)
+        : null;
     if (
       ts.isPropertyAccessExpression(callee) &&
       callee.questionDotToken === undefined &&
@@ -4923,10 +5225,10 @@ function isConditionallyEvaluatedWithin(node: ts.Node, boundary: ts.Node): boole
 function bindingReferences(
   owner: RuntimeFunctionLike,
   name: string,
-  declaration: ts.Identifier
+  declaration: ts.Identifier,
 ): ts.Identifier[] {
   const references: ts.Identifier[] = [];
-  visit(owner.body, node => {
+  visit(owner.body, (node) => {
     if (
       ts.isIdentifier(node) &&
       node !== declaration &&
@@ -4942,32 +5244,34 @@ function bindingReferences(
 
 function isReadOnlyFilteredResultReference(
   reference: ts.Identifier,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): boolean {
   const access = reference.parent;
-  if (
-    !ts.isPropertyAccessExpression(access) ||
-    access.expression !== reference
-  ) {
+  if (!ts.isPropertyAccessExpression(access) || access.expression !== reference) {
     return false;
   }
-  if (access.name.text === "length") return !!findAncestorUntil(access, isJsxNode, owner);
-  if (access.name.text !== "map" || !ts.isCallExpression(access.parent)) return false;
+  if (access.name.text === "length") {
+    return !!findAncestorUntil(access, isJsxNode, owner);
+  }
+  if (access.name.text !== "map" || !ts.isCallExpression(access.parent)) {
+    return false;
+  }
   const callback = access.parent.arguments[0];
-  return !!callback &&
+  return (
+    !!callback &&
     (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
-    !!findAncestorUntil(access, isJsxNode, owner);
+    !!findAncestorUntil(access, isJsxNode, owner)
+  );
 }
 
 function repeatedSubscriptionSuffix(subtree: StateSubtree): string {
-  if (subtree.uniqueRepeatedBranch) return " inside its uniquely selected branch";
+  if (subtree.uniqueRepeatedBranch) {
+    return " inside its uniquely selected branch";
+  }
   return subtree.repeated ? " with a per-item selector" : "";
 }
 
-function isCohesiveDelayedPendingState(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
+function isCohesiveDelayedPendingState(state: StateCandidate, usage: StateUsage): boolean {
   if (
     state.call.arguments[0]?.kind !== ts.SyntaxKind.FalseKeyword ||
     jsxElementCount(state.owner) > 5 ||
@@ -4984,13 +5288,15 @@ function isCohesiveDelayedPendingState(
   ) {
     return false;
   }
-  const pending = usage.setterCallNodes.find(call =>
-    call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword
-  );
-  const reset = usage.setterCallNodes.find(call =>
-    call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword
-  );
-  if (!pending || !reset) return false;
+  const pending = usage.setterCallNodes.find(
+      (call) => call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword,
+    ),
+    reset = usage.setterCallNodes.find(
+      (call) => call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword,
+    );
+  if (!pending || !reset) {
+    return false;
+  }
 
   const scheduled = nearestNestedFunction(pending, state.owner);
   if (!scheduled || !ts.isArrowFunction(scheduled) || !scheduledSetterIsExact(scheduled, pending)) {
@@ -5022,13 +5328,13 @@ function isCohesiveDelayedPendingState(
       !ts.isFunctionExpression(command)) ||
     !command.body ||
     !ts.isBlock(command.body) ||
-    !command.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    !command.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     !callbackIsEventRooted(command, state.owner, "", new Set())
   ) {
     return false;
   }
-  const tryStatement = findAncestorUntil(reset, ts.isTryStatement, command);
-  const finalizer = tryStatement?.finallyBlock;
+  const tryStatement = findAncestorUntil(reset, ts.isTryStatement, command),
+    finalizer = tryStatement?.finallyBlock;
   if (
     !finalizer ||
     finalizer.statements.length !== 2 ||
@@ -5049,22 +5355,25 @@ function isCohesiveDelayedPendingState(
     return false;
   }
   let awaitsPending = false;
-  visitSkippingNestedRuntimeFunctions(tryStatement.tryBlock, node => {
-    if (ts.isAwaitExpression(node)) awaitsPending = true;
+  visitSkippingNestedRuntimeFunctions(tryStatement.tryBlock, (node) => {
+    if (ts.isAwaitExpression(node)) {
+      awaitsPending = true;
+    }
   });
   return awaitsPending;
 }
 
-function scheduledSetterIsExact(
-  callback: ts.ArrowFunction,
-  setter: ts.CallExpression
-): boolean {
-  if (!ts.isBlock(callback.body)) return unwrapTransparentExpression(callback.body) === setter;
+function scheduledSetterIsExact(callback: ts.ArrowFunction, setter: ts.CallExpression): boolean {
+  if (!ts.isBlock(callback.body)) {
+    return unwrapTransparentExpression(callback.body) === setter;
+  }
   const statement = callback.body.statements[0];
-  return callback.body.statements.length === 1 &&
+  return (
+    callback.body.statements.length === 1 &&
     !!statement &&
     ts.isExpressionStatement(statement) &&
-    unwrapTransparentExpression(statement.expression) === setter;
+    unwrapTransparentExpression(statement.expression) === setter
+  );
 }
 
 function isNamedCall(call: ts.CallExpression, name: string): boolean {
@@ -5074,12 +5383,11 @@ function isNamedCall(call: ts.CallExpression, name: string): boolean {
     : ts.isPropertyAccessExpression(callee) && callee.name.text === name;
 }
 
-function setterOwnedByValueCallSite(
-  usage: StateUsage,
-  owner: RuntimeFunctionLike
-): boolean {
+function setterOwnedByValueCallSite(usage: StateUsage, owner: RuntimeFunctionLike): boolean {
   const valueSite = [...usage.valueTransportSites][0];
-  if (valueSite === undefined || usage.setterReferences === 0) return false;
+  if (valueSite === undefined || usage.setterReferences === 0) {
+    return false;
+  }
   if (
     usage.setterTargets.size === 1 &&
     usage.setterCalls === 0 &&
@@ -5100,7 +5408,7 @@ function setterOwnedByValueCallSite(
     owner.body
   ) {
     let valueSubtree: ts.Node | null = null;
-    visitSkippingNestedRuntimeFunctions(owner.body, node => {
+    visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
       if (
         valueSubtree === null &&
         (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
@@ -5110,47 +5418,50 @@ function setterOwnedByValueCallSite(
       }
     });
     const subtree = valueSubtree;
-    if (subtree && usage.setterCallNodes.every(call => nodeWithin(call, subtree))) {
+    if (subtree && usage.setterCallNodes.every((call) => nodeWithin(call, subtree))) {
       return true;
     }
   }
-  return usage.setterReferences === usage.setterCalls &&
+  return (
+    usage.setterReferences === usage.setterCalls &&
     usage.setterCallNodes.length > 0 &&
-    usage.setterCallNodes.every(call => {
+    usage.setterCallNodes.every((call) => {
       const attribute = findAncestorUntil(call, ts.isJsxAttribute, owner);
       return attribute !== null && jsxTransportSite(attribute) === valueSite;
-    });
+    })
+  );
 }
 
-function setterOwnedByValueTransitionCallSite(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
-  const setterName = state.setterName;
-  if (!setterName || !setterOwnedByValueCallSite(usage, state.owner)) return false;
+function setterOwnedByValueTransitionCallSite(state: StateCandidate, usage: StateUsage): boolean {
+  const { setterName } = state;
+  if (!setterName || !setterOwnedByValueCallSite(usage, state.owner)) {
+    return false;
+  }
   if (usage.setterCalls > 0) {
-    return usage.setterCallNodes.every(call => {
-      const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner);
-      const opening = attribute?.parent.parent;
-      return attribute !== null &&
+    return usage.setterCallNodes.every((call) => {
+      const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner),
+        opening = attribute?.parent.parent;
+      return (
+        attribute !== null &&
         opening !== undefined &&
         (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
-        isValueTransitionAttribute(opening, attribute.name.getText(), state.valueName);
+        isValueTransitionAttribute(opening, attribute.name.getText(), state.valueName)
+      );
     });
   }
 
   const valueSite = [...usage.valueTransportSites][0];
-  if (valueSite === undefined || !state.owner.body) return false;
+  if (valueSite === undefined || !state.owner.body) {
+    return false;
+  }
   let transition = false;
-  visitSkippingNestedRuntimeFunctions(state.owner.body, node => {
+  visitSkippingNestedRuntimeFunctions(state.owner.body, (node) => {
     if (
       !transition &&
       (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
       node.getStart() === valueSite &&
-      hasDirectInteractionSetter(
-        node,
-        setterName,
-        name => isValueTransitionAttribute(node, name, state.valueName)
+      hasDirectInteractionSetter(node, setterName, (name) =>
+        isValueTransitionAttribute(node, name, state.valueName),
       )
     ) {
       transition = true;
@@ -5163,40 +5474,50 @@ function controlledLeafRenderCut(
   state: StateCandidate,
   usage: StateUsage,
   localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>
+  sourceComponents: ReadonlySet<string>,
 ): {
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
   returned: ts.Expression;
 } | null {
   const callSite = controlledLeafCallSite(state, usage, isValueTransitionProp);
-  if (!callSite) return null;
-  const controlled = callSite.opening;
-  const controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlled) ? controlled.parent : controlled;
+  if (!callSite) {
+    return null;
+  }
+  const controlled = callSite.opening,
+    controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlled)
+      ? controlled.parent
+      : controlled;
   return hasIndependentRenderCutWitness(
     callSite.returned,
     [controlledSubtree],
     localComponents,
-    sourceComponents
-  ) ? callSite : null;
+    sourceComponents,
+  )
+    ? callSite
+    : null;
 }
 
 function controlledLeafProjectionCut(
   state: StateCandidate,
   usage: StateUsage,
   localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>
+  sourceComponents: ReadonlySet<string>,
 ): ControlledProjectionCut | null {
   const callSite = controlledLeafCallSite(state, usage);
-  if (!callSite) return null;
+  if (!callSite) {
+    return null;
+  }
   const references = controlledProjectionRenderReferences(state, usage);
   if (
     !references ||
-    references.some(reference => nearestRepeatedRenderCall(reference, state.owner) !== null)
+    references.some((reference) => nearestRepeatedRenderCall(reference, state.owner) !== null)
   ) {
     return null;
   }
   const consumer = lowestCommonJsxSubtree(references, state.owner);
-  if (!consumer || jsxElementCountIn(consumer) / jsxElementCount(state.owner) > 0.4) return null;
+  if (!consumer || jsxElementCountIn(consumer) / jsxElementCount(state.owner) > 0.4) {
+    return null;
+  }
   const controlled: ts.Node = ts.isJsxOpeningElement(callSite.opening)
     ? callSite.opening.parent
     : callSite.opening;
@@ -5209,14 +5530,15 @@ function controlledLeafProjectionCut(
       callSite.returned,
       [controlled, consumer],
       localComponents,
-      sourceComponents
+      sourceComponents,
     )
   ) {
     return null;
   }
   return {
     consumerLabel: jsxSubtreeLabel(consumer),
-    consumerLine: consumer.getSourceFile().getLineAndCharacterOfPosition(consumer.getStart()).line + 1,
+    consumerLine:
+      consumer.getSourceFile().getLineAndCharacterOfPosition(consumer.getStart()).line + 1,
   };
 }
 
@@ -5224,16 +5546,19 @@ function controlledSameCallSiteProjectionCut(
   state: StateCandidate,
   usage: StateUsage,
   localComponents: ReadonlySet<string>,
-  sourceComponents: ReadonlySet<string>
+  sourceComponents: ReadonlySet<string>,
 ): boolean {
   const callSite = controlledLeafCallSite(state, usage, isValueTransitionProp);
-  if (!callSite) return false;
+  if (!callSite) {
+    return false;
+  }
   const references = controlledProjectionRenderReferences(state, usage);
   if (
     !references ||
-    references.some(reference =>
-      !nodeWithin(reference, callSite.opening) ||
-      nearestRepeatedRenderCall(reference, state.owner) !== null
+    references.some(
+      (reference) =>
+        !nodeWithin(reference, callSite.opening) ||
+        nearestRepeatedRenderCall(reference, state.owner) !== null,
     )
   ) {
     return false;
@@ -5245,14 +5570,11 @@ function controlledSameCallSiteProjectionCut(
     callSite.returned,
     [controlled],
     localComponents,
-    sourceComponents
+    sourceComponents,
   );
 }
 
-function cohesiveControlledLeafOwner(
-  state: StateCandidate,
-  usage: StateUsage
-): string | null {
+function cohesiveControlledLeafOwner(state: StateCandidate, usage: StateUsage): string | null {
   if (
     isCustomHookOwner(state.owner) ||
     stateMayHoldCallable(state) ||
@@ -5268,7 +5590,9 @@ function cohesiveControlledLeafOwner(
     return null;
   }
   const directCallSite = directUniqueReturnCallSite(usage, state.owner);
-  if (!directCallSite) return null;
+  if (!directCallSite) {
+    return null;
+  }
   const controlled: ts.Node = ts.isJsxOpeningElement(directCallSite.opening)
     ? directCallSite.opening.parent
     : directCallSite.opening;
@@ -5284,7 +5608,7 @@ function cohesiveControlledLeafOwner(
 function controlledLeafCallSite(
   state: StateCandidate,
   usage: StateUsage,
-  isInteractionProp: (name: string) => boolean = isControlledInteractionProp
+  isInteractionProp: (name: string) => boolean = isControlledInteractionProp,
 ): {
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
   returned: ts.Expression;
@@ -5295,35 +5619,37 @@ function controlledLeafCallSite(
     ownerHasRefBackedRenderRead(state.owner) ||
     usage.valueTransportSites.size !== 1 ||
     usage.valueTargets.size !== 1 ||
-    !usage.setterCallNodes.every(call => {
+    !usage.setterCallNodes.every((call) => {
       const callback = nearestNestedFunction(call, state.owner);
       return callback !== null && !isSynchronousRenderCallback(callback);
     })
   ) {
     return null;
   }
-  const callSite = directUniqueReturnCallSite(usage, state.owner) ??
+  const callSite =
+    directUniqueReturnCallSite(usage, state.owner) ??
     directBranchReturnCallSite(usage, state.owner);
-  if (!callSite) return null;
+  if (!callSite) {
+    return null;
+  }
   const isStateInteractionProp = (name: string): boolean =>
     isInteractionProp(name) || isPairedSetterProp(callSite.opening, name, state.valueName);
   if (
     !hasDirectInteractionSetter(callSite.opening, state.setterName, isStateInteractionProp) &&
-      !hasInlineInteractionSetter(callSite.opening, state, usage, isStateInteractionProp) &&
-      !hasInteractionSetterAdapter(callSite.opening, state, usage, isStateInteractionProp)
+    !hasInlineInteractionSetter(callSite.opening, state, usage, isStateInteractionProp) &&
+    !hasInteractionSetterAdapter(callSite.opening, state, usage, isStateInteractionProp)
   ) {
     return null;
   }
   return callSite;
 }
 
-function stateReferencesConfinedTo(
-  state: StateCandidate,
-  boundary: ts.Node
-): boolean {
-  if (!state.owner.body) return false;
+function stateReferencesConfinedTo(state: StateCandidate, boundary: ts.Node): boolean {
+  if (!state.owner.body) {
+    return false;
+  }
   let confined = true;
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       !confined ||
       !ts.isIdentifier(node) ||
@@ -5333,20 +5659,20 @@ function stateReferencesConfinedTo(
     ) {
       return;
     }
-    if (!nodeWithin(node, boundary)) confined = false;
+    if (!nodeWithin(node, boundary)) {
+      confined = false;
+    }
   });
   return confined;
 }
 
 function ownerHasRefBackedRenderRead(owner: RuntimeFunctionLike): boolean {
-  if (!owner.body) return false;
+  if (!owner.body) {
+    return false;
+  }
   let found = false;
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (
-      !found &&
-      ts.isPropertyAccessExpression(node) &&
-      node.name.text === "current"
-    ) {
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (!found && ts.isPropertyAccessExpression(node) && node.name.text === "current") {
       found = true;
     }
   });
@@ -5355,15 +5681,19 @@ function ownerHasRefBackedRenderRead(owner: RuntimeFunctionLike): boolean {
 
 function controlledProjectionRenderReferences(
   state: StateCandidate,
-  usage: StateUsage
+  usage: StateUsage,
 ): readonly ts.Identifier[] | null {
   const references = oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes);
-  if (!references) return null;
+  if (!references) {
+    return null;
+  }
   const renderReferences: ts.Identifier[] = [];
   for (const reference of references) {
     const attribute = findAncestorUntil(reference, ts.isJsxAttribute, state.owner);
     if (attribute) {
-      if (!isSafeJsxProjectionReference(reference, state.owner)) return null;
+      if (!isSafeJsxProjectionReference(reference, state.owner)) {
+        return null;
+      }
       renderReferences.push(reference);
       continue;
     }
@@ -5384,16 +5714,17 @@ function controlledProjectionRenderReferences(
 function hasDirectInteractionSetter(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   setterName: string,
-  isInteractionProp: (name: string) => boolean = isControlledInteractionProp
+  isInteractionProp: (name: string) => boolean = isControlledInteractionProp,
 ): boolean {
-  return opening.attributes.properties.some(attribute =>
-    ts.isJsxAttribute(attribute) &&
-    isInteractionProp(attribute.name.getText()) &&
-    attribute.initializer !== undefined &&
-    ts.isJsxExpression(attribute.initializer) &&
-    attribute.initializer.expression !== undefined &&
-    ts.isIdentifier(attribute.initializer.expression) &&
-    attribute.initializer.expression.text === setterName
+  return opening.attributes.properties.some(
+    (attribute) =>
+      ts.isJsxAttribute(attribute) &&
+      isInteractionProp(attribute.name.getText()) &&
+      attribute.initializer !== undefined &&
+      ts.isJsxExpression(attribute.initializer) &&
+      attribute.initializer.expression !== undefined &&
+      ts.isIdentifier(attribute.initializer.expression) &&
+      attribute.initializer.expression.text === setterName,
   );
 }
 
@@ -5401,17 +5732,15 @@ function hasInlineInteractionSetter(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   state: StateCandidate,
   usage: StateUsage,
-  isInteractionProp: (name: string) => boolean = isControlledInteractionProp
+  isInteractionProp: (name: string) => boolean = isControlledInteractionProp,
 ): boolean {
-  if (
-    !state.setterName ||
-    usage.setterCalls === 0 ||
-    usage.setterTransportSites.size !== 0
-  ) {
+  if (!state.setterName || usage.setterCalls === 0 || usage.setterTransportSites.size !== 0) {
     return false;
   }
-  return usage.setterCallNodes.some(call => {
-    if (call.arguments.some(argument => containsCallExpression(argument))) return false;
+  return usage.setterCallNodes.some((call) => {
+    if (call.arguments.some((argument) => containsCallExpression(argument))) {
+      return false;
+    }
     const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner);
     if (
       !attribute ||
@@ -5423,13 +5752,21 @@ function hasInlineInteractionSetter(
       return false;
     }
     const callback = attribute.initializer.expression;
-    if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) return false;
-    if (nearestNestedFunction(call, state.owner) !== callback) return false;
-    if (ts.isCallExpression(callback.body)) return callback.body === call;
-    return ts.isBlock(callback.body) &&
+    if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
+      return false;
+    }
+    if (nearestNestedFunction(call, state.owner) !== callback) {
+      return false;
+    }
+    if (ts.isCallExpression(callback.body)) {
+      return callback.body === call;
+    }
+    return (
+      ts.isBlock(callback.body) &&
       callback.body.statements.length === 1 &&
       ts.isExpressionStatement(callback.body.statements[0]!) &&
-      callback.body.statements[0]!.expression === call;
+      callback.body.statements[0]!.expression === call
+    );
   });
 }
 
@@ -5437,7 +5774,7 @@ function hasInteractionSetterAdapter(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   state: StateCandidate,
   usage: StateUsage,
-  isInteractionProp: (name: string) => boolean = isControlledInteractionProp
+  isInteractionProp: (name: string) => boolean = isControlledInteractionProp,
 ): boolean {
   if (
     !state.setterName ||
@@ -5451,7 +5788,7 @@ function hasInteractionSetterAdapter(
   const call = usage.setterCallNodes[0];
   if (
     !call ||
-    (call.arguments.some(argument => containsCallExpression(argument)) &&
+    (call.arguments.some((argument) => containsCallExpression(argument)) &&
       !isExactControlledArrayMembershipToggle(state, usage))
   ) {
     return false;
@@ -5467,28 +5804,34 @@ function hasInteractionSetterAdapter(
     return false;
   }
   const name = localCallbackBindingName(callback);
-  if (!name) return false;
-  const interaction = opening.attributes.properties.some(attribute =>
-    ts.isJsxAttribute(attribute) &&
-    isInteractionProp(attribute.name.getText()) &&
-    attribute.initializer !== undefined &&
-    ts.isJsxExpression(attribute.initializer) &&
-    attribute.initializer.expression !== undefined &&
-    ts.isIdentifier(attribute.initializer.expression) &&
-    attribute.initializer.expression.text === name
+  if (!name) {
+    return false;
+  }
+  const interaction = opening.attributes.properties.some(
+    (attribute) =>
+      ts.isJsxAttribute(attribute) &&
+      isInteractionProp(attribute.name.getText()) &&
+      attribute.initializer !== undefined &&
+      ts.isJsxExpression(attribute.initializer) &&
+      attribute.initializer.expression !== undefined &&
+      ts.isIdentifier(attribute.initializer.expression) &&
+      attribute.initializer.expression.text === name,
   );
-  if (!interaction || !callback.body) return false;
-  if (ts.isCallExpression(callback.body)) return callback.body === call;
-  return ts.isBlock(callback.body) &&
+  if (!interaction || !callback.body) {
+    return false;
+  }
+  if (ts.isCallExpression(callback.body)) {
+    return callback.body === call;
+  }
+  return (
+    ts.isBlock(callback.body) &&
     callback.body.statements.length === 1 &&
     ts.isExpressionStatement(callback.body.statements[0]!) &&
-    callback.body.statements[0]!.expression === call;
+    callback.body.statements[0]!.expression === call
+  );
 }
 
-function isExactControlledArrayMembershipToggle(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
+function isExactControlledArrayMembershipToggle(state: StateCandidate, usage: StateUsage): boolean {
   if (
     usage.setterCalls !== 1 ||
     usage.setterReferences !== 1 ||
@@ -5496,40 +5839,44 @@ function isExactControlledArrayMembershipToggle(
   ) {
     return false;
   }
-  const setterCall = usage.setterCallNodes[0]!;
-  const updater = setterCall.arguments[0] && unwrapTransparentExpression(setterCall.arguments[0]);
+  const setterCall = usage.setterCallNodes[0]!,
+    updater = setterCall.arguments[0] && unwrapTransparentExpression(setterCall.arguments[0]);
   if (
     !updater ||
     (!ts.isArrowFunction(updater) && !ts.isFunctionExpression(updater)) ||
-    updater.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    updater.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     updater.asteriskToken ||
     updater.parameters.length !== 1 ||
     !ts.isIdentifier(updater.parameters[0]!.name)
   ) {
     return false;
   }
-  const previous = updater.parameters[0]!.name.text;
-  const toggle = arrayMembershipToggle(updater);
-  if (!toggle) return false;
+  const previous = updater.parameters[0]!.name.text,
+    toggle = arrayMembershipToggle(updater);
+  if (!toggle) {
+    return false;
+  }
 
   const value = arrayMembershipValue(toggle.condition, previous);
-  if (!value) return false;
+  if (!value) {
+    return false;
+  }
   const adapter = nearestMutationFunction(setterCall, state.owner);
   if (
     adapter === state.owner ||
-    !adapter.parameters.some(parameter =>
-      ts.isIdentifier(parameter.name) && parameter.name.text === value
+    !adapter.parameters.some(
+      (parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === value,
     )
   ) {
     return false;
   }
-  return isArrayMembershipRemoval(toggle.whenPresent, previous, value) &&
-    isArrayMembershipAppend(toggle.whenAbsent, previous, value);
+  return (
+    isArrayMembershipRemoval(toggle.whenPresent, previous, value) &&
+    isArrayMembershipAppend(toggle.whenAbsent, previous, value)
+  );
 }
 
-function arrayMembershipToggle(
-  updater: ts.ArrowFunction | ts.FunctionExpression
-): {
+function arrayMembershipToggle(updater: ts.ArrowFunction | ts.FunctionExpression): {
   condition: ts.Expression;
   whenAbsent: ts.Expression;
   whenPresent: ts.Expression;
@@ -5542,11 +5889,15 @@ function arrayMembershipToggle(
       whenPresent: expression.whenTrue,
     };
   }
-  if (!ts.isBlock(updater.body) || updater.body.statements.length !== 1) return null;
+  if (!ts.isBlock(updater.body) || updater.body.statements.length !== 1) {
+    return null;
+  }
   const statement = updater.body.statements[0]!;
-  if (!ts.isIfStatement(statement) || !statement.elseStatement) return null;
-  const whenPresent = returnedStatementExpression(statement.thenStatement);
-  const whenAbsent = returnedStatementExpression(statement.elseStatement);
+  if (!ts.isIfStatement(statement) || !statement.elseStatement) {
+    return null;
+  }
+  const whenPresent = returnedStatementExpression(statement.thenStatement),
+    whenAbsent = returnedStatementExpression(statement.elseStatement);
   return whenPresent && whenAbsent
     ? { condition: statement.expression, whenAbsent, whenPresent }
     : null;
@@ -5564,9 +5915,11 @@ function returnedStatementExpression(statement: ts.Statement): ts.Expression | n
 }
 
 function returnedCallbackExpression(
-  callback: ts.ArrowFunction | ts.FunctionExpression
+  callback: ts.ArrowFunction | ts.FunctionExpression,
 ): ts.Expression | null {
-  if (!ts.isBlock(callback.body)) return unwrapTransparentExpression(callback.body);
+  if (!ts.isBlock(callback.body)) {
+    return unwrapTransparentExpression(callback.body);
+  }
   const statement = callback.body.statements[0];
   return callback.body.statements.length === 1 &&
     statement !== undefined &&
@@ -5594,7 +5947,7 @@ function arrayMembershipValue(condition: ts.Expression, previous: string): strin
 function isArrayMembershipRemoval(
   expression: ts.Expression,
   previous: string,
-  value: string
+  value: string,
 ): boolean {
   const removal = unwrapTransparentExpression(expression);
   if (
@@ -5614,29 +5967,35 @@ function isArrayMembershipRemoval(
   ) {
     return false;
   }
-  const item = predicate.parameters[0]!.name.text;
-  const comparison = returnedCallbackExpression(predicate);
-  return comparison !== null &&
+  const item = predicate.parameters[0]!.name.text,
+    comparison = returnedCallbackExpression(predicate);
+  return (
+    comparison !== null &&
     ts.isBinaryExpression(comparison) &&
     comparison.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken &&
     isIdentifierNamed(comparison.left, item) &&
-    isIdentifierNamed(comparison.right, value);
+    isIdentifierNamed(comparison.right, value)
+  );
 }
 
 function isArrayMembershipAppend(
   expression: ts.Expression,
   previous: string,
-  value: string
+  value: string,
 ): boolean {
   const append = unwrapTransparentExpression(expression);
-  if (!ts.isArrayLiteralExpression(append) || append.elements.length !== 2) return false;
+  if (!ts.isArrayLiteralExpression(append) || append.elements.length !== 2) {
+    return false;
+  }
   const [spread, member] = append.elements;
-  return spread !== undefined &&
+  return (
+    spread !== undefined &&
     ts.isSpreadElement(spread) &&
     isIdentifierNamed(spread.expression, previous) &&
     member !== undefined &&
     !ts.isSpreadElement(member) &&
-    isIdentifierNamed(member, value);
+    isIdentifierNamed(member, value)
+  );
 }
 
 function isIdentifierNamed(expression: ts.Expression, name: string): boolean {
@@ -5647,7 +6006,7 @@ function isIdentifierNamed(expression: ts.Expression, name: string): boolean {
 function isValueTransitionAttribute(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   name: string,
-  valueName: string
+  valueName: string,
 ): boolean {
   return isValueTransitionProp(name) || isPairedSetterProp(opening, name, valueName);
 }
@@ -5655,30 +6014,37 @@ function isValueTransitionAttribute(
 function isVisibilityTransitionAttribute(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   name: string,
-  valueName: string
+  valueName: string,
 ): boolean {
-  if (/^on(?:Open|Visible|Visibility)Change$/.test(name)) return true;
-  if (!isPairedSetterProp(opening, name, valueName)) return false;
-  return opening.attributes.properties.some(attribute =>
-    ts.isJsxAttribute(attribute) &&
-    /^(?:isOpen|isVisible|open|visible)$/.test(attribute.name.getText()) &&
-    attribute.initializer !== undefined &&
-    ts.isJsxExpression(attribute.initializer) &&
-    attribute.initializer.expression !== undefined &&
-    ts.isIdentifier(attribute.initializer.expression) &&
-    attribute.initializer.expression.text === valueName
+  if (/^on(?:Open|Visible|Visibility)Change$/.test(name)) {
+    return true;
+  }
+  if (!isPairedSetterProp(opening, name, valueName)) {
+    return false;
+  }
+  return opening.attributes.properties.some(
+    (attribute) =>
+      ts.isJsxAttribute(attribute) &&
+      /^(?:isOpen|isVisible|open|visible)$/.test(attribute.name.getText()) &&
+      attribute.initializer !== undefined &&
+      ts.isJsxExpression(attribute.initializer) &&
+      attribute.initializer.expression !== undefined &&
+      ts.isIdentifier(attribute.initializer.expression) &&
+      attribute.initializer.expression.text === valueName,
   );
 }
 
 function isPairedSetterProp(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | undefined,
   name: string,
-  valueName: string
+  valueName: string,
 ): boolean {
   const setter = /^set([A-Z][A-Za-z0-9]*)$/.exec(name)?.[1];
-  if (!opening || !setter) return false;
+  if (!opening || !setter) {
+    return false;
+  }
   const normalizedSetter = normalizeStatePropName(setter);
-  return opening.attributes.properties.some(attribute => {
+  return opening.attributes.properties.some((attribute) => {
     if (
       !ts.isJsxAttribute(attribute) ||
       !attribute.initializer ||
@@ -5699,7 +6065,7 @@ function normalizeStatePropName(name: string): string {
 
 function directUniqueReturnCallSite(
   usage: StateUsage,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): {
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
   returned: ts.Expression;
@@ -5708,42 +6074,49 @@ function directUniqueReturnCallSite(
   return callSite && uniqueReturnedExpression(owner) ? callSite : null;
 }
 
-function setterCallEndsCommand(
-  call: ts.CallExpression,
-  owner: RuntimeFunctionLike
-): boolean {
+function setterCallEndsCommand(call: ts.CallExpression, owner: RuntimeFunctionLike): boolean {
   const command = nearestMutationFunction(call, owner);
-  if (!command.body) return false;
+  if (!command.body) {
+    return false;
+  }
   if (!ts.isBlock(command.body)) {
     return unwrapTransparentExpression(command.body) === call;
   }
   const statement = call.parent;
-  return ts.isExpressionStatement(statement) &&
+  return (
+    ts.isExpressionStatement(statement) &&
     statement.expression === call &&
     statement.parent === command.body &&
-    command.body.statements.at(-1) === statement;
+    command.body.statements.at(-1) === statement
+  );
 }
 
 function uniqueReturnedExpression(owner: RuntimeFunctionLike): ts.Expression | null {
-  if (!owner.body) return null;
+  if (!owner.body) {
+    return null;
+  }
   const expressions: ts.Expression[] = [];
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (ts.isReturnStatement(node) && node.expression) expressions.push(node.expression);
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (ts.isReturnStatement(node) && node.expression) {
+      expressions.push(node.expression);
+    }
   });
   return expressions.length === 1 ? expressions[0]! : null;
 }
 
 function directBranchReturnCallSite(
   usage: StateUsage,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): {
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
   returned: ts.Expression;
 } | null {
   const valueSite = [...usage.valueTransportSites][0];
-  if (!owner.body || valueSite === undefined || usage.repeatedValueTransport) return null;
-  const openings: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
+  if (!owner.body || valueSite === undefined || usage.repeatedValueTransport) {
+    return null;
+  }
+  const openings: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
     if (
       openings.length === 0 &&
       (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
@@ -5753,14 +6126,18 @@ function directBranchReturnCallSite(
     }
   });
   const opening = openings[0];
-  if (!opening) return null;
+  if (!opening) {
+    return null;
+  }
 
   for (
     let current: ts.Node | undefined = opening.parent;
     current && current !== owner;
     current = current.parent
   ) {
-    if (ts.isVariableDeclaration(current) || isRuntimeFunctionLike(current)) return null;
+    if (ts.isVariableDeclaration(current) || isRuntimeFunctionLike(current)) {
+      return null;
+    }
     if (ts.isReturnStatement(current)) {
       return current.expression && nodeWithin(opening, current.expression)
         ? { opening, returned: current.expression }
@@ -5771,39 +6148,43 @@ function directBranchReturnCallSite(
 }
 
 function setterCallsDiscardConfidence(
-  calls: readonly ts.CallExpression[]
+  calls: readonly ts.CallExpression[],
 ): "certain" | "probable" | null {
   let confidence: "certain" | "probable" = "certain";
   for (const call of calls) {
     const argument = call.arguments[0];
-    if (call.arguments.length !== 1 || !argument) return null;
+    if (call.arguments.length !== 1 || !argument) {
+      return null;
+    }
     const argumentConfidence = discardableExpressionConfidence(argument);
-    if (!argumentConfidence) return null;
-    if (argumentConfidence === "probable") confidence = "probable";
+    if (!argumentConfidence) {
+      return null;
+    }
+    if (argumentConfidence === "probable") {
+      confidence = "probable";
+    }
   }
   return confidence;
 }
 
-function stateReadsOnlyCalculateOwnSetter(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
+function stateReadsOnlyCalculateOwnSetter(state: StateCandidate, usage: StateUsage): boolean {
   if (
     usage.effectWrites > 0 ||
     usage.setterCallNodes.length === 0 ||
-    usage.setterCallNodes.some(call =>
-      nearestMutationFunction(call, state.owner) === state.owner ||
-      call.arguments.length !== 1 ||
-      !call.arguments[0] ||
-      !isEvaluationInert(call.arguments[0])
+    usage.setterCallNodes.some(
+      (call) =>
+        nearestMutationFunction(call, state.owner) === state.owner ||
+        call.arguments.length !== 1 ||
+        !call.arguments[0] ||
+        !isEvaluationInert(call.arguments[0]),
     )
   ) {
     return false;
   }
 
-  let reads = 0;
-  let safe = true;
-  visit(state.owner.body, node => {
+  let reads = 0,
+    safe = true;
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -5814,17 +6195,14 @@ function stateReadsOnlyCalculateOwnSetter(
       return;
     }
     reads += 1;
-    safe = usage.setterCallNodes.some(call =>
-      call.arguments[0] !== undefined && nodeWithin(node, call.arguments[0])
+    safe = usage.setterCallNodes.some(
+      (call) => call.arguments[0] !== undefined && nodeWithin(node, call.arguments[0]),
     );
   });
   return safe && reads > 0;
 }
 
-function stateOnlyReceivesItsInitialPrimitive(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
+function stateOnlyReceivesItsInitialPrimitive(state: StateCandidate, usage: StateUsage): boolean {
   const initializer = state.call.arguments[0];
   if (
     !initializer ||
@@ -5835,17 +6213,20 @@ function stateOnlyReceivesItsInitialPrimitive(
   ) {
     return false;
   }
-  return usage.setterCallNodes.every(call =>
-    call.arguments.length === 1 &&
-    call.arguments[0] !== undefined &&
-    samePrimitiveLiteral(initializer, call.arguments[0])
+  return usage.setterCallNodes.every(
+    (call) =>
+      call.arguments.length === 1 &&
+      call.arguments[0] !== undefined &&
+      samePrimitiveLiteral(initializer, call.arguments[0]),
   );
 }
 
 function samePrimitiveLiteral(left: ts.Expression, right: ts.Expression): boolean {
-  const leftValue = unwrapTransparentExpression(left);
-  const rightValue = unwrapTransparentExpression(right);
-  if (leftValue.kind !== rightValue.kind) return false;
+  const leftValue = unwrapTransparentExpression(left),
+    rightValue = unwrapTransparentExpression(right);
+  if (leftValue.kind !== rightValue.kind) {
+    return false;
+  }
   if (
     leftValue.kind === ts.SyntaxKind.NullKeyword ||
     leftValue.kind === ts.SyntaxKind.TrueKeyword ||
@@ -5860,43 +6241,53 @@ function samePrimitiveLiteral(left: ts.Expression, right: ts.Expression): boolea
     : false;
 }
 
-function discardableExpressionConfidence(
-  node: ts.Expression
-): "certain" | "probable" | null {
-  if (isEvaluationInert(node)) return "certain";
+function discardableExpressionConfidence(node: ts.Expression): "certain" | "probable" | null {
+  if (isEvaluationInert(node)) {
+    return "certain";
+  }
   const value = unwrapTransparentExpression(node);
   if (ts.isPropertyAccessExpression(value)) {
     return discardableExpressionConfidence(value.expression) ? "probable" : null;
   }
   if (ts.isArrayLiteralExpression(value)) {
     return combineDiscardConfidence(
-      value.elements.map(element =>
-        ts.isSpreadElement(element) ? null : discardableExpressionConfidence(element)
-      )
+      value.elements.map((element) =>
+        ts.isSpreadElement(element) ? null : discardableExpressionConfidence(element),
+      ),
     );
   }
   if (ts.isObjectLiteralExpression(value)) {
     return combineDiscardConfidence(
-      value.properties.map(property => {
-        if (ts.isShorthandPropertyAssignment(property)) return "certain";
+      value.properties.map((property) => {
+        if (ts.isShorthandPropertyAssignment(property)) {
+          return "certain";
+        }
         return ts.isPropertyAssignment(property) && !ts.isComputedPropertyName(property.name)
           ? discardableExpressionConfidence(property.initializer)
           : null;
-      })
+      }),
     );
   }
   return null;
 }
 
 function combineDiscardConfidence(
-  confidences: readonly ("certain" | "probable" | null)[]
+  confidences: readonly ("certain" | "probable" | null)[],
 ): "certain" | "probable" | null {
-  if (confidences.some(confidence => confidence === null)) return null;
-  return confidences.some(confidence => confidence === "probable") ? "probable" : "certain";
+  if (confidences.some((confidence) => confidence === null)) {
+    return null;
+  }
+  return confidences.some((confidence) => confidence === "probable") ? "probable" : "certain";
 }
 
 interface StateSubtree {
-  kind: "direct" | "effect-command-projection" | "effect-projection" | "effect-split-projection" | "gate" | "projection";
+  kind:
+    | "direct"
+    | "effect-command-projection"
+    | "effect-projection"
+    | "effect-split-projection"
+    | "gate"
+    | "projection";
   leafCount?: number;
   label: string;
   line: number;
@@ -5913,29 +6304,24 @@ function analyzeStateSubtree(
   pureProjectionImports: ReadonlySet<string>,
   directEffectCalls: ReadonlySet<ts.CallExpression>,
   effectOwnedMemoizedCommand: boolean,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): StateSubtree | null {
-  const ownerJsx = jsxElementCount(state.owner);
-  const effectWrittenPresentation =
-    usage.effectWrites > 0 &&
-    usage.effectWrites === usage.setterCalls &&
-    usage.setterReferences === usage.setterCalls &&
-    usage.setterCallNodes.every(call => hasAncestorInSet(call, directEffectCalls)) &&
-    usage.deferredReads === 0 &&
-    !usage.setterUsesPreviousValue;
-  const allowedProjectionCalls = effectWrittenPresentation
-    ? new Set(
-        [...pureProjectionImports].filter(name => !ownerDeclaresBinding(state.owner, name))
-      )
-    : EMPTY_BINDINGS;
-  const splitEffectProjection = effectWrittenPresentation
-    ? effectSplitProjectionSubtree(
-        state,
-        usage,
-        ownerJsx,
-        pureProjectionImports
-      )
-    : null;
+  const ownerJsx = jsxElementCount(state.owner),
+    effectWrittenPresentation =
+      usage.effectWrites > 0 &&
+      usage.effectWrites === usage.setterCalls &&
+      usage.setterReferences === usage.setterCalls &&
+      usage.setterCallNodes.every((call) => hasAncestorInSet(call, directEffectCalls)) &&
+      usage.deferredReads === 0 &&
+      !usage.setterUsesPreviousValue,
+    allowedProjectionCalls = effectWrittenPresentation
+      ? new Set(
+          [...pureProjectionImports].filter((name) => !ownerDeclaresBinding(state.owner, name)),
+        )
+      : EMPTY_BINDINGS,
+    splitEffectProjection = effectWrittenPresentation
+      ? effectSplitProjectionSubtree(state, usage, ownerJsx, pureProjectionImports)
+      : null;
   if (
     (ownerJsx < 8 && !effectWrittenPresentation) ||
     stateMayHoldCallable(state) ||
@@ -5953,29 +6339,30 @@ function analyzeStateSubtree(
   }
 
   const projectionNodes = effectWrittenPresentation
-    ? multipleOneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
-      usage.directRenderNodes
-    : boundedRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
+    ? (multipleOneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
+      usage.directRenderNodes)
+    : (boundedRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
       oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes) ??
-      usage.directRenderNodes;
-  if (splitEffectProjection) return splitEffectProjection;
+      usage.directRenderNodes);
+  if (splitEffectProjection) {
+    return splitEffectProjection;
+  }
   const renderReadsInNestedCallbacks = projectionNodes.some(
-    node => nearestNestedFunction(node, state.owner) !== null
-  );
-  const safeJsxChildProjection =
-    renderReadsInNestedCallbacks &&
-    sharesJsxChildRenderCallback(projectionNodes, state.owner) &&
-    projectionWritesAreDeferred(usage, state.owner, directEffectCalls, childContracts);
-  const uniqueRepeatedProjection =
-    isUniquelySelectedRepeatedProjection(projectionNodes, state.owner);
+      (node) => nearestNestedFunction(node, state.owner) !== null,
+    ),
+    safeJsxChildProjection =
+      renderReadsInNestedCallbacks &&
+      sharesJsxChildRenderCallback(projectionNodes, state.owner) &&
+      projectionWritesAreDeferred(usage, state.owner, directEffectCalls, childContracts),
+    uniqueRepeatedProjection = isUniquelySelectedRepeatedProjection(projectionNodes, state.owner);
   if (
     !effectWrittenPresentation &&
     usage.transportedOccurrences === 0 &&
     projectionAllowed &&
     !renderReadsInNestedCallbacks
   ) {
-    const directNodes = [...usage.directRenderNodes, ...usage.setterCallNodes];
-    const direct = lowestCommonJsxSubtree(directNodes, state.owner);
+    const directNodes = [...usage.directRenderNodes, ...usage.setterCallNodes],
+      direct = lowestCommonJsxSubtree(directNodes, state.owner);
     if (direct) {
       const subtreeJsx = jsxElementCountIn(direct);
       if (ownerJsx >= 12 && subtreeJsx >= 2 && subtreeJsx / ownerJsx <= 0.4) {
@@ -5985,13 +6372,13 @@ function analyzeStateSubtree(
   }
 
   const gateProjection = renderReadsInNestedCallbacks
-    ? null
-    : commonRenderGateSubtree(projectionNodes, state.owner);
-  const safeProjectionReferences = projectionNodes.every(node =>
-    isSafeJsxProjectionReference(node, state.owner, allowedProjectionCalls) ||
-    (effectWrittenPresentation &&
-      isSafeEffectPresentationReference(node, state.owner))
-  );
+      ? null
+      : commonRenderGateSubtree(projectionNodes, state.owner),
+    safeProjectionReferences = projectionNodes.every(
+      (node) =>
+        isSafeJsxProjectionReference(node, state.owner, allowedProjectionCalls) ||
+        (effectWrittenPresentation && isSafeEffectPresentationReference(node, state.owner)),
+    );
   if (
     !projectionAllowed ||
     !(safeProjectionReferences || gateProjection) ||
@@ -6009,15 +6396,10 @@ function analyzeStateSubtree(
       projection,
       ownerJsx,
       effectWrittenPresentation,
-      uniqueRepeatedProjection
+      uniqueRepeatedProjection,
     ) ||
     (usage.transportedOccurrences > 0 &&
-      !isSafeMixedProjectionTransport(
-        state,
-        usage,
-        projection,
-        effectWrittenPresentation
-      ))
+      !isSafeMixedProjectionTransport(state, usage, projection, effectWrittenPresentation))
   ) {
     return null;
   }
@@ -6025,14 +6407,14 @@ function analyzeStateSubtree(
     effectOwnedMemoizedCommand
       ? "effect-command-projection"
       : effectWrittenPresentation
-      ? "effect-projection"
-      : gateProjection
-        ? "gate"
-        : "projection",
+        ? "effect-projection"
+        : gateProjection
+          ? "gate"
+          : "projection",
     projection,
     projectionNodes,
     state,
-    uniqueRepeatedProjection
+    uniqueRepeatedProjection,
   );
 }
 
@@ -6040,26 +6422,32 @@ function projectionWritesAreDeferred(
   usage: StateUsage,
   owner: RuntimeFunctionLike,
   directEffectCalls: ReadonlySet<ts.CallExpression>,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): boolean {
-  return usage.setterCallNodes.every(call => {
-    if (ancestorCallInSet(call, directEffectCalls, owner)) return true;
-    const callback = nearestMutationFunction(call, owner);
-    const attribute = callback === owner
-      ? null
-      : findAncestorUntil(callback, ts.isJsxAttribute, owner);
-    const prop = attribute?.name.getText() ?? null;
-    const target = attribute ? jsxTargetName(attribute) : null;
-    if (!attribute || !prop || !target || !/^on[A-Z]/.test(prop)) return false;
-    if (!isCustomJsxTarget(target)) return true;
-    return childContracts?.frameworkEventComponent(target) === true ||
-      childContracts?.componentCallbackPropIsDeferred(target, prop) === true;
+  return usage.setterCallNodes.every((call) => {
+    if (ancestorCallInSet(call, directEffectCalls, owner)) {
+      return true;
+    }
+    const callback = nearestMutationFunction(call, owner),
+      attribute = callback === owner ? null : findAncestorUntil(callback, ts.isJsxAttribute, owner),
+      prop = attribute?.name.getText() ?? null,
+      target = attribute ? jsxTargetName(attribute) : null;
+    if (!attribute || !prop || !target || !/^on[A-Z]/.test(prop)) {
+      return false;
+    }
+    if (!isCustomJsxTarget(target)) {
+      return true;
+    }
+    return (
+      childContracts?.frameworkEventComponent(target) === true ||
+      childContracts?.componentCallbackPropIsDeferred(target, prop) === true
+    );
   });
 }
 
 function sharesJsxChildRenderCallback(
   nodes: readonly ts.Node[],
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): boolean {
   let common: ts.ArrowFunction | ts.FunctionExpression | null = null;
   for (const node of nodes) {
@@ -6073,7 +6461,9 @@ function sharesJsxChildRenderCallback(
     }
     common = callback;
   }
-  if (!common) return false;
+  if (!common) {
+    return false;
+  }
 
   let expression: ts.Expression = common;
   while (
@@ -6087,8 +6477,10 @@ function sharesJsxChildRenderCallback(
     expression = expression.parent;
   }
   const container = expression.parent;
-  return ts.isJsxExpression(container) &&
-    (ts.isJsxElement(container.parent) || ts.isJsxFragment(container.parent));
+  return (
+    ts.isJsxExpression(container) &&
+    (ts.isJsxElement(container.parent) || ts.isJsxFragment(container.parent))
+  );
 }
 
 /**
@@ -6101,7 +6493,7 @@ function effectSplitProjectionSubtree(
   state: StateCandidate,
   usage: StateUsage,
   ownerJsx: number,
-  pureProjectionImports: ReadonlySet<string>
+  pureProjectionImports: ReadonlySet<string>,
 ): StateSubtree | null {
   if (
     ownerJsx < 12 ||
@@ -6113,24 +6505,24 @@ function effectSplitProjectionSubtree(
   }
 
   const allowedCalls = new Set([
-    ...pureProjectionImports,
-    ...localPureProjectionBindings(state.owner.getSourceFile()),
-  ]);
-  const renderRoots = effectSplitRenderRoots(state, usage, allowedCalls);
-  if (!renderRoots) return null;
-  const terminals = terminalRenderProjectionReferences(
-    state.owner,
-    renderRoots,
-    allowedCalls
-  );
-  if (!terminals || terminals.length < 2) return null;
+      ...pureProjectionImports,
+      ...localPureProjectionBindings(state.owner.getSourceFile()),
+    ]),
+    renderRoots = effectSplitRenderRoots(state, usage, allowedCalls);
+  if (!renderRoots) {
+    return null;
+  }
+  const terminals = terminalRenderProjectionReferences(state.owner, renderRoots, allowedCalls);
+  if (!terminals || terminals.length < 2) {
+    return null;
+  }
 
   const leaves: JsxSubtreeNode[] = [];
   for (const terminal of terminals) {
     const repeated = nearestRepeatedRenderCall(terminal, state.owner);
     if (repeated) {
-      const callback = repeated.arguments[0];
-      const leaf = nearestJsxElement(repeated, state.owner);
+      const callback = repeated.arguments[0],
+        leaf = nearestJsxElement(repeated, state.owner);
       if (
         !callback ||
         (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -6144,25 +6536,30 @@ function effectSplitProjectionSubtree(
       leaves.push(leaf);
       continue;
     }
-    if (!isSafeJsxProjectionReference(terminal, state.owner, allowedCalls)) return null;
+    if (!isSafeJsxProjectionReference(terminal, state.owner, allowedCalls)) {
+      return null;
+    }
     const leaf = nearestJsxElement(terminal, state.owner);
-    if (!leaf) return null;
+    if (!leaf) {
+      return null;
+    }
     leaves.push(leaf);
   }
 
-  const uniqueLeaves = [...new Map(leaves.map(leaf => [leaf.getStart(), leaf])).values()];
-  if (uniqueLeaves.length < 2 || uniqueLeaves.length > 6) return null;
+  const uniqueLeaves = [...new Map(leaves.map((leaf) => [leaf.getStart(), leaf])).values()];
+  if (uniqueLeaves.length < 2 || uniqueLeaves.length > 6) {
+    return null;
+  }
   const leafElements = uniqueLeaves.reduce((total, leaf) => total + jsxElementCountIn(leaf), 0);
-  if (leafElements / ownerJsx > 0.4) return null;
+  if (leafElements / ownerJsx > 0.4) {
+    return null;
+  }
 
   const common = lowestCommonJsxSubtree(uniqueLeaves, state.owner);
-  if (!common) return null;
-  const result = stateSubtreeResult(
-    "effect-split-projection",
-    common,
-    terminals,
-    state
-  );
+  if (!common) {
+    return null;
+  }
+  const result = stateSubtreeResult("effect-split-projection", common, terminals, state);
   result.leafCount = uniqueLeaves.length;
   return result;
 }
@@ -6170,13 +6567,15 @@ function effectSplitProjectionSubtree(
 function effectSplitRenderRoots(
   state: StateCandidate,
   usage: StateUsage,
-  allowedCalls: ReadonlySet<string>
+  allowedCalls: ReadonlySet<string>,
 ): readonly ts.Identifier[] | null {
-  if (!state.owner.body) return null;
-  const direct = new Set(usage.directRenderNodes);
-  const roots: ts.Identifier[] = [];
+  if (!state.owner.body) {
+    return null;
+  }
+  const direct = new Set(usage.directRenderNodes),
+    roots: ts.Identifier[] = [];
   let safe = true;
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -6195,7 +6594,7 @@ function effectSplitRenderRoots(
       call &&
       ts.isIdentifier(call.expression) &&
       allowedCalls.has(call.expression.text) &&
-      call.arguments.some(argument => nodeWithin(node, argument)) &&
+      call.arguments.some((argument) => nodeWithin(node, argument)) &&
       nearestNestedFunction(node, state.owner) === null
     ) {
       roots.push(node);
@@ -6208,30 +6607,42 @@ function effectSplitRenderRoots(
 
 function hasDirectNumericInitializer(state: StateCandidate): boolean {
   const initializer = state.call.arguments[0];
-  if (!initializer) return false;
+  if (!initializer) {
+    return false;
+  }
   const value = unwrapTransparentExpression(initializer);
-  return ts.isNumericLiteral(value) ||
-    ts.isPrefixUnaryExpression(value) &&
+  return (
+    ts.isNumericLiteral(value) ||
+    (ts.isPrefixUnaryExpression(value) &&
       (value.operator === ts.SyntaxKind.PlusToken || value.operator === ts.SyntaxKind.MinusToken) &&
-      ts.isNumericLiteral(unwrapTransparentExpression(value.operand));
+      ts.isNumericLiteral(unwrapTransparentExpression(value.operand)))
+  );
 }
 
 function terminalRenderProjectionReferences(
   owner: RuntimeFunctionLike,
   roots: readonly ts.Node[],
-  allowedCalls: ReadonlySet<string>
+  allowedCalls: ReadonlySet<string>,
 ): readonly ts.Identifier[] | null {
-  if (!owner.body || roots.some(root => !ts.isIdentifier(root))) return null;
-  const pending = roots.map(root => ({ depth: 0, reference: root as ts.Identifier }));
-  const terminals: ts.Identifier[] = [];
-  const visited = new Set<number>();
+  if (!owner.body || roots.some((root) => !ts.isIdentifier(root))) {
+    return null;
+  }
+  const pending = roots.map((root) => ({ depth: 0, reference: root as ts.Identifier })),
+    terminals: ts.Identifier[] = [],
+    visited = new Set<number>();
 
   while (pending.length > 0) {
     const current = pending.pop()!;
-    if (visited.has(current.reference.getStart())) continue;
+    if (visited.has(current.reference.getStart())) {
+      continue;
+    }
     visited.add(current.reference.getStart());
     const declaration = findAncestorUntil(current.reference, ts.isVariableDeclaration, owner);
-    if (!declaration || !declaration.initializer || !nodeWithin(current.reference, declaration.initializer)) {
+    if (
+      !declaration ||
+      !declaration.initializer ||
+      !nodeWithin(current.reference, declaration.initializer)
+    ) {
       terminals.push(current.reference);
       continue;
     }
@@ -6245,13 +6656,13 @@ function terminalRenderProjectionReferences(
         declaration.initializer,
         current.reference,
         allowedCalls,
-        projectionMathCalls(owner)
+        projectionMathCalls(owner),
       )
     ) {
       return null;
     }
     const references: ts.Identifier[] = [];
-    visit(owner.body, node => {
+    visit(owner.body, (node) => {
       if (
         ts.isIdentifier(node) &&
         node.text === declaration.name.getText() &&
@@ -6262,14 +6673,18 @@ function terminalRenderProjectionReferences(
         references.push(node);
       }
     });
-    if (references.length === 0) return null;
-    pending.push(...references.map(reference => ({ depth: current.depth + 1, reference })));
+    if (references.length === 0) {
+      return null;
+    }
+    pending.push(...references.map((reference) => ({ depth: current.depth + 1, reference })));
   }
   return terminals.length > 0 ? terminals : null;
 }
 
 function projectionMathCalls(owner: RuntimeFunctionLike): ReadonlySet<string> {
-  if (sourceHasRuntimeBinding(owner.getSourceFile(), "Math")) return EMPTY_BINDINGS;
+  if (sourceHasRuntimeBinding(owner.getSourceFile(), "Math")) {
+    return EMPTY_BINDINGS;
+  }
   return new Set([
     "Math.abs",
     "Math.ceil",
@@ -6285,14 +6700,18 @@ function projectionMathCalls(owner: RuntimeFunctionLike): ReadonlySet<string> {
 function localPureProjectionBindings(sourceFile: ts.SourceFile): ReadonlySet<string> {
   const bindings = new Set<string>();
   for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
+    if (
+      !ts.isVariableStatement(statement) ||
+      (statement.declarationList.flags & ts.NodeFlags.Const) === 0
+    ) {
       continue;
     }
     for (const declaration of statement.declarationList.declarations) {
       if (
         !ts.isIdentifier(declaration.name) ||
         !declaration.initializer ||
-        (!ts.isArrowFunction(declaration.initializer) && !ts.isFunctionExpression(declaration.initializer)) ||
+        (!ts.isArrowFunction(declaration.initializer) &&
+          !ts.isFunctionExpression(declaration.initializer)) ||
         !localProjectionFunctionIsPure(declaration.initializer, sourceFile)
       ) {
         continue;
@@ -6305,13 +6724,13 @@ function localPureProjectionBindings(sourceFile: ts.SourceFile): ReadonlySet<str
 
 function localProjectionFunctionIsPure(
   fn: ts.ArrowFunction | ts.FunctionExpression,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): boolean {
   if (
     fn.asteriskToken ||
-    fn.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    fn.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     fn.parameters.length === 0 ||
-    fn.parameters.some(parameter => !ts.isIdentifier(parameter.name) || parameter.initializer)
+    fn.parameters.some((parameter) => !ts.isIdentifier(parameter.name) || parameter.initializer)
   ) {
     return false;
   }
@@ -6320,13 +6739,17 @@ function localProjectionFunctionIsPure(
       ts.isReturnStatement(fn.body.statements[0]!) &&
       fn.body.statements[0]!.expression
     : fn.body;
-  if (!expression) return false;
-  if (!isSafeProjectionExpression(expression, expression, EMPTY_BINDINGS, projectionMathCalls(fn))) {
+  if (!expression) {
+    return false;
+  }
+  if (
+    !isSafeProjectionExpression(expression, expression, EMPTY_BINDINGS, projectionMathCalls(fn))
+  ) {
     return false;
   }
 
   let safe = true;
-  visit(fn.body, node => {
+  visit(fn.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -6344,15 +6767,21 @@ function localProjectionFunctionIsPure(
 
 function identifierIsProjectionParameter(
   node: ts.Identifier,
-  boundary: ts.ArrowFunction | ts.FunctionExpression
+  boundary: ts.ArrowFunction | ts.FunctionExpression,
 ): boolean {
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
     if (isRuntimeFunctionLike(current)) {
       const names = new Set<string>();
-      for (const parameter of current.parameters) collectBindingNames(parameter.name, names);
-      if (names.has(node.text)) return true;
+      for (const parameter of current.parameters) {
+        collectBindingNames(parameter.name, names);
+      }
+      if (names.has(node.text)) {
+        return true;
+      }
     }
-    if (current === boundary) return false;
+    if (current === boundary) {
+      return false;
+    }
   }
   return false;
 }
@@ -6360,20 +6789,31 @@ function identifierIsProjectionParameter(
 function moduleConstIsEvaluationInert(sourceFile: ts.SourceFile, name: string): boolean {
   const matches: ts.VariableDeclaration[] = [];
   for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
+    if (
+      !ts.isVariableStatement(statement) ||
+      (statement.declarationList.flags & ts.NodeFlags.Const) === 0
+    ) {
+      continue;
+    }
     for (const declaration of statement.declarationList.declarations) {
-      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) matches.push(declaration);
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) {
+        matches.push(declaration);
+      }
     }
   }
-  return matches.length === 1 && !!matches[0]!.initializer && isEvaluationInert(matches[0]!.initializer);
+  return (
+    matches.length === 1 && !!matches[0]!.initializer && isEvaluationInert(matches[0]!.initializer)
+  );
 }
 
 function nearestJsxElement(node: ts.Node, boundary: ts.Node): JsxSubtreeNode | null {
   return findAncestorUntil(
     node,
     (candidate): candidate is JsxSubtreeNode =>
-      ts.isJsxElement(candidate) || ts.isJsxSelfClosingElement(candidate) || ts.isJsxFragment(candidate),
-    boundary
+      ts.isJsxElement(candidate) ||
+      ts.isJsxSelfClosingElement(candidate) ||
+      ts.isJsxFragment(candidate),
+    boundary,
   );
 }
 
@@ -6381,33 +6821,40 @@ function isMaterialStateSubtree(
   subtree: JsxSubtreeNode,
   ownerJsx: number,
   effectWrittenPresentation: boolean,
-  uniqueRepeatedProjection: boolean
+  uniqueRepeatedProjection: boolean,
 ): boolean {
   const subtreeJsx = jsxElementCountIn(subtree);
-  return (ownerJsx >= 12 && subtreeJsx / ownerJsx <= 0.4) ||
+  return (
+    (ownerJsx >= 12 && subtreeJsx / ownerJsx <= 0.4) ||
     (uniqueRepeatedProjection && ownerJsx >= 8 && subtreeJsx / ownerJsx <= 0.25) ||
-    (effectWrittenPresentation && ownerJsx < 12 && ownerJsx - subtreeJsx >= 5);
+    (effectWrittenPresentation && ownerJsx < 12 && ownerJsx - subtreeJsx >= 5)
+  );
 }
 
 function multipleOneHopRenderProjectionReferences(
   owner: RuntimeFunctionLike,
-  renderNodes: readonly ts.Node[]
+  renderNodes: readonly ts.Node[],
 ): readonly ts.Identifier[] | null {
   const references = new Set<ts.Identifier>();
   for (const renderNode of renderNodes) {
     const projected = oneHopRenderProjectionReferences(owner, [renderNode]);
-    if (!projected) return null;
-    for (const reference of projected) references.add(reference);
+    if (!projected) {
+      return null;
+    }
+    for (const reference of projected) {
+      references.add(reference);
+    }
   }
   return references.size > 0 ? [...references] : null;
 }
 
-function isSafeEffectPresentationReference(
-  node: ts.Node,
-  owner: RuntimeFunctionLike
-): boolean {
-  if (!findAncestorUntil(node, isJsxNode, owner)) return false;
-  if (commonRenderGateSubtree([node], owner)) return true;
+function isSafeEffectPresentationReference(node: ts.Node, owner: RuntimeFunctionLike): boolean {
+  if (!findAncestorUntil(node, isJsxNode, owner)) {
+    return false;
+  }
+  if (commonRenderGateSubtree([node], owner)) {
+    return true;
+  }
   const repeated = nearestRepeatedRenderCall(node, owner);
   if (
     !repeated ||
@@ -6417,17 +6864,16 @@ function isSafeEffectPresentationReference(
     return false;
   }
   const callback = repeated.arguments[0];
-  return !!callback &&
+  return (
+    !!callback &&
     (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
-    repeatedRenderHasStableItemKey(callback);
+    repeatedRenderHasStableItemKey(callback)
+  );
 }
 
-function isKeyedRepeatedProjection(
-  nodes: readonly ts.Node[],
-  owner: RuntimeFunctionLike
-): boolean {
-  const repeated = commonRepeatedRender(nodes, owner);
-  const callback = repeated?.arguments[0];
+function isKeyedRepeatedProjection(nodes: readonly ts.Node[], owner: RuntimeFunctionLike): boolean {
+  const repeated = commonRepeatedRender(nodes, owner),
+    callback = repeated?.arguments[0];
   if (
     !callback ||
     (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -6436,15 +6882,18 @@ function isKeyedRepeatedProjection(
     return false;
   }
   const binding = callback.parameters[0]?.name;
-  return !!binding && nodes.every(node => {
-    const expression = jsxProjectionExpression(node, owner);
-    return !!expression && expressionDependsOnBinding(expression, binding, callback);
-  });
+  return (
+    !!binding &&
+    nodes.every((node) => {
+      const expression = jsxProjectionExpression(node, owner);
+      return !!expression && expressionDependsOnBinding(expression, binding, callback);
+    })
+  );
 }
 
 function jsxProjectionExpression(
   node: ts.Node,
-  boundary: RuntimeFunctionLike
+  boundary: RuntimeFunctionLike,
 ): ts.Expression | null {
   const attribute = findAncestorUntil(node, ts.isJsxAttribute, boundary);
   if (attribute?.initializer && ts.isJsxExpression(attribute.initializer)) {
@@ -6458,11 +6907,10 @@ function stateSubtreeResult(
   node: JsxSubtreeNode,
   renderNodes: readonly ts.Node[],
   state: StateCandidate,
-  uniqueRepeatedBranch = false
+  uniqueRepeatedBranch = false,
 ): StateSubtree {
-  const lineNode = kind === "gate" && nearestNestedFunction(node, state.owner)
-    ? renderNodes[0] ?? node
-    : node;
+  const lineNode =
+    kind === "gate" && nearestNestedFunction(node, state.owner) ? (renderNodes[0] ?? node) : node;
   return {
     kind,
     label: jsxSubtreeLabel(node),
@@ -6478,10 +6926,10 @@ function isSafeMixedProjectionTransport(
   state: StateCandidate,
   usage: StateUsage,
   common: JsxSubtreeNode,
-  allowNestedSite = false
+  allowNestedSite = false,
 ): boolean {
-  const site = [...usage.valueTransportSites][0];
-  const target = [...usage.valueTargets][0];
+  const site = [...usage.valueTransportSites][0],
+    target = [...usage.valueTargets][0];
   if (
     usage.valueTransportSites.size !== 1 ||
     usage.setterTransportSites.size !== 0 ||
@@ -6496,65 +6944,82 @@ function isSafeMixedProjectionTransport(
     return false;
   }
   const props = usage.valueProps.get(target);
-  return !!props && props.size > 0 && [...props].every(prop =>
-    !/^(?:children|key|ref|render|on[A-Z])/.test(prop)
+  return (
+    !!props &&
+    props.size > 0 &&
+    [...props].every((prop) => !/^(?:children|key|ref|render|on[A-Z])/.test(prop))
   );
 }
 
 function setterReactiveMutationPaths(
   state: StateCandidate,
   usage: StateUsage,
-  mutationBindings: ReadonlySet<string>
+  mutationBindings: ReadonlySet<string>,
 ): { all: boolean; any: boolean } {
-  let any = false;
-  let all = mutationBindings.size > 0 && usage.setterCallNodes.length > 0;
+  let any = false,
+    all = mutationBindings.size > 0 && usage.setterCallNodes.length > 0;
   for (const call of usage.setterCallNodes) {
-    const pathHasMutation = mutationBindings.size > 0 && functionAncestors(call, state.owner).some(ancestor =>
-      functionDirectlyCallsBinding(ancestor, mutationBindings)
-    );
+    const pathHasMutation =
+      mutationBindings.size > 0 &&
+      functionAncestors(call, state.owner).some((ancestor) =>
+        functionDirectlyCallsBinding(ancestor, mutationBindings),
+      );
     any ||= pathHasMutation;
     all &&= pathHasMutation;
   }
   return { all, any };
 }
 
-function functionAncestors(
-  node: ts.Node,
-  owner: RuntimeFunctionLike
-): RuntimeFunctionLike[] {
+function functionAncestors(node: ts.Node, owner: RuntimeFunctionLike): RuntimeFunctionLike[] {
   const ancestors: RuntimeFunctionLike[] = [];
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
-    if (isRuntimeFunctionLike(current)) ancestors.push(current);
-    if (current === owner) break;
+    if (isRuntimeFunctionLike(current)) {
+      ancestors.push(current);
+    }
+    if (current === owner) {
+      break;
+    }
   }
   return ancestors;
 }
 
 function functionDirectlyCallsBinding(
   fn: RuntimeFunctionLike,
-  bindings: ReadonlySet<string>
+  bindings: ReadonlySet<string>,
 ): boolean {
-  if (!fn.body) return false;
+  if (!fn.body) {
+    return false;
+  }
   let calls = false;
-  visitSkippingNestedFunctions(fn.body, fn, node => {
-    if (!ts.isCallExpression(node)) return;
-    const expression = node.expression;
-    if (ts.isIdentifier(expression) && bindings.has(expression.text)) calls = true;
+  visitSkippingNestedFunctions(fn.body, fn, (node) => {
+    if (!ts.isCallExpression(node)) {
+      return;
+    }
+    const { expression } = node;
+    if (ts.isIdentifier(expression) && bindings.has(expression.text)) {
+      calls = true;
+    }
     if (
       ts.isPropertyAccessExpression(expression) &&
       ts.isIdentifier(expression.expression) &&
       bindings.has(`${expression.expression.text}.${expression.name.text}`)
-    ) calls = true;
+    ) {
+      calls = true;
+    }
   });
   return calls;
 }
 
 function setterCallbackEscapesThroughUnknownHook(
   state: StateCandidate,
-  usage: StateUsage
+  usage: StateUsage,
 ): boolean {
-  return usage.setterCallNodes.some(call => {
-    for (let current: ts.Node | undefined = call.parent; current && current !== state.owner; current = current.parent) {
+  return usage.setterCallNodes.some((call) => {
+    for (
+      let current: ts.Node | undefined = call.parent;
+      current && current !== state.owner;
+      current = current.parent
+    ) {
       const hookName = ts.isCallExpression(current)
         ? ts.isIdentifier(current.expression)
           ? current.expression.text
@@ -6567,7 +7032,7 @@ function setterCallbackEscapesThroughUnknownHook(
         /^use[A-Z0-9]/.test(hookName) &&
         !["useCallback", "useEffect"].includes(hookName) &&
         ts.isCallExpression(current) &&
-        current.arguments.some(argument => nodeWithin(call, argument))
+        current.arguments.some((argument) => nodeWithin(call, argument))
       ) {
         return true;
       }
@@ -6580,7 +7045,7 @@ function isSourceProvenMemoizedOptionCommand(
   state: StateCandidate,
   usage: StateUsage,
   imports: HookImports,
-  childContracts: ChildContractResolver
+  childContracts: ChildContractResolver,
 ): boolean {
   if (
     !state.owner.body ||
@@ -6596,39 +7061,39 @@ function isSourceProvenMemoizedOptionCommand(
     usage.setterUsesPreviousValue ||
     usage.shadowed ||
     usage.escaped ||
-    usage.setterCallNodes.some(call => {
+    usage.setterCallNodes.some((call) => {
       const value = call.arguments[0];
-      return call.arguments.length !== 1 ||
+      return (
+        call.arguments.length !== 1 ||
         !value ||
-        (value.kind !== ts.SyntaxKind.TrueKeyword && value.kind !== ts.SyntaxKind.FalseKeyword);
+        (value.kind !== ts.SyntaxKind.TrueKeyword && value.kind !== ts.SyntaxKind.FalseKeyword)
+      );
     })
   ) {
     return false;
   }
 
-  const deferredSetters = usage.setterCallNodes.filter(call =>
-    !isInsideJsxEventCallback(call, state.owner)
+  const deferredSetters = usage.setterCallNodes.filter(
+    (call) => !isInsideJsxEventCallback(call, state.owner),
   );
-  if (deferredSetters.length === 0) return false;
+  if (deferredSetters.length === 0) {
+    return false;
+  }
 
-  let memoCall: ts.CallExpression | null = null;
-  let callbackProp: string | null = null;
+  let memoCall: ts.CallExpression | null = null,
+    callbackProp: string | null = null;
   for (const setter of deferredSetters) {
     const containingMemo = findAncestorUntil(
-      setter,
-      (node): node is ts.CallExpression =>
-        ts.isCallExpression(node) &&
-        isImportedHookCall(node, imports.useMemo, imports.reactNamespaces, "useMemo"),
-      state.owner
-    );
-    const factory = containingMemo?.arguments[0];
-    const property = factory
-      ? findAncestorUntil(setter, ts.isPropertyAssignment, factory)
-      : null;
-    const propertyName = property ? staticPropertyName(property.name) : null;
-    const callback = property
-      ? nearestNestedFunction(setter, state.owner)
-      : null;
+        setter,
+        (node): node is ts.CallExpression =>
+          ts.isCallExpression(node) &&
+          isImportedHookCall(node, imports.useMemo, imports.reactNamespaces, "useMemo"),
+        state.owner,
+      ),
+      factory = containingMemo?.arguments[0],
+      property = factory ? findAncestorUntil(setter, ts.isPropertyAssignment, factory) : null,
+      propertyName = property ? staticPropertyName(property.name) : null,
+      callback = property ? nearestNestedFunction(setter, state.owner) : null;
     if (
       !containingMemo ||
       !factory ||
@@ -6646,7 +7111,9 @@ function isSourceProvenMemoizedOptionCommand(
     memoCall = containingMemo;
     callbackProp = propertyName;
   }
-  if (!memoCall || !callbackProp) return false;
+  if (!memoCall || !callbackProp) {
+    return false;
+  }
 
   const declaration = findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner);
   if (
@@ -6659,11 +7126,11 @@ function isSourceProvenMemoizedOptionCommand(
   }
   const memoBinding = declaration.name.text;
 
-  let target: string | null = null;
-  let propName: string | null = null;
-  let transportCount = 0;
-  let safe = true;
-  visit(state.owner.body, node => {
+  let target: string | null = null,
+    propName: string | null = null,
+    transportCount = 0,
+    safe = true;
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -6686,9 +7153,9 @@ function isSourceProvenMemoizedOptionCommand(
       safe = false;
       return;
     }
-    const opening = jsxOpeningForAttribute(attribute);
-    const nextTarget = opening?.tagName.getText() ?? null;
-    const nextProp = attribute.name.getText();
+    const opening = jsxOpeningForAttribute(attribute),
+      nextTarget = opening?.tagName.getText() ?? null,
+      nextProp = attribute.name.getText();
     if (
       !nextTarget ||
       transportCount > 0 ||
@@ -6702,12 +7169,10 @@ function isSourceProvenMemoizedOptionCommand(
     propName = nextProp;
     transportCount += 1;
   });
-  if (!safe || transportCount !== 1 || !target || !propName) return false;
-  return childContracts.componentArrayItemCallbackIsDeferred(
-    target,
-    propName,
-    callbackProp
-  );
+  if (!safe || transportCount !== 1 || !target || !propName) {
+    return false;
+  }
+  return childContracts.componentArrayItemCallbackIsDeferred(target, propName, callbackProp);
 }
 
 function staticPropertyName(name: ts.PropertyName): string | null {
@@ -6720,7 +7185,7 @@ function isEffectOwnedMemoizedPresentationState(
   state: StateCandidate,
   usage: StateUsage,
   directEffectCalls: ReadonlySet<ts.CallExpression>,
-  imports: HookImports
+  imports: HookImports,
 ): boolean {
   if (
     !state.owner.body ||
@@ -6738,21 +7203,20 @@ function isEffectOwnedMemoizedPresentationState(
       setterCall,
       (node): node is ts.CallExpression =>
         ts.isCallExpression(node) &&
-        isImportedHookCall(
-          node,
-          imports.useMemo,
-          imports.reactNamespaces,
-          "useMemo"
-        ),
-      state.owner
+        isImportedHookCall(node, imports.useMemo, imports.reactNamespaces, "useMemo"),
+      state.owner,
     );
-    if (!containingMemo || (memoCall !== null && memoCall !== containingMemo)) return false;
+    if (!containingMemo || (memoCall !== null && memoCall !== containingMemo)) {
+      return false;
+    }
     memoCall = containingMemo;
   }
-  if (!memoCall) return false;
+  if (!memoCall) {
+    return false;
+  }
 
-  const factory = memoCall.arguments[0];
-  const declaration = findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner);
+  const factory = memoCall.arguments[0],
+    declaration = findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner);
   if (
     !factory ||
     (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
@@ -6760,15 +7224,15 @@ function isEffectOwnedMemoizedPresentationState(
     unwrapTransparentExpression(declaration.initializer) !== memoCall ||
     !ts.isIdentifier(declaration.name) ||
     bindingDeclarationCount(state.owner, declaration.name.text) !== 1 ||
-    !usage.setterCallNodes.every(call => nodeWithin(call, factory))
+    !usage.setterCallNodes.every((call) => nodeWithin(call, factory))
   ) {
     return false;
   }
 
   const binding = declaration.name.text;
-  let invokedByEffect = false;
-  let safe = true;
-  visit(state.owner.body, node => {
+  let invokedByEffect = false,
+    safe = true;
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -6779,7 +7243,7 @@ function isEffectOwnedMemoizedPresentationState(
     ) {
       return;
     }
-    const effectCall = [...directEffectCalls].find(effect => nodeWithin(node, effect));
+    const effectCall = [...directEffectCalls].find((effect) => nodeWithin(node, effect));
     if (!effectCall) {
       safe = false;
       return;
@@ -6789,12 +7253,15 @@ function isEffectOwnedMemoizedPresentationState(
       invokedByEffect = true;
       return;
     }
-    const memberCall = ts.isPropertyAccessExpression(node.parent) &&
-      node.parent.expression === node &&
-      ts.isCallExpression(node.parent.parent) &&
-      node.parent.parent.expression === node.parent;
-    const dependencies = effectCall.arguments[1];
-    if (memberCall || (dependencies !== undefined && nodeWithin(node, dependencies))) return;
+    const memberCall =
+        ts.isPropertyAccessExpression(node.parent) &&
+        node.parent.expression === node &&
+        ts.isCallExpression(node.parent.parent) &&
+        node.parent.parent.expression === node.parent,
+      dependencies = effectCall.arguments[1];
+    if (memberCall || (dependencies !== undefined && nodeWithin(node, dependencies))) {
+      return;
+    }
     safe = false;
   });
   return safe && invokedByEffect;
@@ -6804,7 +7271,7 @@ function isEffectOwnedSelfRefreshingCommandState(
   state: StateCandidate,
   usage: StateUsage,
   directEffectCalls: ReadonlySet<ts.CallExpression>,
-  imports: HookImports
+  imports: HookImports,
 ): boolean {
   const setterCall = usage.setterCallNodes[0];
   if (
@@ -6821,21 +7288,16 @@ function isEffectOwnedSelfRefreshingCommandState(
   }
 
   const memoCall = findAncestorUntil(
-    setterCall,
-    (node): node is ts.CallExpression =>
-      ts.isCallExpression(node) &&
-      isImportedHookCall(
-        node,
-        imports.useCallback,
-        imports.reactNamespaces,
-        "useCallback"
-      ),
-    state.owner
-  );
-  const factory = memoCall?.arguments[0];
-  const declaration = memoCall
-    ? findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner)
-    : null;
+      setterCall,
+      (node): node is ts.CallExpression =>
+        ts.isCallExpression(node) &&
+        isImportedHookCall(node, imports.useCallback, imports.reactNamespaces, "useCallback"),
+      state.owner,
+    ),
+    factory = memoCall?.arguments[0],
+    declaration = memoCall
+      ? findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner)
+      : null;
   if (
     !memoCall ||
     !factory ||
@@ -6844,18 +7306,20 @@ function isEffectOwnedSelfRefreshingCommandState(
     unwrapTransparentExpression(declaration.initializer) !== memoCall ||
     !ts.isIdentifier(declaration.name) ||
     bindingDeclarationCount(state.owner, declaration.name.text) !== 1 ||
-    factory.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+    factory.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
   ) {
     return false;
   }
 
-  let bodyReads = 0;
-  let dependencyReads = 0;
-  let unsafe = false;
+  let bodyReads = 0,
+    dependencyReads = 0,
+    unsafe = false;
   const reads: ts.Identifier[] = [];
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (unsafe || ts.isAwaitExpression(node) || ts.isYieldExpression(node)) {
-      if (nodeWithin(node, factory)) unsafe = true;
+      if (nodeWithin(node, factory)) {
+        unsafe = true;
+      }
       return;
     }
     if (
@@ -6879,16 +7343,19 @@ function isEffectOwnedSelfRefreshingCommandState(
     }
     unsafe = true;
   });
-  if (unsafe || bodyReads === 0 || dependencyReads === 0) return false;
+  if (unsafe || bodyReads === 0 || dependencyReads === 0) {
+    return false;
+  }
 
   const writeSites = memoizedCommandWriteSites(setterCall, factory, state.owner);
   if (
     !writeSites ||
-    writeSites.some(write =>
-      reads.some(read =>
-        write.getStart() < read.getStart() &&
-        !writeIsFollowedByReturnBeforeRead(write, read, factory)
-      )
+    writeSites.some((write) =>
+      reads.some(
+        (read) =>
+          write.getStart() < read.getStart() &&
+          !writeIsFollowedByReturnBeforeRead(write, read, factory),
+      ),
     )
   ) {
     return false;
@@ -6896,7 +7363,7 @@ function isEffectOwnedSelfRefreshingCommandState(
 
   const binding = declaration.name.text;
   let invokedByEffect = false;
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       unsafe ||
       !ts.isIdentifier(node) ||
@@ -6907,7 +7374,7 @@ function isEffectOwnedSelfRefreshingCommandState(
     ) {
       return;
     }
-    const effectCall = [...directEffectCalls].find(effect => nodeWithin(node, effect));
+    const effectCall = [...directEffectCalls].find((effect) => nodeWithin(node, effect));
     if (!effectCall) {
       unsafe = true;
       return;
@@ -6917,7 +7384,9 @@ function isEffectOwnedSelfRefreshingCommandState(
       return;
     }
     const dependencies = effectCall.arguments[1];
-    if (!dependencies || !nodeWithin(node, dependencies)) unsafe = true;
+    if (!dependencies || !nodeWithin(node, dependencies)) {
+      unsafe = true;
+    }
   });
   return !unsafe && invokedByEffect;
 }
@@ -6925,10 +7394,12 @@ function isEffectOwnedSelfRefreshingCommandState(
 function memoizedCommandWriteSites(
   setterCall: ts.CallExpression,
   factory: ts.ArrowFunction | ts.FunctionExpression,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): readonly ts.CallExpression[] | null {
   const region = nearestMutationFunction(setterCall, owner);
-  if (region === factory) return [setterCall];
+  if (region === factory) {
+    return [setterCall];
+  }
   if (
     !ts.isArrowFunction(region) &&
     !ts.isFunctionDeclaration(region) &&
@@ -6937,11 +7408,13 @@ function memoizedCommandWriteSites(
     return null;
   }
   const name = localCallbackBindingName(region);
-  if (!name || bindingDeclarationCount(factory, name) !== 1) return null;
+  if (!name || bindingDeclarationCount(factory, name) !== 1) {
+    return null;
+  }
 
   const calls: ts.CallExpression[] = [];
   let safe = true;
-  visit(factory.body, node => {
+  visit(factory.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -6963,14 +7436,20 @@ function memoizedCommandWriteSites(
 function writeIsFollowedByReturnBeforeRead(
   write: ts.CallExpression,
   read: ts.Identifier,
-  boundary: ts.Node
+  boundary: ts.Node,
 ): boolean {
-  for (let current: ts.Node | undefined = write.parent; current && current !== boundary; current = current.parent) {
-    if (!ts.isBlock(current) || nodeWithin(read, current)) continue;
-    const writeIndex = current.statements.findIndex(statement => nodeWithin(write, statement));
+  for (
+    let current: ts.Node | undefined = write.parent;
+    current && current !== boundary;
+    current = current.parent
+  ) {
+    if (!ts.isBlock(current) || nodeWithin(read, current)) {
+      continue;
+    }
+    const writeIndex = current.statements.findIndex((statement) => nodeWithin(write, statement));
     if (
-      writeIndex >= 0 &&
-      current.statements.slice(writeIndex + 1).some(statement => ts.isReturnStatement(statement))
+      writeIndex !== -1 &&
+      current.statements.slice(writeIndex + 1).some((statement) => ts.isReturnStatement(statement))
     ) {
       return true;
     }
@@ -6980,19 +7459,20 @@ function writeIsFollowedByReturnBeforeRead(
 
 function commonRepeatedRender(
   nodes: readonly ts.Node[],
-  boundary: ts.Node
+  boundary: ts.Node,
 ): ts.CallExpression | null {
-  const calls = nodes.map(node => nearestRepeatedRenderCall(node, boundary));
-  const first = calls[0];
-  return first && calls.every(call => call === first) ? first : null;
+  const calls = nodes.map((node) => nearestRepeatedRenderCall(node, boundary)),
+    first = calls[0];
+  return first && calls.every((call) => call === first) ? first : null;
 }
 
-
-
-
 function jsxSubtreeLabel(node: JsxSubtreeNode): string {
-  if (ts.isJsxFragment(node)) return "fragment";
-  return ts.isJsxElement(node) ? `<${node.openingElement.tagName.getText()}>` : `<${node.tagName.getText()}>`;
+  if (ts.isJsxFragment(node)) {
+    return "fragment";
+  }
+  return ts.isJsxElement(node)
+    ? `<${node.openingElement.tagName.getText()}>`
+    : `<${node.tagName.getText()}>`;
 }
 
 function findingFor(
@@ -7002,7 +7482,7 @@ function findingFor(
   hook: "useEffect" | "useState",
   name: string | null,
   classification: ClassifiedState | ClassifiedEffect,
-  evidence: readonly string[] = []
+  evidence: readonly string[] = [],
 ): HookFinding {
   const position = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
   return {
@@ -7018,12 +7498,16 @@ function findingFor(
     },
     message: classification.message,
     name,
-    ...(hook === "useState" ? { stateModel: stateModelFor(classification.action as StateAction) } : {}),
+    ...(hook === "useState"
+      ? { stateModel: stateModelFor(classification.action as StateAction) }
+      : {}),
   };
 }
 
 function dispositionFor(action: HookFinding["action"]): HookFinding["disposition"] {
-  if (action === "keep-effect" || action === "keep-state") return "keep";
+  if (action === "keep-effect" || action === "keep-state") {
+    return "keep";
+  }
   if (
     action === "review-effect" ||
     action === "review-state" ||
@@ -7038,7 +7522,7 @@ function dispositionFor(action: HookFinding["action"]): HookFinding["disposition
 function isStructuralLegendCandidate(
   state: StateCandidate,
   usage: StateUsage,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): boolean {
   return (
     ownerLineSpan(state.owner, sourceFile) >= 150 &&
@@ -7051,40 +7535,48 @@ function isStructuralLegendCandidate(
 function legendCandidateMessage(
   state: StateCandidate,
   usage: StateUsage,
-  sourceComponents: ReadonlySet<string> = new Set()
+  sourceComponents: ReadonlySet<string> = new Set(),
 ): string {
-  const targets = [...usage.jsxTargets].sort().join(", ") || "the receiving descendants";
-  const resolved = [...usage.jsxTargets].filter(target => sourceComponents.has(target));
-  const proof = resolved.length > 0
-    ? ` Source declarations resolved for ${resolved.sort().join(", ")}, but their prop contracts and mount identity still need verification.`
-    : "";
+  const targets = [...usage.jsxTargets].sort().join(", ") || "the receiving descendants",
+    resolved = [...usage.jsxTargets].filter((target) => sourceComponents.has(target)),
+    proof =
+      resolved.length > 0
+        ? ` Source declarations resolved for ${resolved.sort().join(", ")}, but their prop contracts and mount identity still need verification.`
+        : "";
   return `Legend-first restructuring candidate: keep \`${state.valueName}\` in a stable observable owner and subscribe only inside ${targets}; verify the child contract before changing it.${proof}`;
 }
 
 function stateModelFor(action: StateAction): NonNullable<HookFinding["stateModel"]> {
   switch (action) {
-    case "keep-state":
+    case "keep-state": {
       return { ownership: "react", subscription: "owner-react" };
-    case "move-state-down":
+    }
+    case "move-state-down": {
       return { ownership: "react", subscription: "leaf-react" };
-    case "use-observable":
+    }
+    case "use-observable": {
       return { ownership: "local-observable", subscription: "leaf-use-value" };
-    case "use-value":
+    }
+    case "use-value": {
       return { ownership: "existing-observable", subscription: "owner-use-value" };
+    }
     case "delete-derived-state":
-    case "delete-unused-state":
+    case "delete-unused-state": {
       return { ownership: "delete", subscription: "none" };
-    case "use-ref":
+    }
+    case "use-ref": {
       return { ownership: "ref", subscription: "none" };
-    case "review-state":
+    }
+    case "review-state": {
       return { ownership: "review", subscription: "review" };
+    }
   }
 }
 
 function stateEvidence(
   state: StateCandidate,
   usage: StateUsage,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): readonly string[] {
   return [
     `${ownerEvidence(state.owner, sourceFile)}, JSX elements ${jsxElementCount(state.owner)}`,
@@ -7097,30 +7589,33 @@ function stateEvidence(
 function effectEvidence(
   effect: EffectCandidate,
   sourceFile: ts.SourceFile,
-  stateBySetter: ReadonlyMap<string, StateCandidate>
+  stateBySetter: ReadonlyMap<string, StateCandidate>,
 ): readonly string[] {
   const evidence = [effect.owner ? ownerEvidence(effect.owner, sourceFile) : "owner: unresolved"];
-  evidence.push(`dependencies: ${effect.dependencies?.elements.length ?? "unresolved"}`);
-  evidence.push(`cleanup: ${effect.callback ? callbackHasCleanup(effect.callback, stateBySetter) : "unresolved"}`);
+  evidence.push(
+    `dependencies: ${effect.dependencies?.elements.length ?? "unresolved"}`,
+    `cleanup: ${effect.callback ? callbackHasCleanup(effect.callback, stateBySetter) : "unresolved"}`,
+  );
   return evidence;
 }
 
 function ownerEvidence(owner: RuntimeFunctionLike, sourceFile: ts.SourceFile): string {
-  const start = sourceFile.getLineAndCharacterOfPosition(owner.getStart(sourceFile)).line + 1;
-  const end = sourceFile.getLineAndCharacterOfPosition(owner.end).line + 1;
+  const start = sourceFile.getLineAndCharacterOfPosition(owner.getStart(sourceFile)).line + 1,
+    end = sourceFile.getLineAndCharacterOfPosition(owner.end).line + 1;
   return `owner: ${runtimeFunctionName(owner) ?? "anonymous"}, lines ${start}-${end}`;
 }
 
 function ownerLineSpan(owner: RuntimeFunctionLike, sourceFile: ts.SourceFile): number {
-  const start = sourceFile.getLineAndCharacterOfPosition(owner.getStart(sourceFile)).line;
-  const end = sourceFile.getLineAndCharacterOfPosition(owner.end).line;
+  const start = sourceFile.getLineAndCharacterOfPosition(owner.getStart(sourceFile)).line,
+    end = sourceFile.getLineAndCharacterOfPosition(owner.end).line;
   return end - start + 1;
 }
 
-
 function runtimeFunctionName(owner: RuntimeFunctionLike): string | null {
-  if (owner.name && ts.isIdentifier(owner.name)) return owner.name.text;
-  const parent = owner.parent;
+  if (owner.name && ts.isIdentifier(owner.name)) {
+    return owner.name.text;
+  }
+  const { parent } = owner;
   return ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name) ? parent.name.text : null;
 }
 
@@ -7133,7 +7628,7 @@ function isEffectOwnedReturnedKeyedCursor(
   state: StateCandidate,
   usage: StateUsage,
   directEffectCalls: ReadonlySet<ts.CallExpression>,
-  childContracts: ChildContractResolver
+  childContracts: ChildContractResolver,
 ): boolean {
   const hookName = runtimeFunctionName(state.owner);
   if (
@@ -7156,42 +7651,57 @@ function isEffectOwnedReturnedKeyedCursor(
   ) {
     return false;
   }
-  return !!state.setterName && childContracts.hookStateHasKeyedRowConsumer(
-    hookName,
-    state.valueName,
-    state.setterName
+  return (
+    !!state.setterName &&
+    childContracts.hookStateHasKeyedRowConsumer(hookName, state.valueName, state.setterName)
   );
 }
 
 function hasNumericStateInitializer(state: StateCandidate): boolean {
   const initializer = state.call.arguments[0];
-  if (!initializer) return false;
+  if (!initializer) {
+    return false;
+  }
   const value = unwrapTransparentExpression(initializer);
-  return ts.isNumericLiteral(value) ||
+  return (
+    ts.isNumericLiteral(value) ||
     (ts.isPrefixUnaryExpression(value) &&
       value.operator === ts.SyntaxKind.MinusToken &&
-      ts.isNumericLiteral(value.operand));
+      ts.isNumericLiteral(value.operand))
+  );
 }
 
 function returnsStateAndSetter(state: StateCandidate): boolean {
-  if (!state.owner.body || !state.setterName) return false;
-  let returns = 0;
-  let matched = false;
-  visitSkippingNestedRuntimeFunctions(state.owner.body, node => {
-    if (!ts.isReturnStatement(node) || !node.expression) return;
+  if (!state.owner.body || !state.setterName) {
+    return false;
+  }
+  let returns = 0,
+    matched = false;
+  visitSkippingNestedRuntimeFunctions(state.owner.body, (node) => {
+    if (!ts.isReturnStatement(node) || !node.expression) {
+      return;
+    }
     returns += 1;
     const value = unwrapTransparentExpression(node.expression);
-    if (!ts.isObjectLiteralExpression(value)) return;
-    const names = new Set(value.properties.flatMap(property => {
-      if (ts.isShorthandPropertyAssignment(property)) return [property.name.text];
-      if (!ts.isPropertyAssignment(property)) return [];
-      const initializer = unwrapTransparentExpression(property.initializer);
-      return ts.isIdentifier(property.name) &&
-        ts.isIdentifier(initializer) &&
-        property.name.text === initializer.text
-        ? [initializer.text]
-        : [];
-    }));
+    if (!ts.isObjectLiteralExpression(value)) {
+      return;
+    }
+    const names = new Set(
+      value.properties.flatMap((property) => {
+        if (ts.isShorthandPropertyAssignment(property)) {
+          return [property.name.text];
+        }
+        if (!ts.isPropertyAssignment(property)) {
+          return [];
+        }
+        const initializer = unwrapTransparentExpression(property.initializer);
+        return ts.isIdentifier(property.name) &&
+          ts.isIdentifier(initializer) &&
+          property.name.text === initializer.text
+          ? [initializer.text]
+          : [];
+      }),
+    );
     matched = names.has(state.valueName) && names.has(state.setterName!);
   });
   return returns === 1 && matched;
@@ -7200,12 +7710,14 @@ function returnsStateAndSetter(state: StateCandidate): boolean {
 function effectCursorReadsAreDeferred(
   state: StateCandidate,
   directEffectCalls: ReadonlySet<ts.CallExpression>,
-  childContracts: ChildContractResolver
+  childContracts: ChildContractResolver,
 ): boolean {
-  if (!state.owner.body) return false;
+  if (!state.owner.body) {
+    return false;
+  }
   const nestedReadEffects = new Set<ts.CallExpression>();
   let safe = true;
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -7217,7 +7729,11 @@ function effectCursorReadsAreDeferred(
       return;
     }
     const returned = findAncestorUntil(node, ts.isReturnStatement, state.owner);
-    if (returned && returned.expression && ts.isObjectLiteralExpression(unwrapTransparentExpression(returned.expression))) {
+    if (
+      returned &&
+      returned.expression &&
+      ts.isObjectLiteralExpression(unwrapTransparentExpression(returned.expression))
+    ) {
       return;
     }
     const effect = ancestorCallInSet(node, directEffectCalls, state.owner);
@@ -7226,9 +7742,11 @@ function effectCursorReadsAreDeferred(
       return;
     }
     const dependencies = effect.arguments[1];
-    if (dependencies && nodeWithin(node, dependencies)) return;
-    const callback = effect.arguments[0];
-    const nested = nearestNestedFunction(node, state.owner);
+    if (dependencies && nodeWithin(node, dependencies)) {
+      return;
+    }
+    const callback = effect.arguments[0],
+      nested = nearestNestedFunction(node, state.owner);
     if (
       !callback ||
       (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -7242,28 +7760,34 @@ function effectCursorReadsAreDeferred(
     }
     nestedReadEffects.add(effect);
   });
-  return safe && nestedReadEffects.size > 0 && [...nestedReadEffects].every(effect => {
-    const callback = effect.arguments[0];
-    const dependencies = effect.arguments[1];
-    return !!callback &&
-      (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
-      callbackHasCleanup(callback, EMPTY_STATE_CANDIDATES) &&
-      !!dependencies &&
-      ts.isArrayLiteralExpression(dependencies) &&
-      dependencies.elements.some(element => {
-        const value = unwrapTransparentExpression(element);
-        return ts.isIdentifier(value) && value.text === state.valueName;
-      });
-  });
+  return (
+    safe &&
+    nestedReadEffects.size > 0 &&
+    [...nestedReadEffects].every((effect) => {
+      const callback = effect.arguments[0],
+        dependencies = effect.arguments[1];
+      return (
+        !!callback &&
+        (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
+        callbackHasCleanup(callback, EMPTY_STATE_CANDIDATES) &&
+        !!dependencies &&
+        ts.isArrayLiteralExpression(dependencies) &&
+        dependencies.elements.some((element) => {
+          const value = unwrapTransparentExpression(element);
+          return ts.isIdentifier(value) && value.text === state.valueName;
+        })
+      );
+    })
+  );
 }
 
 function registeredCallbackHasEffectCleanup(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   effect: ts.ArrowFunction | ts.FunctionExpression,
-  childContracts: ChildContractResolver
+  childContracts: ChildContractResolver,
 ): boolean {
-  const call = callback.parent;
-  const owner = findAncestor(effect, isRuntimeFunctionLike);
+  const call = callback.parent,
+    owner = findAncestor(effect, isRuntimeFunctionLike);
   if (
     !owner ||
     !ts.isCallExpression(call) ||
@@ -7274,7 +7798,7 @@ function registeredCallbackHasEffectCleanup(
     !childContracts.callbackRegistrationIsDeferred(
       call.expression.expression.text,
       call.expression.name.text,
-      call.arguments.indexOf(callback)
+      call.arguments.indexOf(callback),
     )
   ) {
     return false;
@@ -7291,9 +7815,9 @@ function registeredCallbackHasEffectCleanup(
   ) {
     return false;
   }
-  const disposerName = declaration.name.text;
-  const references: ts.Identifier[] = [];
-  visit(effect.body, node => {
+  const disposerName = declaration.name.text,
+    references: ts.Identifier[] = [];
+  visit(effect.body, (node) => {
     if (
       ts.isIdentifier(node) &&
       node.text === disposerName &&
@@ -7304,36 +7828,54 @@ function registeredCallbackHasEffectCleanup(
       references.push(node);
     }
   });
-  return references.length > 0 && references.every(reference => {
-    const returned = findAncestorUntil(reference, ts.isReturnStatement, effect);
-    if (!returned?.expression) return false;
-    const cleanup = unwrapTransparentExpression(returned.expression);
-    if (cleanup === reference) return true;
-    if (!ts.isArrowFunction(cleanup) && !ts.isFunctionExpression(cleanup)) return false;
-    return ts.isCallExpression(reference.parent) &&
-      reference.parent.expression === reference &&
-      nearestNestedFunction(reference, effect) === cleanup;
-  });
+  return (
+    references.length > 0 &&
+    references.every((reference) => {
+      const returned = findAncestorUntil(reference, ts.isReturnStatement, effect);
+      if (!returned?.expression) {
+        return false;
+      }
+      const cleanup = unwrapTransparentExpression(returned.expression);
+      if (cleanup === reference) {
+        return true;
+      }
+      if (!ts.isArrowFunction(cleanup) && !ts.isFunctionExpression(cleanup)) {
+        return false;
+      }
+      return (
+        ts.isCallExpression(reference.parent) &&
+        reference.parent.expression === reference &&
+        nearestNestedFunction(reference, effect) === cleanup
+      );
+    })
+  );
 }
 
 function ancestorCallInSet(
   node: ts.Node,
   calls: ReadonlySet<ts.CallExpression>,
-  boundary: ts.Node
+  boundary: ts.Node,
 ): ts.CallExpression | null {
-  for (let current: ts.Node | undefined = node.parent; current && current !== boundary; current = current.parent) {
-    if (ts.isCallExpression(current) && calls.has(current)) return current;
+  for (
+    let current: ts.Node | undefined = node.parent;
+    current && current !== boundary;
+    current = current.parent
+  ) {
+    if (ts.isCallExpression(current) && calls.has(current)) {
+      return current;
+    }
   }
   return null;
 }
 
 function jsxTargetName(attribute: ts.JsxAttribute): string | null {
-  const properties = attribute.parent;
-  const opening = properties.parent;
-  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) return null;
+  const properties = attribute.parent,
+    opening = properties.parent;
+  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) {
+    return null;
+  }
   return opening.tagName.getText();
 }
-
 
 function isCustomJsxTarget(name: string): boolean {
   const first = name[0];
@@ -7345,26 +7887,37 @@ function jsxTransportSite(attribute: ts.JsxAttribute): number {
 }
 
 function isInsideJsxCallback(node: ts.Node, boundary: RuntimeFunctionLike): boolean {
-  for (let current: ts.Node | undefined = node.parent; current && current !== boundary; current = current.parent) {
-    if (!isRuntimeFunctionLike(current)) continue;
+  for (
+    let current: ts.Node | undefined = node.parent;
+    current && current !== boundary;
+    current = current.parent
+  ) {
+    if (!isRuntimeFunctionLike(current)) {
+      continue;
+    }
     const attribute = findAncestorUntil(current, ts.isJsxAttribute, boundary);
-    if (attribute && isInsideJsxAttribute(current, attribute)) return true;
+    if (attribute && isInsideJsxAttribute(current, attribute)) {
+      return true;
+    }
   }
   return false;
 }
-
 
 function hasUnstableJsxLifetime(node: ts.Node, boundary: ts.Node): boolean {
   const opening = node.parent.parent;
   if (
     (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) &&
     opening.attributes.properties.some(
-      property => ts.isJsxAttribute(property) && property.name.getText() === "key"
+      (property) => ts.isJsxAttribute(property) && property.name.getText() === "key",
     )
   ) {
     return true;
   }
-  for (let current: ts.Node | undefined = opening.parent; current && current !== boundary; current = current.parent) {
+  for (
+    let current: ts.Node | undefined = opening.parent;
+    current && current !== boundary;
+    current = current.parent
+  ) {
     if (
       ts.isConditionalExpression(current) ||
       (ts.isBinaryExpression(current) &&
@@ -7378,21 +7931,27 @@ function hasUnstableJsxLifetime(node: ts.Node, boundary: ts.Node): boolean {
   return nearestRepeatedRenderCall(opening, boundary) !== null;
 }
 
-
 function isDirectArgumentToUnknownCall(node: ts.Identifier): boolean {
-  const parent = node.parent;
-  return ts.isCallExpression(parent) && parent.expression !== node && parent.arguments.includes(node);
+  const { parent } = node;
+  return (
+    ts.isCallExpression(parent) && parent.expression !== node && parent.arguments.includes(node)
+  );
 }
 
 function isOriginalStateBinding(node: ts.Identifier, call: ts.CallExpression): boolean {
   const declaration = call.parent;
-  return ts.isVariableDeclaration(declaration) && declaration.name.getStart() <= node.getStart() && node.end <= declaration.name.end;
+  return (
+    ts.isVariableDeclaration(declaration) &&
+    declaration.name.getStart() <= node.getStart() &&
+    node.end <= declaration.name.end
+  );
 }
-
 
 function hasAncestorInSet(node: ts.Node, ancestors: ReadonlySet<ts.Node>): boolean {
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
-    if (ancestors.has(current)) return true;
+    if (ancestors.has(current)) {
+      return true;
+    }
   }
   return false;
 }
@@ -7403,7 +7962,9 @@ function isInsideImportedCallback(node: ts.Node, hookNames: ReadonlySet<string>)
       ts.isCallExpression(current) &&
       ts.isIdentifier(current.expression) &&
       hookNames.has(current.expression.text) &&
-      current.arguments.some(argument => argument.getStart() <= node.getStart() && node.end <= argument.end)
+      current.arguments.some(
+        (argument) => argument.getStart() <= node.getStart() && node.end <= argument.end,
+      )
     ) {
       return true;
     }
@@ -7411,10 +7972,12 @@ function isInsideImportedCallback(node: ts.Node, hookNames: ReadonlySet<string>)
   return false;
 }
 
-
-function collectLocalComponents(sourceFile: ts.SourceFile, imports: HookImports): ReadonlySet<string> {
+function collectLocalComponents(
+  sourceFile: ts.SourceFile,
+  imports: HookImports,
+): ReadonlySet<string> {
   const names = new Set<string>();
-  visit(sourceFile, node => {
+  visit(sourceFile, (node) => {
     if (ts.isFunctionDeclaration(node) && node.name && isComponentName(node.name.text)) {
       names.add(node.name.text);
       return;
@@ -7424,11 +7987,9 @@ function collectLocalComponents(sourceFile: ts.SourceFile, imports: HookImports)
       ts.isIdentifier(node.name) &&
       isComponentName(node.name.text) &&
       node.initializer &&
-      (
-        ts.isArrowFunction(node.initializer) ||
+      (ts.isArrowFunction(node.initializer) ||
         ts.isFunctionExpression(node.initializer) ||
-        isImportedReactLazyCall(node.initializer, imports)
-      )
+        isImportedReactLazyCall(node.initializer, imports))
     ) {
       names.add(node.name.text);
     }
@@ -7438,12 +7999,18 @@ function collectLocalComponents(sourceFile: ts.SourceFile, imports: HookImports)
 
 function isImportedReactLazyCall(node: ts.Expression, imports: HookImports): boolean {
   const value = unwrapTransparentExpression(node);
-  if (!ts.isCallExpression(value)) return false;
-  if (ts.isIdentifier(value.expression)) return imports.lazy.has(value.expression.text);
-  return ts.isPropertyAccessExpression(value.expression) &&
+  if (!ts.isCallExpression(value)) {
+    return false;
+  }
+  if (ts.isIdentifier(value.expression)) {
+    return imports.lazy.has(value.expression.text);
+  }
+  return (
+    ts.isPropertyAccessExpression(value.expression) &&
     value.expression.name.text === "lazy" &&
     ts.isIdentifier(value.expression.expression) &&
-    imports.reactNamespaces.has(value.expression.expression.text);
+    imports.reactNamespaces.has(value.expression.expression.text)
+  );
 }
 
 function collectPureProjectionImports(sourceFile: ts.SourceFile): ReadonlySet<string> {
@@ -7458,9 +8025,15 @@ function collectPureProjectionImports(sourceFile: ts.SourceFile): ReadonlySet<st
       continue;
     }
     const clause = statement.importClause;
-    if (!clause) continue;
-    if (clause.name) names.add(clause.name.text);
-    if (!clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+    if (!clause) {
+      continue;
+    }
+    if (clause.name) {
+      names.add(clause.name.text);
+    }
+    if (!clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) {
+      continue;
+    }
     for (const specifier of clause.namedBindings.elements) {
       if (
         !specifier.isTypeOnly &&
@@ -7475,13 +8048,8 @@ function collectPureProjectionImports(sourceFile: ts.SourceFile): ReadonlySet<st
 
 function ownerDeclaresBinding(owner: RuntimeFunctionLike, name: string): boolean {
   let declared = false;
-  visit(owner, node => {
-    if (
-      node !== owner &&
-      ts.isIdentifier(node) &&
-      node.text === name &&
-      isDeclarationName(node)
-    ) {
+  visit(owner, (node) => {
+    if (node !== owner && ts.isIdentifier(node) && node.text === name && isDeclarationName(node)) {
       declared = true;
     }
   });
@@ -7495,12 +8063,14 @@ function isComponentName(name: string): boolean {
 
 function stableOwnerLevelCallSite(
   usage: StateUsage,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
   const valueSite = [...usage.valueTransportSites][0];
-  if (valueSite === undefined || !owner.body) return null;
-  const openings: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
-  visit(owner.body, node => {
+  if (valueSite === undefined || !owner.body) {
+    return null;
+  }
+  const openings: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
+  visit(owner.body, (node) => {
     if (
       openings.length === 0 &&
       (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
@@ -7510,22 +8080,26 @@ function stableOwnerLevelCallSite(
     }
   });
   const opening = openings[0];
-  if (!opening) return null;
+  if (!opening) {
+    return null;
+  }
   for (
     let current: ts.Node | undefined = opening.parent;
     current && current !== owner;
     current = current.parent
   ) {
-    if (isRuntimeFunctionLike(current)) return null;
+    if (isRuntimeFunctionLike(current)) {
+      return null;
+    }
   }
   return opening;
 }
 
-function callSiteIsKeyed(
-  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | null
-): boolean {
-  if (!opening) return true;
+function callSiteIsKeyed(opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement | null): boolean {
+  if (!opening) {
+    return true;
+  }
   return opening.attributes.properties.some(
-    property => ts.isJsxAttribute(property) && property.name.getText() === "key"
+    (property) => ts.isJsxAttribute(property) && property.name.getText() === "key",
   );
 }

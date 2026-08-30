@@ -8,13 +8,10 @@ import { AnalysisProject } from "../src/analysis-project.js";
 
 test("parses each project file once and caches its source file", () => {
   const project = new AnalysisProject(
-    new Map([
-      ["screen.tsx", "export const Screen = () => <main />;"],
-    ])
-  );
-
-  const first = project.getFile("screen.tsx");
-  const second = project.getFile("screen.tsx");
+      new Map([["screen.tsx", "export const Screen = () => <main />;"]]),
+    ),
+    first = project.getFile("screen.tsx"),
+    second = project.getFile("screen.tsx");
 
   assert.ok(first);
   assert.strictEqual(second, first);
@@ -32,30 +29,29 @@ test("records the TypeScript dialect and script kind for supported source extens
       ["view.jsx", "export const View = () => <main />;"],
       ["module.mts", "export const value: number = 1;"],
       ["screen.tsx", "export const Screen = () => <main />;"],
-    ])
+    ]),
   );
 
   assert.deepEqual(
-    project.files.map(file => [file.originalPath, file.dialect, file.scriptKind]),
+    project.files.map((file) => [file.originalPath, file.dialect, file.scriptKind]),
     [
       ["module.mts", "typescript", ts.ScriptKind.TS],
       ["plain.js", "javascript", ts.ScriptKind.JS],
       ["screen.tsx", "typescript-jsx", ts.ScriptKind.TSX],
       ["view.jsx", "javascript-jsx", ts.ScriptKind.JSX],
-    ]
+    ],
   );
 });
 
 test("retains syntactic diagnostics on the cached source file", () => {
   const project = new AnalysisProject(
-    new Map([
-      ["broken.ts", "const value = ;"],
-      ["valid.ts", "const value = 1;"],
-    ])
-  );
-
-  const broken = project.getFile("broken.ts");
-  const valid = project.getFile("valid.ts");
+      new Map([
+        ["broken.ts", "const value = ;"],
+        ["valid.ts", "const value = 1;"],
+      ]),
+    ),
+    broken = project.getFile("broken.ts"),
+    valid = project.getFile("valid.ts");
 
   assert.ok(broken);
   assert.equal(broken.parserDiagnostics.length, 1);
@@ -65,8 +61,8 @@ test("retains syntactic diagnostics on the cached source file", () => {
 });
 
 test("keeps source snapshots independent from later source-map mutations", () => {
-  const sources = new Map([["state.ts", "export const state = 1;"]]);
-  const project = new AnalysisProject(sources);
+  const sources = new Map([["state.ts", "export const state = 1;"]]),
+    project = new AnalysisProject(sources);
 
   sources.set("state.ts", "export const state = 2;");
 
@@ -76,11 +72,14 @@ test("keeps source snapshots independent from later source-map mutations", () =>
 
 test("rejects path aliases that resolve to one file identity", () => {
   assert.throws(
-    () => new AnalysisProject(new Map([
-      [`src${path.sep}..${path.sep}src${path.sep}view.tsx`, "export const first = 1;"],
-      [path.join("src", "view.tsx"), "export const second = 2;"],
-    ])),
-    /duplicate analysis file identity/
+    () =>
+      new AnalysisProject(
+        new Map([
+          [`src${path.sep}..${path.sep}src${path.sep}view.tsx`, "export const first = 1;"],
+          [path.join("src", "view.tsx"), "export const second = 2;"],
+        ]),
+      ),
+    /duplicate analysis file identity/,
   );
 });
 
@@ -99,6 +98,6 @@ test("uses filesystem case sensitivity when resolving file identities", () => {
 test("rejects unsupported source dialects explicitly", () => {
   assert.throws(
     () => new AnalysisProject(new Map([["component.vue", "<template />"]])),
-    /unsupported analysis file extension/
+    /unsupported analysis file extension/,
   );
 });

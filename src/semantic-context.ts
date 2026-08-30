@@ -78,14 +78,12 @@ class ProgramSemanticContext implements SemanticContext {
     if (!symbol) {
       return undefined;
     }
-    return symbol.flags & ts.SymbolFlags.Alias
-      ? this.#checker.getAliasedSymbol(symbol)
-      : symbol;
+    return symbol.flags & ts.SymbolFlags.Alias ? this.#checker.getAliasedSymbol(symbol) : symbol;
   }
 
   getDeclarations(symbol: ts.Symbol): readonly ts.Declaration[] {
     const declarations = symbol.declarations ?? [];
-    return declarations.every(declaration => this.#ownsNode(declaration))
+    return declarations.every((declaration) => this.#ownsNode(declaration))
       ? [...declarations]
       : [];
   }
@@ -107,8 +105,8 @@ class ProgramSemanticContext implements SemanticContext {
       return undefined;
     }
 
-    const direct = this.#checker.getSymbolAtLocation(node);
-    const directProvenance = direct && importProvenanceOfSymbol(direct);
+    const direct = this.#checker.getSymbolAtLocation(node),
+      directProvenance = direct && importProvenanceOfSymbol(direct);
     if (directProvenance) {
       return directProvenance;
     }
@@ -117,8 +115,8 @@ class ProgramSemanticContext implements SemanticContext {
     if (!access) {
       return undefined;
     }
-    const namespaceSymbol = this.#checker.getSymbolAtLocation(access.root);
-    const namespaceProvenance = namespaceSymbol && importProvenanceOfSymbol(namespaceSymbol);
+    const namespaceSymbol = this.#checker.getSymbolAtLocation(access.root),
+      namespaceProvenance = namespaceSymbol && importProvenanceOfSymbol(namespaceSymbol);
     if (namespaceProvenance?.kind !== "namespace") {
       return undefined;
     }
@@ -136,10 +134,10 @@ class ProgramSemanticContext implements SemanticContext {
 
 export function createSemanticContext(
   project: AnalysisProject,
-  options: CreateSemanticContextOptions
+  options: CreateSemanticContextOptions,
 ): SemanticContextResult {
-  const configFilePath = path.resolve(options.configFilePath);
-  const readResult = ts.readConfigFile(configFilePath, ts.sys.readFile);
+  const configFilePath = path.resolve(options.configFilePath),
+    readResult = ts.readConfigFile(configFilePath, ts.sys.readFile);
   if (readResult.error) {
     return unavailable(normalizeTypeScriptDiagnostic("config-read-failed", readResult.error));
   }
@@ -149,55 +147,54 @@ export function createSemanticContext(
     ts.sys,
     path.dirname(configFilePath),
     undefined,
-    configFilePath
+    configFilePath,
   );
   if (parsedConfig.errors.length > 0) {
     return {
       context: null,
-      diagnostics: parsedConfig.errors.map(diagnostic =>
-        normalizeTypeScriptDiagnostic("config-invalid", diagnostic)
+      diagnostics: parsedConfig.errors.map((diagnostic) =>
+        normalizeTypeScriptDiagnostic("config-invalid", diagnostic),
       ),
     };
   }
 
-  const host = createIdentityPreservingHost(parsedConfig.options, project.files);
-  const rootNames = uniqueCanonicalPaths(parsedConfig.fileNames);
-  const program = ts.createProgram({
-    configFileParsingDiagnostics: parsedConfig.errors,
-    host,
-    options: parsedConfig.options,
-    rootNames,
-    ...(parsedConfig.projectReferences
-      ? { projectReferences: parsedConfig.projectReferences }
-      : {}),
-  });
-
-  const unconfiguredFiles = project.files.filter(
-    file => !program.getSourceFile(file.identityPath)
-  );
+  const host = createIdentityPreservingHost(parsedConfig.options, project.files),
+    rootNames = uniqueCanonicalPaths(parsedConfig.fileNames),
+    program = ts.createProgram({
+      configFileParsingDiagnostics: parsedConfig.errors,
+      host,
+      options: parsedConfig.options,
+      rootNames,
+      ...(parsedConfig.projectReferences
+        ? { projectReferences: parsedConfig.projectReferences }
+        : {}),
+    }),
+    unconfiguredFiles = project.files.filter((file) => !program.getSourceFile(file.identityPath));
   if (unconfiguredFiles.length > 0) {
     return {
       context: null,
-      diagnostics: unconfiguredFiles.map(file => ({
+      diagnostics: unconfiguredFiles.map((file) => ({
         category: "error",
         code: "file-not-in-config",
         fileName: file.originalPath,
-        message: "The analysis file is not owned by the selected tsconfig. Create one semantic context per tsconfig shard.",
+        message:
+          "The analysis file is not owned by the selected tsconfig. Create one semantic context per tsconfig shard.",
       })),
     };
   }
 
   const mismatches = project.files.filter(
-    file => program.getSourceFile(file.identityPath) !== file.sourceFile
+    (file) => program.getSourceFile(file.identityPath) !== file.sourceFile,
   );
   if (mismatches.length > 0) {
     return {
       context: null,
-      diagnostics: mismatches.map(file => ({
+      diagnostics: mismatches.map((file) => ({
         category: "error",
-      code: "source-file-identity-mismatch",
-      fileName: file.originalPath,
-      message: "The semantic Program did not retain the cached SourceFile for this analysis file.",
+        code: "source-file-identity-mismatch",
+        fileName: file.originalPath,
+        message:
+          "The semantic Program did not retain the cached SourceFile for this analysis file.",
       })),
     };
   }
@@ -207,43 +204,28 @@ export function createSemanticContext(
 
 function createIdentityPreservingHost(
   options: ts.CompilerOptions,
-  files: readonly AnalysisFile[]
+  files: readonly AnalysisFile[],
 ): ts.CompilerHost {
-  const host = ts.createCompilerHost(options, true);
-  const filesByPath = new Map(files.map(file => [pathIdentityKey(file.identityPath), file]));
-  const defaultGetSourceFile = host.getSourceFile.bind(host);
+  const host = ts.createCompilerHost(options, true),
+    filesByPath = new Map(files.map((file) => [pathIdentityKey(file.identityPath), file])),
+    defaultGetSourceFile = host.getSourceFile.bind(host);
 
-  host.fileExists = fileName =>
+  host.fileExists = (fileName) =>
     filesByPath.has(pathIdentityKey(fileName)) || ts.sys.fileExists(fileName);
-  host.readFile = fileName =>
+  host.readFile = (fileName) =>
     filesByPath.get(pathIdentityKey(fileName))?.sourceFile.text ?? ts.sys.readFile(fileName);
-  host.getSourceFile = (
-    fileName,
-    languageVersionOrOptions,
-    onError,
-    shouldCreateNewSourceFile
-  ) =>
+  host.getSourceFile = (fileName, languageVersionOrOptions, onError, shouldCreateNewSourceFile) =>
     filesByPath.get(pathIdentityKey(fileName))?.sourceFile ??
-    defaultGetSourceFile(
-      fileName,
-      languageVersionOrOptions,
-      onError,
-      shouldCreateNewSourceFile
-    );
+    defaultGetSourceFile(fileName, languageVersionOrOptions, onError, shouldCreateNewSourceFile);
   host.getSourceFileByPath = (
     fileName,
     _path,
     languageVersionOrOptions,
     onError,
-    shouldCreateNewSourceFile
+    shouldCreateNewSourceFile,
   ) =>
     filesByPath.get(pathIdentityKey(fileName))?.sourceFile ??
-    defaultGetSourceFile(
-      fileName,
-      languageVersionOrOptions,
-      onError,
-      shouldCreateNewSourceFile
-    );
+    defaultGetSourceFile(fileName, languageVersionOrOptions, onError, shouldCreateNewSourceFile);
   return host;
 }
 
@@ -330,7 +312,7 @@ function importProvenanceOfSymbol(symbol: ts.Symbol): ImportProvenance | undefin
 }
 
 function staticAccessFromNamespace(
-  node: ts.Node
+  node: ts.Node,
 ): { readonly path: readonly string[]; readonly root: ts.Identifier } | undefined {
   let expression: ts.Expression | undefined;
   if (ts.isPropertyAccessExpression(node)) {
@@ -370,7 +352,7 @@ function unavailable(diagnostic: SemanticContextDiagnostic): SemanticContextResu
 
 function normalizeTypeScriptDiagnostic(
   code: SemanticContextDiagnosticCode,
-  diagnostic: ts.Diagnostic
+  diagnostic: ts.Diagnostic,
 ): SemanticContextDiagnostic {
   const location =
     diagnostic.file && diagnostic.start !== undefined
@@ -379,9 +361,10 @@ function normalizeTypeScriptDiagnostic(
   return {
     category: "error",
     code,
-    message: code === "config-read-failed"
-      ? "Unable to read the selected tsconfig."
-      : ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+    message:
+      code === "config-read-failed"
+        ? "Unable to read the selected tsconfig."
+        : ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
     typescriptCode: diagnostic.code,
     ...(diagnostic.file ? { fileName: diagnostic.file.fileName } : {}),
     ...(location ? { column: location.character + 1, line: location.line + 1 } : {}),

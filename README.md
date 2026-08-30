@@ -106,41 +106,41 @@ consumer on it. Each finding names the edit, proof, location, and required owner
 }
 ```
 
-| Disposition | Agent action |
-| --- | --- |
-| `change` | Apply the instruction. Structural proof is complete. |
+| Disposition | Agent action                                                                   |
+| ----------- | ------------------------------------------------------------------------------ |
+| `change`    | Apply the instruction. Structural proof is complete.                           |
 | `candidate` | Inspect the named source. Resolve the missing timing, ownership, or type fact. |
-| `keep` | Preserve the current React or lifecycle boundary. |
-| `style` | Apply only when the installed Legend API supports the equivalent form. |
+| `keep`      | Preserve the current React or lifecycle boundary.                              |
+| `style`     | Apply only when the installed Legend API supports the equivalent form.         |
 
 ## What each finding removes
 
 Every action names the render or lifecycle cost it deletes, and each has a worked before/after example below.
 
-| Finding | Proven cost removed |
-| --- | --- |
-| `delete-unused-state` | Unused state cell and its updates |
-| `delete-derived-state` | Post-commit synchronization and second render |
-| `delete-effect` | Empty lifecycle left by deleted derived state |
-| `move-state-down` | Parent render caused by one child's local edit |
-| `use-observable` | Broad owner render while preserving owner lifetime |
-| `use-ref` | Render caused by a value used only in commands or cleanup |
-| `use-value` | Duplicate React ownership of a Legend value |
-| `move-to-event` | Effect-driven second transition after an event |
-| `use-observe-effect` | Component subscription used only by an external side effect |
-| `use-mount`, `use-unmount` | Equivalent setup or teardown expressed with Legend lifecycle APIs |
-| `narrow-use-value-subscription` | Updates to unread sibling observable fields |
-| `split-use-value-leaves` | One broad subscription invalidating independent leaves |
-| `move-use-value-down` | Observable updates rendering a broad parent |
-| `move-use-value-into-child` | A parent render used only to transport one observable value |
-| `pass-observable-to-use-value` | Redundant selector execution |
-| `replace-legacy-use-value` | Legacy `useSelector` or `use$` call |
-| `use-peek-for-snapshot` | Tracking read in a proven non-tracking command |
-| `narrow-observable-write` | Parent clone and broad observable publication |
-| `toggle-observable` | Boolean updater ceremony |
-| `assign-observable-fields` | Several publications to sibling fields |
-| `batch-observable-writes` | Several publications across related observable roots |
-| `review-state`, `review-effect` | Unsafe guesses, surfaced with the exact missing proof |
+| Finding                         | Proven cost removed                                               |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `delete-unused-state`           | Unused state cell and its updates                                 |
+| `delete-derived-state`          | Post-commit synchronization and second render                     |
+| `delete-effect`                 | Empty lifecycle left by deleted derived state                     |
+| `move-state-down`               | Parent render caused by one child's local edit                    |
+| `use-observable`                | Broad owner render while preserving owner lifetime                |
+| `use-ref`                       | Render caused by a value used only in commands or cleanup         |
+| `use-value`                     | Duplicate React ownership of a Legend value                       |
+| `move-to-event`                 | Effect-driven second transition after an event                    |
+| `use-observe-effect`            | Component subscription used only by an external side effect       |
+| `use-mount`, `use-unmount`      | Equivalent setup or teardown expressed with Legend lifecycle APIs |
+| `narrow-use-value-subscription` | Updates to unread sibling observable fields                       |
+| `split-use-value-leaves`        | One broad subscription invalidating independent leaves            |
+| `move-use-value-down`           | Observable updates rendering a broad parent                       |
+| `move-use-value-into-child`     | A parent render used only to transport one observable value       |
+| `pass-observable-to-use-value`  | Redundant selector execution                                      |
+| `replace-legacy-use-value`      | Legacy `useSelector` or `use$` call                               |
+| `use-peek-for-snapshot`         | Tracking read in a proven non-tracking command                    |
+| `narrow-observable-write`       | Parent clone and broad observable publication                     |
+| `toggle-observable`             | Boolean updater ceremony                                          |
+| `assign-observable-fields`      | Several publications to sibling fields                            |
+| `batch-observable-writes`       | Several publications across related observable roots              |
+| `review-state`, `review-effect` | Unsafe guesses, surfaced with the exact missing proof             |
 
 ## React state examples
 
@@ -152,7 +152,9 @@ const [, setTick] = useState(0);
 const refresh = () => setTick(loadVersion());
 
 // after, preserve argument evaluation
-const refresh = () => { loadVersion(); };
+const refresh = () => {
+  loadVersion();
+};
 ```
 
 ### Calculate during render
@@ -172,16 +174,26 @@ const total = price * quantity;
 // before
 function Page() {
   const [query, setQuery] = useState("");
-  return <><Dashboard /><SearchBox query={query} onChange={setQuery} /></>;
+  return (
+    <>
+      <Dashboard />
+      <SearchBox query={query} onChange={setQuery} />
+    </>
+  );
 }
 
 // after
 function Page() {
-  return <><Dashboard /><SearchBox /></>;
+  return (
+    <>
+      <Dashboard />
+      <SearchBox />
+    </>
+  );
 }
 function SearchBox() {
   const [query, setQuery] = useState("");
-  return <input value={query} onChange={event => setQuery(event.target.value)} />;
+  return <input value={query} onChange={(event) => setQuery(event.target.value)} />;
 }
 ```
 
@@ -189,36 +201,66 @@ function SearchBox() {
 
 ```tsx
 // before: editing one field rerenders the dialog shell, list, warning, and every field
-interface Fields { name: string; scientificName: string; }
+interface Fields {
+  name: string;
+  scientificName: string;
+}
 const EMPTY_FIELDS: Fields = { name: "", scientificName: "" };
 const [fields, setFields] = useState(EMPTY_FIELDS);
 const valid = fields.name.trim() && fields.scientificName.trim();
 const submit = () => save(fields);
-return <Dialog>
-  <SourceList />
-  <Field value={fields.name} onChange={value => setFields(old => ({ ...old, name: value }))} />
-  <Field value={fields.scientificName} onChange={value => setFields(old => ({ ...old, scientificName: value }))} />
-  <Warning />
-  <button disabled={!valid} onClick={submit}>Save</button>
-</Dialog>;
+return (
+  <Dialog>
+    <SourceList />
+    <Field
+      value={fields.name}
+      onChange={(value) => setFields((old) => ({ ...old, name: value }))}
+    />
+    <Field
+      value={fields.scientificName}
+      onChange={(value) => setFields((old) => ({ ...old, scientificName: value }))}
+    />
+    <Warning />
+    <button disabled={!valid} onClick={submit}>
+      Save
+    </button>
+  </Dialog>
+);
 
 // after: each edit publishes one child and rerenders only its field plus validation
 const fields$ = useObservable({ ...EMPTY_FIELDS });
 const submit = () => save({ ...fields$.peek() });
-return <Dialog>
-  <SourceList />
-  <FieldState value$={fields$.name} onChange={value => fields$.name.set(value)} />
-  <FieldState value$={fields$.scientificName} onChange={value => fields$.scientificName.set(value)} />
-  <Warning />
-  <SubmitState fields$={fields$} onSubmit={submit} />
-</Dialog>;
+return (
+  <Dialog>
+    <SourceList />
+    <FieldState value$={fields$.name} onChange={(value) => fields$.name.set(value)} />
+    <FieldState
+      value$={fields$.scientificName}
+      onChange={(value) => fields$.scientificName.set(value)}
+    />
+    <Warning />
+    <SubmitState fields$={fields$} onSubmit={submit} />
+  </Dialog>
+);
 
-function FieldState({ value$, onChange }: { value$: Observable<string>; onChange: (value: string) => void }) {
+function FieldState({
+  value$,
+  onChange,
+}: {
+  value$: Observable<string>;
+  onChange: (value: string) => void;
+}) {
   return <Field value={useValue(value$)} onChange={onChange} />;
 }
 function SubmitState({ fields$, onSubmit }: { fields$: Observable<Fields>; onSubmit: () => void }) {
-  const disabled = useValue(() => !fields$.name.get().trim() || !fields$.scientificName.get().trim());
-  return <button disabled={disabled} onClick={onSubmit}>Save</button>;
+  const disabled = useValue(
+    () => !fields$.name.get().trim() || !fields$.scientificName.get().trim(),
+  );
+  return (
+    <button disabled={disabled} onClick={onSubmit}>
+      Save
+    </button>
+  );
 }
 ```
 
@@ -243,10 +285,14 @@ const onChange = (value: string) => {
   setDraft(value);
   scheduleSearch(value, setQuery);
 };
-return <>
-  <Input value={draft} onChange={onChange} />
-  {items.map(item => <Row key={item.id} item={item} />)}
-</>;
+return (
+  <>
+    <Input value={draft} onChange={onChange} />
+    {items.map((item) => (
+      <Row key={item.id} item={item} />
+    ))}
+  </>
+);
 
 // after: the existing delayed query update still renders results; draft edits render only InputState
 const draft$ = useObservable("");
@@ -254,12 +300,22 @@ const onChange = (value: string) => {
   draft$.set(value);
   scheduleSearch(value, setQuery);
 };
-return <>
-  <InputState value$={draft$} onChange={onChange} />
-  {items.map(item => <Row key={item.id} item={item} />)}
-</>;
+return (
+  <>
+    <InputState value$={draft$} onChange={onChange} />
+    {items.map((item) => (
+      <Row key={item.id} item={item} />
+    ))}
+  </>
+);
 
-function InputState({ value$, onChange }: { value$: Observable<string>; onChange: (value: string) => void }) {
+function InputState({
+  value$,
+  onChange,
+}: {
+  value$: Observable<string>;
+  onChange: (value: string) => void;
+}) {
   return <Input value={useValue(value$)} onChange={onChange} />;
 }
 ```
@@ -273,35 +329,63 @@ the input subtree remain candidates.
 ```tsx
 // before: typing rebuilds every owner-side collection projection
 const [query, setQuery] = useState("");
-const matches = users.filter(user => user.name?.toLowerCase().includes(query));
-const current = users.find(user => user.current);
-const others = users.filter(user => !user.current);
+const matches = users.filter((user) => user.name?.toLowerCase().includes(query));
+const current = users.find((user) => user.current);
+const others = users.filter((user) => !user.current);
 const shown = current ? [...others.slice(0, 8), current] : others.slice(0, 8);
-const avatars = shown.map(user => {
+const avatars = shown.map((user) => {
   if (!user.current) return <Avatar key={user.id} user={user} />;
-  return <Avatar key={user.id}><Island>
-    <QuickSearch onChange={setQuery} />
-    {matches.map(match => <User key={match.id} user={match} />)}
-  </Island></Avatar>;
+  return (
+    <Avatar key={user.id}>
+      <Island>
+        <QuickSearch onChange={setQuery} />
+        {matches.map((match) => (
+          <User key={match.id} user={match} />
+        ))}
+      </Island>
+    </Avatar>
+  );
 });
-return mobile ? <MobileUsers users={users} /> : <Desktop><Toolbar />{avatars}</Desktop>;
+return mobile ? (
+  <MobileUsers users={users} />
+) : (
+  <Desktop>
+    <Toolbar />
+    {avatars}
+  </Desktop>
+);
 
 // after: the filter still runs once, inside the producer subscriber
 const query$ = useObservable("");
-return mobile
-  ? <MobileUsers users={users} />
-  : <Desktop><Toolbar /><AvatarListState query$={query$} shown={shown} users={users} /></Desktop>;
+return mobile ? (
+  <MobileUsers users={users} />
+) : (
+  <Desktop>
+    <Toolbar />
+    <AvatarListState query$={query$} shown={shown} users={users} />
+  </Desktop>
+);
 
 function AvatarListState({ users, shown, query$ }: Props) {
   const query = useValue(query$);
-  const matches = users.filter(user => user.name?.toLowerCase().includes(query));
-  return <>{shown.map(user => {
-    if (!user.current) return <Avatar key={user.id} user={user} />;
-    return <Avatar key={user.id}><Island>
-      <QuickSearch onChange={value => query$.set(value)} />
-      {matches.map(match => <User key={match.id} user={match} />)}
-    </Island></Avatar>;
-  })}</>;
+  const matches = users.filter((user) => user.name?.toLowerCase().includes(query));
+  return (
+    <>
+      {shown.map((user) => {
+        if (!user.current) return <Avatar key={user.id} user={user} />;
+        return (
+          <Avatar key={user.id}>
+            <Island>
+              <QuickSearch onChange={(value) => query$.set(value)} />
+              {matches.map((match) => (
+                <User key={match.id} user={match} />
+              ))}
+            </Island>
+          </Avatar>
+        );
+      })}
+    </>
+  );
 }
 ```
 
@@ -316,11 +400,21 @@ under review.
 ```tsx
 // before, selecting an account rerenders Accounts
 const [target, setTarget] = useState<Account | null>(null);
-return <><Accounts onDelete={setTarget} /><DeleteDialog account={target} /></>;
+return (
+  <>
+    <Accounts onDelete={setTarget} />
+    <DeleteDialog account={target} />
+  </>
+);
 
 // after
 const target$ = useObservable<Account | null>(null);
-return <><Accounts onDelete={value => target$.set(value)} /><DeleteDialogState target$={target$} /></>;
+return (
+  <>
+    <Accounts onDelete={(value) => target$.set(value)} />
+    <DeleteDialogState target$={target$} />
+  </>
+);
 
 function DeleteDialogState({ target$ }: { target$: Observable<Account | null> }) {
   return <DeleteDialog account={useValue(target$)} />;
@@ -334,18 +428,38 @@ function DeleteDialogState({ target$ }: { target$: Observable<Account | null> })
 const [target, setTarget] = useState<Item | null>(null);
 const [open, setOpen] = useState(false);
 const [ready, setReady] = useState(false);
-const show = (item: Item) => { setTarget(item); setReady(true); setOpen(true); };
-return <><PageChrome />{ready && <LazyDialog item={target} open={open} />}</>;
+const show = (item: Item) => {
+  setTarget(item);
+  setReady(true);
+  setOpen(true);
+};
+return (
+  <>
+    <PageChrome />
+    {ready && <LazyDialog item={target} open={open} />}
+  </>
+);
 
 // after: one atomic model keeps the first-open latch and dialog transitions together
 const dialog$ = useObservable({ target: null as Item | null, open: false, ready: false });
 const show = (item: Item) => dialog$.assign({ target: item, open: true, ready: true });
-return <><PageChrome /><LazyDialogState dialog$={dialog$} /></>;
+return (
+  <>
+    <PageChrome />
+    <LazyDialogState dialog$={dialog$} />
+  </>
+);
 
-function LazyDialogState({ dialog$ }: { dialog$: Observable<{ target: Item | null; open: boolean; ready: boolean }> }) {
+function LazyDialogState({
+  dialog$,
+}: {
+  dialog$: Observable<{ target: Item | null; open: boolean; ready: boolean }>;
+}) {
   const dialog = useValue(dialog$);
   const close = () => dialog$.assign({ target: null, open: false });
-  return dialog.ready ? <LazyDialog item={dialog.target} open={dialog.open} onClose={close} /> : null;
+  return dialog.ready ? (
+    <LazyDialog item={dialog.target} open={dialog.open} onClose={close} />
+  ) : null;
 }
 ```
 
@@ -357,11 +471,23 @@ reset, a second gated surface, unresolved lazy provenance, or state outside that
 ```tsx
 // before
 const [open, setOpen] = useState(false);
-return <><Canvas /><button onClick={() => setOpen(true)}>Open</button>{open && <Panel />}</>;
+return (
+  <>
+    <Canvas />
+    <button onClick={() => setOpen(true)}>Open</button>
+    {open && <Panel />}
+  </>
+);
 
 // after, PanelGate stays mounted while Panel keeps its conditional mount
 const open$ = useObservable(false);
-return <><Canvas /><button onClick={() => open$.set(true)}>Open</button><PanelGate open$={open$} /></>;
+return (
+  <>
+    <Canvas />
+    <button onClick={() => open$.set(true)}>Open</button>
+    <PanelGate open$={open$} />
+  </>
+);
 
 function PanelGate({ open$ }: { open$: Observable<boolean> }) {
   return useValue(open$) ? <Panel /> : null;
@@ -380,12 +506,16 @@ const onScroll = (event: React.UIEvent<HTMLDivElement>) => {
   const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
   setScrolled(scrollTop + clientHeight >= scrollHeight);
 };
-return <section>
-  <div onScroll={onScroll}><Content /></div>
-  {!scrolled && <Fade />}
-  {!scrolled && <ScrollHint />}
-  <Dashboard />
-</section>;
+return (
+  <section>
+    <div onScroll={onScroll}>
+      <Content />
+    </div>
+    {!scrolled && <Fade />}
+    {!scrolled && <ScrollHint />}
+    <Dashboard />
+  </section>
+);
 
 // after, one stable leaf subscribes for both overlays
 const scrolled$ = useObservable(false);
@@ -393,15 +523,24 @@ const onScroll = (event: React.UIEvent<HTMLDivElement>) => {
   const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
   scrolled$.set(scrollTop + clientHeight >= scrollHeight);
 };
-return <section>
-  <div onScroll={onScroll}><Content /></div>
-  <ScrollPresentation scrolled$={scrolled$} />
-  <Dashboard />
-</section>;
+return (
+  <section>
+    <div onScroll={onScroll}>
+      <Content />
+    </div>
+    <ScrollPresentation scrolled$={scrolled$} />
+    <Dashboard />
+  </section>
+);
 
 function ScrollPresentation({ scrolled$ }: { scrolled$: Observable<boolean> }) {
   const scrolled = useValue(scrolled$);
-  return <>{!scrolled && <Fade />}{!scrolled && <ScrollHint />}</>;
+  return (
+    <>
+      {!scrolled && <Fade />}
+      {!scrolled && <ScrollHint />}
+    </>
+  );
 }
 ```
 
@@ -416,21 +555,25 @@ event/effect ownership, companion React writes, repeated output, and separated s
 // before, each native layout event renders the full sidebar
 const [outerWidth, setOuterWidth] = useState(0);
 const width = Math.max(outerWidth - inset, 0);
-const onLayout = useCallback(layout => setOuterWidth(layout.width), [setOuterWidth]);
-return <NativeSidebar onLayout={onLayout}>
-  <Search width={width + 8} />
-  <Header style={{ width }} />
-  <PlaylistRows />
-</NativeSidebar>;
+const onLayout = useCallback((layout) => setOuterWidth(layout.width), [setOuterWidth]);
+return (
+  <NativeSidebar onLayout={onLayout}>
+    <Search width={width + 8} />
+    <Header style={{ width }} />
+    <PlaylistRows />
+  </NativeSidebar>
+);
 
 // after, the owner keeps lifetime while only the two width leaves subscribe
 const outerWidth$ = useObservable(0);
-const onLayout = useCallback(layout => outerWidth$.set(layout.width), [outerWidth$]);
-return <NativeSidebar onLayout={onLayout}>
-  <SearchWidth outerWidth$={outerWidth$} inset={inset} />
-  <HeaderWidth outerWidth$={outerWidth$} inset={inset} />
-  <PlaylistRows />
-</NativeSidebar>;
+const onLayout = useCallback((layout) => outerWidth$.set(layout.width), [outerWidth$]);
+return (
+  <NativeSidebar onLayout={onLayout}>
+    <SearchWidth outerWidth$={outerWidth$} inset={inset} />
+    <HeaderWidth outerWidth$={outerWidth$} inset={inset} />
+    <PlaylistRows />
+  </NativeSidebar>
+);
 
 function SearchWidth({ outerWidth$, inset }: Props) {
   return <Search width={Math.max(useValue(outerWidth$) - inset, 0) + 8} />;
@@ -453,24 +596,28 @@ const [scale, setScale] = useState(1);
 const onLayout = (event: LayoutChangeEvent) => {
   setScale(event.nativeEvent.layout.width / DESIGN_WIDTH);
 };
-return <View onLayout={onLayout}>
-  <Image source={template} />
-  <View style={[styles.scaler, { transform: [{ scale }] }]}>
-    <CertificateContent />
+return (
+  <View onLayout={onLayout}>
+    <Image source={template} />
+    <View style={[styles.scaler, { transform: [{ scale }] }]}>
+      <CertificateContent />
+    </View>
   </View>
-</View>;
+);
 
 // after: the native style prop owns the only subscription
 const scale$ = useObservable(1);
 const onLayout = (event: LayoutChangeEvent) => {
   scale$.set(event.nativeEvent.layout.width / DESIGN_WIDTH);
 };
-return <View onLayout={onLayout}>
-  <Image source={template} />
-  <$View $style={() => [styles.scaler, { transform: [{ scale: scale$.get() }] }]}>
-    <CertificateContent />
-  </$View>
-</View>;
+return (
+  <View onLayout={onLayout}>
+    <Image source={template} />
+    <$View $style={() => [styles.scaler, { transform: [{ scale: scale$.get() }] }]}>
+      <CertificateContent />
+    </$View>
+  </View>
+);
 ```
 
 Agent output:
@@ -484,17 +631,21 @@ The same proof catches interaction props:
 ```tsx
 // before: focus rerenders the complete row
 const [focused, setFocused] = useState(false);
-return <View style={styles.container(focused)}>
-  <TextInput onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
-  <RowContent />
-</View>;
+return (
+  <View style={styles.container(focused)}>
+    <TextInput onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} />
+    <RowContent />
+  </View>
+);
 
 // after: only the root host style reacts
 const focused$ = useObservable(false);
-return <$View $style={() => styles.container(focused$.get())}>
-  <TextInput onFocus={() => focused$.set(true)} onBlur={() => focused$.set(false)} />
-  <RowContent />
-</$View>;
+return (
+  <$View $style={() => styles.container(focused$.get())}>
+    <TextInput onFocus={() => focused$.set(true)} onBlur={() => focused$.set(false)} />
+    <RowContent />
+  </$View>
+);
 ```
 
 This requires source-proven DOM or React Native events, one pure prop on one non-repeated host, and at least twelve JSX
@@ -506,11 +657,23 @@ impure projections, repeated surfaces, command reads, functional updaters, and c
 ```tsx
 // before, each key renders the form owner
 const [name, setName] = useState("");
-return <><FormHelp /><NameInput value={name} onChange={setName} /><Save disabled={!name.trim()} /></>;
+return (
+  <>
+    <FormHelp />
+    <NameInput value={name} onChange={setName} />
+    <Save disabled={!name.trim()} />
+  </>
+);
 
 // after, the input and validation subscribe independently
 const name$ = useObservable("");
-return <><FormHelp /><NameState name$={name$} /><SaveState name$={name$} /></>;
+return (
+  <>
+    <FormHelp />
+    <NameState name$={name$} />
+    <SaveState name$={name$} />
+  </>
+);
 ```
 
 ### Derive controlled props inside one leaf
@@ -518,15 +681,27 @@ return <><FormHelp /><NameState name$={name$} /><SaveState name$={name$} /></>;
 ```tsx
 // before, opening the dialog renders the page owner
 const [open, setOpen] = useState(false);
-return <><Dashboard /><DetailDialog id={open ? id : null} open={open} onOpenChange={setOpen} /></>;
+return (
+  <>
+    <Dashboard />
+    <DetailDialog id={open ? id : null} open={open} onOpenChange={setOpen} />
+  </>
+);
 
 // after, one subscriber derives every state-dependent dialog prop
 const open$ = useObservable(false);
-return <><Dashboard /><DetailDialogState id={id} open$={open$} /></>;
+return (
+  <>
+    <Dashboard />
+    <DetailDialogState id={id} open$={open$} />
+  </>
+);
 
 function DetailDialogState({ id, open$ }: Props) {
   const open = useValue(open$);
-  return <DetailDialog id={open ? id : null} open={open} onOpenChange={value => open$.set(value)} />;
+  return (
+    <DetailDialog id={open ? id : null} open={open} onOpenChange={(value) => open$.set(value)} />
+  );
 }
 ```
 
@@ -539,13 +714,25 @@ Opaque calls, repeated children, sibling consumers, and effect reads remain cand
 const [expanded, setExpanded] = useState(false);
 const open = () => setExpanded(true);
 const dismiss = () => setExpanded(false);
-return <><Toolbar /><PressTarget onPress={open} /><NativeMenu expanded={expanded} onDismiss={dismiss} /></>;
+return (
+  <>
+    <Toolbar />
+    <PressTarget onPress={open} />
+    <NativeMenu expanded={expanded} onDismiss={dismiss} />
+  </>
+);
 
 // after, the owner keeps the lifetime and the menu owns the subscription
 const expanded$ = useObservable(false);
 const open = () => expanded$.set(true);
 const dismiss = () => expanded$.set(false);
-return <><Toolbar /><PressTarget onPress={open} /><NativeMenuState expanded$={expanded$} onDismiss={dismiss} /></>;
+return (
+  <>
+    <Toolbar />
+    <PressTarget onPress={open} />
+    <NativeMenuState expanded$={expanded$} onDismiss={dismiss} />
+  </>
+);
 
 function NativeMenuState({ expanded$, onDismiss }: Props) {
   return <NativeMenu expanded={useValue(expanded$)} onDismiss={onDismiss} />;
@@ -573,28 +760,36 @@ narrowing the render boundary.
 ```tsx
 // before, every checkbox renders the settings page
 const [selected, setSelected] = useState(initial);
-const toggle = (value: string) => setSelected(previous =>
-  previous.includes(value) ? previous.filter(item => item !== value) : [...previous, value]
-);
+const toggle = (value: string) =>
+  setSelected((previous) =>
+    previous.includes(value) ? previous.filter((item) => item !== value) : [...previous, value],
+  );
 const submit = () => save(selected);
-return <form onSubmit={handleSubmit(submit)}>
-  <SettingsHelp />
-  <TriggerCheckboxGroup selected={selected} onSelectionChange={toggle} />
-</form>;
+return (
+  <form onSubmit={handleSubmit(submit)}>
+    <SettingsHelp />
+    <TriggerCheckboxGroup selected={selected} onSelectionChange={toggle} />
+  </form>
+);
 
 // after, keep one owner handle and snapshot once when submitting
 const selected$ = useObservable(initial);
-const toggle = (value: string) => selected$.set(previous =>
-  previous.includes(value) ? previous.filter(item => item !== value) : [...previous, value]
-);
+const toggle = (value: string) =>
+  selected$.set((previous) =>
+    previous.includes(value) ? previous.filter((item) => item !== value) : [...previous, value],
+  );
 const submit = () => save(selected$.peek());
-return <form onSubmit={handleSubmit(submit)}>
-  <SettingsHelp />
-  <TriggerCheckboxGroupState selected$={selected$} onSelectionChange={toggle} />
-</form>;
+return (
+  <form onSubmit={handleSubmit(submit)}>
+    <SettingsHelp />
+    <TriggerCheckboxGroupState selected$={selected$} onSelectionChange={toggle} />
+  </form>
+);
 
 function TriggerCheckboxGroupState({ selected$, onSelectionChange }: Props) {
-  return <TriggerCheckboxGroup selected={useValue(selected$)} onSelectionChange={onSelectionChange} />;
+  return (
+    <TriggerCheckboxGroup selected={useValue(selected$)} onSelectionChange={onSelectionChange} />
+  );
 }
 ```
 
@@ -607,36 +802,46 @@ reconcilers, extra updater work, unresolved adapters, and coupled state changes 
 // before, one vote renders the entire message rail
 const [feedback, setFeedback] = useState<Record<string, Verdict>>({});
 const vote = async (message: Message, verdict: Verdict) => {
-  setFeedback(previous => ({ ...previous, [message.id]: verdict }));
-  try { await submit(message.id, verdict); }
-  catch {
-    setFeedback(previous => {
+  setFeedback((previous) => ({ ...previous, [message.id]: verdict }));
+  try {
+    await submit(message.id, verdict);
+  } catch {
+    setFeedback((previous) => {
       const next = { ...previous };
       delete next[message.id];
       return next;
     });
   }
 };
-return messages.map(message =>
-  <MessageRow key={message.id} active={feedback[message.id]} onVote={value => vote(message, value)} />
-);
+return messages.map((message) => (
+  <MessageRow
+    key={message.id}
+    active={feedback[message.id]}
+    onVote={(value) => vote(message, value)}
+  />
+));
 
 // after, only the voted row subscribes and the async boundary stays unchanged
 const feedback$ = useObservable<Record<string, Verdict>>({});
 const vote = async (message: Message, verdict: Verdict) => {
   feedback$[message.id].set(verdict);
-  try { await submit(message.id, verdict); }
-  catch { feedback$[message.id].delete(); }
+  try {
+    await submit(message.id, verdict);
+  } catch {
+    feedback$[message.id].delete();
+  }
 };
-return messages.map(message =>
+return messages.map((message) => (
   <MessageRowState key={message.id} feedback$={feedback$} message={message} onVote={vote} />
-);
+));
 
 function MessageRowState({ feedback$, message, onVote }: Props) {
-  return <MessageRow
-    active={useValue(feedback$[message.id])}
-    onVote={verdict => onVote(message, verdict)}
-  />;
+  return (
+    <MessageRow
+      active={useValue(feedback$[message.id])}
+      onVote={(verdict) => onVote(message, verdict)}
+    />
+  );
 }
 ```
 
@@ -657,13 +862,19 @@ const beginEdit = (row: Row) => editor$.assign({ id: row.id, text: row.name });
 const closeEdit = () => editor$.id.set(null);
 const saveEdit = () => save(editor$.text.peek());
 
-function EditableRow({ editor$, row }: { editor$: Observable<{ id: string | null; text: string }>; row: Row }) {
+function EditableRow({
+  editor$,
+  row,
+}: {
+  editor$: Observable<{ id: string | null; text: string }>;
+  row: Row;
+}) {
   const editing = useValue(() => editor$.id.get() === row.id);
   return editing ? <InlineEditor editor$={editor$} /> : <RowView row={row} />;
 }
 
 function InlineEditor({ editor$ }: { editor$: Observable<{ id: string | null; text: string }> }) {
-  return <Input value={useValue(editor$.text)} onChange={value => editor$.text.set(value)} />;
+  return <Input value={useValue(editor$.text)} onChange={(value) => editor$.text.set(value)} />;
 }
 ```
 
@@ -676,20 +887,37 @@ change must still assign its matching draft atomically; switching rows with stal
 // before, opening and closing render the 50-element page owner
 const [target, setTarget] = useState<Action | null>(null);
 const [open, setOpen] = useState(false);
-const edit = (action: Action) => { setTarget(action); setOpen(true); };
-return <><PageContent onEdit={edit} />{target ? <EditDialog target={target} open={open} setOpen={setOpen} /> : null}</>;
+const edit = (action: Action) => {
+  setTarget(action);
+  setOpen(true);
+};
+return (
+  <>
+    <PageContent onEdit={edit} />
+    {target ? <EditDialog target={target} open={open} setOpen={setOpen} /> : null}
+  </>
+);
 
 // after, the model opens atomically and the dialog still stays mounted while open=false
 const dialog$ = useObservable({ target: null as Action | null, open: false });
 const edit = (action: Action) => dialog$.assign({ target: action, open: true });
-return <><PageContent onEdit={edit} /><EditDialogState dialog$={dialog$} /></>;
+return (
+  <>
+    <PageContent onEdit={edit} />
+    <EditDialogState dialog$={dialog$} />
+  </>
+);
 
-function EditDialogState({ dialog$ }: { dialog$: Observable<{ target: Action | null; open: boolean }> }) {
+function EditDialogState({
+  dialog$,
+}: {
+  dialog$: Observable<{ target: Action | null; open: boolean }>;
+}) {
   const target = useValue(dialog$.target);
   const open = useValue(dialog$.open);
-  return target
-    ? <EditDialog target={target} open={open} setOpen={value => dialog$.open.set(value)} />
-    : null;
+  return target ? (
+    <EditDialog target={target} open={open} setOpen={(value) => dialog$.open.set(value)} />
+  ) : null;
 }
 ```
 
@@ -705,17 +933,32 @@ the complete branch has at most twelve JSX elements and is no more than 40% of i
 // before, selecting a level rerenders the complete card
 const [open, setOpen] = useState(false);
 const [level, setLevel] = useState(1);
-const showLevel = (nextLevel: number) => { setLevel(nextLevel); setOpen(true); };
-return <><CardContent onSelect={showLevel} /><LevelPopup open={open} level={level} setOpen={setOpen} /></>;
+const showLevel = (nextLevel: number) => {
+  setLevel(nextLevel);
+  setOpen(true);
+};
+return (
+  <>
+    <CardContent onSelect={showLevel} />
+    <LevelPopup open={open} level={level} setOpen={setOpen} />
+  </>
+);
 
 // after, one leaf receives the same plain props and the paired open stays atomic
 const popup$ = useObservable({ open: false, level: 1 });
 const showLevel = (nextLevel: number) => popup$.assign({ level: nextLevel, open: true });
-return <><CardContent onSelect={showLevel} /><LevelPopupState popup$={popup$} /></>;
+return (
+  <>
+    <CardContent onSelect={showLevel} />
+    <LevelPopupState popup$={popup$} />
+  </>
+);
 
 function LevelPopupState({ popup$ }: { popup$: Observable<{ open: boolean; level: number }> }) {
   const popup = useValue(popup$);
-  return <LevelPopup open={popup.open} level={popup.level} setOpen={value => popup$.open.set(value)} />;
+  return (
+    <LevelPopup open={popup.open} level={popup.level} setOpen={(value) => popup$.open.set(value)} />
+  );
 }
 ```
 
@@ -746,17 +989,35 @@ React writes remain candidates.
 const [copying, setCopying] = useState(false);
 const copy = async () => {
   setCopying(true);
-  try { await duplicate(); } finally { setCopying(false); }
+  try {
+    await duplicate();
+  } finally {
+    setCopying(false);
+  }
 };
-return <><Editor /><Button loading={copying} onClick={copy} /></>;
+return (
+  <>
+    <Editor />
+    <Button loading={copying} onClick={copy} />
+  </>
+);
 
 // after, the command boundary is unchanged
 const copying$ = useObservable(false);
 const copy = async () => {
   copying$.set(true);
-  try { await duplicate(); } finally { copying$.set(false); }
+  try {
+    await duplicate();
+  } finally {
+    copying$.set(false);
+  }
 };
-return <><Editor /><ButtonState copying$={copying$} onClick={copy} /></>;
+return (
+  <>
+    <Editor />
+    <ButtonState copying$={copying$} onClick={copy} />
+  </>
+);
 ```
 
 Pure props, labels, and icons may share one stable status leaf. Every async status change requires source-proven deferred
@@ -778,21 +1039,29 @@ The same pending interval may feed two or three stable leaves without rendering 
 ```tsx
 // before, both transitions render the settings popover
 const [uploading, setUploading] = useState(false);
-return <Popover>
-  <Settings />
-  {hasLogo
-    ? <LogoButton disabled={uploading}>Replace</LogoButton>
-    : <LogoButton disabled={uploading}>Upload</LogoButton>}
-</Popover>;
+return (
+  <Popover>
+    <Settings />
+    {hasLogo ? (
+      <LogoButton disabled={uploading}>Replace</LogoButton>
+    ) : (
+      <LogoButton disabled={uploading}>Upload</LogoButton>
+    )}
+  </Popover>
+);
 
 // after, each existing branch keeps its mount identity and subscribes at the button
 const uploading$ = useObservable(false);
-return <Popover>
-  <Settings />
-  {hasLogo
-    ? <LogoButtonState uploading$={uploading$}>Replace</LogoButtonState>
-    : <LogoButtonState uploading$={uploading$}>Upload</LogoButtonState>}
-</Popover>;
+return (
+  <Popover>
+    <Settings />
+    {hasLogo ? (
+      <LogoButtonState uploading$={uploading$}>Replace</LogoButtonState>
+    ) : (
+      <LogoButtonState uploading$={uploading$}>Upload</LogoButtonState>
+    )}
+  </Popover>
+);
 
 function LogoButtonState({ uploading$, children }: Props) {
   return <LogoButton disabled={useValue(uploading$)}>{children}</LogoButton>;
@@ -817,11 +1086,11 @@ Calling that callback in the condition or either branch remains a candidate.
 ```tsx
 // before, selection renders the list owner
 const [selectedId, setSelectedId] = useState<string | null>(null);
-return rows.map(row => <Row key={row.id} selected={selectedId === row.id} />);
+return rows.map((row) => <Row key={row.id} selected={selectedId === row.id} />);
 
 // after
 const selectedId$ = useObservable<string | null>(null);
-return rows.map(row => <RowState key={row.id} row={row} selectedId$={selectedId$} />);
+return rows.map((row) => <RowState key={row.id} row={row} selectedId$={selectedId$} />);
 ```
 
 The proof requires an item-derived stable key and per-row membership. Index keys and mount-control reads abstain.
@@ -831,12 +1100,16 @@ The proof requires an item-derived stable key and per-row membership. Index keys
 ```tsx
 // before
 const [socket, setSocket] = useState<WebSocket | null>(null);
-useEffect(() => { setSocket(connect()); }, []);
+useEffect(() => {
+  setSocket(connect());
+}, []);
 const send = () => socket?.send("ping");
 
 // after
 const socketRef = useRef<WebSocket | null>(null);
-useEffect(() => { socketRef.current = connect(); }, []);
+useEffect(() => {
+  socketRef.current = connect();
+}, []);
 const send = () => socketRef.current?.send("ping");
 ```
 
@@ -846,7 +1119,10 @@ const send = () => socketRef.current?.send("ping");
 // before
 const savedName = useSavedName();
 const [name, setName] = useState(savedName);
-const rename = (next: string) => { setName(next); writeName(next); };
+const rename = (next: string) => {
+  setName(next);
+  writeName(next);
+};
 
 // after
 const name = useSavedName();
@@ -865,10 +1141,17 @@ useEffect(() => {
   return () => clearInterval(timer);
 }, []);
 const activeStage = stageFromElapsed(elapsed);
-return <><GenerationChrome />
-  <ol>{stages.map(stage => <Stage key={stage.id} active={stage.index === activeStage} />)}</ol>
-  <Progress value={progressFromElapsed(elapsed)} />
-</>;
+return (
+  <>
+    <GenerationChrome />
+    <ol>
+      {stages.map((stage) => (
+        <Stage key={stage.id} active={stage.index === activeStage} />
+      ))}
+    </ol>
+    <Progress value={progressFromElapsed(elapsed)} />
+  </>
+);
 
 // after: keep the effect; subscribe once around the keyed list and once around progress
 const elapsed$ = useObservable(0);
@@ -876,7 +1159,13 @@ useEffect(() => {
   const timer = setInterval(() => elapsed$.set(Date.now() - startedAt), 200);
   return () => clearInterval(timer);
 }, []);
-return <><GenerationChrome /><StagesState elapsed$={elapsed$} /><ProgressState elapsed$={elapsed$} /></>;
+return (
+  <>
+    <GenerationChrome />
+    <StagesState elapsed$={elapsed$} />
+    <ProgressState elapsed$={elapsed$} />
+  </>
+);
 ```
 
 Agent output:
@@ -920,11 +1209,11 @@ useObserveEffect(() => syncTheme(settings$.theme.get()));
 ### Express setup and teardown intent
 
 ```tsx
-useEffect(() => start(), []);       // before
-useMount(() => start());            // after
+useEffect(() => start(), []); // before
+useMount(() => start()); // after
 
-useEffect(() => () => stop(), []);  // before
-useUnmount(() => stop());           // after
+useEffect(() => () => stop(), []); // before
+useUnmount(() => stop()); // after
 ```
 
 Strict Mode replay, setup work, and disposer ownership stay candidates unless the lifecycle is equivalent.
@@ -947,7 +1236,7 @@ depends on React post-commit timing. Alias escape and unrelated nested calls rem
 ### Narrow to the field that renders
 
 ```tsx
-const profile = useValue(profile$);           // before
+const profile = useValue(profile$); // before
 const name = profile.contact.name;
 
 const name = useValue(profile$.contact.name); // after
@@ -957,19 +1246,39 @@ const name = useValue(profile$.contact.name); // after
 
 ```tsx
 const user = useValue(user$); // before
-return <><Name value={user.name} /><Avatar src={user.avatarUrl} /></>;
+return (
+  <>
+    <Name value={user.name} />
+    <Avatar src={user.avatarUrl} />
+  </>
+);
 
 // after
-return <><NameState name$={user$.name} /><AvatarState avatar$={user$.avatarUrl} /></>;
+return (
+  <>
+    <NameState name$={user$.name} />
+    <AvatarState avatar$={user$.avatarUrl} />
+  </>
+);
 ```
 
 ### Move a subscription into its only stable consumer
 
 ```tsx
-const open = useValue(dialog$.open);                     // before
-return <><Editor /><Dialog open={open} /></>;
+const open = useValue(dialog$.open); // before
+return (
+  <>
+    <Editor />
+    <Dialog open={open} />
+  </>
+);
 
-return <><Editor /><DialogState open$={dialog$.open} /></>; // after
+return (
+  <>
+    <Editor />
+    <DialogState open$={dialog$.open} />
+  </>
+); // after
 ```
 
 ### Use an existing child as the subscription boundary
@@ -1000,20 +1309,20 @@ Conditional, keyed, repeated, memoized, shared, transformed, object-valued, or u
 ### Remove selector work and legacy APIs
 
 ```tsx
-useValue(() => profile$.name.get());                 // before
-useValue(profile$.name);                             // after
+useValue(() => profile$.name.get()); // before
+useValue(profile$.name); // after
 
 useValue(profile$.avatar.get(), { suspense: true }); // before
-useValue(profile$.avatar, { suspense: true });       // after
+useValue(profile$.avatar, { suspense: true }); // after
 
-useSelector(profile$.name);                          // before
-useValue(profile$.name);                             // after
+useSelector(profile$.name); // before
+useValue(profile$.name); // after
 ```
 
 ### Use a non-tracking command snapshot
 
 ```tsx
-const save = () => persist(settings$.theme.get());  // before
+const save = () => persist(settings$.theme.get()); // before
 const save = () => persist(settings$.theme.peek()); // after
 ```
 
@@ -1024,14 +1333,14 @@ Render reads, tracking callbacks, listener options, and unresolved callback chai
 ### Write the changed path
 
 ```tsx
-profile$.set({ ...profile$.peek(), name });  // before
-profile$.name.set(name);                     // after
+profile$.set({ ...profile$.peek(), name }); // before
+profile$.name.set(name); // after
 
-rows$.set({ ...rows$.peek(), [id]: row });   // before
-rows$[id].set(row);                          // after
+rows$.set({ ...rows$.peek(), [id]: row }); // before
+rows$[id].set(row); // after
 
-items$.set(previous => [...previous, item]); // before
-items$.push(item);                           // after
+items$.set((previous) => [...previous, item]); // before
+items$.push(item); // after
 ```
 
 In a package that compiles with React Compiler — a compiler dependency in any manifest on the file's directory chain,
@@ -1044,14 +1353,14 @@ in-place child write preserves it and can leave that memoized JSX stale.
 ### Toggle directly
 
 ```tsx
-menu$.open.set(value => !value); // before
-menu$.open.toggle();             // after
+menu$.open.set((value) => !value); // before
+menu$.open.toggle(); // after
 ```
 
 ### Publish sibling fields once
 
 ```tsx
-draft$.name.set(name);          // before
+draft$.name.set(name); // before
 draft$.color.set(color);
 
 draft$.assign({ name, color }); // after

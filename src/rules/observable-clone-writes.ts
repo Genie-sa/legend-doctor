@@ -25,14 +25,19 @@ interface NarrowWrite {
 export function findObservableCloneWritePractices(
   sourceFile: ts.SourceFile,
   fileName: string,
-  observableBindings: ReadonlySet<string>
+  observableBindings: ReadonlySet<string>,
 ): LegendPracticeFinding[] {
   const findings: LegendPracticeFinding[] = [];
-  visit(sourceFile, node => {
-    if (!ts.isCallExpression(node)) return;
-    const write = narrowObservableObjectWrite(node, sourceFile, observableBindings) ??
+  visit(sourceFile, (node) => {
+    if (!ts.isCallExpression(node)) {
+      return;
+    }
+    const write =
+      narrowObservableObjectWrite(node, sourceFile, observableBindings) ??
       narrowObservableArrayAppend(node, sourceFile, observableBindings);
-    if (!write) return;
+    if (!write) {
+      return;
+    }
     const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
     findings.push({
       action: "narrow-observable-write",
@@ -50,7 +55,7 @@ export function findObservableCloneWritePractices(
 function narrowObservableObjectWrite(
   call: ts.CallExpression,
   sourceFile: ts.SourceFile,
-  observableBindings: ReadonlySet<string>
+  observableBindings: ReadonlySet<string>,
 ): NarrowWrite | null {
   if (
     call.arguments.length !== 1 ||
@@ -60,35 +65,46 @@ function narrowObservableObjectWrite(
     return null;
   }
   const target = unwrapTransparentExpression(call.expression.expression);
-  if (!staticPathHasBinding(target, observableBindings)) return null;
+  if (!staticPathHasBinding(target, observableBindings)) {
+    return null;
+  }
 
   const value = unwrapTransparentExpression(call.arguments[0]!);
-  if (!ts.isObjectLiteralExpression(value) || value.properties.length !== 2) return null;
+  if (!ts.isObjectLiteralExpression(value) || value.properties.length !== 2) {
+    return null;
+  }
   const [spread, override] = value.properties;
-  if (!spread || !ts.isSpreadAssignment(spread) || !override) return null;
+  if (!spread || !ts.isSpreadAssignment(spread) || !override) {
+    return null;
+  }
 
   const snapshot = snapshotTarget(spread.expression, call, sourceFile);
-  if (!snapshot || snapshot.target.getText(sourceFile) !== target.getText(sourceFile)) return null;
-  if (
-    snapshot.binding &&
-    !snapshotBindingIsReadOnly(snapshot.binding, spread, call)
-  ) {
+  if (!snapshot || snapshot.target.getText(sourceFile) !== target.getText(sourceFile)) {
+    return null;
+  }
+  if (snapshot.binding && !snapshotBindingIsReadOnly(snapshot.binding, spread, call)) {
     return null;
   }
 
   const targetText = target.getText(sourceFile);
   if (ts.isShorthandPropertyAssignment(override)) {
-    if (RESERVED_OBSERVABLE_MEMBERS.has(override.name.text)) return null;
+    if (RESERVED_OBSERVABLE_MEMBERS.has(override.name.text)) {
+      return null;
+    }
     return objectWrite(
       `${targetText}.${override.name.text}.set(${override.name.text})`,
-      targetText
+      targetText,
     );
   }
-  if (!ts.isPropertyAssignment(override)) return null;
+  if (!ts.isPropertyAssignment(override)) {
+    return null;
+  }
   const argument = override.initializer.getText(sourceFile);
   if (ts.isIdentifier(override.name) || ts.isStringLiteral(override.name)) {
     const property = override.name.text;
-    if (RESERVED_OBSERVABLE_MEMBERS.has(property)) return null;
+    if (RESERVED_OBSERVABLE_MEMBERS.has(property)) {
+      return null;
+    }
     const child = ts.isIdentifier(override.name)
       ? `.${property}`
       : `[${override.name.getText(sourceFile)}]`;
@@ -97,7 +113,7 @@ function narrowObservableObjectWrite(
   if (ts.isNumericLiteral(override.name)) {
     return objectWrite(
       `${targetText}[${override.name.getText(sourceFile)}].set(${argument})`,
-      targetText
+      targetText,
     );
   }
   if (!ts.isComputedPropertyName(override.name) || !safeDynamicKey(override.name.expression)) {
@@ -120,7 +136,7 @@ function objectWrite(replacement: string, target: string): NarrowWrite {
 function narrowObservableArrayAppend(
   call: ts.CallExpression,
   sourceFile: ts.SourceFile,
-  observableBindings: ReadonlySet<string>
+  observableBindings: ReadonlySet<string>,
 ): NarrowWrite | null {
   if (
     call.arguments.length !== 1 ||
@@ -129,8 +145,8 @@ function narrowObservableArrayAppend(
   ) {
     return null;
   }
-  const target = unwrapTransparentExpression(call.expression.expression);
-  const root = rootIdentifier(target);
+  const target = unwrapTransparentExpression(call.expression.expression),
+    root = rootIdentifier(target);
   if (
     !root ||
     !staticPathHasBinding(target, observableBindings) ||
@@ -139,14 +155,16 @@ function narrowObservableArrayAppend(
     return null;
   }
 
-  const argument = unwrapTransparentExpression(call.arguments[0]!);
-  const appended = ts.isArrowFunction(argument)
-    ? updaterAppendValue(argument)
-    : snapshotAppendValue(argument, target, call, sourceFile);
-  if (!appended || !isEvaluationInert(appended)) return null;
+  const argument = unwrapTransparentExpression(call.arguments[0]!),
+    appended = ts.isArrowFunction(argument)
+      ? updaterAppendValue(argument)
+      : snapshotAppendValue(argument, target, call, sourceFile);
+  if (!appended || !isEvaluationInert(appended)) {
+    return null;
+  }
 
-  const targetText = target.getText(sourceFile);
-  const appendedText = appended.getText(sourceFile);
+  const targetText = target.getText(sourceFile),
+    appendedText = appended.getText(sourceFile);
   return {
     evidence: [
       `the clone appends exactly one inert value to the same proven observable array ${targetText}`,
@@ -158,7 +176,7 @@ function narrowObservableArrayAppend(
 
 function updaterAppendValue(updater: ts.ArrowFunction): ts.Expression | null {
   if (
-    updater.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    updater.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     updater.parameters.length !== 1 ||
     !ts.isIdentifier(updater.parameters[0]!.name) ||
     ts.isBlock(updater.body)
@@ -166,9 +184,11 @@ function updaterAppendValue(updater: ts.ArrowFunction): ts.Expression | null {
     return null;
   }
   const array = unwrapTransparentExpression(updater.body);
-  if (!ts.isArrayLiteralExpression(array) || array.elements.length !== 2) return null;
-  const [snapshot, appended] = array.elements;
-  const parameter = updater.parameters[0]!.name;
+  if (!ts.isArrayLiteralExpression(array) || array.elements.length !== 2) {
+    return null;
+  }
+  const [snapshot, appended] = array.elements,
+    parameter = updater.parameters[0]!.name;
   if (
     !snapshot ||
     !ts.isSpreadElement(snapshot) ||
@@ -187,15 +207,19 @@ function snapshotAppendValue(
   expression: ts.Expression,
   target: ts.Expression,
   write: ts.CallExpression,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ts.Expression | null {
-  if (!ts.isArrayLiteralExpression(expression) || expression.elements.length !== 2) return null;
+  if (!ts.isArrayLiteralExpression(expression) || expression.elements.length !== 2) {
+    return null;
+  }
   const [spread, appended] = expression.elements;
   if (!spread || !ts.isSpreadElement(spread) || !appended || ts.isSpreadElement(appended)) {
     return null;
   }
   const snapshot = snapshotTarget(spread.expression, write, sourceFile);
-  if (!snapshot || snapshot.target.getText(sourceFile) !== target.getText(sourceFile)) return null;
+  if (!snapshot || snapshot.target.getText(sourceFile) !== target.getText(sourceFile)) {
+    return null;
+  }
   if (
     snapshot.binding &&
     (!snapshotBindingIsReadOnly(snapshot.binding, spread, write) ||
@@ -210,25 +234,39 @@ function snapshotAppendValue(
 function observableTargetStartsAsArray(
   target: ts.Expression,
   write: ts.CallExpression,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): boolean {
   const root = rootIdentifier(target);
-  if (!root) return false;
-  const declaration = lexicalVariableDeclaration(write, root.text) ??
+  if (!root) {
+    return false;
+  }
+  const declaration =
+    lexicalVariableDeclaration(write, root.text) ??
     uniqueVariableDeclaration(sourceFile, root.text);
-  if (!declaration?.initializer) return false;
+  if (!declaration?.initializer) {
+    return false;
+  }
   const factory = unwrapTransparentExpression(declaration.initializer);
-  if (!ts.isCallExpression(factory) || factory.arguments.length === 0) return false;
+  if (!ts.isCallExpression(factory) || factory.arguments.length === 0) {
+    return false;
+  }
   let initializer: ts.Expression = factory.arguments[0]!;
   const properties = staticPropertyPath(target);
-  if (!properties) return false;
+  if (!properties) {
+    return false;
+  }
   for (const propertyName of properties) {
     const object = unwrapTransparentExpression(initializer);
-    if (!ts.isObjectLiteralExpression(object)) return false;
-    const property = object.properties.find(candidate =>
-      ts.isPropertyAssignment(candidate) && staticPropertyName(candidate.name) === propertyName
+    if (!ts.isObjectLiteralExpression(object)) {
+      return false;
+    }
+    const property = object.properties.find(
+      (candidate) =>
+        ts.isPropertyAssignment(candidate) && staticPropertyName(candidate.name) === propertyName,
     );
-    if (!property || !ts.isPropertyAssignment(property)) return false;
+    if (!property || !ts.isPropertyAssignment(property)) {
+      return false;
+    }
     initializer = property.initializer;
   }
   return ts.isArrayLiteralExpression(unwrapTransparentExpression(initializer));
@@ -239,7 +277,9 @@ function lexicalVariableDeclaration(node: ts.Node, name: string): ts.VariableDec
   while (current) {
     if (isRuntimeFunctionLike(current) && current.body) {
       const declaration = uniqueVariableDeclaration(current.body, name);
-      if (declaration) return declaration;
+      if (declaration) {
+        return declaration;
+      }
     }
     current = current.parent;
   }
@@ -248,8 +288,12 @@ function lexicalVariableDeclaration(node: ts.Node, name: string): ts.VariableDec
 
 function staticPropertyPath(expression: ts.Expression): string[] | null {
   const value = unwrapTransparentExpression(expression);
-  if (ts.isIdentifier(value)) return [];
-  if (!ts.isPropertyAccessExpression(value)) return null;
+  if (ts.isIdentifier(value)) {
+    return [];
+  }
+  if (!ts.isPropertyAccessExpression(value)) {
+    return null;
+  }
   const parent = staticPropertyPath(value.expression);
   return parent ? [...parent, value.name.text] : null;
 }
@@ -263,8 +307,10 @@ function staticPropertyName(name: ts.PropertyName): string | null {
 
 function expressionReferencesName(expression: ts.Expression, name: string): boolean {
   let found = false;
-  visit(expression, node => {
-    if (ts.isIdentifier(node) && node.text === name) found = true;
+  visit(expression, (node) => {
+    if (ts.isIdentifier(node) && node.text === name) {
+      found = true;
+    }
   });
   return found;
 }
@@ -272,14 +318,20 @@ function expressionReferencesName(expression: ts.Expression, name: string): bool
 function snapshotTarget(
   expression: ts.Expression,
   write: ts.CallExpression,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): { binding: SnapshotBinding | null; target: ts.Expression } | null {
   const direct = peekTarget(expression);
-  if (direct) return { binding: null, target: direct };
+  if (direct) {
+    return { binding: null, target: direct };
+  }
   const value = unwrapTransparentExpression(expression);
-  if (!ts.isIdentifier(value)) return null;
+  if (!ts.isIdentifier(value)) {
+    return null;
+  }
   const owner = findAncestor(write, isRuntimeFunctionLike);
-  if (!owner?.body || bindingDeclarationCount(owner, value.text) !== 1) return null;
+  if (!owner?.body || bindingDeclarationCount(owner, value.text) !== 1) {
+    return null;
+  }
 
   const resolved = uniqueVariableDeclaration(owner.body, value.text);
   if (
@@ -296,9 +348,7 @@ function snapshotTarget(
 
 function peekTarget(expression: ts.Expression): ts.Expression | null {
   let value = unwrapTransparentExpression(expression);
-  const fallback = ts.isBinaryExpression(value)
-    ? unwrapTransparentExpression(value.right)
-    : null;
+  const fallback = ts.isBinaryExpression(value) ? unwrapTransparentExpression(value.right) : null;
   if (
     ts.isBinaryExpression(value) &&
     value.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
@@ -322,12 +372,14 @@ function peekTarget(expression: ts.Expression): ts.Expression | null {
 function snapshotBindingIsReadOnly(
   binding: SnapshotBinding,
   targetSpread: ts.SpreadAssignment | ts.SpreadElement,
-  write: ts.CallExpression
+  write: ts.CallExpression,
 ): boolean {
   const owner = findAncestor(write, isRuntimeFunctionLike);
-  if (!owner?.body || !ts.isIdentifier(binding.declaration.name)) return false;
+  if (!owner?.body || !ts.isIdentifier(binding.declaration.name)) {
+    return false;
+  }
   let crossesAsyncBoundary = false;
-  visit(owner.body, node => {
+  visit(owner.body, (node) => {
     if (
       node.getStart() > binding.declaration.end &&
       node.end < write.getStart() &&
@@ -336,10 +388,12 @@ function snapshotBindingIsReadOnly(
       crossesAsyncBoundary = true;
     }
   });
-  if (crossesAsyncBoundary) return false;
+  if (crossesAsyncBoundary) {
+    return false;
+  }
   const name = binding.declaration.name.text;
   let safe = true;
-  visit(owner.body, node => {
+  visit(owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -352,7 +406,9 @@ function snapshotBindingIsReadOnly(
       safe = false;
       return;
     }
-    if (nodeWithin(node, targetSpread.expression)) return;
+    if (nodeWithin(node, targetSpread.expression)) {
+      return;
+    }
     if (findAncestor(node, isRuntimeFunctionLike) !== owner) {
       safe = false;
       return;
@@ -366,7 +422,7 @@ function snapshotBindingIsReadOnly(
       safe = false;
       return;
     }
-    const parent = access.parent;
+    const { parent } = access;
     if (
       (ts.isBinaryExpression(parent) &&
         parent.left === access &&
@@ -387,7 +443,7 @@ function snapshotBindingIsReadOnly(
 function isControlConditionReference(node: ts.Node, owner: ts.Node): boolean {
   let current = node;
   while (current.parent && current.parent !== owner) {
-    const parent = current.parent;
+    const { parent } = current;
     if (
       (ts.isIfStatement(parent) && parent.expression === current) ||
       (ts.isConditionalExpression(parent) && parent.condition === current)
@@ -399,20 +455,18 @@ function isControlConditionReference(node: ts.Node, owner: ts.Node): boolean {
   return false;
 }
 
-function referenceMayRepeatAfterWrite(
-  node: ts.Node,
-  write: ts.Node,
-  owner: ts.Node
-): boolean {
+function referenceMayRepeatAfterWrite(node: ts.Node, write: ts.Node, owner: ts.Node): boolean {
   let current = node;
   while (current.parent && current.parent !== owner) {
-    const parent = current.parent;
+    const { parent } = current;
     const repeatedCondition =
       ((ts.isWhileStatement(parent) || ts.isDoStatement(parent)) &&
         parent.expression === current) ||
       (ts.isForStatement(parent) &&
         (parent.condition === current || parent.incrementor === current));
-    if (repeatedCondition && nodeWithin(write, parent.statement)) return true;
+    if (repeatedCondition && nodeWithin(write, parent.statement)) {
+      return true;
+    }
     current = parent;
   }
   return false;
@@ -421,7 +475,8 @@ function referenceMayRepeatAfterWrite(
 function outermostAccess(root: ts.Identifier): ts.Expression {
   let current: ts.Expression = root;
   while (
-    (ts.isPropertyAccessExpression(current.parent) || ts.isElementAccessExpression(current.parent)) &&
+    (ts.isPropertyAccessExpression(current.parent) ||
+      ts.isElementAccessExpression(current.parent)) &&
     current.parent.expression === current
   ) {
     current = current.parent;
@@ -431,6 +486,8 @@ function outermostAccess(root: ts.Identifier): ts.Expression {
 
 function safeDynamicKey(expression: ts.Expression): boolean {
   const key = unwrapTransparentExpression(expression);
-  if (ts.isIdentifier(key) || ts.isNumericLiteral(key)) return true;
+  if (ts.isIdentifier(key) || ts.isNumericLiteral(key)) {
+    return true;
+  }
   return ts.isStringLiteral(key) && !RESERVED_OBSERVABLE_MEMBERS.has(key.text);
 }

@@ -4,7 +4,8 @@ import ts from "typescript";
 
 import { scriptKindForFile } from "./ast.js";
 import { canonicalPath, pathIdentityKey } from "./path-identity.js";
-import { parserDiagnosticsOf, type AnalysisDiagnostic } from "./parser-diagnostics.js";
+import { parserDiagnosticsOf } from "./parser-diagnostics.js";
+import type { AnalysisDiagnostic } from "./parser-diagnostics.js";
 
 const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([
   ".cjs",
@@ -17,11 +18,7 @@ const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([
   ".tsx",
 ]);
 
-export type AnalysisDialect =
-  | "javascript"
-  | "javascript-jsx"
-  | "typescript"
-  | "typescript-jsx";
+export type AnalysisDialect = "javascript" | "javascript-jsx" | "typescript" | "typescript-jsx";
 
 export interface AnalysisFile {
   readonly dialect: AnalysisDialect;
@@ -40,18 +37,18 @@ export class AnalysisProject {
   constructor(sources: ReadonlyMap<string, string>) {
     const filesByIdentity = new Map<string, AnalysisFile>();
     for (const [fileName, sourceText] of sources) {
-      const file = createAnalysisFile(fileName, sourceText);
-      const key = pathIdentityKey(file.identityPath);
-      const existing = filesByIdentity.get(key);
+      const file = createAnalysisFile(fileName, sourceText),
+        key = pathIdentityKey(file.identityPath),
+        existing = filesByIdentity.get(key);
       if (existing) {
         throw new Error(
-          `duplicate analysis file identity: ${existing.originalPath} and ${file.originalPath}`
+          `duplicate analysis file identity: ${existing.originalPath} and ${file.originalPath}`,
         );
       }
       filesByIdentity.set(key, file);
     }
     this.files = [...filesByIdentity.values()].sort((left, right) =>
-      compareText(left.identityPath, right.identityPath)
+      compareText(left.identityPath, right.identityPath),
     );
     this.#filesByIdentity = filesByIdentity;
   }
@@ -65,15 +62,15 @@ export function createAnalysisFile(fileName: string, sourceText: string): Analys
   if (!isSupportedAnalysisFile(fileName)) {
     throw new Error(`unsupported analysis file extension: ${fileName}`);
   }
-  const identityPath = canonicalPath(fileName);
-  const scriptKind = scriptKindForFile(identityPath);
-  const sourceFile = ts.createSourceFile(
-    identityPath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind
-  );
+  const identityPath = canonicalPath(fileName),
+    scriptKind = scriptKindForFile(identityPath),
+    sourceFile = ts.createSourceFile(
+      identityPath,
+      sourceText,
+      ts.ScriptTarget.Latest,
+      true,
+      scriptKind,
+    );
   return {
     dialect: dialectForScriptKind(scriptKind),
     identityPath,
@@ -94,14 +91,18 @@ function compareText(left: string, right: string): number {
 
 function dialectForScriptKind(scriptKind: ts.ScriptKind): AnalysisDialect {
   switch (scriptKind) {
-    case ts.ScriptKind.JS:
+    case ts.ScriptKind.JS: {
       return "javascript";
-    case ts.ScriptKind.JSX:
+    }
+    case ts.ScriptKind.JSX: {
       return "javascript-jsx";
-    case ts.ScriptKind.TSX:
+    }
+    case ts.ScriptKind.TSX: {
       return "typescript-jsx";
-    default:
+    }
+    default: {
       return "typescript";
+    }
   }
 }
 

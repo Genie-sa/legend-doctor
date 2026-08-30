@@ -2,8 +2,8 @@ import ts from "typescript";
 
 import {
   containsElementAccess,
-  staticPropertyPath,
   staticPathHasBinding,
+  staticPropertyPath,
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import { visit } from "../ast.js";
@@ -13,15 +13,19 @@ import { RESERVED_OBSERVABLE_MEMBERS } from "./observable-reads.js";
 export function findObservableTogglePractices(
   sourceFile: ts.SourceFile,
   fileName: string,
-  observableBindings: ReadonlySet<string>
+  observableBindings: ReadonlySet<string>,
 ): LegendPracticeFinding[] {
   const findings: LegendPracticeFinding[] = [];
-  visit(sourceFile, node => {
-    if (!ts.isCallExpression(node)) return;
+  visit(sourceFile, (node) => {
+    if (!ts.isCallExpression(node)) {
+      return;
+    }
     const target = exactBooleanToggleTarget(node, observableBindings);
-    if (!target) return;
-    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-    const path = target.getText(sourceFile);
+    if (!target) {
+      return;
+    }
+    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)),
+      path = target.getText(sourceFile);
     findings.push({
       action: "toggle-observable",
       confidence: "certain",
@@ -40,7 +44,7 @@ export function findObservableTogglePractices(
 
 function exactBooleanToggleTarget(
   call: ts.CallExpression,
-  observableBindings: ReadonlySet<string>
+  observableBindings: ReadonlySet<string>,
 ): ts.Expression | null {
   if (
     call.arguments.length !== 1 ||
@@ -53,14 +57,21 @@ function exactBooleanToggleTarget(
     return null;
   }
   const target = provenStaticObservablePath(call.expression.expression, observableBindings);
-  if (!target) return null;
+  if (!target) {
+    return null;
+  }
   const argument = unwrapTransparentExpression(call.arguments[0]!);
-  if (isSamePathPeekNegation(argument, target)) return target;
+  if (isSamePathPeekNegation(argument, target)) {
+    return target;
+  }
   return isExactBooleanUpdater(argument) ? target : null;
 }
 
 function isSamePathPeekNegation(argument: ts.Expression, target: ts.Expression): boolean {
-  if (!ts.isPrefixUnaryExpression(argument) || argument.operator !== ts.SyntaxKind.ExclamationToken) {
+  if (
+    !ts.isPrefixUnaryExpression(argument) ||
+    argument.operator !== ts.SyntaxKind.ExclamationToken
+  ) {
     return false;
   }
   const read = unwrapTransparentExpression(argument.operand);
@@ -75,15 +86,15 @@ function isSamePathPeekNegation(argument: ts.Expression, target: ts.Expression):
   ) {
     return false;
   }
-  const readPath = staticPropertyPath(read.expression.expression);
-  const targetPath = staticPropertyPath(target);
+  const readPath = staticPropertyPath(read.expression.expression),
+    targetPath = staticPropertyPath(target);
   return readPath !== null && targetPath !== null && samePath(readPath, targetPath);
 }
 
 function isExactBooleanUpdater(argument: ts.Expression): boolean {
   if (
     !ts.isArrowFunction(argument) ||
-    argument.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    argument.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     argument.parameters.length !== 1 ||
     !ts.isIdentifier(argument.parameters[0]!.name) ||
     ts.isBlock(argument.body)
@@ -100,7 +111,7 @@ function isExactBooleanUpdater(argument: ts.Expression): boolean {
 
 function provenStaticObservablePath(
   expression: ts.Expression,
-  observableBindings: ReadonlySet<string>
+  observableBindings: ReadonlySet<string>,
 ): ts.Expression | null {
   const path = unwrapTransparentExpression(expression);
   if (
@@ -110,8 +121,14 @@ function provenStaticObservablePath(
   ) {
     return null;
   }
-  for (let current: ts.Expression = path; ts.isPropertyAccessExpression(current); current = current.expression) {
-    if (current.questionDotToken || RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) return null;
+  for (
+    let current: ts.Expression = path;
+    ts.isPropertyAccessExpression(current);
+    current = current.expression
+  ) {
+    if (current.questionDotToken || RESERVED_OBSERVABLE_MEMBERS.has(current.name.text)) {
+      return null;
+    }
   }
   return staticPathHasBinding(path, observableBindings) ? path : null;
 }

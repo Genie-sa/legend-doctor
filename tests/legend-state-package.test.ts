@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -9,7 +9,7 @@ import { resolveInstalledLegendState } from "../src/legend-state-package.js";
 async function writeInstalledPackage(
   root: string,
   manifest: Record<string, unknown>,
-  declarations: Record<string, string> = {}
+  declarations: Record<string, string> = {},
 ): Promise<string> {
   const packageDirectory = path.join(root, "node_modules", "@legendapp", "state");
   await mkdir(packageDirectory, { recursive: true });
@@ -22,13 +22,13 @@ async function writeInstalledPackage(
   return packageDirectory;
 }
 
-test("resolves an aliased useValue export from the installed react declarations", async t => {
+test("resolves an aliased useValue export from the installed react declarations", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-alias-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   await writeInstalledPackage(
     root,
     { name: "@legendapp/state", version: "3.0.0-beta.48" },
-    { "react.d.ts": "export { useSelector as use$, useSelector, useSelector as useValue };" }
+    { "react.d.ts": "export { useSelector as use$, useSelector, useSelector as useValue };" },
   );
 
   assert.deepEqual(await resolveInstalledLegendState(root), {
@@ -37,17 +37,17 @@ test("resolves an aliased useValue export from the installed react declarations"
   });
 });
 
-test("resolves declarations through the exports map and walks up from nested roots", async t => {
+test("resolves declarations through the exports map and walks up from nested roots", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-exports-"));
   t.after(() => rm(root, { force: true, recursive: true }));
   await writeInstalledPackage(
     root,
     {
+      exports: { "./react": { types: "./dist/types/react.d.ts" } },
       name: "@legendapp/state",
       version: "3.0.0",
-      exports: { "./react": { types: "./dist/types/react.d.ts" } },
     },
-    { "dist/types/react.d.ts": "export declare function useValue<T>(selector: T): T;" }
+    { "dist/types/react.d.ts": "export declare function useValue<T>(selector: T): T;" },
   );
   const nested = path.join(root, "packages", "app");
   await mkdir(nested, { recursive: true });
@@ -58,15 +58,15 @@ test("resolves declarations through the exports map and walks up from nested roo
   });
 });
 
-test("reports missing useValue and unresolvable declarations distinctly", async t => {
-  const missingRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-missing-"));
-  const unknownRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-unknown-"));
+test("reports missing useValue and unresolvable declarations distinctly", async (t) => {
+  const missingRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-missing-")),
+    unknownRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-unknown-"));
   t.after(() => rm(missingRoot, { force: true, recursive: true }));
   t.after(() => rm(unknownRoot, { force: true, recursive: true }));
   await writeInstalledPackage(
     missingRoot,
     { name: "@legendapp/state", version: "2.1.0" },
-    { "react.d.ts": "export { useSelector };" }
+    { "react.d.ts": "export { useSelector };" },
   );
   await writeInstalledPackage(unknownRoot, { name: "@legendapp/state", version: "2.1.0" });
 
@@ -80,7 +80,7 @@ test("reports missing useValue and unresolvable declarations distinctly", async 
   });
 });
 
-test("returns null when no @legendapp/state package is installed", async t => {
+test("returns null when no @legendapp/state package is installed", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-none-"));
   t.after(() => rm(root, { force: true, recursive: true }));
 

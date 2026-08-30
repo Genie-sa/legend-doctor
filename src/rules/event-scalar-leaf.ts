@@ -11,9 +11,9 @@ import {
   findAncestorUntil,
   isRuntimeFunctionLike,
   nearestNestedFunction,
-  type RuntimeFunctionLike,
   visit,
 } from "../ast.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import { isSafeProjectionExpression } from "./deferred-reveal.js";
 import { mutationRegionOnlyCallsStateSetters } from "./effect-drafts.js";
@@ -55,7 +55,7 @@ interface ReactiveHostPropScalarOptions extends EventOwnedScalarOptions {
 export function isReactiveHostPropScalarState(
   state: StateCandidate,
   usage: StateUsage,
-  options: ReactiveHostPropScalarOptions
+  options: ReactiveHostPropScalarOptions,
 ): boolean {
   if (
     !isEventOwnedNumericState(state, usage, options) &&
@@ -68,26 +68,24 @@ export function isReactiveHostPropScalarState(
     state.owner,
     usage.directRenderNodes,
     (expression, reference) =>
-      isSafeProjectionExpression(expression, reference, options.pureProjectionImports)
+      isSafeProjectionExpression(expression, reference, options.pureProjectionImports),
   );
-  if (!projections || projections.length === 0) return false;
+  if (!projections || projections.length === 0) {
+    return false;
+  }
 
-  let surfaceStart: number | null = null;
-  let attributeStart: number | null = null;
+  let surfaceStart: number | null = null,
+    attributeStart: number | null = null;
   for (const projection of projections) {
     if (
       nearestNestedFunction(projection, state.owner) ||
       nearestRepeatedRenderCall(projection, state.owner) ||
-      !isSafeJsxProjectionReference(
-        projection,
-        state.owner,
-        options.pureProjectionImports
-      )
+      !isSafeJsxProjectionReference(projection, state.owner, options.pureProjectionImports)
     ) {
       return false;
     }
-    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
-    const opening = attribute?.parent.parent;
+    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner),
+      opening = attribute?.parent.parent;
     if (
       !attribute ||
       !opening ||
@@ -115,26 +113,25 @@ export function isReactiveHostPropScalarState(
 export function isSourceEventScalarLeafState(
   state: StateCandidate,
   usage: StateUsage,
-  options: EventScalarLeafOptions
+  options: EventScalarLeafOptions,
 ): boolean {
   const ownerElements = jsxElementCount(state.owner);
-  if (!isEventOwnedNumericState(state, usage, options)) return false;
+  if (!isEventOwnedNumericState(state, usage, options)) {
+    return false;
+  }
 
   const mathCalls = sourceHasRuntimeBinding(state.owner.getSourceFile(), "Math")
-    ? new Set<string>()
-    : new Set(["Math.max", "Math.min"]);
-  const projections = oneHopRenderProjectionReferences(
-    state.owner,
-    usage.directRenderNodes,
-    (expression, reference) =>
-      isSafeProjectionExpression(
-        expression,
-        reference,
-        options.pureProjectionImports,
-        mathCalls
-      )
-  );
-  if (!projections || projections.length < 2) return false;
+      ? new Set<string>()
+      : new Set(["Math.max", "Math.min"]),
+    projections = oneHopRenderProjectionReferences(
+      state.owner,
+      usage.directRenderNodes,
+      (expression, reference) =>
+        isSafeProjectionExpression(expression, reference, options.pureProjectionImports, mathCalls),
+    );
+  if (!projections || projections.length < 2) {
+    return false;
+  }
 
   const surfaces = new Map<number, ts.JsxElement | ts.JsxSelfClosingElement>();
   let returned: ts.Expression | null = null;
@@ -142,16 +139,12 @@ export function isSourceEventScalarLeafState(
     if (
       nearestNestedFunction(projection, state.owner) ||
       nearestRepeatedRenderCall(projection, state.owner) ||
-      !isSafeJsxProjectionReference(
-        projection,
-        state.owner,
-        options.pureProjectionImports
-      )
+      !isSafeJsxProjectionReference(projection, state.owner, options.pureProjectionImports)
     ) {
       return false;
     }
-    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
-    const opening = attribute?.parent.parent;
+    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner),
+      opening = attribute?.parent.parent;
     if (
       !attribute ||
       !opening ||
@@ -161,17 +154,22 @@ export function isSourceEventScalarLeafState(
       return false;
     }
     const surface = ts.isJsxOpeningElement(opening) ? opening.parent : opening;
-    if (jsxElementCountIn(surface) > 6) return false;
+    if (jsxElementCountIn(surface) > 6) {
+      return false;
+    }
     surfaces.set(surface.getStart(), surface);
 
     const returnExpression = directOwnerReturnExpression(projection, state.owner);
-    if (!returnExpression || (returned !== null && returned !== returnExpression)) return false;
+    if (!returnExpression || (returned !== null && returned !== returnExpression)) {
+      return false;
+    }
     returned = returnExpression;
   }
 
-  const leaves = [...surfaces.values()];
-  const leafElements = leaves.reduce((sum, surface) => sum + jsxElementCountIn(surface), 0);
-  return leaves.length >= 2 &&
+  const leaves = [...surfaces.values()],
+    leafElements = leaves.reduce((sum, surface) => sum + jsxElementCountIn(surface), 0);
+  return (
+    leaves.length >= 2 &&
     leaves.length <= 6 &&
     leafElements / ownerElements <= 0.4 &&
     returned !== null &&
@@ -179,14 +177,15 @@ export function isSourceEventScalarLeafState(
       returned,
       leaves,
       options.localComponents,
-      options.sourceComponents
-    );
+      options.sourceComponents,
+    )
+  );
 }
 
 function isEventOwnedNumericState(
   state: StateCandidate,
   usage: StateUsage,
-  options: EventOwnedScalarOptions
+  options: EventOwnedScalarOptions,
 ): boolean {
   if (
     !hasNumericInitializer(state) ||
@@ -197,46 +196,53 @@ function isEventOwnedNumericState(
     return false;
   }
 
-  const setterCall = usage.setterCallNodes[0]!;
-  const argument = setterCall.arguments[0];
-  const callback = nearestNestedFunction(setterCall, state.owner);
-  const setterName = state.setterName!;
-  return setterCall.arguments.length === 1 &&
+  const setterCall = usage.setterCallNodes[0]!,
+    argument = setterCall.arguments[0],
+    callback = nearestNestedFunction(setterCall, state.owner),
+    setterName = state.setterName!;
+  return (
+    setterCall.arguments.length === 1 &&
     !!argument &&
     isPureExpression(argument) &&
     !!callback &&
     options.eventCallbacks.has(callback) &&
-    mutationRegionOnlyCallsStateSetters(callback, new Set([setterName]));
+    mutationRegionOnlyCallsStateSetters(callback, new Set([setterName]))
+  );
 }
 
 function isEventOwnedLiteralBooleanState(
   state: StateCandidate,
   usage: StateUsage,
-  options: EventOwnedScalarOptions
+  options: EventOwnedScalarOptions,
 ): boolean {
-  return state.call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword &&
+  return (
+    state.call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword &&
     usage.setterCallNodes.length > 0 &&
     usage.setterCalls === usage.setterCallNodes.length &&
     isEventOwnedScalarBase(state, usage, options) &&
-    usage.setterCallNodes.every(call => {
-      const argument = call.arguments[0];
-      const callback = nearestNestedFunction(call, state.owner);
-      return call.arguments.length === 1 &&
+    usage.setterCallNodes.every((call) => {
+      const argument = call.arguments[0],
+        callback = nearestNestedFunction(call, state.owner);
+      return (
+        call.arguments.length === 1 &&
         !!argument &&
         (argument.kind === ts.SyntaxKind.TrueKeyword ||
           argument.kind === ts.SyntaxKind.FalseKeyword) &&
         !!callback &&
         options.eventCallbacks.has(callback) &&
-        mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]));
-    });
+        mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]))
+      );
+    })
+  );
 }
 
 function isEventOwnedScalarBase(
   state: StateCandidate,
   usage: StateUsage,
-  options: EventOwnedScalarOptions
+  options: EventOwnedScalarOptions,
 ): boolean {
-  return !!state.setterName &&
+  return (
+    !!state.setterName &&
     jsxElementCount(state.owner) >= 12 &&
     usage.localRenderReads > 0 &&
     usage.localRenderReads === usage.directRenderNodes.length &&
@@ -250,26 +256,30 @@ function isEventOwnedScalarBase(
     !usage.setterUsesPreviousValue &&
     !usage.shadowed &&
     stateValueReferencesAreRenderOnly(state, usage) &&
-    setterReferencesAreCallsOrCallbackDependencies(state, options.useCallbackNames);
+    setterReferencesAreCallsOrCallbackDependencies(state, options.useCallbackNames)
+  );
 }
 
 function hasNumericInitializer(state: StateCandidate): boolean {
   const initializer = state.call.arguments[0];
-  if (!initializer) return false;
+  if (!initializer) {
+    return false;
+  }
   const value = unwrapTransparentExpression(initializer);
-  if (ts.isNumericLiteral(value)) return true;
-  return ts.isPrefixUnaryExpression(value) &&
+  if (ts.isNumericLiteral(value)) {
+    return true;
+  }
+  return (
+    ts.isPrefixUnaryExpression(value) &&
     (value.operator === ts.SyntaxKind.PlusToken || value.operator === ts.SyntaxKind.MinusToken) &&
-    ts.isNumericLiteral(unwrapTransparentExpression(value.operand));
+    ts.isNumericLiteral(unwrapTransparentExpression(value.operand))
+  );
 }
 
-function stateValueReferencesAreRenderOnly(
-  state: StateCandidate,
-  usage: StateUsage
-): boolean {
+function stateValueReferencesAreRenderOnly(state: StateCandidate, usage: StateUsage): boolean {
   const renderReads = new Set(usage.directRenderNodes);
   let safe = true;
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -279,17 +289,19 @@ function stateValueReferencesAreRenderOnly(
     ) {
       return;
     }
-    if (!renderReads.has(node)) safe = false;
+    if (!renderReads.has(node)) {
+      safe = false;
+    }
   });
   return safe;
 }
 
 function setterReferencesAreCallsOrCallbackDependencies(
   state: StateCandidate,
-  useCallbackNames: ReadonlySet<string>
+  useCallbackNames: ReadonlySet<string>,
 ): boolean {
   let safe = true;
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -299,8 +311,12 @@ function setterReferencesAreCallsOrCallbackDependencies(
     ) {
       return;
     }
-    if (ts.isCallExpression(node.parent) && node.parent.expression === node) return;
-    if (isHookDependencyReference(node, useCallbackNames)) return;
+    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+      return;
+    }
+    if (isHookDependencyReference(node, useCallbackNames)) {
+      return;
+    }
     safe = false;
   });
   return safe;
@@ -308,7 +324,7 @@ function setterReferencesAreCallsOrCallbackDependencies(
 
 function directOwnerReturnExpression(
   node: ts.Node,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): ts.Expression | null {
   const statement = findAncestorUntil(node, ts.isReturnStatement, owner);
   return statement?.expression && findAncestor(statement, isRuntimeFunctionLike) === owner
@@ -318,9 +334,8 @@ function directOwnerReturnExpression(
 
 function isHostOpening(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
-  hostComponents: ReadonlySet<string>
+  hostComponents: ReadonlySet<string>,
 ): boolean {
   const target = opening.tagName;
-  return ts.isIdentifier(target) &&
-    (/^[a-z]/.test(target.text) || hostComponents.has(target.text));
+  return ts.isIdentifier(target) && (/^[a-z]/.test(target.text) || hostComponents.has(target.text));
 }

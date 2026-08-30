@@ -1,11 +1,7 @@
 import ts from "typescript";
 
-import {
-  nearestNestedFunction,
-  nodeWithin,
-  type RuntimeFunctionLike,
-  visit,
-} from "../ast.js";
+import { nearestNestedFunction, nodeWithin, visit } from "../ast.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import {
   hasIndependentRenderCutWitness,
@@ -28,16 +24,16 @@ export function findLazyCallbackLeaf(
   usage: StateUsage,
   localComponents: ReadonlySet<string>,
   sourceComponents: ReadonlySet<string>,
-  proofs: LazyCallbackLeafProofs
+  proofs: LazyCallbackLeafProofs,
 ): LazyCallbackLeaf | null {
-  const initializer = state.call.arguments[0];
-  const valueSite = [...usage.valueTransportSites][0];
-  const target = [...usage.valueTargets][0];
+  const initializer = state.call.arguments[0],
+    valueSite = [...usage.valueTransportSites][0],
+    target = [...usage.valueTargets][0];
   if (
     !initializer ||
     (!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer)) ||
     initializer.parameters.length > 0 ||
-    initializer.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    initializer.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     initializer.asteriskToken ||
     stateMayHoldCallable(state) ||
     !state.owner.body ||
@@ -52,8 +48,8 @@ export function findLazyCallbackLeaf(
     return null;
   }
 
-  const openings: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
-  visit(state.owner.body, node => {
+  const openings: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
+  visit(state.owner.body, (node) => {
     if (
       (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
       node.getStart() === valueSite
@@ -62,7 +58,9 @@ export function findLazyCallbackLeaf(
     }
   });
   const opening = openings.length === 1 ? openings[0]! : null;
-  if (!opening || nearestRepeatedRenderCall(opening, state.owner)) return null;
+  if (!opening || nearestRepeatedRenderCall(opening, state.owner)) {
+    return null;
+  }
 
   const callback = nearestNestedFunction(opening, state.owner);
   if (
@@ -74,19 +72,14 @@ export function findLazyCallbackLeaf(
   ) {
     return null;
   }
-  const callbackOwner = callback.parent.parent;
-  const returned = proofs.uniqueReturnedExpression(state.owner);
+  const callbackOwner = callback.parent.parent,
+    returned = proofs.uniqueReturnedExpression(state.owner);
   if (
     !returned ||
     !nodeWithin(callbackOwner, returned) ||
     nearestRepeatedRenderCall(callbackOwner, state.owner) ||
     proofs.hasUnstableSubtreeLifetime(callbackOwner, state.owner) ||
-    !hasIndependentRenderCutWitness(
-      returned,
-      [callbackOwner],
-      localComponents,
-      sourceComponents
-    )
+    !hasIndependentRenderCutWitness(returned, [callbackOwner], localComponents, sourceComponents)
   ) {
     return null;
   }

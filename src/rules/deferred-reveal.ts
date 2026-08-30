@@ -8,11 +8,11 @@ import {
 } from "../analysis-ast.js";
 import {
   nodeWithin,
-  type RuntimeFunctionLike,
   visit,
   visitSkippingNestedFunctions,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "../analyze-source.js";
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
@@ -22,7 +22,7 @@ export type JsxSubtreeNode = ts.JsxElement | ts.JsxFragment | ts.JsxSelfClosingE
 export function findDeferredRevealStates(
   effects: readonly EffectCandidate[],
   states: readonly StateCandidate[],
-  usageByState: ReadonlyMap<StateCandidate, StateUsage>
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
 ): ReadonlySet<StateCandidate> {
   const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
@@ -33,13 +33,15 @@ export function findDeferredRevealStates(
 
   const result = new Set<StateCandidate>();
   for (const effect of effects) {
-    if (!effect.owner) continue;
+    if (!effect.owner) {
+      continue;
+    }
     const stateBySetter = new Map(
-      (statesByOwner.get(effect.owner) ?? []).flatMap(state =>
-        state.setterName ? [[state.setterName, state] as const] : []
-      )
-    );
-    const state = deferredRevealState(effect, stateBySetter);
+        (statesByOwner.get(effect.owner) ?? []).flatMap((state) =>
+          state.setterName ? [[state.setterName, state] as const] : [],
+        ),
+      ),
+      state = deferredRevealState(effect, stateBySetter);
     if (
       !state ||
       state.owner !== effect.owner ||
@@ -60,7 +62,7 @@ export function findDeferredRevealStates(
       usage.localRenderReads !== usage.directRenderNodes.length ||
       usage.shadowed ||
       usage.escaped ||
-      !usage.directRenderNodes.every(node => isRenderGateReference(node, state.owner))
+      !usage.directRenderNodes.every((node) => isRenderGateReference(node, state.owner))
     ) {
       continue;
     }
@@ -71,7 +73,7 @@ export function findDeferredRevealStates(
 
 function deferredRevealState(
   effect: EffectCandidate,
-  stateBySetter: ReadonlyMap<string, StateCandidate>
+  stateBySetter: ReadonlyMap<string, StateCandidate>,
 ): StateCandidate | null {
   if (
     !effect.callback ||
@@ -81,12 +83,12 @@ function deferredRevealState(
   ) {
     return null;
   }
-  const schedulerDeclarations: Array<{
-    handle: string;
-    setter: StateCandidate;
-  }> = [];
-  const knownSetterCalls: ts.CallExpression[] = [];
-  visit(effect.callback.body, node => {
+  const schedulerDeclarations: {
+      handle: string;
+      setter: StateCandidate;
+    }[] = [],
+    knownSetterCalls: ts.CallExpression[] = [];
+  visit(effect.callback.body, (node) => {
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
@@ -103,12 +105,18 @@ function deferredRevealState(
       return;
     }
     const callback = node.initializer.arguments[0];
-    if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) return;
-    const setterCall = soleLiteralTrueSetterCall(callback, stateBySetter);
-    const setter = setterCall ? stateBySetter.get(setterCall.expression.text) : undefined;
-    if (setter) schedulerDeclarations.push({ handle: node.name.text, setter });
+    if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
+      return;
+    }
+    const setterCall = soleLiteralTrueSetterCall(callback, stateBySetter),
+      setter = setterCall ? stateBySetter.get(setterCall.expression.text) : undefined;
+    if (setter) {
+      schedulerDeclarations.push({ handle: node.name.text, setter });
+    }
   });
-  if (schedulerDeclarations.length !== 1 || knownSetterCalls.length !== 1) return null;
+  if (schedulerDeclarations.length !== 1 || knownSetterCalls.length !== 1) {
+    return null;
+  }
   const scheduler = schedulerDeclarations[0];
   if (!scheduler || !callbackCancelsDeferredHandle(effect.callback, scheduler.handle)) {
     return null;
@@ -118,10 +126,10 @@ function deferredRevealState(
 
 function soleLiteralTrueSetterCall(
   callback: ts.ArrowFunction | ts.FunctionExpression,
-  stateBySetter: ReadonlyMap<string, StateCandidate>
+  stateBySetter: ReadonlyMap<string, StateCandidate>,
 ): (ts.CallExpression & { expression: ts.Identifier }) | null {
-  const calls: Array<ts.CallExpression & { expression: ts.Identifier }> = [];
-  visitSkippingNestedFunctions(callback.body, callback, node => {
+  const calls: (ts.CallExpression & { expression: ts.Identifier })[] = [];
+  visitSkippingNestedFunctions(callback.body, callback, (node) => {
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
@@ -140,15 +148,23 @@ function soleLiteralTrueSetterCall(
 
 function callbackCancelsDeferredHandle(
   callback: ts.ArrowFunction | ts.FunctionExpression,
-  handle: string
+  handle: string,
 ): boolean {
-  if (!ts.isBlock(callback.body)) return false;
-  return callback.body.statements.some(statement => {
-    if (!ts.isReturnStatement(statement) || !statement.expression) return false;
+  if (!ts.isBlock(callback.body)) {
+    return false;
+  }
+  return callback.body.statements.some((statement) => {
+    if (!ts.isReturnStatement(statement) || !statement.expression) {
+      return false;
+    }
     const cleanup = statement.expression;
-    if (!ts.isArrowFunction(cleanup) && !ts.isFunctionExpression(cleanup)) return false;
+    if (!ts.isArrowFunction(cleanup) && !ts.isFunctionExpression(cleanup)) {
+      return false;
+    }
     const cleanupBindings = localBindingNames(cleanup, null);
-    if (cleanupBindings.has(handle)) return false;
+    if (cleanupBindings.has(handle)) {
+      return false;
+    }
     const call = ts.isBlock(cleanup.body)
       ? (() => {
           const only = cleanup.body.statements[0];
@@ -157,7 +173,9 @@ function callbackCancelsDeferredHandle(
             : null;
         })()
       : cleanup.body;
-    if (!call || !ts.isCallExpression(call)) return false;
+    if (!call || !ts.isCallExpression(call)) {
+      return false;
+    }
     if (
       ts.isPropertyAccessExpression(call.expression) &&
       ts.isIdentifier(call.expression.expression) &&
@@ -185,7 +203,9 @@ export function isRenderGateReference(node: ts.Node, boundary: ts.Node): boolean
     current && current !== boundary;
     current = current.parent
   ) {
-    if (ts.isConditionalExpression(current) && nodeWithin(node, current.condition)) return true;
+    if (ts.isConditionalExpression(current) && nodeWithin(node, current.condition)) {
+      return true;
+    }
     if (
       ts.isIfStatement(current) &&
       nodeWithin(node, current.expression) &&
@@ -209,11 +229,11 @@ export function isRenderGateReference(node: ts.Node, boundary: ts.Node): boolean
 
 export function commonRenderGateSubtree(
   nodes: readonly ts.Node[],
-  boundary: ts.Node
+  boundary: ts.Node,
 ): JsxSubtreeNode | null {
-  const subtrees = nodes.map(node => renderGateSubtree(node, boundary));
-  const first = subtrees[0];
-  return first && subtrees.every(subtree => subtree === first) ? first : null;
+  const subtrees = nodes.map((node) => renderGateSubtree(node, boundary)),
+    first = subtrees[0];
+  return first && subtrees.every((subtree) => subtree === first) ? first : null;
 }
 
 function renderGateSubtree(node: ts.Node, boundary: ts.Node): JsxSubtreeNode | null {
@@ -237,30 +257,31 @@ function renderGateSubtree(node: ts.Node, boundary: ts.Node): JsxSubtreeNode | n
       isSafeProjectionExpression(current.left, node)
     ) {
       const subtree = directJsxSubtree(current.right, boundary);
-      if (subtree) return subtree;
+      if (subtree) {
+        return subtree;
+      }
     }
   }
   return null;
 }
 
-function directJsxSubtree(
-  expression: ts.Expression,
-  boundary: ts.Node
-): JsxSubtreeNode | null {
+function directJsxSubtree(expression: ts.Expression, boundary: ts.Node): JsxSubtreeNode | null {
   const current = unwrapTransparentExpression(expression);
   return literalJsxSubtree(current) ?? localJsxFactoryReturn(current, boundary);
 }
 
 function literalJsxSubtree(expression: ts.Expression): JsxSubtreeNode | null {
   const current = unwrapTransparentExpression(expression);
-  return ts.isJsxElement(current) || ts.isJsxFragment(current) || ts.isJsxSelfClosingElement(current)
+  return ts.isJsxElement(current) ||
+    ts.isJsxFragment(current) ||
+    ts.isJsxSelfClosingElement(current)
     ? current
     : null;
 }
 
 function localJsxFactoryReturn(
   expression: ts.Expression,
-  boundary: ts.Node
+  boundary: ts.Node,
 ): JsxSubtreeNode | null {
   const call = unwrapTransparentExpression(expression);
   if (
@@ -271,10 +292,9 @@ function localJsxFactoryReturn(
   ) {
     return null;
   }
-  const factoryName = call.expression.text;
-
-  const declarations: ts.VariableDeclaration[] = [];
-  visitSkippingNestedRuntimeFunctions(boundary, node => {
+  const factoryName = call.expression.text,
+    declarations: ts.VariableDeclaration[] = [];
+  visitSkippingNestedRuntimeFunctions(boundary, (node) => {
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
@@ -296,7 +316,7 @@ function localJsxFactoryReturn(
   if (
     (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
     factory.parameters.length !== 0 ||
-    factory.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    factory.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     (ts.isFunctionExpression(factory) && factory.asteriskToken)
   ) {
     return null;
@@ -306,18 +326,18 @@ function localJsxFactoryReturn(
   }
 
   const returns: ts.ReturnStatement[] = [];
-  visitSkippingNestedFunctions(factory.body, factory, node => {
-    if (ts.isReturnStatement(node)) returns.push(node);
+  visitSkippingNestedFunctions(factory.body, factory, (node) => {
+    if (ts.isReturnStatement(node)) {
+      returns.push(node);
+    }
   });
   const returned = returns[0]?.expression;
-  return returns.length === 1 && returned
-    ? literalJsxSubtree(returned)
-    : null;
+  return returns.length === 1 && returned ? literalJsxSubtree(returned) : null;
 }
 
 function statementContainsRenderableReturn(statement: ts.Statement, boundary: ts.Node): boolean {
   let found = false;
-  visitSkippingNestedRuntimeFunctions(statement, node => {
+  visitSkippingNestedRuntimeFunctions(statement, (node) => {
     if (
       ts.isReturnStatement(node) &&
       !!node.expression &&
@@ -333,7 +353,7 @@ function statementContainsRenderableReturn(statement: ts.Statement, boundary: ts
 
 function uniqueConstJsxInitializer(boundary: ts.Node, name: string): ts.Expression | null {
   const declarations: ts.VariableDeclaration[] = [];
-  visitSkippingNestedRuntimeFunctions(boundary, node => {
+  visitSkippingNestedRuntimeFunctions(boundary, (node) => {
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) {
       declarations.push(node);
     }
@@ -353,7 +373,7 @@ function uniqueConstJsxInitializer(boundary: ts.Node, name: string): ts.Expressi
 
 export function expressionContainsJsx(expression: ts.Expression): boolean {
   let found = false;
-  visit(expression, node => {
+  visit(expression, (node) => {
     if (ts.isJsxElement(node) || ts.isJsxFragment(node) || ts.isJsxSelfClosingElement(node)) {
       found = true;
     }
@@ -365,11 +385,13 @@ export function isSafeProjectionExpression(
   expression: ts.Expression,
   reference: ts.Node,
   allowedIdentifierCalls: ReadonlySet<string> = EMPTY_BINDINGS,
-  allowedPropertyCalls: ReadonlySet<string> = EMPTY_BINDINGS
+  allowedPropertyCalls: ReadonlySet<string> = EMPTY_BINDINGS,
 ): boolean {
-  if (!nodeWithin(reference, expression)) return false;
+  if (!nodeWithin(reference, expression)) {
+    return false;
+  }
   let safe = true;
-  visit(expression, node => {
+  visit(expression, (node) => {
     if (
       ts.isAwaitExpression(node) ||
       ts.isYieldExpression(node) ||
@@ -392,13 +414,19 @@ export function isSafeProjectionExpression(
 function isSafeProjectionCall(
   call: ts.CallExpression,
   allowedIdentifierCalls: ReadonlySet<string>,
-  allowedPropertyCalls: ReadonlySet<string>
+  allowedPropertyCalls: ReadonlySet<string>,
 ): boolean {
   const callee = call.expression;
-  if (ts.isIdentifier(callee)) return allowedIdentifierCalls.has(callee.text);
-  if (!ts.isPropertyAccessExpression(callee)) return false;
+  if (ts.isIdentifier(callee)) {
+    return allowedIdentifierCalls.has(callee.text);
+  }
+  if (!ts.isPropertyAccessExpression(callee)) {
+    return false;
+  }
   const name = callee.name.text;
-  if (["filter", "findIndex", "join", "slice", "trim"].includes(name)) return true;
+  if (["filter", "findIndex", "join", "slice", "trim"].includes(name)) {
+    return true;
+  }
   const root = callRootIdentifier(callee);
   if (
     ts.isIdentifier(callee.expression) &&
@@ -416,7 +444,11 @@ export function jsxSubtreeAncestors(node: ts.Node, boundary: ts.Node): JsxSubtre
     current && current !== boundary;
     current = current.parent
   ) {
-    if (ts.isJsxElement(current) || ts.isJsxFragment(current) || ts.isJsxSelfClosingElement(current)) {
+    if (
+      ts.isJsxElement(current) ||
+      ts.isJsxFragment(current) ||
+      ts.isJsxSelfClosingElement(current)
+    ) {
       ancestors.push(current);
     }
   }

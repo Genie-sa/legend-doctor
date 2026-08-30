@@ -1,9 +1,4 @@
-export const ANALYSIS_COVERAGE_STAGES = [
-  "parser",
-  "lowering",
-  "semantic",
-  "detector",
-] as const;
+export const ANALYSIS_COVERAGE_STAGES = ["parser", "lowering", "semantic", "detector"] as const;
 
 export type AnalysisCoverageStage = (typeof ANALYSIS_COVERAGE_STAGES)[number];
 
@@ -63,16 +58,26 @@ function compareText(left: string, right: string): number {
 
 function compareTargets(left: AnalysisCoverageTarget, right: AnalysisCoverageTarget): number {
   const fileOrder = compareText(left.file, right.file);
-  if (fileOrder !== 0) return fileOrder;
+  if (fileOrder !== 0) {
+    return fileOrder;
+  }
 
-  if (left.kind !== right.kind) return left.kind === "file" ? -1 : 1;
-  if (left.kind === "file" || right.kind === "file") return 0;
+  if (left.kind !== right.kind) {
+    return left.kind === "file" ? -1 : 1;
+  }
+  if (left.kind === "file" || right.kind === "file") {
+    return 0;
+  }
 
   const startOrder = left.start - right.start;
-  if (startOrder !== 0) return startOrder;
+  if (startOrder !== 0) {
+    return startOrder;
+  }
 
   const endOrder = left.end - right.end;
-  if (endOrder !== 0) return endOrder;
+  if (endOrder !== 0) {
+    return endOrder;
+  }
 
   return compareText(left.name ?? "", right.name ?? "");
 }
@@ -86,12 +91,16 @@ function requireNonBlank(value: string, field: string): string {
 
 function normalizeTarget(target: AnalysisCoverageTarget): AnalysisCoverageTarget {
   const file = requireNonBlank(target.file, "coverage target file");
-  if (target.kind === "file") return { kind: "file", file };
+  if (target.kind === "file") {
+    return { kind: "file", file };
+  }
   if (target.kind !== "function") {
     throw new TypeError("coverage target kind must be file or function");
   }
 
-  if (target.name !== null) requireNonBlank(target.name, "function target name");
+  if (target.name !== null) {
+    requireNonBlank(target.name, "function target name");
+  }
   if (!Number.isSafeInteger(target.start) || target.start < 0) {
     throw new TypeError("function target start must be a non-negative safe integer");
   }
@@ -100,28 +109,28 @@ function normalizeTarget(target: AnalysisCoverageTarget): AnalysisCoverageTarget
   }
 
   return {
-    kind: "function",
+    end: target.end,
     file,
+    kind: "function",
     name: target.name,
     start: target.start,
-    end: target.end,
   };
 }
 
 function normalizeOutcome(
   stage: AnalysisCoverageStage,
-  outcome: AnalysisCoverageOutcome
+  outcome: AnalysisCoverageOutcome,
 ): AnalysisCoverageOutcome {
   if (!COVERAGE_STATUSES.has(outcome.status)) {
     throw new TypeError(`coverage stage ${stage} has an invalid status`);
   }
 
   return {
-    status: outcome.status,
     reason: {
       code: requireNonBlank(outcome.reason.code, `coverage stage ${stage} reason code`),
       message: requireNonBlank(outcome.reason.message, `coverage stage ${stage} reason message`),
     },
+    status: outcome.status,
   };
 }
 
@@ -129,16 +138,18 @@ function normalizeStages(stages: AnalysisCoverageStages): AnalysisCoverageStages
   const suppliedStages = Object.keys(stages);
   if (
     suppliedStages.length !== ANALYSIS_COVERAGE_STAGES.length ||
-    suppliedStages.some(stage => !(ANALYSIS_COVERAGE_STAGES as readonly string[]).includes(stage))
+    suppliedStages.some((stage) => !(ANALYSIS_COVERAGE_STAGES as readonly string[]).includes(stage))
   ) {
-    throw new TypeError("coverage must explicitly report parser, lowering, semantic, and detector stages");
+    throw new TypeError(
+      "coverage must explicitly report parser, lowering, semantic, and detector stages",
+    );
   }
 
   return {
-    parser: normalizeOutcome("parser", stages.parser),
-    lowering: normalizeOutcome("lowering", stages.lowering),
-    semantic: normalizeOutcome("semantic", stages.semantic),
     detector: normalizeOutcome("detector", stages.detector),
+    lowering: normalizeOutcome("lowering", stages.lowering),
+    parser: normalizeOutcome("parser", stages.parser),
+    semantic: normalizeOutcome("semantic", stages.semantic),
   };
 }
 
@@ -155,9 +166,11 @@ export class AnalysisCoverageLedger {
   constructor(expectedTargets: readonly AnalysisCoverageTarget[] = []) {
     const expected = new Map<string, AnalysisCoverageTarget>();
     for (const candidate of expectedTargets) {
-      const target = normalizeTarget(candidate);
-      const key = targetKey(target);
-      if (expected.has(key)) throw new Error(`duplicate expected coverage target: ${key}`);
+      const target = normalizeTarget(candidate),
+        key = targetKey(target);
+      if (expected.has(key)) {
+        throw new Error(`duplicate expected coverage target: ${key}`);
+      }
       expected.set(key, target);
     }
     this.#expectedTargets = expected;
@@ -165,10 +178,10 @@ export class AnalysisCoverageLedger {
 
   record(entry: AnalysisCoverageEntry): void {
     const normalized: AnalysisCoverageEntry = {
-      target: normalizeTarget(entry.target),
-      stages: normalizeStages(entry.stages),
-    };
-    const key = targetKey(normalized.target);
+        stages: normalizeStages(entry.stages),
+        target: normalizeTarget(entry.target),
+      },
+      key = targetKey(normalized.target);
     if (this.#expectedTargets.size > 0 && !this.#expectedTargets.has(key)) {
       throw new Error(`unexpected coverage target: ${key}`);
     }
@@ -187,13 +200,14 @@ export class AnalysisCoverageLedger {
   report(): AnalysisCoverageReport {
     const missing = [...this.#expectedTargets].filter(([key]) => !this.#entries.has(key));
     if (missing.length > 0) {
-      throw new Error(`coverage targets were not recorded: ${missing.map(([key]) => key).join(", ")}`);
+      throw new Error(
+        `coverage targets were not recorded: ${missing.map(([key]) => key).join(", ")}`,
+      );
     }
     return {
-      schemaVersion: 1,
       entries: [...this.#entries.values()]
         .sort((left, right) => compareTargets(left.target, right.target))
-        .map(entry => ({
+        .map((entry) => ({
           target: { ...entry.target },
           stages: {
             parser: normalizeOutcome("parser", entry.stages.parser),
@@ -202,6 +216,7 @@ export class AnalysisCoverageLedger {
             detector: normalizeOutcome("detector", entry.stages.detector),
           },
         })),
+      schemaVersion: 1,
     };
   }
 

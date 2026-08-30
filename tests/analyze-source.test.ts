@@ -5,7 +5,7 @@ import { analyzeSource } from "../src/analyze-source.js";
 import { agentFindings } from "../src/format.js";
 
 function actions(source: string): string[] {
-  return analyzeSource(source, "fixture.tsx").map(finding => finding.action);
+  return analyzeSource(source, "fixture.tsx").map((finding) => finding.action);
 }
 
 test("keeps state rendered by its owner", () => {
@@ -17,12 +17,13 @@ test("keeps state rendered by its owner", () => {
         return <button onClick={() => setCount(count + 1)}>{count}</button>;
       }
     `),
-    ["keep-state"]
+    ["keep-state"],
   );
 });
 
 test("isolates direct controlled child state when a sibling proves an owner render cut", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -31,13 +32,16 @@ test("isolates direct controlled child state when a sibling proves an owner rend
       const submit = () => save(value);
       return <main><Field value={value} onChangeText={setValue} /><Preview /><button onClick={submit} /></main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /non-tracking reads in submit or commit commands/);
 });
 
 test("isolates property-local object draft edits without splitting coupled commands", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     interface Draft { title: string; notes: string; }
     const EMPTY_DRAFT: Draft = { title: "", notes: "" };
@@ -95,17 +99,23 @@ test("isolates property-local object draft edits without splitting coupled comma
         <button onClick={submit}>Save</button>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
 
-  assert.equal(findings.find(finding => finding.name === "draft")?.action, "use-observable");
-  assert.match(findings.find(finding => finding.name === "draft")?.message ?? "", /property leaf/);
-  for (const finding of findings.filter(finding => finding.name === "draft").slice(1)) {
+  assert.equal(findings.find((finding) => finding.name === "draft")?.action, "use-observable");
+  assert.match(
+    findings.find((finding) => finding.name === "draft")?.message ?? "",
+    /property leaf/,
+  );
+  for (const finding of findings.filter((finding) => finding.name === "draft").slice(1)) {
     assert.doesNotMatch(finding.message, /object draft/);
   }
 });
 
 test("isolates an exact controlled array membership toggle", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     import { useForm } from "react-hook-form";
     function CheckboxGroup(_props: unknown) { return null; }
@@ -138,14 +148,17 @@ test("isolates an exact controlled array membership toggle", () => {
         <button onClick={submit}>Save</button>
       </main>;
     }
-  `, "fixture.tsx").filter(finding => finding.name === "selected");
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.name === "selected");
   assert.equal(findings[0]?.action, "use-observable");
   assert.notEqual(findings[1]?.action, "use-observable");
 });
 
 test("recognizes standard boolean controlled-child callbacks", () => {
   for (const callback of ["onCheckedChange", "onToggle"]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function Switch(_props: unknown) { return null; }
       function Preview() { return null; }
@@ -158,14 +171,17 @@ test("recognizes standard boolean controlled-child callbacks", () => {
           <button onClick={submit}>Save</button>
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.equal(finding?.action, "use-observable", callback);
   }
 });
 
 test("recognizes descriptive value-transition callbacks on controlled leaves", () => {
   for (const callback of ["onInputChange", "onSelectCover", "onDashboardNameChange"]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function Field(_props: unknown) { return null; }
       function Preview() { return null; }
@@ -178,13 +194,16 @@ test("recognizes descriptive value-transition callbacks on controlled leaves", (
           <button onClick={submit}>Save</button>
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.equal(finding?.action, "use-observable", callback);
   }
 });
 
 test("moves call-site-owned custom controlled state into that leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Filter(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -195,12 +214,15 @@ test("moves call-site-owned custom controlled state into that leaf", () => {
         <Preview />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "move-state-down");
 });
 
 test("keeps controlled state already owned by one cohesive leaf", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function Input(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -216,14 +238,17 @@ test("keeps controlled state already owned by one cohesive leaf", () => {
         <Preview /><Preview /><Preview /><Preview /><Preview /><Preview />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(findings[0]?.action, "keep-state");
   assert.equal(findings[1]?.action, "move-state-down");
 });
 
 test("keeps call-site-owned state above a conditionally mounted controlled leaf", () => {
   for (const alternateReturn of [false, true]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function Menu(_props: unknown) { return null; }
       function Alternative() { return null; }
@@ -236,14 +261,17 @@ test("keeps call-site-owned state above a conditionally mounted controlled leaf"
           <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.equal(finding?.action, "use-observable");
     assert.match(finding?.message ?? "", /keep ownership at this owner/i);
   }
 });
 
 test("keeps controlled menu ownership above descendant close commands", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     import { Menu } from "third-party-ui";
     export function Widget({ enabled, onEdit }: { enabled: boolean; onEdit: () => void }) {
@@ -256,13 +284,16 @@ test("keeps controlled menu ownership above descendant close commands", () => {
         <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /keep ownership at this owner/i);
 });
 
 test("does not isolate call-site-owned state when it controls the child mount", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Menu(_props: unknown) { return null; }
     export function Toolbar() {
@@ -273,12 +304,15 @@ test("does not isolate call-site-owned state when it controls the child mount", 
         <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("does not isolate call-site-owned state in repeated controlled leaves", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Menu(_props: unknown) { return null; }
     export function Toolbar({ rows }: { rows: Array<{ id: string }> }) {
@@ -289,14 +323,17 @@ test("does not isolate call-site-owned state in repeated controlled leaves", () 
         <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.doesNotMatch(finding?.message ?? "", /branch-local `Menu` call site/);
 });
 
 test("does not treat an arbitrary setter prop as call-site-owned state", () => {
   for (const callback of ["register", "setCache"]) {
     for (const conditional of [false, true]) {
-      const [finding] = analyzeSource(`
+      const [finding] = analyzeSource(
+        `
         import { useState } from "react";
         function Registry(_props: unknown) { return null; }
         function Alternative() { return null; }
@@ -309,18 +346,21 @@ test("does not treat an arbitrary setter prop as call-site-owned state", () => {
             <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
           </main>;
         }
-      `, "fixture.tsx");
+      `,
+        "fixture.tsx",
+      );
       assert.notEqual(
         finding?.action,
         conditional ? "use-observable" : "move-state-down",
-        `${callback}/${conditional}`
+        `${callback}/${conditional}`,
       );
     }
   }
 });
 
 test("recognizes explicit setter props as value-transition APIs", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Editor(_props: unknown) { return null; }
     function Alternative() { return null; }
@@ -333,12 +373,15 @@ test("recognizes explicit setter props as value-transition APIs", () => {
         <Status /><Footer /><Aside /><Preview /><Details /><Metrics />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("does not split custom controlled fields that share one validation projection", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Submit(_props: unknown) { return null; }
@@ -355,13 +398,16 @@ test("does not split custom controlled fields that share one validation projecti
         <Preview />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.filter(finding => finding.action === "use-observable").length, 0);
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.filter((finding) => finding.action === "use-observable").length, 0);
 });
 
 test("does not treat arbitrary callback props as controlled value transitions", () => {
   for (const callback of ["onClick", "onSubmit", "register", "renderValue"]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function Field(_props: unknown) { return null; }
       function Preview() { return null; }
@@ -370,13 +416,16 @@ test("does not treat arbitrary callback props as controlled value transitions", 
         const submit = () => save(value);
         return <main><Field value={value} ${callback}={setValue} /><Preview /><button onClick={submit} /></main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable", callback);
   }
 });
 
 test("isolates a direct inline controlled-input setter", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -389,12 +438,15 @@ test("isolates a direct inline controlled-input setter", () => {
         <button onClick={submit}>Save</button>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("isolates a controlled input and its complete sibling validation projection", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -408,13 +460,16 @@ test("isolates a controlled input and its complete sibling validation projection
         <Submit disabled={!query.trim()} onClick={submit} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /derive validation from the subscribed value/);
 });
 
 test("allows one pure validation alias shared with an event command", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -429,12 +484,15 @@ test("allows one pure validation alias shared with an event command", () => {
         <Submit disabled={!canSubmit} onClick={submit} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("resolves a strict controlled-input setter adapter", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -449,12 +507,15 @@ test("resolves a strict controlled-input setter adapter", () => {
         <Submit disabled={name.trim().length === 0} onClick={submit} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("keeps controlled ownership above a state-independent conditional field", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -468,13 +529,16 @@ test("keeps controlled ownership above a state-independent conditional field", (
         <Submit disabled={!value.trim()} onClick={submit} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /owner-scoped observable/);
 });
 
 test("keeps controlled ownership above state-independent early returns", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Header() { return null; }
@@ -488,13 +552,16 @@ test("keeps controlled ownership above state-independent early returns", () => {
         <Field value={value} onChangeText={setValue} onBlur={submit} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /controlled state/);
 });
 
 test("isolates a controlled leaf in one of several prop-selected returns", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Header() { return null; }
@@ -505,12 +572,15 @@ test("isolates a controlled leaf in one of several prop-selected returns", () =>
       if (mode !== "edit") return <Alternative />;
       return <main><Header /><Field value={value} onChange={setValue} onBlur={submit} /></main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("does not use a stored controlled JSX value as a branch callsite", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Header() { return null; }
@@ -520,12 +590,15 @@ test("does not use a stored controlled JSX value as a branch callsite", () => {
       if (disabled) return <Header />;
       return <main><Header />{field}</main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("does not call a state-controlled early return a controlled leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Empty(_props: unknown) { return null; }
@@ -535,12 +608,15 @@ test("does not call a state-controlled early return a controlled leaf", () => {
       if (!value) return <Empty onStart={() => setValue("start")} />;
       return <main><Header /><Field value={value} onChangeText={setValue} /></main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.doesNotMatch(finding?.message ?? "", /Replace controlled state/);
 });
 
 test("does not split one controlled value across alternate return branches", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function CompactField(_props: unknown) { return null; }
     function FullField(_props: unknown) { return null; }
@@ -550,7 +626,9 @@ test("does not split one controlled value across alternate return branches", () 
       if (compact) return <CompactField value={value} onChangeText={setValue} />;
       return <main><Header /><FullField value={value} onChangeText={setValue} /></main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -562,7 +640,8 @@ test("does not isolate incomplete or nested validation projections", () => {
     `<main><Preview /><Field value={value} onChangeText={setValue} /><Submit disabled={validate(value)} /></main>`,
     `<main><Field value={value} onChangeText={setValue} /><Submit disabled={!value} /><button><span /></button></main>`,
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function Field(_props: unknown) { return null; }
       function Form(_props: unknown) { return null; }
@@ -572,13 +651,16 @@ test("does not isolate incomplete or nested validation projections", () => {
         const [value, setValue] = useState("");
         return ${body};
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable", body);
   }
 });
 
 test("does not resolve a controlled setter adapter with additional work", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -595,12 +677,15 @@ test("does not resolve a controlled setter adapter with additional work", () => 
         <Submit disabled={!name.trim()} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("keeps owner rerenders when controlled input validity is read through a ref", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useRef, useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -618,7 +703,9 @@ test("keeps owner rerenders when controlled input validity is read through a ref
         </form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -627,7 +714,8 @@ test("does not trace multi-hop validation aliases or repeated validation broadca
     `<main><Preview /><Field value={value} onChangeText={setValue} /><Submit disabled={!canSubmit} /></main>`,
     `<main><Preview /><Field value={value} onChangeText={setValue} />{rows.map(row => <Submit key={row.id} disabled={value !== row.id} />)}</main>`,
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function Field(_props: unknown) { return null; }
       function Preview() { return null; }
@@ -638,7 +726,9 @@ test("does not trace multi-hop validation aliases or repeated validation broadca
         const canSubmit = trimmed.length > 0;
         return ${rendered};
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable", rendered);
   }
 });
@@ -649,7 +739,8 @@ test("does not isolate inline controlled setters with extra or scheduled work", 
     `event => setTimeout(() => setEmail(event.target.value), 0)`,
     `event => setEmail(normalize(event.target.value))`,
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function Field(_props: unknown) { return null; }
       function Preview() { return null; }
@@ -662,25 +753,31 @@ test("does not isolate inline controlled setters with extra or scheduled work", 
           <button onClick={submit}>Save</button>
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable");
   }
 });
 
 test("keeps a controlled child without an independent render-cut witness", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     export function FieldOwner() {
       const [value, setValue] = useState("");
       return <Field value={value} onChangeText={setValue} />;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "keep-state");
 });
 
 test("uses independent host siblings as a controlled render-cut witness", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     export function Form() {
@@ -692,12 +789,15 @@ test("uses independent host siblings as a controlled render-cut witness", () => 
         <button onClick={submit}>Export</button>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("uses an unresolved JSX component sibling as a controlled render-cut witness", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     import { SummaryPanel } from "./summary-panel";
     function Field(_props: unknown) { return null; }
@@ -709,12 +809,15 @@ test("uses an unresolved JSX component sibling as a controlled render-cut witnes
         <SummaryPanel onSubmit={submit} />
       </>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("does not treat a Fragment as an independent component boundary", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import React, { useState } from "react";
     function Field(_props: unknown) { return null; }
     export function Form() {
@@ -726,12 +829,15 @@ test("does not treat a Fragment as an independent component boundary", () => {
         </React.Fragment>
       </>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("treats a local helper invoked by a JSX event as a deferred command", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -743,12 +849,15 @@ test("treats a local helper invoked by a JSX event as a deferred command", () =>
         <Preview />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("does not split a controlled state transaction across independent migrations", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -762,12 +871,15 @@ test("does not split a controlled state transaction across independent migration
         <Preview />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.filter(finding => finding.action === "use-observable").length, 0);
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.filter((finding) => finding.action === "use-observable").length, 0);
 });
 
 test("isolates a controlled edit path even when a separate reset co-writes sibling state", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Form() {
       const [name, setName] = useState("");
@@ -779,13 +891,16 @@ test("isolates a controlled edit path even when a separate reset co-writes sibli
         <Status dirty={dirty} /><Sidebar /><Banner /><Navigation /><Details />
       </Page>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /controlled state/);
 });
 
 test("does not call a multi-command input callback an independent controlled edit", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Form() {
       const [name, setName] = useState("");
@@ -797,12 +912,15 @@ test("does not call a multi-command input callback an independent controlled edi
         <Status dirty={dirty} /><Sidebar /><Banner /><Navigation /><Details />
       </Page>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("does not use dead JSX or a controlled-child ancestor as a render-cut witness", () => {
-  const dead = analyzeSource(`
+  const dead = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -811,10 +929,13 @@ test("does not use dead JSX or a controlled-child ancestor as a render-cut witne
       const unused = <Preview />;
       return <Field value={value} onChangeText={setValue} />;
     }
-  `, "fixture.tsx")[0];
+  `,
+    "fixture.tsx",
+  )[0];
   assert.notEqual(dead?.action, "use-observable");
 
-  const ancestor = analyzeSource(`
+  const ancestor = analyzeSource(
+    `
     import { useState } from "react";
     function FormShell(_props: unknown) { return null; }
     function Field(_props: unknown) { return null; }
@@ -822,12 +943,15 @@ test("does not use dead JSX or a controlled-child ancestor as a render-cut witne
       const [value, setValue] = useState("");
       return <FormShell><Field value={value} onChangeText={setValue} /></FormShell>;
     }
-  `, "fixture.tsx")[0];
+  `,
+    "fixture.tsx",
+  )[0];
   assert.notEqual(ancestor?.action, "use-observable");
 });
 
 test("does not isolate controlled state with a render-phase setter", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -836,12 +960,16 @@ test("does not isolate controlled state with a render-phase setter", () => {
       if (reset && value) setValue("");
       return <main><Field value={value} onChangeText={setValue} /><Preview /></main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("does not isolate controlled state read by an effect-like lifecycle hook", () => {
-  const source = (hookImport: string, hookCall: string) => analyzeSource(`
+  const source = (hookImport: string, hookCall: string) =>
+    analyzeSource(
+      `
     import { useState, ${hookImport} } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -850,14 +978,18 @@ test("does not isolate controlled state read by an effect-like lifecycle hook", 
       ${hookCall}(() => save(value), [value]);
       return <main><Field value={value} onChangeText={setValue} /><Preview /></main>;
     }
-  `, "fixture.tsx")[0];
+  `,
+      "fixture.tsx",
+    )[0];
   assert.notEqual(source("useLayoutEffect", "useLayoutEffect")?.action, "use-observable");
   assert.notEqual(source("useInsertionEffect as useInsert", "useInsert")?.action, "use-observable");
 });
 
 test("tracks state reads and writes through React lifecycle callback bindings", () => {
-  const siblings = "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />";
-  const findings = analyzeSource(`
+  const siblings =
+      "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />",
+    findings = analyzeSource(
+      `
     import React, {
       useCallback,
       useEffect,
@@ -894,10 +1026,14 @@ test("tracks state reads and writes through React lifecycle callback bindings", 
       useEffect(synchronize, [synchronize]);
       return <main>${siblings}{visible && <Leaf />}</main>;
     }
-  `, "fixture.tsx");
-  const stateFor = (owner: string) => findings.find(finding =>
-    finding.hook === "useState" && finding.evidence[0]?.startsWith(`owner: ${owner},`)
-  );
+  `,
+      "fixture.tsx",
+    ),
+    stateFor = (owner: string) =>
+      findings.find(
+        (finding) =>
+          finding.hook === "useState" && finding.evidence[0]?.startsWith(`owner: ${owner},`),
+      );
 
   assert.equal(stateFor("InlineLayout")?.action, "review-state");
   assert.match(stateFor("InlineLayout")?.evidence[1] ?? "", /effects 1/);
@@ -908,14 +1044,12 @@ test("tracks state reads and writes through React lifecycle callback bindings", 
   assert.match(stateFor("AliasedInsertion")?.evidence[1] ?? "", /effects 1/);
   assert.equal(stateFor("NamedEffect")?.action, "review-state");
   assert.match(stateFor("NamedEffect")?.evidence[2] ?? "", /effect writes 1/);
-  assert.equal(
-    findings.filter(finding => finding.hook === "useEffect").length,
-    1
-  );
+  assert.equal(findings.filter((finding) => finding.hook === "useEffect").length, 1);
 });
 
 test("does not isolate state whose update is scheduled by a React transition", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { startTransition as schedule, useState, useTransition } from "react";
     function Leaf(_props: unknown) { return null; }
     function Shell(_props: unknown) { return null; }
@@ -1002,10 +1136,12 @@ test("does not isolate state whose update is scheduled by a React transition", (
         {visible && <Leaf />}
       </main>;
     }
-  `, "fixture.tsx");
-  const visible = findings.filter(finding => finding.name === "visible");
+  `,
+      "fixture.tsx",
+    ),
+    visible = findings.filter((finding) => finding.name === "visible");
   assert.deepEqual(
-    visible.map(finding => finding.action),
+    visible.map((finding) => finding.action),
     [
       "use-observable",
       "review-state",
@@ -1017,12 +1153,13 @@ test("does not isolate state whose update is scheduled by a React transition", (
       "review-state",
       "review-state",
       "review-state",
-    ]
+    ],
   );
 });
 
 test("isolates only state proven outside direct inline React transitions", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState, useTransition } from "react";
     function Leaf(_props: unknown) { return null; }
     function Shell() { return null; }
@@ -1036,10 +1173,12 @@ test("isolates only state proven outside direct inline React transitions", () =>
         {visible && <Leaf />}{busy && <Leaf />}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
 
-  assert.equal(findings.find(finding => finding.name === "visible")?.action, "use-observable");
-  assert.equal(findings.find(finding => finding.name === "busy")?.action, "review-state");
+  assert.equal(findings.find((finding) => finding.name === "visible")?.action, "use-observable");
+  assert.equal(findings.find((finding) => finding.name === "busy")?.action, "review-state");
 });
 
 test("preserves mutable React state when its owner has an every-commit effect", () => {
@@ -1048,7 +1187,8 @@ test("preserves mutable React state when its owner has an every-commit effect", 
     ["useLayoutEffect as useLayout", "useLayout"],
     ["useInsertionEffect", "useInsertionEffect"],
   ]) {
-    const findings = analyzeSource(`
+    const findings = analyzeSource(
+      `
       import { ${hookImport}, useState } from "react";
       function Leaf(_props: unknown) { return null; }
       export function Screen() {
@@ -1059,11 +1199,14 @@ test("preserves mutable React state when its owner has an every-commit effect", 
           {visible && <Leaf />}
         </main>;
       }
-    `, "fixture.tsx");
-    assert.equal(findings.find(finding => finding.name === "visible")?.action, "review-state");
+    `,
+      "fixture.tsx",
+    );
+    assert.equal(findings.find((finding) => finding.name === "visible")?.action, "review-state");
   }
 
-  const explicitUndefined = analyzeSource(`
+  const explicitUndefined = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     function Leaf() { return null; }
     export function Screen() {
@@ -1074,13 +1217,16 @@ test("preserves mutable React state when its owner has an every-commit effect", 
         <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(
-    explicitUndefined.find(finding => finding.name === "visible")?.action,
-    "review-state"
+    explicitUndefined.find((finding) => finding.name === "visible")?.action,
+    "review-state",
   );
 
-  const explicitNull = analyzeSource(`
+  const explicitNull = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     function Leaf() { return null; }
     export function Screen() {
@@ -1090,15 +1236,15 @@ test("preserves mutable React state when its owner has an every-commit effect", 
         <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(
-    explicitNull.find(finding => finding.name === "visible")?.action,
-    "review-state"
+  `,
+    "fixture.tsx",
   );
+  assert.equal(explicitNull.find((finding) => finding.name === "visible")?.action, "review-state");
 });
 
 test("preserves mutable React state when its owner uses an inline callback ref", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function Leaf() { return null; }
     export function Screen() {
@@ -1109,13 +1255,17 @@ test("preserves mutable React state when its owner uses an inline callback ref",
         {visible && <Leaf />}
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "visible")?.action, "review-state");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "visible")?.action, "review-state");
 });
 
 test("uses an owner-level boundary for fresh refs while allowing stable memoized refs", () => {
-  const siblings = "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />";
-  const findings = analyzeSource(`
+  const siblings =
+      "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />",
+    findings = analyzeSource(
+      `
     import { useCallback, useState } from "react";
     function Leaf() { return null; }
     export function NamedRef() {
@@ -1184,10 +1334,12 @@ test("uses an owner-level boundary for fresh refs while allowing stable memoized
         : (node: unknown) => synchronizeFallback(node);
       return <main ref={setNode}>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
     }
-  `, "fixture.tsx");
-  const visible = findings.filter(finding => finding.name === "visible");
+  `,
+      "fixture.tsx",
+    ),
+    visible = findings.filter((finding) => finding.name === "visible");
   assert.deepEqual(
-    visible.map(finding => finding.action),
+    visible.map((finding) => finding.action),
     [
       "review-state",
       "review-state",
@@ -1201,12 +1353,13 @@ test("uses an owner-level boundary for fresh refs while allowing stable memoized
       "review-state",
       "review-state",
       "review-state",
-    ]
+    ],
   );
 });
 
 test("does not call a nonliteral dependency array an every-commit effect", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     function Leaf() { return null; }
     export function Screen({ dependency }: { dependency: string }) {
@@ -1217,12 +1370,15 @@ test("does not call a nonliteral dependency array an every-commit effect", () =>
         <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "visible")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "visible")?.action, "use-observable");
 });
 
 test("does not trust shadowed React effect bindings", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     function Leaf() { return null; }
     export function Screen({ useEffect }: { useEffect: (callback: () => void) => void }) {
@@ -1232,11 +1388,14 @@ test("does not trust shadowed React effect bindings", () => {
         <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "visible")?.action, "use-observable");
-  assert.equal(findings.filter(finding => finding.hook === "useEffect").length, 0);
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "visible")?.action, "use-observable");
+  assert.equal(findings.filter((finding) => finding.hook === "useEffect").length, 0);
 
-  const unrelatedNestedShadow = analyzeSource(`
+  const unrelatedNestedShadow = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     function Leaf() { return null; }
     export function Screen() {
@@ -1247,16 +1406,23 @@ test("does not trust shadowed React effect bindings", () => {
         <button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(
-    unrelatedNestedShadow.find(finding => finding.name === "visible")?.action,
-    "review-state"
+    unrelatedNestedShadow.find((finding) => finding.name === "visible")?.action,
+    "review-state",
   );
 });
 
 test("does not isolate controlled state captured by timers or subscriptions", () => {
-  for (const root of ["subscribe(listener)", "setInterval(listener, 100)", "useFocusEffect(listener)"]) {
-    const [finding] = analyzeSource(`
+  for (const root of [
+    "subscribe(listener)",
+    "setInterval(listener, 100)",
+    "useFocusEffect(listener)",
+  ]) {
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function Field(_props: unknown) { return null; }
       function Preview() { return null; }
@@ -1266,13 +1432,16 @@ test("does not isolate controlled state captured by timers or subscriptions", ()
         ${root};
         return <main><Field value={value} onChangeText={setValue} /><Preview /></main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable");
   }
 });
 
 test("does not change stale useCallback snapshot semantics", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     function Field(_props: unknown) { return null; }
     function Preview() { return null; }
@@ -1281,12 +1450,15 @@ test("does not change stale useCallback snapshot semantics", () => {
       const submit = useCallback(() => save(value), []);
       return <main><Field value={value} onChangeText={setValue} /><Preview /><button onClick={submit} /></main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("migrates a complete effect-synchronized draft while preserving the effect", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Profile({ initialName }: { initialName: string }) {
       const [name, setName] = useState(initialName);
@@ -1296,13 +1468,19 @@ test("migrates a complete effect-synchronized draft while preserving the effect"
         <input value={name} onChange={event => setName(event.target.value)} />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.deepEqual(findings.map(finding => finding.action), ["use-observable", "review-effect"]);
+  `,
+    "fixture.tsx",
+  );
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["use-observable", "review-effect"],
+  );
   assert.match(findings[0]?.message ?? "", /preserve the React synchronization effect/);
 });
 
 test("preserves lazy draft initialization as a once-only snapshot", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useEffect, useState } from "react";
     export function Permissions({ saved }: { saved: string[] }) {
       const [draft, setDraft] = useState(() => new Set(saved));
@@ -1312,15 +1490,18 @@ test("preserves lazy draft initialization as a once-only snapshot", () => {
         <PermissionsEditor value={draft} onChange={setDraft} />
       </main>;
     }
-  `, "fixture.tsx");
-  const state = findings.find(finding => finding.hook === "useState");
+  `,
+      "fixture.tsx",
+    ),
+    state = findings.find((finding) => finding.hook === "useState");
   assert.equal(state?.action, "use-observable");
   assert.match(state?.message ?? "", /once-only owner snapshot/);
   assert.match(state?.message ?? "", /not pass it to Legend as a computed/);
 });
 
 test("keeps a synchronized local draft beside its value-forwarding upstream command", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useCallback, useEffect, useMemo, useState } from "react";
     export function Profile({ initialName, onChange }: { initialName: string; onChange: (value: string) => void }) {
       const [name, setName] = useState(initialName);
@@ -1336,9 +1517,11 @@ test("keeps a synchronized local draft beside its value-forwarding upstream comm
         <input value={name} onChange={event => edit(event.target.value)} />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "name")?.action, "use-observable");
-  assert.equal(findings.find(finding => finding.hook === "useEffect")?.action, "review-effect");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "name")?.action, "use-observable");
+  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "review-effect");
 });
 
 test("does not call unrelated or stateful work a synchronized draft forwarding command", () => {
@@ -1349,7 +1532,8 @@ test("does not call unrelated or stateful work a synchronized draft forwarding c
     `const markDirty = (next: string) => setDirty(next !== "");
      const edit = (next: string) => { const updated = next.trim(); setName(updated); markDirty(updated); };`,
   ]) {
-    const findings = analyzeSource(`
+    const findings = analyzeSource(
+      `
       import { useEffect, useState } from "react";
       export function Profile({ initialName }: { initialName: string }) {
         const [name, setName] = useState(initialName);
@@ -1361,17 +1545,20 @@ test("does not call unrelated or stateful work a synchronized draft forwarding c
           <input value={name} onChange={event => edit(event.target.value)} /><p>{dirty}</p>
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(
-      findings.find(finding => finding.name === "name")?.action,
+      findings.find((finding) => finding.name === "name")?.action,
       "use-observable",
-      edit
+      edit,
     );
   }
 });
 
 test("groups every state written by one synchronization effect", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useEffect, useState } from "react";
     export function Address({ city: initialCity, zip: initialZip }: { city: string; zip: string }) {
       const [city, setCity] = useState(initialCity);
@@ -1388,16 +1575,22 @@ test("groups every state written by one synchronization effect", () => {
         <input value={zip} onChange={event => setZip(event.target.value)} />
       </main>;
     }
-  `, "fixture.tsx");
-  const states = findings.filter(finding => finding.hook === "useState");
-  assert.deepEqual(states.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+      "fixture.tsx",
+    ),
+    states = findings.filter((finding) => finding.hook === "useState");
+  assert.deepEqual(
+    states.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(states[0]?.group?.members, ["city", "zip"]);
   assert.equal(states[0]?.group?.primary, true);
   assert.equal(states[1]?.group?.primary, false);
 });
 
 test("groups branch-complete drafts edited through a direct host callback", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useEffect, useState } from "react";
     export function Editor({ open, saved }: { open: boolean; saved: { name: string; color: string } | null }) {
       const [name, setName] = useState("");
@@ -1418,14 +1611,20 @@ test("groups branch-complete drafts edited through a direct host callback", () =
         <button style={{ color }} onClick={() => { notify(); setColor("blue"); }} />
       </main>;
     }
-  `, "fixture.tsx");
-  const states = findings.filter(finding => finding.hook === "useState");
-  assert.deepEqual(states.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+      "fixture.tsx",
+    ),
+    states = findings.filter((finding) => finding.hook === "useState");
+  assert.deepEqual(
+    states.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(states[0]?.group?.members, ["name", "color"]);
 });
 
 test("treats TypeScript-only JSX wrappers as direct draft transport", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useEffect, useState } from "react";
     type Country = string & { readonly country: unique symbol };
     export function Address({ saved }: { saved: { country: string; city: string; state: string; zip: string } }) {
@@ -1456,19 +1655,20 @@ test("treats TypeScript-only JSX wrappers as direct draft transport", () => {
         />
       </main>;
     }
-  `, "fixture.tsx");
-  const states = findings.filter(finding => finding.hook === "useState");
-  assert.deepEqual(states.map(finding => finding.action), [
-    "use-observable",
-    "use-observable",
-    "use-observable",
-    "use-observable",
-  ]);
+  `,
+      "fixture.tsx",
+    ),
+    states = findings.filter((finding) => finding.hook === "useState");
+  assert.deepEqual(
+    states.map((finding) => finding.action),
+    ["use-observable", "use-observable", "use-observable", "use-observable"],
+  );
   assert.deepEqual(states[0]?.group?.members, ["country", "city", "region", "zip"]);
 });
 
 test("isolates an effect-synchronized preview from its sibling producer", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useCallback, useEffect, useState } from "react";
     export function Picker({ items }: { items: string[] }) {
       const [active, setActive] = useState<string | null>(null);
@@ -1481,14 +1681,20 @@ test("isolates an effect-synchronized preview from its sibling producer", () => 
         <Footer /><Help /><Status />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "active")?.action, "use-observable");
-  assert.equal(findings.find(finding => finding.hook === "useEffect")?.action, "review-effect");
-  assert.match(findings.find(finding => finding.name === "active")?.message ?? "", /sibling.*Preview/i);
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "active")?.action, "use-observable");
+  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "review-effect");
+  assert.match(
+    findings.find((finding) => finding.name === "active")?.message ?? "",
+    /sibling.*Preview/i,
+  );
 });
 
 test("keeps opaque fallback work in the owner as a sibling preview snapshot", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useCallback, useEffect, useState } from "react";
     export function Picker({ items }: { items: string[] }) {
       const [active, setActive] = useState<string | null>(null);
@@ -1500,14 +1706,17 @@ test("keeps opaque fallback work in the owner as a sibling preview snapshot", ()
         <Footer /><Help /><Status />
       </main>;
     }
-  `, "fixture.tsx");
-  const state = findings.find(finding => finding.name === "active");
+  `,
+      "fixture.tsx",
+    ),
+    state = findings.find((finding) => finding.name === "active");
   assert.equal(state?.action, "use-observable");
   assert.match(state?.message ?? "", /state-independent fallback inputs as ordinary snapshots/);
 });
 
 test("does not isolate a fallback expression that reads the state twice", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Picker() {
       const [active, setActive] = useState<string | null>(null);
@@ -1517,12 +1726,15 @@ test("does not isolate a fallback expression that reads the state twice", () => 
         <Footer /><Help /><Status />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("isolates a chart cursor in a stable sibling labels subtree", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function ChartCard({ rows }: { rows: Array<{ id: string; label: string }> }) {
       const [active, setActive] = useState<string | null>(null);
@@ -1533,13 +1745,16 @@ test("isolates a chart cursor in a stable sibling labels subtree", () => {
         <Header /><Footer /><Help />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /sibling.*<div>/i);
 });
 
 test("isolates direct setter transport from its sibling value consumer", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Picker() {
       const [showFade, setShowFade] = useState(false);
@@ -1549,7 +1764,9 @@ test("isolates direct setter transport from its sibling value consumer", () => {
         <Header /><Footer /><Help />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /sibling.*Preview/i);
 });
@@ -1563,19 +1780,23 @@ test("requires one stable producer and one complete sibling consumer", () => {
     `<>{rows.map(row => <Grid key={row.id} onActive={item => setActive(item)} />)}<Preview item={active} /></>`,
   ];
   for (const rendered of snippets) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       export function Picker({ rows }: { rows: Array<{ id: string }> }) {
         const [active, setActive] = useState<string | null>(null);
         return <main>${rendered}<Footer /><Help /><Status /><Actions /></main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable");
   }
 });
 
 test("does not isolate a sibling preview when its alias also drives owner work", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Picker({ items }: { items: string[] }) {
       const [active, setActive] = useState<string | null>(null);
@@ -1583,12 +1804,15 @@ test("does not isolate a sibling preview when its alias also drives owner work",
       usePreviewQuery(preview);
       return <main><Grid onActive={item => setActive(item)} /><Preview item={preview} /><Footer /><Help /><Status /></main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("does not call a producer command-only when it also invokes owner work", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Picker({ notify }: { notify: () => void }) {
       const [active, setActive] = useState<string | null>(null);
@@ -1602,12 +1826,15 @@ test("does not call a producer command-only when it also invokes owner work", ()
         <Header /><Footer /><Help />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("uses a strict local JSX cut for a compact synchronized draft", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useEffect, useState } from "react";
     export function Editor({ open, saved }: { open: boolean; saved: string }) {
       const [value, setValue] = useState(saved);
@@ -1622,14 +1849,20 @@ test("uses a strict local JSX cut for a compact synchronized draft", () => {
         <Footer /><Cancel /><Save onError={() => setError("invalid")} />
       </Dialog>;
     }
-  `, "fixture.tsx");
-  const states = findings.filter(finding => finding.hook === "useState");
-  assert.deepEqual(states.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+      "fixture.tsx",
+    ),
+    states = findings.filter((finding) => finding.hook === "useState");
+  assert.deepEqual(
+    states.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(states[0]?.group?.members, ["value", "error"]);
 });
 
 test("does not use owner line count as proof of a synchronized draft cut", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Tiny({ saved }: { saved: string }) {
       const [value, setValue] = useState(saved);
@@ -1637,24 +1870,30 @@ test("does not use owner line count as proof of a synchronized draft cut", () =>
       ${"\n".repeat(120)}
       return <label><input value={value} onChange={setValue} /></label>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "value")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
 });
 
 test("requires a synchronized draft's one call site to contain every render read", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Compact({ saved }: { saved: string | null }) {
       const [value, setValue] = useState(saved);
       useEffect(() => { setValue(saved); }, [saved]);
       return <main><Header />{value && <Editor value={value} onChange={setValue} />}</main>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "value")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
 });
 
 test("does not change a synchronized draft's stale deferred snapshot", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useCallback, useEffect, useState } from "react";
     export function Editor({ saved }: { saved: string }) {
       const [value, setValue] = useState(saved);
@@ -1664,8 +1903,10 @@ test("does not change a synchronized draft's stale deferred snapshot", () => {
         <input value={value} onChange={setValue} /><button onClick={save}>Save</button>
       </main>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "value")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
 });
 
 test("rejects reset mirrors, hook-fed owner work, and edit commands with external work", () => {
@@ -1675,12 +1916,14 @@ test("rejects reset mirrors, hook-fed owner work, and edit commands with externa
     `useEffect(() => { setValue(source); }, [source]);`,
   ];
   for (const [index, setup] of snippets.entries()) {
-    const edit = index === 0
-      ? `const edit = () => setValue(source);`
-      : index === 2
-      ? `const edit = () => { setValue("edit"); updateExternal(); };`
-      : `const edit = () => setValue("edit");`;
-    const [finding] = analyzeSource(`
+    const edit =
+      index === 0
+        ? `const edit = () => setValue(source);`
+        : index === 2
+          ? `const edit = () => { setValue("edit"); updateExternal(); };`
+          : `const edit = () => setValue("edit");`;
+    const [finding] = analyzeSource(
+      `
       import { useEffect, useState } from "react";
       export function Form({ source }: { source: string }) {
         const [value, setValue] = useState<string | null>(source);
@@ -1688,13 +1931,16 @@ test("rejects reset mirrors, hook-fed owner work, and edit commands with externa
         ${edit}
         return <main><Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><p>{value}</p><button onClick={edit} /></main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable");
   }
 });
 
 test("keeps a synchronized draft when a one-hop projection feeds a hook", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Search({ open }: { open: boolean }) {
       const [query, setQuery] = useState("");
@@ -1704,12 +1950,15 @@ test("keeps a synchronized draft when a one-hop projection feeds a hook", () => 
       useEffect(() => { if (!open) setQuery(""); }, [open]);
       return <main><Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><input value={query} onChange={setQuery} /></main>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "query")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "query")?.action, "use-observable");
 });
 
 test("does not use broad JSX count as proof of a synchronized draft render cut", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Card({ disabled }: { disabled: boolean }) {
       const [open, setOpen] = useState(false);
@@ -1719,12 +1968,15 @@ test("does not use broad JSX count as proof of a synchronized draft render cut",
         <Collapsible.Content className={open ? "expanded" : "collapsed"}><Content /></Collapsible.Content>
       </Collapsible.Root>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "open")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "open")?.action, "use-observable");
 });
 
 test("keeps a keyed one-hop render alias inside a synchronized draft", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Picker({ rows, source }: { rows: Array<{ id: string }>; source: string | null }) {
       const [active, setActive] = useState<string | null>(source);
@@ -1736,12 +1988,15 @@ test("keeps a keyed one-hop render alias inside a synchronized draft", () => {
         })}
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "active")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "active")?.action, "use-observable");
 });
 
 test("preserves one command snapshot for a synchronized draft read by deferred work", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useEffect, useState } from "react";
     export function DeletePanel({ initial, rows }: { initial: boolean; rows: string[] }) {
       const [decrement, setDecrement] = useState(initial);
@@ -1753,40 +2008,49 @@ test("preserves one command snapshot for a synchronized draft read by deferred w
         <Checkbox checked={decrement} onCheckedChange={setDecrement} /><button onClick={remove} />
       </main>;
     }
-  `, "fixture.tsx");
-  const state = findings.find(finding => finding.name === "decrement");
+  `,
+      "fixture.tsx",
+    ),
+    state = findings.find((finding) => finding.name === "decrement");
   assert.equal(state?.action, "use-observable");
   assert.match(state?.message ?? "", /snapshot once at command entry/);
 });
 
 test("accepts a literal reset effect when a controlled input proves independent editing", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Form({ open }: { open: boolean }) {
       const [value, setValue] = useState("");
       useEffect(() => { if (open) setValue(""); }, [open]);
       return <main><Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><input value={value} onChange={setValue} /></main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "value")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "value")?.action, "use-observable");
 });
 
 test("does not treat an opaque setter prop as a draft edit path", () => {
   for (const setterProp of ["register", "onClick"]) {
-    const findings = analyzeSource(`
+    const findings = analyzeSource(
+      `
       import { useEffect, useState } from "react";
       export function Form({ source }: { source: string }) {
         const [value, setValue] = useState(source);
         useEffect(() => { setValue(source); }, [source]);
         return <main><Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><Field value={value} ${setterProp}={setValue} /></main>;
       }
-    `, "fixture.tsx");
-    assert.notEqual(findings.find(finding => finding.name === "value")?.action, "use-observable");
+    `,
+      "fixture.tsx",
+    );
+    assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
   }
 });
 
 test("keeps owner rerenders when a memoized draft projection feeds another lifecycle hook", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useMemo, useState } from "react";
     export function Editor({ saved }: { saved: string }) {
       const [value, setValue] = useState(saved);
@@ -1795,12 +2059,15 @@ test("keeps owner rerenders when a memoized draft projection feeds another lifec
       useEffect(() => { persist(payload); }, [payload]);
       return <main><Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><input value={value} onChange={setValue} /></main>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "value")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
 });
 
 test("rejects draft reads and dead member edits that do not originate in UI events", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useCallback, useEffect, useState } from "react";
     export function Editor({ saved }: { saved: string }) {
       const [first, setFirst] = useState(saved);
@@ -1811,9 +2078,11 @@ test("rejects draft reads and dead member edits that do not originate in UI even
       const never = () => setSecond("edit");
       return <main><Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><input value={first} onChange={setFirst} /><p>{second}</p></main>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "first")?.action, "use-observable");
-  assert.notEqual(findings.find(finding => finding.name === "second")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "first")?.action, "use-observable");
+  assert.notEqual(findings.find((finding) => finding.name === "second")?.action, "use-observable");
 });
 
 test("rejects partial, asynchronous, cleanup, and derived effect sinks", () => {
@@ -1824,8 +2093,9 @@ test("rejects partial, asynchronous, cleanup, and derived effect sinks", () => {
     `useEffect(() => { setValue(source); }, [source]);`,
   ];
   for (const [index, effect] of snippets.entries()) {
-    const editable = index === 3 ? "" : `<button onClick={() => setValue("edit")} />`;
-    const findings = analyzeSource(`
+    const editable = index === 3 ? "" : `<button onClick={() => setValue("edit")} />`,
+      findings = analyzeSource(
+        `
       import { useEffect, useState } from "react";
       export function Form({ source }: { source: string }) {
         const [value, setValue] = useState(source);
@@ -1833,25 +2103,31 @@ test("rejects partial, asynchronous, cleanup, and derived effect sinks", () => {
         ${effect}
         return <main><Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><p>{value}</p>${editable}</main>;
       }
-    `, "fixture.tsx");
-    assert.notEqual(findings.find(finding => finding.name === "value")?.action, "use-observable");
+    `,
+        "fixture.tsx",
+      );
+    assert.notEqual(findings.find((finding) => finding.name === "value")?.action, "use-observable");
   }
 });
 
 test("does not mistake a JSX callback invocation for an owner render read", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function Form() {
       const [busy, setBusy] = useState(false);
       const canSubmit = useCallback(() => !busy, [busy]);
       return <Panel renderFooter={() => <Button disabled={!canSubmit()} onClick={() => setBusy(true)} />} />;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-ref");
 });
 
 test("traces local callable state reads invoked before JSX", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function Form() {
       const [busy, setBusy] = useState(false);
@@ -1859,25 +2135,31 @@ test("traces local callable state reads invoked before JSX", () => {
       const disabled = !canSubmit();
       return <Button disabled={disabled} onClick={() => setBusy(true)} />;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-ref");
 });
 
 test("flags direct render state in a non-trivial owner as Legend-first", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [active, setActive] = useState(false);
       return <main><Header /><Toolbar /><Content /><Button onClick={() => setActive(v => !v)} />{active && <Panel />}</main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
   assert.equal(finding?.disposition, "candidate");
   assert.match(finding?.message ?? "", /Legend-first restructuring candidate/);
 });
 
 test("reports competing observable subscriptions as evidence for direct render state", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     import { useValue } from "@legendapp/state/react";
     import { player$ } from "./state";
@@ -1886,17 +2168,20 @@ test("reports competing observable subscriptions as evidence for direct render s
       const positionSec = useValue(player$.positionSec);
       return <main><Header /><Toolbar time={positionSec} /><Content /><Button onClick={() => setActive(v => !v)} />{active && <Panel />}</main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
   assert.match(finding?.message ?? "", /Legend-first restructuring candidate/);
   assert.match(
     finding?.message ?? "",
-    /also re-renders through an existing observable subscription; isolate this state only if it updates less often/
+    /also re-renders through an existing observable subscription; isolate this state only if it updates less often/,
   );
 });
 
 test("reports multiple legacy-hook subscriptions as competing evidence", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     import { use$ } from "@legendapp/state/react";
     import { player$ } from "./state";
@@ -1906,13 +2191,16 @@ test("reports multiple legacy-hook subscriptions as competing evidence", () => {
       const duration = use$(player$.durationSec);
       return <main><Header /><Toolbar time={positionSec} max={duration} /><Content /><Button onClick={() => setNote("x")} />{note}</main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
   assert.match(finding?.message ?? "", /2 existing observable subscriptions/);
 });
 
 test("moves direct state into its strict stable JSX subtree", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [expanded, setExpanded] = useState(false);
@@ -1922,13 +2210,16 @@ test("moves direct state into its strict stable JSX subtree", () => {
         <section><p>{expanded ? "Long" : "Short"}</p><button onClick={() => setExpanded(v => !v)}>Toggle</button></section>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "move-state-down");
   assert.match(finding?.message ?? "", /every read and command is confined/);
 });
 
 test("keeps ownership stable and extracts a conditional subscription subtree", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen({ show }: { show: boolean }) {
       const [expanded, setExpanded] = useState(false);
@@ -1938,13 +2229,16 @@ test("keeps ownership stable and extracts a conditional subscription subtree", (
         {show ? <section><p>{expanded ? "Long" : "Short"}</p><button onClick={() => setExpanded(v => !v)}>Toggle</button></section> : null}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /preserves conditional mount lifetime/);
 });
 
 test("isolates presentation gates whose branches contain ordinary render calls", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen({ t }: { t: (key: string) => string }) {
       const [copied, setCopied] = useState(false);
@@ -1959,7 +2253,9 @@ test("isolates presentation gates whose branches contain ordinary render calls",
         </button>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /full state-controlled render expression/);
 });
@@ -1979,8 +2275,8 @@ test("isolates a presentation gate rendered by one local JSX factory", () => {
         {open && renderDialog()}
       </main>;
     }
-  `;
-  const finding = analyzeSource(source, "fixture.tsx").find(candidate => candidate.name === "open");
+  `,
+    finding = analyzeSource(source, "fixture.tsx").find((candidate) => candidate.name === "open");
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /full state-controlled render expression/);
 
@@ -1992,15 +2288,19 @@ test("isolates a presentation gate rendered by one local JSX factory", () => {
     source
       .replace("const renderDialog = () => {", "const renderDialog = makeRenderer(() => {")
       .replace("\n      };\n      return", "\n      });\n      return"),
-    source.replace("const title = t(\"confirm\");", 'if (t("skip")) return <Fallback />; const title = t("confirm");'),
+    source.replace(
+      'const title = t("confirm");',
+      'if (t("skip")) return <Fallback />; const title = t("confirm");',
+    ),
   ]) {
-    const candidate = analyzeSource(unsafe, "fixture.tsx").find(result => result.name === "open");
+    const candidate = analyzeSource(unsafe, "fixture.tsx").find((result) => result.name === "open");
     assert.notEqual(candidate?.action, "use-observable");
   }
 });
 
 test("isolates a small logical JSX gate without moving its owner lifetime", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [visible, setVisible] = useState(true);
@@ -2013,13 +2313,16 @@ test("isolates a small logical JSX gate without moving its owner lifetime", () =
         </section>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /always-mounted leaf subscriber/);
 });
 
 test("isolates a leaf reached through one immutable render projection", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen({ src, enabled }: { src: string; enabled: boolean }) {
       const [failed, setFailed] = useState(false);
@@ -2029,13 +2332,16 @@ test("isolates a leaf reached through one immutable render projection", () => {
         <section>{showImage && enabled && <img src={src} onError={() => setFailed(true)} />}</section>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /full state-controlled render expression/);
 });
 
 test("isolates a bounded pure projection in one uniquely selected repeated branch", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Controls({ configured, windowWidth }: { configured: string[]; windowWidth: number }) {
       const [layoutWidth, setLayoutWidth] = useState(0);
@@ -2056,7 +2362,9 @@ test("isolates a bounded pure projection in one uniquely selected repeated branc
         })}
       </main>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "layoutWidth");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "layoutWidth");
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /uniquely selected branch/);
 });
@@ -2081,48 +2389,50 @@ test("requires every proof for a uniquely selected repeated projection", () => {
         })}
       </main>;
     }
-  `;
-  const unsafe = [
-    source.replace(
-      "const controls = configured.filter((control, index, array) => array.indexOf(control) === index);",
-      "const controls = configured;"
-    ),
-    source.replace(
-      "export function Controls({ configured, windowWidth }:",
-      "export function Controls({ configured, windowWidth, Math }:"
-    ),
-    source.replace('key="search"', 'key="wrong"'),
-    source.replace("const baseWidth", "let baseWidth"),
-    source.replace("Math.max(baseWidth - 16, 320)", "clamp(baseWidth - 16, 320)"),
-    source.replace("Math.max(baseWidth - 16, 320)", "Math.geometry.max(baseWidth - 16, 320)"),
-    source.replace(
-      "configured.filter((control, index, array) => array.indexOf(control) === index)",
-      "configured.filter((control, index, array) => array.indexOf(control) === index).filter((control, index, array) => { array.push(control); return true; })"
-    ),
-    source.replace(
-      "configured.filter((control, index, array) => array.indexOf(control) === index)",
-      "configured.filter((control, index, array) => array.indexOf(control) === index).filter(control => inspect(control))"
-    ),
-    source.replace("switch (control) {", "controls.push(control); switch (control) {"),
-    source
-      .replace(
-        "const controls = configured.filter",
-        "const finalWidth = dropdownWidth; const renderedWidth = finalWidth; const controls = configured.filter"
-      )
-      .replace("width={dropdownWidth}", "width={renderedWidth}"),
-    source.replace(
-      `{controls.map(control => {
+  `,
+    unsafe = [
+      source.replace(
+        "const controls = configured.filter((control, index, array) => array.indexOf(control) === index);",
+        "const controls = configured;",
+      ),
+      source.replace(
+        "export function Controls({ configured, windowWidth }:",
+        "export function Controls({ configured, windowWidth, Math }:",
+      ),
+      source.replace('key="search"', 'key="wrong"'),
+      source.replace("const baseWidth", "let baseWidth"),
+      source.replace("Math.max(baseWidth - 16, 320)", "clamp(baseWidth - 16, 320)"),
+      source.replace("Math.max(baseWidth - 16, 320)", "Math.geometry.max(baseWidth - 16, 320)"),
+      source.replace(
+        "configured.filter((control, index, array) => array.indexOf(control) === index)",
+        "configured.filter((control, index, array) => array.indexOf(control) === index).filter((control, index, array) => { array.push(control); return true; })",
+      ),
+      source.replace(
+        "configured.filter((control, index, array) => array.indexOf(control) === index)",
+        "configured.filter((control, index, array) => array.indexOf(control) === index).filter(control => inspect(control))",
+      ),
+      source.replace("switch (control) {", "controls.push(control); switch (control) {"),
+      source
+        .replace(
+          "const controls = configured.filter",
+          "const finalWidth = dropdownWidth; const renderedWidth = finalWidth; const controls = configured.filter",
+        )
+        .replace("width={dropdownWidth}", "width={renderedWidth}"),
+      source.replace(
+        `{controls.map(control => {
           switch (control) {
             case "search": return <Search key="search" width={dropdownWidth} />;
             case "save": return <Save key="save" />;
             default: return null;
           }
         })}`,
-      `{controls.map(control => <Search key={control} width={dropdownWidth} />)}`
-    ),
-  ];
+        `{controls.map(control => <Search key={control} width={dropdownWidth} />)}`,
+      ),
+    ];
   for (const candidate of unsafe) {
-    const finding = analyzeSource(candidate, "fixture.tsx").find(result => result.name === "layoutWidth");
+    const finding = analyzeSource(candidate, "fixture.tsx").find(
+      (result) => result.name === "layoutWidth",
+    );
     assert.notEqual(finding?.action, "use-observable");
   }
 });
@@ -2144,7 +2454,7 @@ test("does not isolate mutable, effectful, or externally consumed render aliases
           </main>;
         }
       `),
-      ["review-state"]
+      ["review-state"],
     );
   }
 });
@@ -2162,7 +2472,7 @@ test("does not move side effects embedded in a render gate condition", () => {
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -2177,7 +2487,7 @@ test("does not isolate a presentation gate that owns the whole return", () => {
           : <Loading onReady={() => setReady(true)} />;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -2194,7 +2504,7 @@ test("does not isolate a presentation gate repeated across rows", () => {
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -2212,7 +2522,7 @@ test("does not isolate a presentation gate with companion state writes", () => {
         </main>;
       }
     `),
-    ["review-state", "review-state"]
+    ["review-state", "review-state"],
   );
 
   assert.deepEqual(
@@ -2230,7 +2540,7 @@ test("does not isolate a presentation gate with companion state writes", () => {
         </main>;
       }
     `),
-    ["review-state", "review-state"]
+    ["review-state", "review-state"],
   );
 
   assert.deepEqual(
@@ -2249,12 +2559,13 @@ test("does not isolate a presentation gate with companion state writes", () => {
         </main>;
       }
     `),
-    ["review-state", "review-state"]
+    ["review-state", "review-state"],
   );
 });
 
 test("keeps observable ownership across early-return and keyed subtree lifetimes", () => {
-  const [earlyReturn] = analyzeSource(`
+  const [earlyReturn] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen({ loading }: { loading: boolean }) {
       const [expanded, setExpanded] = useState(false);
@@ -2264,10 +2575,13 @@ test("keeps observable ownership across early-return and keyed subtree lifetimes
         <section><p>{expanded ? "Long" : "Short"}</p><button onClick={() => setExpanded(v => !v)}>Toggle</button></section>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(earlyReturn?.action, "use-observable");
 
-  const [keyed] = analyzeSource(`
+  const [keyed] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen({ identity }: { identity: string }) {
       const [expanded, setExpanded] = useState(false);
@@ -2276,12 +2590,15 @@ test("keeps observable ownership across early-return and keyed subtree lifetimes
         <article key={identity}><section><p>{expanded ? "Long" : "Short"}</p><button onClick={() => setExpanded(v => !v)}>Toggle</button></section></article>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(keyed?.action, "use-observable");
 });
 
 test("does not isolate direct state whose reads span the owner", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [active, setActive] = useState(false);
@@ -2291,12 +2608,15 @@ test("does not isolate direct state whose reads span the owner", () => {
         <section><button onClick={() => setActive(v => !v)}>Toggle</button></section>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("groups multiple direct states confined to the same JSX subtree", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     export function Screen() {
       const [query, setQuery] = useState("");
@@ -2311,15 +2631,21 @@ test("groups multiple direct states confined to the same JSX subtree", () => {
         </section>
       </main>;
     }
-  `, "fixture.tsx");
-  const grouped = findings.filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["move-state-down", "move-state-down"]);
+  `,
+      "fixture.tsx",
+    ),
+    grouped = findings.filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["move-state-down", "move-state-down"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["query", "expanded"]);
-  assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
+  assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 });
 
 test("keeps observable ownership when a subtree cluster mixes direct and projected state", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     export function Screen() {
       const [query, setQuery] = useState("");
@@ -2334,14 +2660,20 @@ test("keeps observable ownership when a subtree cluster mixes direct and project
         </section>
       </main>;
     }
-  `, "fixture.tsx");
-  const grouped = findings.filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+      "fixture.tsx",
+    ),
+    grouped = findings.filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["query", "selected"]);
 });
 
 test("does not let a direct state pull an escaped projection into its subtree cluster", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useCallback, useState } from "react";
     export function Screen() {
       const [query, setQuery] = useState("");
@@ -2357,14 +2689,17 @@ test("does not let a direct state pull an escaped projection into its subtree cl
         </section>
       </main>;
     }
-  `, "fixture.tsx");
-  const selected = findings.find(finding => finding.name === "selected");
+  `,
+      "fixture.tsx",
+    ),
+    selected = findings.find((finding) => finding.name === "selected");
   assert.equal(selected?.action, "review-state");
   assert.equal(selected?.group, undefined);
 });
 
 test("does not let a direct state pull a reactive-mutation projection into its subtree cluster", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     export function Screen() {
       const { mutateAsync: submitSelection } = useSubmitSelection();
@@ -2385,14 +2720,17 @@ test("does not let a direct state pull a reactive-mutation projection into its s
         </section>
       </main>;
     }
-  `, "fixture.tsx");
-  const selected = findings.find(finding => finding.name === "selected");
+  `,
+      "fixture.tsx",
+    ),
+    selected = findings.find((finding) => finding.name === "selected");
   assert.equal(selected?.action, "review-state");
   assert.equal(selected?.group, undefined);
 });
 
 test("places pure JSX prop projections in a call-site subscriber wrapper", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [selected, setSelected] = useState<{ id: string } | null>(null);
@@ -2403,13 +2741,16 @@ test("places pure JSX prop projections in a call-site subscriber wrapper", () =>
         <ItemDialog open={selected != null} itemId={selected?.id ?? null} onClose={() => setSelected(null)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /leave the child API unchanged/);
 });
 
 test("keeps raw state transport and its projection in one stable call-site wrapper", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [target, setTarget] = useState<string | null>(null);
@@ -2418,13 +2759,16 @@ test("keeps raw state transport and its projection in one stable call-site wrapp
         <DetailDialog id={target} open={!!target} onOpenChange={open => !open && setTarget(null)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /leave the child API unchanged/);
 });
 
 test("keeps mixed transport ownership above a state-controlled call-site gate", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [target, setTarget] = useState<string | null>(null);
@@ -2433,13 +2777,16 @@ test("keeps mixed transport ownership above a state-controlled call-site gate", 
         {target && <DetailDialog id={target} open onOpenChange={open => !open && setTarget(null)} />}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /full state-controlled render expression/);
 });
 
 test("does not transport a whole mixed state value into every repeated row subscriber", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen({ rows }: { rows: Array<{ id: string }> }) {
       const [selected, setSelected] = useState<{ id: string } | null>(null);
@@ -2447,7 +2794,9 @@ test("does not transport a whole mixed state value into every repeated row subsc
         {rows.map(row => <Row key={row.id} selected={selected} active={selected?.id === row.id} onPress={() => setSelected(row)} />)}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -2458,9 +2807,10 @@ test("does not put callable React state into a mixed observable transport", () =
     "type Callback = () => void; const [callback, setCallback] = useState<Callback>(() => noop);",
     "const [callback, setCallback] = useState(() => noop);",
   ]) {
-    const name = state.includes("Component") ? "Component" : "callback";
-    const setter = name === "Component" ? "setComponent" : "setCallback";
-    const [finding] = analyzeSource(`
+    const name = state.includes("Component") ? "Component" : "callback",
+      setter = name === "Component" ? "setComponent" : "setCallback",
+      [finding] = analyzeSource(
+        `
       import React, { useState } from "react";
       export function Screen() {
         ${state}
@@ -2468,7 +2818,9 @@ test("does not put callable React state into a mixed observable transport", () =
           <Slot value={${name}} ready={${name} != null} onReset={() => ${setter}(() => noop)} />
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+        "fixture.tsx",
+      );
     assert.notEqual(finding?.action, "use-observable");
   }
 });
@@ -2480,7 +2832,8 @@ test("keeps callable React state out of projection and sibling leaf rules", () =
       write: "setValue(() => work)",
     },
     {
-      declaration: "type Handler = () => void; const [value, setValue] = useState<Handler | null>(null);",
+      declaration:
+        "type Handler = () => void; const [value, setValue] = useState<Handler | null>(null);",
       write: "setValue(() => work)",
     },
     {
@@ -2488,7 +2841,8 @@ test("keeps callable React state out of projection and sibling leaf rules", () =
       write: "setValue(() => next)",
     },
     {
-      declaration: "interface DialogState { id: string; onConfirm(): void } const [value, setValue] = useState<DialogState | null>(null);",
+      declaration:
+        "interface DialogState { id: string; onConfirm(): void } const [value, setValue] = useState<DialogState | null>(null);",
       write: "setValue({ id: 'x', onConfirm: work })",
     },
     {
@@ -2496,7 +2850,8 @@ test("keeps callable React state out of projection and sibling leaf rules", () =
       write: "setValue({ onConfirm: () => work() })",
     },
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function work() {}
       function next() {}
@@ -2508,7 +2863,9 @@ test("keeps callable React state out of projection and sibling leaf rules", () =
           <section><Leaf ready={value != null} /></section>
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable", state.declaration);
     assert.notEqual(finding?.action, "move-state-down", state.declaration);
   }
@@ -2516,7 +2873,8 @@ test("keeps callable React state out of projection and sibling leaf rules", () =
 
 test("does not mistake ordinary local state aliases for callable state", () => {
   for (const alias of ["Selection", "FC", "ComponentType"]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       type ${alias} = { id: string };
       export function Screen() {
@@ -2527,13 +2885,16 @@ test("does not mistake ordinary local state aliases for callable state", () => {
           <section><Leaf ready={value != null} /></section>
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.equal(finding?.action, "use-observable", alias);
   }
 });
 
 test("resolves callable aliases in the nearest lexical scope", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     function OtherScreen() {
       type Handler = string;
@@ -2549,14 +2910,19 @@ test("resolves callable aliases in the nearest lexical scope", () => {
         <section><Leaf ready={value != null} /></section>
       </main>;
     }
-  `, "fixture.tsx");
-  const finding = findings.find(candidate => candidate.name === "value" && candidate.location.line > 8);
+  `,
+      "fixture.tsx",
+    ),
+    finding = findings.find(
+      (candidate) => candidate.name === "value" && candidate.location.line > 8,
+    );
   assert.notEqual(finding?.action, "use-observable");
   assert.notEqual(finding?.action, "move-state-down");
 });
 
 test("isolates direct primitive state at one stable call-site leaf", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     const Leaf = (props: { value: unknown }) => <output>{String(props.value)}</output>;
     const Shell = ({ children }: { children: React.ReactNode }) => <main>{children}</main>;
@@ -2575,15 +2941,20 @@ test("isolates direct primitive state at one stable call-site leaf", () => {
       return <Shell><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
         <button onClick={() => setPage(1)}>Next</button><Leaf value={page} /></Shell>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.deepEqual(
-    findings.filter(finding => ["visible", "mode", "page"].includes(finding.name ?? "")).map(finding => finding.action),
-    ["use-observable", "use-observable", "use-observable"]
+    findings
+      .filter((finding) => ["visible", "mode", "page"].includes(finding.name ?? ""))
+      .map((finding) => finding.action),
+    ["use-observable", "use-observable", "use-observable"],
   );
 });
 
 test("isolates one unresolved JSX leaf without requiring its prop contract", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     import { RemoteDialog, RemoteStatus } from "third-party-ui";
     export function StatusScreen() {
@@ -2599,15 +2970,20 @@ test("isolates one unresolved JSX leaf without requiring its prop contract", () 
         <RemoteDialog target={target} onClose={() => setTarget(null)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.deepEqual(
-    findings.filter(finding => ["busy", "target"].includes(finding.name ?? "")).map(finding => finding.action),
-    ["use-observable", "use-observable"]
+    findings
+      .filter((finding) => ["busy", "target"].includes(finding.name ?? ""))
+      .map((finding) => finding.action),
+    ["use-observable", "use-observable"],
   );
 });
 
 test("does not mistake unresolved boundaries for proof of leaf ownership", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     import { RemoteLeaf, RemoteMenu } from "third-party-ui";
     export function CohesiveMenu() {
@@ -2641,16 +3017,20 @@ test("does not mistake unresolved boundaries for proof of leaf ownership", () =>
         <output>{String(dirty)}</output>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   for (const name of ["open", "visible"]) {
-    const matching = findings.filter(finding => finding.name === name);
+    const matching = findings.filter((finding) => finding.name === name);
     assert.ok(matching.length > 0);
-    const atomic = matching.find(finding => finding.message.includes("dirty") && finding.message.includes("visible"));
+    const atomic = matching.find(
+      (finding) => finding.message.includes("dirty") && finding.message.includes("visible"),
+    );
     if (name === "open" || !atomic) {
-      assert.ok(matching.every(finding => finding.action !== "use-observable"));
+      assert.ok(matching.every((finding) => finding.action !== "use-observable"));
     } else {
       // The dirty+visible pair is one atomic workflow: the grouped observable-model
-      // instruction migrates both members together instead of splitting the transaction.
+      // Instruction migrates both members together instead of splitting the transaction.
       assert.equal(atomic?.action, "use-observable");
       assert.match(atomic?.message ?? "", /one owner-lifetime observable model/);
     }
@@ -2658,7 +3038,8 @@ test("does not mistake unresolved boundaries for proof of leaf ownership", () =>
 });
 
 test("reviews a literal boolean leaf commanded by memoized event options", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useMemo, useState } from "react";
     function DecisionModal(props: { isVisible: boolean; onClose: () => void }) { return null; }
     export function Screen() {
@@ -2671,12 +3052,15 @@ test("reviews a literal boolean leaf commanded by memoized event options", () =>
         <DecisionModal isVisible={failureVisible} onClose={() => setFailureVisible(false)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("does not treat lifecycle options passed to an unknown hook as JSX events", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useMemo, useState } from "react";
     function DecisionModal(props: { isVisible: boolean; onClose: () => void }) { return null; }
     export function Screen() {
@@ -2690,12 +3074,15 @@ test("does not treat lifecycle options passed to an unknown hook as JSX events",
         <DecisionModal isVisible={visible} onClose={() => setVisible(false)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("does not treat event options wrapped by a JSX-time registrar as direct events", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useMemo, useState } from "react";
     function DecisionModal(props: { isVisible: boolean; onClose: () => void }) { return null; }
     export function Screen() {
@@ -2705,12 +3092,15 @@ test("does not treat event options wrapped by a JSX-time registrar as direct eve
         <DecisionModal isVisible={visible} onClose={() => setVisible(false)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("requires literal leaf setters to be event-rooted and independently useful", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useMemo, useState } from "react";
     function DecisionModal(props: { isVisible: boolean; onClose: () => void }) { return null; }
     export function RenderWrite() {
@@ -2749,8 +3139,10 @@ test("requires literal leaf setters to be event-rooted and independently useful"
         <DecisionModal isVisible={visible} onClose={() => setVisible(false)} />
       </main>;
     }
-  `, "fixture.tsx");
-  const candidates = findings.filter(candidate => candidate.name === "visible");
+  `,
+      "fixture.tsx",
+    ),
+    candidates = findings.filter((candidate) => candidate.name === "visible");
   assert.equal(candidates.length, 4);
   for (const finding of candidates) {
     assert.equal(finding.action, "review-state");
@@ -2758,7 +3150,8 @@ test("requires literal leaf setters to be event-rooted and independently useful"
 });
 
 test("isolates an async pending flag at one stable leaf without changing its completion boundary", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form() {
@@ -2771,13 +3164,16 @@ test("isolates an async pending flag at one stable leaf without changing its com
         <form onSubmit={save}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("keeps async status label projections inside the same subscribed leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Form() {
       const [saving, setSaving] = useState(false);
@@ -2791,13 +3187,16 @@ test("keeps async status label projections inside the same subscribed leaf", () 
         </button>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /stable pending-control call site/);
 });
 
 test("isolates a direct async status projection in one stable call site", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Scanner({ queueFull }: { queueFull: boolean }) {
       const [files, setFiles] = useState(["receipt"]);
@@ -2811,14 +3210,17 @@ test("isolates a direct async status projection in one stable call site", () => 
         {files.length > 0 && <button disabled={encoding || queueFull} onClick={scan}>Scan</button>}
       </main>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "encoding");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "encoding");
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /async pending flag/);
   assert.match(finding?.message ?? "", /pending-control call site/);
 });
 
 test("keeps a pure conditional status label inside the direct async leaf", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     export function Copier({ destination }: { destination: string | null }) {
       const [copying, setCopying] = useState(false);
@@ -2860,7 +3262,9 @@ test("keeps a pure conditional status label inside the direct async leaf", () =>
         </Button>
       </main>;
     }
-  `, "fixture.tsx").filter(candidate => candidate.name === "copying");
+  `,
+    "fixture.tsx",
+  ).filter((candidate) => candidate.name === "copying");
   assert.equal(findings[0]?.action, "use-observable");
   assert.match(findings[0]?.message ?? "", /async pending flag/);
   assert.notEqual(findings[1]?.action, "use-observable");
@@ -2875,7 +3279,8 @@ test("requires one pure non-gating call site for a direct async status projectio
     `{rows.map(row => <Button key={row.id} disabled={encoding || row.disabled} onClick={scan}>Scan</Button>)}`,
   ];
   for (const render of sources) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       export function Scanner({ queueFull, rows }: { queueFull: boolean; rows: Array<{ id: string; disabled: boolean }> }) {
         const [encoding, setEncoding] = useState(false);
@@ -2887,13 +3292,16 @@ test("requires one pure non-gating call site for a direct async status projectio
           ${render}
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
   }
 });
 
 test("does not fold unsafe or external async status projections into a leaf", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     export function UnsafeCondition() {
       const [saving, setSaving] = useState(false);
@@ -2916,14 +3324,17 @@ test("does not fold unsafe or external async status projections into a leaf", ()
         <button onClick={save}>Save</button>{saving && <Button loading={saving} />}
       </main>;
     }
-  `, "fixture.tsx");
-  for (const finding of findings.filter(candidate => candidate.name === "saving")) {
+  `,
+    "fixture.tsx",
+  );
+  for (const finding of findings.filter((candidate) => candidate.name === "saving")) {
     assert.notEqual(finding.action, "use-observable");
   }
 });
 
 test("traces an async pending command through an event-rooted submit helper", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form() {
@@ -2937,12 +3348,15 @@ test("traces an async pending command through an event-rooted submit helper", ()
         <form onSubmit={submit}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("traces async pending state through a direct JSX event adapter", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     import { useForm } from "react-hook-form";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
@@ -2976,15 +3390,18 @@ test("traces async pending state through a direct JSX event adapter", () => {
       };
       return <form onSubmit={handleSubmit(save)}><Header /><Fields /><LoadingButton loading={saving} /></form>;
     }
-  `, "fixture.tsx").filter(finding => finding.name === "saving");
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.name === "saving");
   assert.deepEqual(
-    findings.map(finding => finding.action),
-    ["use-observable", "use-observable", "use-observable"]
+    findings.map((finding) => finding.action),
+    ["use-observable", "use-observable", "use-observable"],
   );
 });
 
 test("traces an async pending helper through a proven React Hook Form event adapter", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     import { useForm } from "react-hook-form";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
@@ -3006,13 +3423,16 @@ test("traces an async pending helper through a proven React Hook Form event adap
         </form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("does not treat deferred or non-event callback adapters as event roots", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     import { useForm } from "react-hook-form";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
@@ -3047,14 +3467,17 @@ test("does not treat deferred or non-event callback adapters as event roots", ()
       const save = async () => { setSaving(true); await persist(); setSaving(false); };
       return <form onSubmit={handleSubmit(save)}><Header /><Fields /><LoadingButton loading={saving} /></form>;
     }
-  `, "fixture.tsx").filter(finding => finding.name === "saving");
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.name === "saving");
   for (const finding of findings) {
     assert.doesNotMatch(finding.message, /async pending flag/);
   }
 });
 
 test("isolates a Promise-chain status rendered through one reachable JSX callback leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Importer() {
@@ -3068,7 +3491,9 @@ test("isolates a Promise-chain status rendered through one reachable JSX callbac
         <button onClick={read}>Read</button>{picker}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /async completion boundary/);
 });
@@ -3079,7 +3504,8 @@ test("requires a Promise-chain leaf alias to be live, unique, and non-repeated",
     `const picker = <LoadingButton loading={reading} />; return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions /></main>;`,
     `return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />{rows.map(row => <LoadingButton key={row.id} loading={reading} />)}</main>;`,
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       export function Importer({ rows }: { rows: Array<{ id: string }> }) {
         const [reading, setReading] = useState(false);
@@ -3089,13 +3515,16 @@ test("requires a Promise-chain leaf alias to be live, unique, and non-repeated",
         }
         ${render}
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
   }
 });
 
 test("does not flatten timers or unrelated Promise continuations into one async command", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Timer() {
@@ -3116,14 +3545,17 @@ test("does not flatten timers or unrelated Promise continuations into one async 
         <button onClick={read}>Read</button><button onClick={finish}>Finish</button><LoadingButton loading={reading} />
       </main>;
     }
-  `, "fixture.tsx");
-  for (const finding of findings.filter(candidate => candidate.name === "reading")) {
+  `,
+    "fixture.tsx",
+  );
+  for (const finding of findings.filter((candidate) => candidate.name === "reading")) {
     assert.doesNotMatch(finding.message, /async pending flag/);
   }
 });
 
 test("isolates async status after non-mutating validation guards", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form({ valid }: { valid: boolean }) {
@@ -3138,13 +3570,16 @@ test("isolates async status after non-mutating validation guards", () => {
         <form onSubmit={save}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("isolates async status after bounded synchronous command preparation", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form() {
@@ -3159,13 +3594,16 @@ test("isolates async status after bounded synchronous command preparation", () =
         <form onSubmit={save}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("allows an event-rooted reset-only helper beside one async activation", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form() {
@@ -3179,12 +3617,15 @@ test("allows an event-rooted reset-only helper beside one async activation", () 
         <button onClick={reset}>Reset</button><form onSubmit={save}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("recognizes an async command selected by a JSX event conditional", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form({ alreadySaved }: { alreadySaved: boolean }) {
@@ -3198,13 +3639,16 @@ test("recognizes an async command selected by a JSX event conditional", () => {
         <form onSubmit={alreadySaved ? openSaved : save}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("does not treat a callback used as an event condition as the selected handler", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form() {
@@ -3218,12 +3662,15 @@ test("does not treat a callback used as an event condition as the selected handl
         <form onSubmit={save ? noop : undefined}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
 });
 
 test("does not hide a synchronous companion write inside a Promise-chain argument", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form({ rows }: { rows: string[] }) {
@@ -3240,12 +3687,15 @@ test("does not hide a synchronous companion write inside a Promise-chain argumen
         <button onClick={save}>Save</button><LoadingButton loading={saving} /><output>{String(dirty)}</output>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
 });
 
 test("does not isolate a Promise-chain status before later synchronous owner work", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form({ enabled }: { enabled: boolean }) {
@@ -3263,12 +3713,15 @@ test("does not isolate a Promise-chain status before later synchronous owner wor
         <LoadingButton loading={saving} /><output>{email}</output>
       </main>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "saving");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "saving");
   assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
 });
 
 test("does not isolate prepared async status when owner state can update before suspension", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function DirectCompanion() {
@@ -3298,14 +3751,17 @@ test("does not isolate prepared async status when owner state can update before 
         <form onSubmit={save}><LoadingButton loading={saving} /></form><output>{String(dirty)}</output>
       </main>;
     }
-  `, "fixture.tsx");
-  for (const finding of findings.filter(candidate => candidate.name === "saving")) {
+  `,
+    "fixture.tsx",
+  );
+  for (const finding of findings.filter((candidate) => candidate.name === "saving")) {
     assert.doesNotMatch(finding.message, /async pending flag/);
   }
 });
 
 test("does not cross an early exit or scheduled reset to prove async status", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function EarlyExit({ valid }: { valid: boolean }) {
@@ -3332,14 +3788,17 @@ test("does not cross an early exit or scheduled reset to prove async status", ()
         <form onSubmit={save}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
-  for (const finding of findings.filter(candidate => candidate.name === "saving")) {
+  `,
+    "fixture.tsx",
+  );
+  for (const finding of findings.filter((candidate) => candidate.name === "saving")) {
     assert.doesNotMatch(finding.message, /async pending flag/);
   }
 });
 
 test("keeps async status ownership above a state-independent conditional leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Form({ existing }: { existing: boolean }) {
       const [saving, setSaving] = useState(false);
@@ -3351,13 +3810,16 @@ test("keeps async status ownership above a state-independent conditional leaf", 
         {existing ? <button disabled={saving} onClick={save}>Save</button> : <CreateButton />}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /async completion boundary/);
 });
 
 test("does not isolate async status when another owner update starts the command", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form() {
@@ -3374,12 +3836,15 @@ test("does not isolate async status when another owner update starts the command
         <form onSubmit={save}><LoadingButton loading={saving} /></form><output>{String(dirty)}</output>
       </main>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "saving")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "saving")?.action, "use-observable");
 });
 
 test("does not isolate async status owned by a reactive mutation", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Form() {
@@ -3406,14 +3871,17 @@ test("does not isolate async status owned by a reactive mutation", () => {
         <form onSubmit={save}><LoadingButton loading={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
-  for (const finding of findings.filter(candidate => candidate.name === "saving")) {
+  `,
+    "fixture.tsx",
+  );
+  for (const finding of findings.filter((candidate) => candidate.name === "saving")) {
     assert.notEqual(finding.action, "use-observable");
   }
 });
 
 test("keeps a proven independent UI transition beside a reactive mutation path", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Form() {
       const mutation = useSaveMutation();
@@ -3427,7 +3895,9 @@ test("keeps a proven independent UI transition beside a reactive mutation path",
         <Dialog open={open} onOpenChange={setOpen} onConfirm={confirm} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
@@ -3436,7 +3906,8 @@ test("does not isolate async status from a scheduled callback or nonliteral writ
     `setTimeout(async () => { setSaving(true); await persist(); setSaving(false); }, 0);`,
     `async function save() { setSaving(next); await persist(); setSaving(false); }`,
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
       export function Form({ next = true }: { next?: boolean }) {
@@ -3446,13 +3917,16 @@ test("does not isolate async status from a scheduled callback or nonliteral writ
           <LoadingButton loading={saving} />
         </main>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.doesNotMatch(finding?.message ?? "", /async pending flag/);
   }
 });
 
 test("isolates broad async status fanout but keeps a cohesive form in React", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Small() {
@@ -3467,15 +3941,18 @@ test("isolates broad async status fanout but keeps a cohesive form in React", ()
         <form onSubmit={save}><LoadingButton loading={saving} /><Status pending={saving} /></form>
       </main>;
     }
-  `, "fixture.tsx");
-  const saving = findings.filter(candidate => candidate.name === "saving");
+  `,
+      "fixture.tsx",
+    ),
+    saving = findings.filter((candidate) => candidate.name === "saving");
   assert.notEqual(saving[0]?.action, "use-observable");
   assert.equal(saving[1]?.action, "use-observable");
   assert.match(saving[1]?.message ?? "", /two stable status call sites/);
 });
 
 test("keeps exact async status in React when the owner is already the status leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function SaveButton() {
       const [saving, setSaving] = useState(false);
@@ -3485,13 +3962,16 @@ test("keeps exact async status in React when the owner is already the status lea
       }
       return <button disabled={saving} onClick={save}>Save</button>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "keep-state");
   assert.match(finding?.message ?? "", /cohesive owner boundary/);
 });
 
 test("keeps delayed async status in its cohesive button owner", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function FilledButton({ onClick }: { onClick: () => Promise<void> }) {
       const [loading, setLoading] = useState(false);
@@ -3508,7 +3988,9 @@ test("keeps delayed async status in its cohesive button owner", () => {
       const status = loading ? "loading" : "idle";
       return <button onClick={click}><span /><span /><span /><span>{status}</span></button>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "keep-state");
   assert.match(finding?.message ?? "", /delays the pending transition/);
 });
@@ -3518,7 +4000,8 @@ test("keeps unsafe delayed pending shapes under review", () => {
     [`() => { audit(); setLoading(true); }`, `clearTimeout(timer); setLoading(false);`],
     [`() => setLoading(true)`, `setLoading(false);`],
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       export function FilledButton({ onClick }: { onClick: () => Promise<void> }) {
         const [loading, setLoading] = useState(false);
@@ -3530,13 +4013,16 @@ test("keeps unsafe delayed pending shapes under review", () => {
         const status = loading ? "loading" : "idle";
         return <button onClick={click}><span /><span /><span /><span>{status}</span></button>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.equal(finding?.action, "review-state");
   }
 });
 
 test("isolates async status in a compact owner with an independent render cut", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function CompactForm() {
@@ -3548,13 +4034,16 @@ test("isolates async status in a compact owner with an independent render cut", 
         <LoadingButton loading={saving} />
       </form>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /independent owner content/);
 });
 
 test("does not treat a lazy or indirect initializer as a direct primitive", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     const Leaf = (props: { value: unknown }) => <output>{String(props.value)}</output>;
     export function Screen({ initial }: { initial: string }) {
@@ -3564,14 +4053,17 @@ test("does not treat a lazy or indirect initializer as a direct primitive", () =
         <button onClick={() => setLazy(false)}>Lazy</button><Leaf value={lazy} />
         <button onClick={() => setIndirect("done")}>Indirect</button><Leaf value={indirect} /></main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   for (const name of ["lazy", "indirect"]) {
-    assert.notEqual(findings.find(finding => finding.name === name)?.action, "use-observable");
+    assert.notEqual(findings.find((finding) => finding.name === name)?.action, "use-observable");
   }
 });
 
 test("does not wrap projections that span sibling call sites", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [selected, setSelected] = useState<{ id: string } | null>(null);
@@ -3582,12 +4074,15 @@ test("does not wrap projections that span sibling call sites", () => {
         <DeleteDialog open={selected != null} item={selected} onClose={() => setSelected(null)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("does not promote a projection whose every write shares a reactive mutation lifecycle", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const { mutateAsync: submitFeedback, isPending } = useSubmitFeedback();
@@ -3603,12 +4098,15 @@ test("does not promote a projection whose every write shares a reactive mutation
         <Spinner visible={isPending} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("isolates an exact keyed record entry in a stable repeated row", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     type Verdict = "up" | "down";
     type Row = { id: string };
@@ -3635,7 +4133,9 @@ test("isolates an exact keyed record entry in a stable repeated row", () => {
         </div>)}
       </main>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "feedback");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "feedback");
 
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /dynamic entry/);
@@ -3648,58 +4148,60 @@ test("isolates an exact keyed record entry in a stable repeated row", () => {
 test("keeps ambiguous keyed record entries conservative", () => {
   const variants = [
     {
+      extra: "",
       label: "unstable row key",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
       rowKey: "index",
-      projection: 'aria-pressed={feedback[row.id] === "up"}',
       updater: "previous => ({ ...previous, [row.id]: verdict })",
-      extra: "",
     },
     {
+      extra: "",
       label: "mismatched row key",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
       rowKey: "row.slug",
-      projection: 'aria-pressed={feedback[row.id] === "up"}',
       updater: "previous => ({ ...previous, [row.id]: verdict })",
-      extra: "",
     },
     {
+      extra: "",
       label: "entry controls mount",
+      projection: "{feedback[row.id] && <span>Voted</span>}",
       rowKey: "row.id",
-      projection: '{feedback[row.id] && <span>Voted</span>}',
       updater: "previous => ({ ...previous, [row.id]: verdict })",
-      extra: "",
     },
     {
+      extra: "",
       label: "multi-entry write",
-      rowKey: "row.id",
       projection: 'aria-pressed={feedback[row.id] === "up"}',
+      rowKey: "row.id",
       updater: 'previous => ({ ...previous, [row.id]: verdict, global: "up" })',
-      extra: "",
     },
     {
+      extra: "",
       label: "rollback side effect",
-      rowKey: "row.id",
       projection: 'aria-pressed={feedback[row.id] === "up"}',
-      updater: "previous => { const next = { ...previous }; audit(next); delete next[row.id]; return next; }",
-      extra: "",
+      rowKey: "row.id",
+      updater:
+        "previous => { const next = { ...previous }; audit(next); delete next[row.id]; return next; }",
     },
     {
-      label: "whole-record read",
-      rowKey: "row.id",
-      projection: 'aria-pressed={feedback[row.id] === "up"}',
-      updater: "previous => ({ ...previous, [row.id]: verdict })",
       extra: "const count = Object.keys(feedback).length; void count;",
+      label: "whole-record read",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
+      rowKey: "row.id",
+      updater: "previous => ({ ...previous, [row.id]: verdict })",
     },
     {
-      label: "whole-record reset",
-      rowKey: "row.id",
-      projection: 'aria-pressed={feedback[row.id] === "up"}',
-      updater: "previous => ({ ...previous, [row.id]: verdict })",
       extra: "<button onClick={() => setFeedback({})}>Reset</button>",
+      label: "whole-record reset",
+      projection: 'aria-pressed={feedback[row.id] === "up"}',
+      rowKey: "row.id",
+      updater: "previous => ({ ...previous, [row.id]: verdict })",
     },
   ];
 
   for (const variant of variants) {
-    const finding = analyzeSource(`
+    const finding = analyzeSource(
+      `
       import { useState } from "react";
       type Verdict = "up" | "down";
       type Row = { id: string; slug: string };
@@ -3714,20 +4216,25 @@ test("keeps ambiguous keyed record entries conservative", () => {
         return <main>
           <Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
           {rows.map((row, index) => <div key={${variant.rowKey}}>
-            ${variant.projection.startsWith("{")
-              ? variant.projection
-              : `<button onClick={() => vote(row, "up")} ${variant.projection}>Up</button>`}
+            ${
+              variant.projection.startsWith("{")
+                ? variant.projection
+                : `<button onClick={() => vote(row, "up")} ${variant.projection}>Up</button>`
+            }
           </div>)}
           ${variant.extra.startsWith("<") ? variant.extra : ""}
         </main>;
       }
-    `, "fixture.tsx").find(candidate => candidate.name === "feedback");
+    `,
+      "fixture.tsx",
+    ).find((candidate) => candidate.name === "feedback");
     assert.doesNotMatch(finding?.message ?? "", /dynamic entry/, variant.label);
   }
 });
 
 test("does not promote a projection when its setter callback escapes through a custom hook", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function Screen() {
       const [open, setOpen] = useState(false);
@@ -3737,12 +4244,15 @@ test("does not promote a projection when its setter callback escapes through a c
         <Dialog open={open && enabled} onClose={() => setOpen(false)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("does not treat a namespace hook callback as an event command", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import React, { useState } from "react";
     function Dialog(props: { open: boolean; onClose: () => void }) { return null; }
     export function Screen() {
@@ -3752,61 +4262,79 @@ test("does not treat a namespace hook callback as an event command", () => {
         <Dialog open={open} onClose={() => setOpen(false)} />
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("keeps React state when the component is already a tiny render leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Toggle() {
       const [active, setActive] = useState(false);
       return <button onClick={() => setActive(v => !v)}>{active ? "On" : "Off"}</button>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "keep-state");
   assert.equal(finding?.disposition, "keep");
 });
 
 test("does not issue production state migrations for test harnesses", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Subject() { return null; }
     export function Harness() {
       const [value, setValue] = useState("");
       return <Subject value={value} onChange={setValue} />;
     }
-  `, "Subject.test.tsx");
+  `,
+    "Subject.test.tsx",
+  );
   assert.equal(finding?.action, "keep-state");
   assert.equal(finding?.disposition, "keep");
 });
 
 test("does not issue production effect migrations for test harnesses", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useEffect } from "react";
     export function Harness({ observer, result }: { observer: () => void; result: string }) {
       useEffect(observer, [result]);
       return null;
     }
-  `, "Subject.test.tsx");
+  `,
+    "Subject.test.tsx",
+  );
   assert.equal(finding?.action, "keep-effect");
   assert.equal(finding?.disposition, "keep");
 });
 
 test("does not delete derived state inside a test harness", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Harness({ price, quantity }: { price: number; quantity: number }) {
       const [total, setTotal] = useState(0);
       useEffect(() => setTotal(price * quantity), [price, quantity]);
       return <output>{total}</output>;
     }
-  `, "Harness.test.tsx");
-  assert.deepEqual(findings.map(finding => finding.action), ["keep-state", "keep-effect"]);
+  `,
+    "Harness.test.tsx",
+  );
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["keep-state", "keep-effect"],
+  );
 });
 
 test("does not migrate an effect-synchronized draft cluster inside a story harness", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Profile({ initialName }: { initialName: string }) {
       const [name, setName] = useState(initialName);
@@ -3816,8 +4344,13 @@ test("does not migrate an effect-synchronized draft cluster inside a story harne
         <input value={name} onChange={event => setName(event.target.value)} />
       </main>;
     }
-  `, "Profile.stories.tsx");
-  assert.deepEqual(findings.map(finding => finding.action), ["keep-state", "keep-effect"]);
+  `,
+    "Profile.stories.tsx",
+  );
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["keep-state", "keep-effect"],
+  );
 });
 
 test("moves transport-only state into one child", () => {
@@ -3832,7 +4365,7 @@ test("moves transport-only state into one child", () => {
         </main>;
       }
     `),
-    ["move-state-down"]
+    ["move-state-down"],
   );
 });
 
@@ -3847,12 +4380,13 @@ test("moves controlled state when an inline setter callback belongs to the same 
         </main>;
       }
     `),
-    ["move-state-down"]
+    ["move-state-down"],
   );
 });
 
 test("moves branch-local state down when every outside reset provably unmounts the branch", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     type Phase = { kind: "idle" } | { kind: "loading" } | { kind: "done" };
     function Result(_props: unknown) { return null; }
@@ -3874,8 +4408,10 @@ test("moves branch-local state down when every outside reset provably unmounts t
         ) : null}
       </main>;
     }
-  `, "fixture.tsx");
-  const finding = findings.find(candidate => candidate.name === "showDetails");
+  `,
+      "fixture.tsx",
+    ),
+    finding = findings.find((candidate) => candidate.name === "showDetails");
   assert.equal(finding?.action, "move-state-down");
   assert.match(finding?.message ?? "", /resets it only when that branch unmounts/);
 });
@@ -3890,7 +4426,8 @@ test("does not move branch-local state when an outside reset can leave the branc
     `setShowDetails(false); setPhase(nextPhase);`,
     `if (shouldClose) { setShowDetails(false); } setPhase({ kind: "loading" });`,
   ]) {
-    const findings = analyzeSource(`
+    const findings = analyzeSource(
+        `
       import { useState } from "react";
       type Phase = { kind: "idle" } | { kind: "loading" } | { kind: "done" };
       function Result(_props: unknown) { return null; }
@@ -3905,8 +4442,10 @@ test("does not move branch-local state when an outside reset can leave the branc
           ) : null}
         </main>;
       }
-    `, "fixture.tsx");
-    const finding = findings.find(candidate => candidate.name === "showDetails");
+    `,
+        "fixture.tsx",
+      ),
+      finding = findings.find((candidate) => candidate.name === "showDetails");
     assert.notEqual(finding?.action, "move-state-down", reset);
   }
 });
@@ -3924,12 +4463,13 @@ test("keeps observable ownership when a sibling command opens one exact leaf", (
         </main>;
       }
     `),
-    ["use-observable"]
+    ["use-observable"],
   );
 });
 
 test("keeps a coupled parent opener atomic despite a child visibility callback", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     interface Item { id: string }
     function Dialog(_props: unknown) { return null; }
@@ -3942,13 +4482,16 @@ test("keeps a coupled parent opener atomic despite a child visibility callback",
         <Dialog target={target} open={open} setOpen={setOpen} />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "open")?.action, "review-state");
-  assert.equal(findings.find(finding => finding.name === "target")?.action, "review-state");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "open")?.action, "review-state");
+  assert.equal(findings.find((finding) => finding.name === "target")?.action, "review-state");
 });
 
 test("isolates visibility when companion writes occur only while closing", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function Dialog(_props: unknown) { return null; }
     export function Screen() {
@@ -3959,11 +4502,14 @@ test("isolates visibility when companion writes occur only while closing", () =>
         <Dialog draft={draft} open={open} setOpen={setOpen} onReset={reset} />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "open")?.action, "use-observable");
-  assert.equal(findings.find(finding => finding.name === "draft")?.action, "review-state");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "open")?.action, "use-observable");
+  assert.equal(findings.find((finding) => finding.name === "draft")?.action, "review-state");
 
-  const nonVisibility = analyzeSource(`
+  const nonVisibility = analyzeSource(
+    `
     import { useState } from "react";
     function Control(_props: unknown) { return null; }
     export function Screen() {
@@ -3975,13 +4521,16 @@ test("isolates visibility when companion writes occur only while closing", () =>
         <Control draft={draft} active={active} onReset={reset} />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(nonVisibility.find(finding => finding.name === "active")?.action, "review-state");
-  assert.equal(nonVisibility.find(finding => finding.name === "draft")?.action, "review-state");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(nonVisibility.find((finding) => finding.name === "active")?.action, "review-state");
+  assert.equal(nonVisibility.find((finding) => finding.name === "draft")?.action, "review-state");
 });
 
 test("proves a controlled boolean forwards only guarded close companions", () => {
-  const safe = analyzeSource(`
+  const safe = analyzeSource(
+    `
     import { useState } from "react";
     function Dialog(_props: unknown) { return null; }
     export function Screen() {
@@ -3996,15 +4545,18 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
         <Dialog draft={draft} open={open} onOpenChange={changeOpen} />
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(safe.find(finding => finding.name === "open")?.action, "use-observable");
-  assert.equal(safe.find(finding => finding.name === "draft")?.action, "review-state");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(safe.find((finding) => finding.name === "open")?.action, "use-observable");
+  assert.equal(safe.find((finding) => finding.name === "draft")?.action, "review-state");
 
   for (const unsafeChange of [
     `if (nextOpen) setDraft("next"); setOpen(nextOpen);`,
     `nextOpen = false; if (!nextOpen) setDraft(""); setOpen(nextOpen);`,
   ]) {
-    const unsafe = analyzeSource(`
+    const unsafe = analyzeSource(
+      `
       import { useState } from "react";
       function Dialog(_props: unknown) { return null; }
       export function Screen() {
@@ -4016,14 +4568,25 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
           <Dialog draft={draft} open={open} onOpenChange={changeOpen} />
         </main>;
       }
-    `, "fixture.tsx");
-    assert.equal(unsafe.find(finding => finding.name === "open")?.action, "review-state", unsafeChange);
-    assert.equal(unsafe.find(finding => finding.name === "draft")?.action, "review-state", unsafeChange);
+    `,
+      "fixture.tsx",
+    );
+    assert.equal(
+      unsafe.find((finding) => finding.name === "open")?.action,
+      "review-state",
+      unsafeChange,
+    );
+    assert.equal(
+      unsafe.find((finding) => finding.name === "draft")?.action,
+      "review-state",
+      unsafeChange,
+    );
   }
 });
 
 test("does not put a subscriber inside its own false visibility gate", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     interface Item { id: string }
     function Dialog(_props: unknown) { return null; }
@@ -4036,13 +4599,16 @@ test("does not put a subscriber inside its own false visibility gate", () => {
         {open && <Dialog target={target} open={open} setOpen={setOpen} />}
       </main>;
     }
-  `, "fixture.tsx");
-  const open = findings.find(finding => finding.name === "open");
+  `,
+      "fixture.tsx",
+    ),
+    open = findings.find((finding) => finding.name === "open");
   assert.equal(open?.action, "review-state");
 });
 
 test("does not treat arbitrary direct setter props as independent child commands", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function Registry(_props: unknown) { return null; }
     export function Screen() {
@@ -4055,8 +4621,10 @@ test("does not treat arbitrary direct setter props as independent child commands
         <output>{String(dirty)}</output>
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "open")?.action, "review-state");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "open")?.action, "review-state");
 });
 
 test("does not infer an independent write through a helper-hidden companion update", () => {
@@ -4077,7 +4645,7 @@ test("does not infer an independent write through a helper-hidden companion upda
         </main>;
       }
     `),
-    ["review-state", "review-state"]
+    ["review-state", "review-state"],
   );
 
   assert.deepEqual(
@@ -4096,12 +4664,13 @@ test("does not infer an independent write through a helper-hidden companion upda
         </main>;
       }
     `),
-    ["review-state", "review-state"]
+    ["review-state", "review-state"],
   );
 });
 
 test("isolates an independently opened leaf while preserving coupled workflow transitions", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     function Dialog(_props: unknown) { return null; }
     export function Screen() {
@@ -4114,9 +4683,11 @@ test("isolates an independently opened leaf while preserving coupled workflow tr
         <span>{selection}</span>
       </main>;
     }
-  `, "fixture.tsx");
-  const open = findings.find(finding => finding.name === "open");
-  const selection = findings.find(finding => finding.name === "selection");
+  `,
+      "fixture.tsx",
+    ),
+    open = findings.find((finding) => finding.name === "open"),
+    selection = findings.find((finding) => finding.name === "selection");
   assert.equal(open?.action, "use-observable");
   assert.equal(selection?.action, "review-state");
 });
@@ -4134,7 +4705,7 @@ test("does not move an inline controlled callback that co-writes owner state", (
         </main>;
       }
     `),
-    ["review-state", "review-state"]
+    ["review-state", "review-state"],
   );
 });
 
@@ -4150,7 +4721,7 @@ test("keeps observable ownership above a receiving leaf with an outside setter c
         </main>;
       }
     `),
-    ["use-observable"]
+    ["use-observable"],
   );
 });
 
@@ -4165,12 +4736,13 @@ test("does not move controlled state through an opaque JSX callback", () => {
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
 test("isolates a lazy-initialized value inside one stable JSX child callback", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function ImageField(_props: unknown) { return null; }
     function FormField(_props: unknown) { return null; }
@@ -4187,7 +4759,9 @@ test("isolates a lazy-initialized value inside one stable JSX child callback", (
         <button onClick={chooseFile}>Choose</button>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /created exactly once/);
   assert.match(finding?.message ?? "", /do not turn the initializer into a computed/);
@@ -4201,7 +4775,8 @@ test("keeps lazy callback transport without one stable independent leaf cut", ()
     `<main>{rows.map(row => <FormField key={row.id}>{() => <ImageField preview={preview} />}</FormField>)}<Details /></main>`,
     `<main>{show && <FormField>{() => <ImageField preview={preview} />}</FormField>}<Details /></main>`,
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       function ImageField(_props: unknown) { return null; }
       function FormField(_props: unknown) { return null; }
@@ -4212,13 +4787,16 @@ test("keeps lazy callback transport without one stable independent leaf cut", ()
         const chooseFile = () => setPreview("next");
         return ${body};
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable", body);
   }
 });
 
 test("does not put a lazy callable value into a nested observable leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     function Slot(_props: unknown) { return null; }
@@ -4231,12 +4809,15 @@ test("does not put a lazy callable value into a nested observable leaf", () => {
         <button onClick={() => setCallback(() => work)}>Set</button>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("keeps a lazy callback leaf when its write command also invalidates the owner", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     function ImageField(_props: unknown) { return null; }
     function FormField(_props: unknown) { return null; }
@@ -4255,14 +4836,17 @@ test("keeps a lazy callback leaf when its write command also invalidates the own
         <button onClick={chooseFile}>Choose</button>
       </main>;
     }
-  `, "fixture.tsx");
-  const preview = findings.find(finding => finding.name === "preview");
+  `,
+      "fixture.tsx",
+    ),
+    preview = findings.find((finding) => finding.name === "preview");
   assert.notEqual(preview?.action, "use-observable");
 });
 
 test("does not promote broad transported state when every write also invalidates the owner", () => {
-  const padding = "\n".repeat(150);
-  const findings = analyzeSource(`
+  const padding = "\n".repeat(150),
+    findings = analyzeSource(
+      `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     export function Screen() {
@@ -4277,13 +4861,16 @@ test("does not promote broad transported state when every write also invalidates
         {dirty && <Save />}
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "value")?.action, "review-state");
+  `,
+      "fixture.tsx",
+    );
+  assert.equal(findings.find((finding) => finding.name === "value")?.action, "review-state");
 });
 
 test("does not split a broad transported preview from a companion React transition", () => {
-  const padding = "\n".repeat(150);
-  const findings = analyzeSource(`
+  const padding = "\n".repeat(150),
+    findings = analyzeSource(
+      `
     import { useState } from "react";
     function ImageField(_props: unknown) { return null; }
     export function Screen() {
@@ -4302,8 +4889,10 @@ test("does not split a broad transported preview from a companion React transiti
         <span>{role}</span>
       </main>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "preview")?.action, "review-state");
+  `,
+      "fixture.tsx",
+    );
+  assert.equal(findings.find((finding) => finding.name === "preview")?.action, "review-state");
 });
 
 test("does not move controlled state through a stored JSX value", () => {
@@ -4318,7 +4907,7 @@ test("does not move controlled state through a stored JSX value", () => {
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -4333,7 +4922,7 @@ test("does not move controlled state out of a custom hook that returns JSX", () 
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -4348,12 +4937,13 @@ test("does not move direct state into an opaque render callback", () => {
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
 test("isolates a narrow projection inside a JSX child render callback", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [hovered, setHovered] = useState(false);
@@ -4363,13 +4953,16 @@ test("isolates a narrow projection inside a JSX child render callback", () => {
         </div>}</Picker>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /leaf subscriber/);
 });
 
 test("does not trust an unresolved event producer inside a JSX child render callback", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [hovered, setHovered] = useState(false);
@@ -4379,12 +4972,15 @@ test("does not trust an unresolved event producer inside a JSX child render call
         </Wrapper>}</Picker>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
 test("does not isolate a key projection inside a JSX child render callback", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen() {
       const [version, setVersion] = useState(0);
@@ -4394,7 +4990,9 @@ test("does not isolate a key projection inside a JSX child render callback", () 
         </div>}</Picker>
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
@@ -4409,7 +5007,7 @@ test("requires repeated projections to depend on a stable row key", () => {
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
   assert.deepEqual(
     actions(`
@@ -4421,12 +5019,13 @@ test("requires repeated projections to depend on a stable row key", () => {
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
 test("allows a keyed row projection to read the current key in its click command", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Screen({ rows }: { rows: Array<{ id: string }> }) {
       const [openId, setOpenId] = useState<string | null>(null);
@@ -4434,7 +5033,9 @@ test("allows a keyed row projection to read the current key in its click command
         {rows.map(row => <Row key={row.id} open={openId === row.id} onClick={() => setOpenId(openId === row.id ? null : row.id)} />)}
       </main>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /per-item/);
 });
@@ -4451,7 +5052,7 @@ test("does not move direct state when every write shares a mutation lifecycle", 
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -4465,7 +5066,7 @@ test("does not move controlled state from an owner that is already a small leaf"
         return <Editor value={value} onChange={setValue} />;
       }
     `),
-    ["keep-state"]
+    ["keep-state"],
   );
 });
 
@@ -4481,7 +5082,7 @@ test("keeps conditional child state at the owner and rejects multiple instances"
         </main>;
       }
     `),
-    ["use-observable"]
+    ["use-observable"],
   );
   assert.deepEqual(
     actions(`
@@ -4494,12 +5095,13 @@ test("keeps conditional child state at the owner and rejects multiple instances"
         </main>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
 test("groups a co-written dialog payload and visibility flag into one observable model", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDialog(_props: unknown) { return null; }
@@ -4514,15 +5116,21 @@ test("groups a co-written dialog payload and visibility flag into one observable
         <ItemDialog target={target} open={open} onOpenChange={setOpen} onShow={show} />
       </main>;
     }
-  `, "fixture.tsx");
-  const grouped = findings.filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+      "fixture.tsx",
+    ),
+    grouped = findings.filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["target", "open"]);
-  assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
+  assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 });
 
 test("groups a persistent dialog model behind one bounded payload gate", () => {
-  const grouped = analyzeSource(`
+  const grouped = analyzeSource(
+    `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDialog(_props: unknown) { return null; }
@@ -4537,12 +5145,18 @@ test("groups a persistent dialog model behind one bounded payload gate", () => {
         {target ? <ItemDialog target={target} open={open} onOpenChange={setOpen} onShow={show} /> : null}
       </main>;
     }
-  `, "fixture.tsx").filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["target", "open"]);
   assert.match(grouped[0]?.message ?? "", /stable leaf wrapper/);
 
-  const fanout = analyzeSource(`
+  const fanout = analyzeSource(
+    `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDialog(_props: unknown) { return null; }
@@ -4558,7 +5172,9 @@ test("groups a persistent dialog model behind one bounded payload gate", () => {
         {target ? <Preview item={target} /> : null}
       </main>;
     }
-  `, "fixture.tsx").filter(finding => finding.group);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.group);
   assert.equal(fanout.length, 0);
 });
 
@@ -4580,15 +5196,17 @@ test("groups a persistent dialog payload, visibility, and monotonic mount latch"
         {ready ? <ItemDialog target={target} open={open} onClose={close} /> : null}
       </main>;
     }
-  `;
-
-  const grouped = analyzeSource(source(""), "fixture.tsx").filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable", "use-observable"]);
+  `,
+    grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["target", "open", "ready"]);
   assert.match(grouped[0]?.message ?? "", /persistent dialog state/);
 
   const resetting = analyzeSource(source("setReady(false);"), "fixture.tsx");
-  assert.equal(resetting.filter(finding => finding.group).length, 0);
+  assert.equal(resetting.filter((finding) => finding.group).length, 0);
 });
 
 test("groups one bounded logical-and dialog gate without merging payload fanout", () => {
@@ -4608,14 +5226,16 @@ test("groups one bounded logical-and dialog gate without merging payload fanout"
         ${extra}
       </main>;
     }
-  `;
-
-  const grouped = analyzeSource(source(""), "fixture.tsx").filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+    grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["open", "target"]);
 
   const fanout = analyzeSource(source("{target && <Preview item={target} />}"), "fixture.tsx");
-  assert.equal(fanout.filter(finding => finding.group).length, 0);
+  assert.equal(fanout.filter((finding) => finding.group).length, 0);
 });
 
 test("groups a bounded multi-element dialog gate without wrapping a broad branch", () => {
@@ -4636,22 +5256,23 @@ test("groups a bounded multi-element dialog gate without wrapping a broad branch
         </ItemDialog>}
       </main>;
     }
-  `;
-
-  const bounded = analyzeSource(
-    source("<One /><Two /><Three /><Four /><Five /><Six /><Seven />"),
-    "fixture.tsx"
-  );
+  `,
+    bounded = analyzeSource(
+      source("<One /><Two /><Three /><Four /><Five /><Six /><Seven />"),
+      "fixture.tsx",
+    );
   assert.deepEqual(
-    bounded.filter(finding => finding.group).map(finding => finding.action),
-    ["use-observable", "use-observable"]
+    bounded.filter((finding) => finding.group).map((finding) => finding.action),
+    ["use-observable", "use-observable"],
   );
 
   const broad = analyzeSource(
-    source("<One /><Two /><Three /><Four /><Five /><Six /><Seven /><Eight /><Nine /><Ten /><Eleven /><Twelve /><Thirteen />"),
-    "fixture.tsx"
+    source(
+      "<One /><Two /><Three /><Four /><Five /><Six /><Seven /><Eight /><Nine /><Ten /><Eleven /><Twelve /><Thirteen />",
+    ),
+    "fixture.tsx",
   );
-  assert.equal(broad.filter(finding => finding.group).length, 0);
+  assert.equal(broad.filter((finding) => finding.group).length, 0);
 });
 
 test("groups an undefined-initialized dialog payload without accepting opaque initializers", () => {
@@ -4670,21 +5291,23 @@ test("groups an undefined-initialized dialog payload without accepting opaque in
         <ItemDrawer target={target} open={open} onOpenChange={setOpen} onShow={show} />
       </main>;
     }
-  `;
-
-  const grouped = analyzeSource(source(""), "fixture.tsx").filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+    grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["target", "open"]);
 
   const opaque = analyzeSource(source("loadInitialTarget()"), "fixture.tsx");
-  assert.equal(opaque.filter(finding => finding.group).length, 0);
+  assert.equal(opaque.filter((finding) => finding.group).length, 0);
 });
 
 test("isolates one nullable payload inside a bounded dialog boundary", () => {
   const source = (
     dialog: string,
     extraWrite = "",
-    confirmBody = "if (!target) return; remove(target.id); setTarget(null);"
+    confirmBody = "if (!target) return; remove(target.id); setTarget(null);",
   ) => `
     import { useState } from "react";
     interface Item { id: string; name: string }
@@ -4707,51 +5330,70 @@ test("isolates one nullable payload inside a bounded dialog boundary", () => {
   `;
 
   assert.deepEqual(
-    actions(source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
+    actions(
+      source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
       <h2>{renderName(target)}</h2>
       <button onClick={confirm} disabled={!target}>Confirm</button>
-    </dialog>`)),
-    ["use-observable", "review-state"]
+    </dialog>`),
+    ),
+    ["use-observable", "review-state"],
   );
 
   assert.deepEqual(
-    actions(source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
+    actions(
+      source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
       <h2>{renderName(target)}</h2>
       <button onClick={confirm}>Confirm</button>
-    </dialog><Preview item={target} />`)),
-    ["review-state", "review-state"]
+    </dialog><Preview item={target} />`),
+    ),
+    ["review-state", "review-state"],
   );
 
   assert.deepEqual(
-    actions(source(`{target && <dialog open>
+    actions(
+      source(`{target && <dialog open>
       <h2>Delete {target.name}</h2>
       <button onClick={confirm}>Confirm</button>
-    </dialog>}`)),
-    ["use-observable", "review-state"]
+    </dialog>}`),
+    ),
+    ["use-observable", "review-state"],
   );
 
   assert.deepEqual(
-    actions(source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
+    actions(
+      source(
+        `<dialog open={target !== null} onClose={() => setTarget(null)}>
       <h2>{renderName(target)}</h2>
       <button onClick={confirm}>Confirm</button>
-    </dialog>`, "setPage(2);")),
-    ["review-state", "delete-unused-state"]
+    </dialog>`,
+        "setPage(2);",
+      ),
+    ),
+    ["review-state", "delete-unused-state"],
   );
 
   assert.deepEqual(
-    actions(source(`<Eager onFire={() => setTarget(item)} /><dialog open={target !== null} onClose={() => setTarget(null)}>
+    actions(
+      source(`<Eager onFire={() => setTarget(item)} /><dialog open={target !== null} onClose={() => setTarget(null)}>
       <h2>{renderName(target)}</h2>
       <button onClick={confirm}>Confirm</button>
-    </dialog>`)),
-    ["review-state", "review-state"]
+    </dialog>`),
+    ),
+    ["review-state", "review-state"],
   );
 
   assert.deepEqual(
-    actions(source(`<dialog open={target !== null} onClose={() => setTarget(null)}>
+    actions(
+      source(
+        `<dialog open={target !== null} onClose={() => setTarget(null)}>
       <h2>{renderName(target)}</h2>
       <button onClick={confirm}>Confirm</button>
-    </dialog>`, "", "Promise.resolve().then(() => remove(target?.id)); setTarget(null);")),
-    ["review-state", "review-state"]
+    </dialog>`,
+        "",
+        "Promise.resolve().then(() => remove(target?.id)); setTarget(null);",
+      ),
+    ),
+    ["review-state", "review-state"],
   );
 });
 
@@ -4759,7 +5401,7 @@ test("isolates call-free payload projections inside one bounded conditional dial
   const source = (
     dialog: string,
     extraWrite = "",
-    producer = `<button onClick={() => open()}>Edit</button>`
+    producer = `<button onClick={() => open()}>Edit</button>`,
   ) => `
     import { useState } from "react";
     interface Item { id: string }
@@ -4777,10 +5419,12 @@ test("isolates call-free payload projections inside one bounded conditional dial
   `;
 
   assert.deepEqual(
-    actions(source(`{target && <dialog open onClose={() => setTarget(null)}>
+    actions(
+      source(`{target && <dialog open onClose={() => setTarget(null)}>
       <Editor item={target === "create" ? null : target} />
-    </dialog>}`)),
-    ["use-observable"]
+    </dialog>}`),
+    ),
+    ["use-observable"],
   );
 
   for (const unsafe of [
@@ -4801,22 +5445,34 @@ test("isolates call-free payload projections inside one bounded conditional dial
   }
 
   assert.deepEqual(
-    actions(source(`{target && <dialog open onClose={() => setTarget(null)}>
+    actions(
+      source(
+        `{target && <dialog open onClose={() => setTarget(null)}>
       <Editor item={target} />
-    </dialog>}`, "setPage(2);")),
-    ["review-state"]
+    </dialog>}`,
+        "setPage(2);",
+      ),
+    ),
+    ["review-state"],
   );
 
   assert.deepEqual(
-    actions(source(`{target && <dialog open onClose={() => setTarget(null)}>
+    actions(
+      source(
+        `{target && <dialog open onClose={() => setTarget(null)}>
       <Editor item={target} />
-    </dialog>}`, "", `<Unknown onFire={() => open()} />`)),
-    ["review-state"]
+    </dialog>}`,
+        "",
+        `<Unknown onFire={() => open()} />`,
+      ),
+    ),
+    ["review-state"],
   );
 });
 
 test("groups a payload-gated timed feedback flag without widening its subscriber", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     function Dialog(_props: unknown) { return null; }
     function Button(_props: unknown) { return null; }
@@ -4844,17 +5500,23 @@ test("groups a payload-gated timed feedback flag without widening its subscriber
         {password ? <section><code>{password}</code><Button onClick={copy}>{copied ? "Copied" : "Copy"}</Button></section> : <Confirm account={account} />}
       </Dialog>;
     }
-  `, "fixture.tsx");
-  const grouped = findings.filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+      "fixture.tsx",
+    ),
+    grouped = findings.filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["password", "copied"]);
   assert.match(grouped[0]?.message ?? "", /batch/);
   assert.match(grouped[0]?.message ?? "", /nested feedback leaf/);
-  assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
+  assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 });
 
 test("rejects incomplete payload-gated feedback models", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function Shell(_props: unknown) { return null; }
     export function OutsideGate() {
@@ -4942,9 +5604,13 @@ test("rejects incomplete payload-gated feedback models", () => {
         {payload ? <section><code>{payload}</code><output>{String(copied)}</output><button onClick={copy} /></section> : null}
       </Shell>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   for (const name of ["payload", "copied"]) {
-    assert.ok(findings.filter(finding => finding.name === name).every(finding => !finding.group));
+    assert.ok(
+      findings.filter((finding) => finding.name === name).every((finding) => !finding.group),
+    );
   }
 });
 
@@ -4974,34 +5640,36 @@ test("groups a co-written cursor and editable name into one observable draft", (
           : <Row key={item.id} item={item} onRename={() => begin(item)} />)}
       </main>;
     }
-  `;
-
-  const findings = analyzeSource(source(""), "fixture.tsx");
-  const grouped = findings.filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+    findings = analyzeSource(source(""), "fixture.tsx"),
+    grouped = findings.filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["draftId", "draftName"]);
   assert.match(grouped[0]?.message ?? "", /atomic/i);
-  assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
+  assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 
   const closeOnly = analyzeSource(
     source("const close = () => setDraftId(null);", "<button onClick={close}>Close</button>"),
-    "fixture.tsx"
+    "fixture.tsx",
   );
-  assert.deepEqual(
-    closeOnly.find(finding => finding.name === "draftId")?.group?.members,
-    ["draftId", "draftName"]
-  );
+  assert.deepEqual(closeOnly.find((finding) => finding.name === "draftId")?.group?.members, [
+    "draftId",
+    "draftName",
+  ]);
 
   const staleDraft = analyzeSource(
     source(
       "const switchWithoutDraft = () => setDraftId(items[0]!.id);",
-      "<button onClick={switchWithoutDraft}>Switch</button>"
+      "<button onClick={switchWithoutDraft}>Switch</button>",
     ),
-    "fixture.tsx"
+    "fixture.tsx",
   );
   assert.notEqual(
-    staleDraft.find(finding => finding.name === "draftId")?.group?.members.join(","),
-    "draftId,draftName"
+    staleDraft.find((finding) => finding.name === "draftId")?.group?.members.join(","),
+    "draftId,draftName",
   );
 });
 
@@ -5031,27 +5699,30 @@ test("groups selection mode with its independently editable ID collection", () =
         {rows.map(row => <Row key={row.id} selected={selectedIds.includes(row.id)} onToggle={() => toggle(row.id)} />)}
       </main>;
     }
-  `;
-
-  const findings = analyzeSource(source(""), "fixture.tsx");
-  const grouped = findings.filter(finding => finding.group);
-  assert.deepEqual(grouped.map(finding => finding.action), ["use-observable", "use-observable"]);
+  `,
+    findings = analyzeSource(source(""), "fixture.tsx"),
+    grouped = findings.filter((finding) => finding.group);
+  assert.deepEqual(
+    grouped.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
   assert.deepEqual(grouped[0]?.group?.members, ["selectionMode", "selectedIds"]);
   assert.match(grouped[0]?.message ?? "", /atomic/i);
-  assert.equal(agentFindings(findings).filter(finding => finding.group).length, 1);
+  assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 
   const unsafe = analyzeSource(
     source("const suspend = () => setSelectionMode(false);"),
-    "fixture.tsx"
+    "fixture.tsx",
   );
   assert.notEqual(
-    unsafe.find(finding => finding.name === "selectionMode")?.group?.members.join(","),
-    "selectionMode,selectedIds"
+    unsafe.find((finding) => finding.name === "selectionMode")?.group?.members.join(","),
+    "selectionMode,selectedIds",
   );
 });
 
 test("does not merge mutually exclusive switch branches into one state cluster", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDialog(_props: unknown) { return null; }
@@ -5074,10 +5745,12 @@ test("does not merge mutually exclusive switch branches into one state cluster",
         <ItemDialog target={linkTarget} open={linkOpen} onOpenChange={setLinkOpen} />
       </main>;
     }
-  `, "fixture.tsx");
-  const primary = findings.find(finding => finding.group?.primary);
+  `,
+      "fixture.tsx",
+    ),
+    primary = findings.find((finding) => finding.group?.primary);
   assert.deepEqual(primary?.group?.members, ["linkTarget", "linkOpen"]);
-  assert.equal(findings.find(finding => finding.name === "editTarget")?.group, undefined);
+  assert.equal(findings.find((finding) => finding.name === "editTarget")?.group, undefined);
 });
 
 test("reviews fanout to multiple leaves without assuming Legend is faster", () => {
@@ -5091,7 +5764,7 @@ test("reviews fanout to multiple leaves without assuming Legend is faster", () =
         return <><SearchInput value={query} onChange={setQuery} /><Preview query={query} /></>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -5105,7 +5778,7 @@ test("suggests observable transport for a repeated leaf", () => {
         return rows.map(id => <Row key={id} id={id} selectedId={selectedId} onSelect={setSelectedId} />);
       }
     `),
-    ["use-observable"]
+    ["use-observable"],
   );
 });
 
@@ -5118,7 +5791,7 @@ test("keeps setter-less lazy state as stable component resource ownership", () =
         return <><Toolbar store={store} /><Table store={store} /></>;
       }
     `),
-    ["keep-state"]
+    ["keep-state"],
   );
 });
 
@@ -5132,7 +5805,7 @@ test("deletes a pure derivation state and effect pair", () => {
         return <span>{fullName}</span>;
       }
     `),
-    ["delete-derived-state", "delete-effect"]
+    ["delete-derived-state", "delete-effect"],
   );
 });
 
@@ -5146,7 +5819,7 @@ test("deletes derived state only when transparent inputs match effect dependenci
         return <span>{String(visible)}</span>;
       }
     `),
-    ["delete-derived-state", "delete-effect"]
+    ["delete-derived-state", "delete-effect"],
   );
 });
 
@@ -5171,13 +5844,14 @@ test("keeps effects whose assigned value is not a transparent dependency derivat
         }
       `),
       ["review-state", "review-effect"],
-      body
+      body,
     );
   }
 });
 
 test("does not leak a derived-state deletion across sibling component bindings", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Interactive() {
       const [value, setValue] = useState("");
@@ -5188,13 +5862,16 @@ test("does not leak a derived-state deletion across sibling component bindings",
       useEffect(() => { setValue(input + "!"); }, [input]);
       return <span>{value}</span>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.filter(finding => finding.action === "delete-derived-state").length, 1);
-  assert.equal(findings.filter(finding => finding.action === "delete-effect").length, 1);
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.filter((finding) => finding.action === "delete-derived-state").length, 1);
+  assert.equal(findings.filter((finding) => finding.action === "delete-effect").length, 1);
 });
 
 test("does not confuse a sibling state setter with an external subscription", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Form() {
       const [flag, subscribe] = useState(false);
@@ -5204,12 +5881,15 @@ test("does not confuse a sibling state setter with an external subscription", ()
       useEffect(() => subscribe(), [subscribe]);
       return null;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.hook === "useEffect")?.action, "keep-effect");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "keep-effect");
 });
 
 test("does not let a sibling setter suppress a module-global mount candidate", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     import { warmCache } from "./cache";
     export function Form() {
@@ -5220,8 +5900,10 @@ test("does not let a sibling setter suppress a module-global mount candidate", (
       useEffect(() => { warmCache(); }, []);
       return null;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.hook === "useEffect")?.action, "use-mount");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "use-mount");
 });
 
 test("does not call a resettable state value derived", () => {
@@ -5234,7 +5916,7 @@ test("does not call a resettable state value derived", () => {
         return <Pager page={page} onChange={setPage} />;
       }
     `),
-    ["review-state", "review-effect"]
+    ["review-state", "review-effect"],
   );
 });
 
@@ -5252,7 +5934,7 @@ test("keeps a same-owner reset effect behind an opaque controlled component", ()
         </main>;
       }
     `),
-    ["review-state", "review-state", "review-effect"]
+    ["review-state", "review-state", "review-effect"],
   );
 });
 
@@ -5276,7 +5958,7 @@ test("does not move reset effects into opaque custom-component callbacks", () =>
         }
       `),
       ["review-state", "review-state", "review-effect"],
-      mutation
+      mutation,
     );
   }
 });
@@ -5295,13 +5977,14 @@ test("moves reset effects into intrinsic event callbacks", () => {
         </main>;
       }
     `),
-    ["review-state", "review-state", "move-to-event"]
+    ["review-state", "review-state", "move-to-event"],
   );
 });
 
 test("does not move reset effects whose initializer evaluation is not stable", () => {
   for (const reset of ["nextPage()", "{}", "[]"]) {
-    const findings = analyzeSource(`
+    const findings = analyzeSource(
+      `
         import { useEffect, useState } from "react";
         export function Browser() {
           const [category, setCategory] = useState("all");
@@ -5312,11 +5995,13 @@ test("does not move reset effects whose initializer evaluation is not stable", (
             <button onClick={() => setPage(${reset})}>Next page</button>
           </main>;
         }
-      `, "fixture.tsx");
+      `,
+      "fixture.tsx",
+    );
     assert.equal(
-      findings.find(finding => finding.hook === "useEffect")?.action,
+      findings.find((finding) => finding.hook === "useEffect")?.action,
       "review-effect",
-      reset
+      reset,
     );
   }
 });
@@ -5331,7 +6016,7 @@ test("does not move a reset effect when a dependency mutation boundary is extern
         return <button onClick={() => setDetailIndex(value => value + 1)}>{detailIndex}</button>;
       }
     `),
-    ["review-state", "review-effect"]
+    ["review-state", "review-effect"],
   );
 });
 
@@ -5344,7 +6029,7 @@ test("keeps an expression-bodied external subscription as lifecycle ownership", 
         return null;
       }
     `),
-    ["keep-effect"]
+    ["keep-effect"],
   );
 });
 
@@ -5358,7 +6043,7 @@ test("does not mistake an expression-bodied React setter for cleanup", () => {
         return <Pager page={page} onChange={setPage} />;
       }
     `),
-    ["review-state", "review-effect"]
+    ["review-state", "review-effect"],
   );
 });
 
@@ -5371,7 +6056,7 @@ test("does not mistake an arbitrary expression-bodied callback call for cleanup"
         return null;
       }
     `),
-    ["review-effect"]
+    ["review-effect"],
   );
 });
 
@@ -5386,7 +6071,7 @@ test("replaces a React mirror written only by a Legend reaction with useValue", 
         return isOpen ? <Menu /> : null;
       }
     `),
-    ["use-value"]
+    ["use-value"],
   );
 });
 
@@ -5400,7 +6085,7 @@ test("recognizes aliased and namespace React hooks", () => {
         return <>{first}{second}</>;
       }
     `),
-    ["keep-state", "keep-state"]
+    ["keep-state", "keep-state"],
   );
 });
 
@@ -5413,7 +6098,7 @@ test("does not treat unrelated functions named useState as React hooks", () => {
         return <>{value}</>;
       }
     `),
-    []
+    [],
   );
 });
 
@@ -5426,7 +6111,7 @@ test("reviews state transported through Context rather than treating Provider as
         return <ValueContext.Provider value={{ value, setValue }}>{children}</ValueContext.Provider>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -5440,7 +6125,7 @@ test("does not suggest a ref when a child renders the state and an owner handler
         return <Input value={name} onChange={setName} onSubmit={submit} />;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -5454,7 +6139,7 @@ test("treats React Native host props as owner render reads", () => {
         return <View style={styles.field(focused)} onFocus={() => setFocused(true)} />;
       }
     `),
-    ["keep-state"]
+    ["keep-state"],
   );
 });
 
@@ -5473,12 +6158,13 @@ test("keeps a returned command reentrancy guard on its React render snapshot", (
         return { run };
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
 test("preserves React lifecycle timing when command-only state becomes a ref", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+      `
     import { useLayoutEffect, useState } from "react";
     export function ChartPreview({ source }: { source: number[] }) {
       const [elements, setElements] = useState<number[]>([]);
@@ -5489,15 +6175,18 @@ test("preserves React lifecycle timing when command-only state becomes a ref", (
       const insert = () => save(elements);
       return <Button onPress={insert} />;
     }
-  `, "fixture.tsx");
-  const state = findings.find(finding => finding.hook === "useState");
+  `,
+      "fixture.tsx",
+    ),
+    state = findings.find((finding) => finding.hook === "useState");
   assert.equal(state?.action, "use-ref");
   assert.match(state?.message ?? "", /preserve any existing React lifecycle hook/i);
   assert.match(state?.evidence[2] ?? "", /effect writes 2/);
 });
 
 test("uses a ref for command state read through imported React Hook Form", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     import { useForm } from "react-hook-form";
     export function Form() {
@@ -5518,13 +6207,16 @@ test("uses a ref for command state read through imported React Hook Form", () =>
       };
       return <form onSubmit={handleSubmit(submit)}><button type="submit">Save</button></form>;
     }
-  `, "fixture.tsx").filter(finding => finding.name === "secret");
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.name === "secret");
   assert.equal(findings[0]?.action, "use-ref");
   assert.notEqual(findings[1]?.action, "use-ref");
 });
 
 test("isolates effect-written presentation state in a leaf subscriber", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Dashboard() {
       const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -5538,7 +6230,9 @@ test("isolates effect-written presentation state in a leaf subscriber", () => {
           {previewUrl ? <Preview src={previewUrl} /> : <EmptyPreview />}
         </Status></Page>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
 
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /preserve the React effect/i);
@@ -5563,42 +6257,42 @@ test("isolates presentation state written by an effect-owned memoized command", 
           <Row>{dimensions.width}</Row><Row>{dimensions.height}</Row>
         </Stats></Page>;
     }
-  `;
-
-  const [finding] = analyzeSource(source(""), "fixture.tsx");
+  `,
+    [finding] = analyzeSource(source(""), "fixture.tsx");
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /memoized command/i);
   assert.match(finding?.message ?? "", /effect and cleanup/i);
 
-  const escaped = analyzeSource(
-    source("onUpdate={updateDimensions}"),
-    "fixture.tsx"
-  ).find(candidate => candidate.name === "dimensions");
+  const escaped = analyzeSource(source("onUpdate={updateDimensions}"), "fixture.tsx").find(
+    (candidate) => candidate.name === "dimensions",
+  );
   assert.notEqual(escaped?.action, "use-observable");
 });
 
 test("requires a material five-element cut in a compact effect-written owner", () => {
-  const analyze = (siblings: string) => analyzeSource(`
+  const analyze = (siblings: string) =>
+    analyzeSource(
+      `
     import { useEffect, useState } from "react";
     export function Panel() {
       const [visible, setVisible] = useState(false);
       useEffect(() => { setVisible(true); }, []);
       return <Page>${siblings}{visible && <Leaf />}</Page>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "visible");
+  `,
+      "fixture.tsx",
+    ).find((candidate) => candidate.name === "visible");
 
   assert.equal(
     analyze("<Header /><Nav /><Summary /><Filters /><Footer />")?.action,
-    "use-observable"
+    "use-observable",
   );
-  assert.notEqual(
-    analyze("<Header /><Nav /><Footer />")?.action,
-    "use-observable"
-  );
+  assert.notEqual(analyze("<Header /><Nav /><Footer />")?.action, "use-observable");
 });
 
 test("accepts an effect-written projection through the imported clsx package", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import clsx from "clsx";
     import { useEffect, useState } from "react";
     export function Dashboard() {
@@ -5612,11 +6306,14 @@ test("accepts an effect-written projection through the imported clsx package", (
           <button className={clsx("retry", { invisible: !canRetry })}>Retry</button>
         </Status></Page>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
 
   assert.equal(finding?.action, "use-observable");
 
-  const [shadowed] = analyzeSource(`
+  const [shadowed] = analyzeSource(
+    `
     import clsx from "clsx";
     import { useEffect, useState } from "react";
     export function Dashboard() {
@@ -5628,12 +6325,15 @@ test("accepts an effect-written projection through the imported clsx package", (
           <button className={clsx("retry", { invisible: !canRetry })}>Retry</button>
         </Status></Page>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(shadowed?.action, "use-observable");
 });
 
 test("combines effect-written presentation state projected through two const aliases", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Gallery() {
       const [items, setItems] = useState<string[] | null>(null);
@@ -5651,12 +6351,15 @@ test("combines effect-written presentation state projected through two const ali
             list.map(item => <Tile key={item} value={item} />)}
         </ScrollView></Page>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
 
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /<ScrollView>/);
 
-  const unkeyed = analyzeSource(`
+  const unkeyed = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Gallery() {
       const [items, setItems] = useState<string[] | null>(null);
@@ -5668,7 +6371,9 @@ test("combines effect-written presentation state projected through two const ali
           {loading ? <Skeleton /> : list.map(item => <Tile value={item} />)}
         </ScrollView></Page>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "items");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "items");
   assert.notEqual(unkeyed?.action, "use-observable");
 });
 
@@ -5678,7 +6383,8 @@ test("keeps unsafe effect-written presentation state under review", () => {
     `if (elapsed < next) setElapsed(next);`,
     `setElapsed(previous => { audit(previous); return previous + 1; });`,
   ]) {
-    const findings = analyzeSource(`
+    const findings = analyzeSource(
+        `
       import { useEffect, useState } from "react";
       export function Dashboard({ next }: { next: number }) {
         const [elapsed, setElapsed] = useState(0);
@@ -5688,12 +6394,15 @@ test("keeps unsafe effect-written presentation state under review", () => {
           <Help /><Footer /><Actions /><Status><Progress value={elapsed} /></Status>
           <Ready value={ready} /></Page>;
       }
-    `, "fixture.tsx");
-    const elapsed = findings.find(finding => finding.name === "elapsed");
+    `,
+        "fixture.tsx",
+      ),
+      elapsed = findings.find((finding) => finding.name === "elapsed");
     assert.notEqual(elapsed?.action, "use-observable", body);
   }
 
-  const opaqueGate = analyzeSource(`
+  const opaqueGate = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Dashboard() {
       const [visible, setVisible] = useState(false);
@@ -5703,12 +6412,15 @@ test("keeps unsafe effect-written presentation state under review", () => {
           {dangerous(visible) ? <Ready /> : <Waiting />}
         </Status></Page>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "visible");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "visible");
   assert.notEqual(opaqueGate?.action, "use-observable");
 });
 
 test("does not move lifecycle-written rendered or self-read state into a ref", () => {
-  const rendered = analyzeSource(`
+  const rendered = analyzeSource(
+    `
     import { useLayoutEffect, useState } from "react";
     export function Preview({ source }: { source: boolean }) {
       const [visible, setVisible] = useState(false);
@@ -5716,10 +6428,13 @@ test("does not move lifecycle-written rendered or self-read state into a ref", (
       const report = () => save(visible);
       return <main><Button onPress={report} />{visible && <Panel />}</main>;
     }
-  `, "fixture.tsx").find(finding => finding.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((finding) => finding.hook === "useState");
   assert.notEqual(rendered?.action, "use-ref");
 
-  const selfRead = analyzeSource(`
+  const selfRead = analyzeSource(
+    `
     import { useLayoutEffect, useState } from "react";
     export function Preview({ source }: { source: boolean }) {
       const [visible, setVisible] = useState(false);
@@ -5727,12 +6442,15 @@ test("does not move lifecycle-written rendered or self-read state into a ref", (
       const report = () => save(visible);
       return <Button onPress={report} />;
     }
-  `, "fixture.tsx").find(finding => finding.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((finding) => finding.hook === "useState");
   assert.notEqual(selfRead?.action, "use-ref");
 });
 
 test("does not call lifecycle or render-callback state command-only", () => {
-  const listener = analyzeSource(`
+  const listener = analyzeSource(
+    `
       import { useCallback, useEffect, useState } from "react";
       export function Listener() {
         const [active, setActive] = useState(false);
@@ -5740,10 +6458,13 @@ test("does not call lifecycle or render-callback state command-only", () => {
         useEffect(report, [report]);
         return <Button onPress={() => { if (active) setActive(false); }} />;
       }
-    `, "fixture.tsx").find(finding => finding.hook === "useState");
+    `,
+    "fixture.tsx",
+  ).find((finding) => finding.hook === "useState");
   assert.equal(listener?.action, "review-state");
 
-  const renderCallback = analyzeSource(`
+  const renderCallback = analyzeSource(
+    `
       import { useCallback, useState } from "react";
       export function Results({ rows }: { rows: Array<{ id: string }> }) {
         const [selected, setSelected] = useState<string | null>(null);
@@ -5753,7 +6474,9 @@ test("does not call lifecycle or render-callback state command-only", () => {
         return <><List data={rows} renderItem={renderItem} />
           <Button onPress={() => { if (selected) setSelected(null); }} /></>;
       }
-    `, "fixture.tsx").find(finding => finding.hook === "useState");
+    `,
+    "fixture.tsx",
+  ).find((finding) => finding.hook === "useState");
   assert.notEqual(renderCallback?.action, "use-ref");
 });
 
@@ -5777,26 +6500,24 @@ test("replaces a self-refreshing effect-owned command snapshot with a ref", () =
       }, [update]);
       return <Status ${escape}/>;
     }
-  `;
-
-  const [finding] = analyzeSource(source("", ""), "fixture.tsx");
+  `,
+    [finding] = analyzeSource(source("", ""), "fixture.tsx");
   assert.equal(finding?.action, "use-ref");
   assert.match(finding?.message ?? "", /listener/i);
   assert.match(finding?.message ?? "", /dependency/i);
 
-  for (const unsafe of [
-    source("onUpdate={update}", ""),
-    source("", "report(previous);"),
-  ]) {
+  for (const unsafe of [source("onUpdate={update}", ""), source("", "report(previous);")]) {
     assert.notEqual(
-      analyzeSource(unsafe, "fixture.tsx").find(candidate => candidate.name === "previous")?.action,
-      "use-ref"
+      analyzeSource(unsafe, "fixture.tsx").find((candidate) => candidate.name === "previous")
+        ?.action,
+      "use-ref",
     );
   }
 });
 
 test("groups listener-only pointer snapshots into one ref migration", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useCallback, useEffect, useState } from "react";
     export function Canvas() {
       const [pressed, setPressed] = useState(false);
@@ -5816,15 +6537,26 @@ test("groups listener-only pointer snapshots into one ref migration", () => {
       }, [move]);
       return <Surface onPointerDown={start} />;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useState");
 
-  assert.deepEqual(findings.map(finding => finding.action), ["use-ref", "use-ref", "use-ref"]);
-  assert.deepEqual(findings.map(finding => finding.group?.members), [
-    ["pressed", "originX", "originY"],
-    ["pressed", "originX", "originY"],
-    ["pressed", "originX", "originY"],
-  ]);
-  assert.deepEqual(findings.map(finding => finding.group?.primary), [true, false, false]);
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["use-ref", "use-ref", "use-ref"],
+  );
+  assert.deepEqual(
+    findings.map((finding) => finding.group?.members),
+    [
+      ["pressed", "originX", "originY"],
+      ["pressed", "originX", "originY"],
+      ["pressed", "originX", "originY"],
+    ],
+  );
+  assert.deepEqual(
+    findings.map((finding) => finding.group?.primary),
+    [true, false, false],
+  );
 });
 
 test("keeps incomplete or render-coupled listener snapshots in React state", () => {
@@ -5840,7 +6572,8 @@ test("keeps incomplete or render-coupled listener snapshots in React state", () 
       return () => document.removeEventListener("mousemove", move);
     }, []);`,
   ]) {
-    const findings = analyzeSource(`
+    const findings = analyzeSource(
+      `
       import { useCallback, useEffect, useState } from "react";
       export function Canvas() {
         const [pressed, setPressed] = useState(false);
@@ -5857,14 +6590,23 @@ test("keeps incomplete or render-coupled listener snapshots in React state", () 
         ${effect}
         return <Surface onPointerDown={start} visible={visible} />;
       }
-    `, "fixture.tsx").filter(finding => ["pressed", "origin"].includes(finding.name ?? ""));
-    assert.ok(findings.every(finding => finding.action === "review-state"), effect);
-    assert.ok(findings.every(finding => finding.group === undefined), effect);
+    `,
+      "fixture.tsx",
+    ).filter((finding) => ["pressed", "origin"].includes(finding.name ?? ""));
+    assert.ok(
+      findings.every((finding) => finding.action === "review-state"),
+      effect,
+    );
+    assert.ok(
+      findings.every((finding) => finding.group === undefined),
+      effect,
+    );
   }
 });
 
 test("keeps async listener snapshots under review", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useCallback, useEffect, useState } from "react";
     export function Canvas() {
       const [pressed, setPressed] = useState(false);
@@ -5883,13 +6625,16 @@ test("keeps async listener snapshots under review", () => {
       }, [move]);
       return <Surface onPointerDown={start} />;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useState");
-  assert.ok(findings.every(finding => finding.action === "review-state"));
-  assert.ok(findings.every(finding => finding.group === undefined));
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useState");
+  assert.ok(findings.every((finding) => finding.action === "review-state"));
+  assert.ok(findings.every((finding) => finding.group === undefined));
 });
 
 test("counts immediately invoked render computations as render reads", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Filter({ custom }: { custom: boolean }) {
       const [enabled, setEnabled] = useState(custom);
@@ -5897,13 +6642,16 @@ test("counts immediately invoked render computations as render reads", () => {
       const selected = (() => enabled ? "custom" : "preset")();
       return <Select value={selected} onChange={() => setEnabled(true)} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
   assert.match(finding?.evidence[1] ?? "", /reads: render 1/);
 });
 
 test("does not call custom-hook reactions or returned commands event-rooted", () => {
-  const focusReaction = analyzeSource(`
+  const focusReaction = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Map() {
       const [idle, setIdle] = useState(false);
@@ -5911,10 +6659,13 @@ test("does not call custom-hook reactions or returned commands event-rooted", ()
       useFocusEffect(() => { if (idle) fitBounds(); });
       return <MapView onIdle={() => setIdle(true)} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(focusReaction?.action, "use-ref");
 
-  const returnedCommand = analyzeSource(`
+  const returnedCommand = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function useSteps(source: string) {
       const [next, setNext] = useState("");
@@ -5922,12 +6673,15 @@ test("does not call custom-hook reactions or returned commands event-rooted", ()
       const navigate = () => go(next);
       return { navigate };
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(returnedCommand?.action, "use-ref");
 });
 
 test("uses a ref for an effect-written cursor read only by one returned switch command", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     import { Navigation, resolveNext } from "./navigation";
     export function useSteps(source: "first" | "second") {
@@ -5948,12 +6702,15 @@ test("uses a ref for an effect-written cursor read only by one returned switch c
       };
       return { navigate };
     }
-  `, "fixture.ts");
-  assert.equal(findings.find(finding => finding.name === "next")?.action, "use-ref");
+  `,
+    "fixture.ts",
+  );
+  assert.equal(findings.find((finding) => finding.name === "next")?.action, "use-ref");
 });
 
 test("uses a ref for a returned switch command with one exact guarded fallback", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     import { Navigation, resolvePrevious } from "./navigation";
     export function useSteps(source: string, backTo?: string) {
@@ -5975,7 +6732,9 @@ test("uses a ref for a returned switch command with one exact guarded fallback",
       };
       return { goBack };
     }
-  `, "fixture.ts");
+  `,
+    "fixture.ts",
+  );
   assert.equal(finding?.action, "use-ref");
 });
 
@@ -5985,7 +6744,8 @@ test("keeps returned switch fallbacks with unsafe guards or branch work conserva
     `if (backTo) { Navigation.goBack(backTo); audit(); return; } Navigation.goBack("root"); break;`,
     `if (backTo) { Navigation.goBack(backTo); return backTo; } Navigation.goBack("root"); break;`,
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useEffect, useState } from "react";
       import { Navigation, resolvePrevious } from "./navigation";
       export function useSteps(source: string, backTo?: string) {
@@ -5999,7 +6759,9 @@ test("keeps returned switch fallbacks with unsafe guards or branch work conserva
         };
         return { goBack };
       }
-    `, "fixture.ts");
+    `,
+      "fixture.ts",
+    );
     assert.notEqual(finding?.action, "use-ref", fallback);
   }
 });
@@ -6010,7 +6772,8 @@ test("keeps returned switch cursors with extra reads or non-command branches con
     `switch (next) { case "first": return next; default: Navigation.navigate("done"); }`,
     `switch (next) { case "first": render(next); break; default: Navigation.navigate("done"); }`,
   ]) {
-    const finding = analyzeSource(`
+    const finding = analyzeSource(
+      `
       import { useEffect, useState } from "react";
       import { Navigation, resolveNext } from "./navigation";
       export function useSteps(source: "first" | "second") {
@@ -6019,13 +6782,16 @@ test("keeps returned switch cursors with extra reads or non-command branches con
         const navigate = () => { ${command} };
         return { navigate };
       }
-    `, "fixture.ts").find(candidate => candidate.name === "next");
+    `,
+      "fixture.ts",
+    ).find((candidate) => candidate.name === "next");
     assert.notEqual(finding?.action, "use-ref", command);
   }
 });
 
 test("does not replace state exposed through a returned getter callback", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function useAttachmentErrors() {
       const [errors, setErrors] = useState<Record<string, boolean>>({});
@@ -6035,12 +6801,15 @@ test("does not replace state exposed through a returned getter callback", () => 
       const hasError = useCallback((key: string) => errors[key] === true, [errors]);
       return { setError, hasError };
     }
-  `, "fixture.ts").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.ts",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
 });
 
 test("does not replace state that refreshes a context getter", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { createContext, useCallback, useMemo, useState } from "react";
     const StateContext = createContext(null);
     export function StateProvider({ children }) {
@@ -6052,12 +6821,15 @@ test("does not replace state that refreshes a context getter", () => {
       const value = useMemo(() => ({ markLoaded, isLoaded }), [markLoaded, isLoaded]);
       return <StateContext.Provider value={value}>{children}</StateContext.Provider>;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
 });
 
 test("does not replace state snapshots exposed through a React imperative handle", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { forwardRef, useImperativeHandle, useState } from "react";
     export const Menu = forwardRef(function Menu(_props, ref) {
       const [opening, setOpening] = useState(false);
@@ -6067,12 +6839,15 @@ test("does not replace state snapshots exposed through a React imperative handle
       }), [opening]);
       return <Button onPress={() => setOpening(false)} />;
     });
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
 });
 
 test("does not replace state that invalidates a React effect through a callback", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useCallback, useEffect, useState } from "react";
     export function Map() {
       const [interacted, setInteracted] = useState(false);
@@ -6082,13 +6857,16 @@ test("does not replace state that invalidates a React effect through a callback"
       }, [shouldPan]);
       return <MapView onTouchStart={() => setInteracted(true)} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
   assert.match(finding?.evidence[1] ?? "", /effects [1-9]/);
 });
 
 test("does not replace state captured by an unresolved lifecycle hook", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     import { useFocusEffect } from "@react-navigation/native";
     export function ImportFlow() {
@@ -6098,12 +6876,15 @@ test("does not replace state captured by an unresolved lifecycle hook", () => {
       }, [pending]));
       return <Button onPress={() => setPending(true)} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
 });
 
 test("does not call a value shared by an event and an effect-owned callback command-only", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useCallback, useEffect, useState } from "react";
     export function Editor() {
       const [edited, setEdited] = useState(false);
@@ -6114,12 +6895,15 @@ test("does not call a value shared by an event and an effect-owned callback comm
       }, [confirm]);
       return <Input onChange={() => { if (!edited) setEdited(true); }} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
 });
 
 test("counts state read by a transported render callback as rendered", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function List({ rows }: { rows: Array<{ id: string }> }) {
       const [highlighted, setHighlighted] = useState<Set<string> | null>(null);
@@ -6129,13 +6913,16 @@ test("counts state read by a transported render callback as rendered", () => {
       };
       return <VirtualList data={rows} renderItem={renderItem} onClear={() => setHighlighted(null)} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
   assert.match(finding?.evidence[1] ?? "", /reads: render 1/);
 });
 
 test("does not replace functional-updater state when commands observe its render snapshot", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function useReload() {
       const [minutes, setMinutes] = useState(0);
@@ -6144,12 +6931,15 @@ test("does not replace functional-updater state when commands observe its render
         if (minutes >= 60) reload();
       }, 1000);
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "use-ref");
 });
 
 test("does not replace a command snapshot written before a later read", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     export function ValidationActions() {
       const [selection, setSelection] = useState<string>();
@@ -6158,13 +6948,16 @@ test("does not replace a command snapshot written before a later read", () => {
         <Button onPress={() => setDraft("next")} />
         <Button onPress={() => save(draft)} /></>;
     }
-  `, "fixture.tsx");
-  assert.notEqual(findings.find(finding => finding.name === "selection")?.action, "use-ref");
-  assert.equal(findings.find(finding => finding.name === "draft")?.action, "use-ref");
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(findings.find((finding) => finding.name === "selection")?.action, "use-ref");
+  assert.equal(findings.find((finding) => finding.name === "draft")?.action, "use-ref");
 });
 
 test("keeps the ref recommendation when a functional updater has no later snapshot read", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Actions() {
       const [count, setCount] = useState(0);
@@ -6172,7 +6965,9 @@ test("keeps the ref recommendation when a functional updater has no later snapsh
       const saveCount = () => save(count);
       return <><Button onPress={increment} /><Button onPress={saveCount} /></>;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.equal(finding?.action, "use-ref");
   assert.match(finding?.message ?? "", /functional updaters against the current handle value/i);
 });
@@ -6187,12 +6982,13 @@ test("keeps invariant same-value state non-actionable", () => {
         return <Button onPress={retry} />;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
 test("deletes state whose only reads calculate inert arguments for its own setter", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     export function Picker({ next }: { next: string }) {
       const [choice, setChoice] = useState("");
@@ -6202,22 +6998,39 @@ test("deletes state whose only reads calculate inert arguments for its own sette
         <Button onPress={() => setCalled(normalize(called))} />
         <Button onPress={() => { setPublished(next === published ? "" : next); save(published); }} /></>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "choice")?.action, "delete-unused-state");
-  assert.notEqual(findings.find(finding => finding.name === "called")?.action, "delete-unused-state");
-  assert.notEqual(findings.find(finding => finding.name === "published")?.action, "delete-unused-state");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(
+    findings.find((finding) => finding.name === "choice")?.action,
+    "delete-unused-state",
+  );
+  assert.notEqual(
+    findings.find((finding) => finding.name === "called")?.action,
+    "delete-unused-state",
+  );
+  assert.notEqual(
+    findings.find((finding) => finding.name === "published")?.action,
+    "delete-unused-state",
+  );
 });
 
 test("deletes setter-only state written by an effect when arguments are discardable", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Resource() {
       const [_failed, setFailed] = useState(false);
       useEffect(() => { setFailed(false); start().catch(() => setFailed(true)); }, []);
       return <Content />;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "_failed")?.action, "delete-unused-state");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(
+    findings.find((finding) => finding.name === "_failed")?.action,
+    "delete-unused-state",
+  );
 });
 
 test("does not delete setter-only state when removing the call would erase evaluation", () => {
@@ -6231,31 +7044,37 @@ test("does not delete setter-only state when removing the call would erase evalu
         return <button onClick={() => setValue(${write})}>Run</button>;
       }
       `),
-      ["review-state"]
+      ["review-state"],
     );
   }
 });
 
 test("preserves property evaluation while deleting otherwise unused state", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Resource({ source }: { source: { value: number } }) {
       const [_value, setValue] = useState(0);
       return <Button onPress={() => setValue(source.value)} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.equal(finding?.action, "delete-unused-state");
   assert.match(finding?.message ?? "", /evaluation.*preserved/i);
 });
 
 test("does not delete unused state when removing its initializer would erase evaluation", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Resource() {
       const [_value, setValue] = useState(loadInitialValue());
       return <Button onPress={() => setValue(0)} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.hook === "useState");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
   assert.notEqual(finding?.action, "delete-unused-state");
 });
 
@@ -6269,7 +7088,7 @@ test("does not delete setter-only state when an updater consumes the previous va
         return <Button onPress={increment} />;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -6283,12 +7102,13 @@ test("treats useCallback dependencies as deferred command reads", () => {
         return <Track onLayout={event => setWidth(event.width)} onMove={update} />;
       }
     `),
-    ["use-ref"]
+    ["use-ref"],
   );
 });
 
 test("traces a state-backed local callable when JSX invokes it synchronously", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function SaveForm() {
       const [busy, setBusy] = useState(false);
@@ -6300,13 +7120,16 @@ test("traces a state-backed local callable when JSX invokes it synchronously", (
       }, [canSubmit]);
       return <Panel><Header /><Body /><Summary /><Footer /><Button disabled={!canSubmit()} onPress={submit} /></Panel>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "review-state");
   assert.match(finding?.evidence.join(" ") ?? "", /reads: render 1/);
 });
 
 test("separates observable ownership from leaf subscription placement", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     function Row() { return null; }
     export function LargeOwner({ rows }: { rows: string[] }) {
@@ -6314,7 +7137,9 @@ test("separates observable ownership from leaf subscription placement", () => {
       const [selected, setSelected] = useState<string | null>(null);
       return rows.map(id => <Row selected={selected} onSelect={setSelected} />);
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.deepEqual(finding?.stateModel, {
     ownership: "local-observable",
     subscription: "leaf-use-value",
@@ -6322,7 +7147,8 @@ test("separates observable ownership from leaf subscription placement", () => {
 });
 
 test("moves a scalar row cursor into stable per-row equality selectors", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows }: { rows: Array<{ id: string }> }) {
       const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -6333,13 +7159,16 @@ test("moves a scalar row cursor into stable per-row equality selectors", () => {
         {rows.map(row => <Row key={row.id} selected={selectedId === row.id} onPress={() => choose(row.id)} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /scalar row-selection/);
 });
 
 test("recognizes an index cursor and a one-hop row presentation alias", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows }: { rows: Array<{ id: string }> }) {
       const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -6351,12 +7180,15 @@ test("recognizes an index cursor and a one-hop row presentation alias", () => {
         })}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("does not mistake a nullish row prop projection for a row mount gate", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows, activeStyle }: { rows: Array<{ id: string }>; activeStyle: unknown }) {
       const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -6370,12 +7202,15 @@ test("does not mistake a nullish row prop projection for a row mount gate", () =
         })}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("allows a row-only event path when a separate reset co-writes companion state", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows }: { rows: Array<{ id: string }> }) {
       const [query, setQuery] = useState("");
@@ -6387,8 +7222,13 @@ test("allows a row-only event path when a separate reset co-writes companion sta
           onPointerMove={() => setSelectedIndex(index)} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "selectedIndex")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(
+    findings.find((finding) => finding.name === "selectedIndex")?.action,
+    "use-observable",
+  );
 });
 
 test("requires scalar selectors to depend on a stable repeated item key", () => {
@@ -6397,7 +7237,8 @@ test("requires scalar selectors to depend on a stable repeated item key", () => 
     `rows.map((row, index) => <Row key={index} selected={selectedId === row.id} onPress={() => setSelectedId(row.id)} />)`,
     `rows.map(row => <Row selected={selectedId === row.id} onPress={() => setSelectedId(row.id)} />)`,
   ]) {
-    const finding = analyzeSource(`
+    const finding = analyzeSource(
+      `
       import { useState } from "react";
       export function Results({ rows, activeId }: { rows: Array<{ id: string }>; activeId: string }) {
         const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -6405,13 +7246,16 @@ test("requires scalar selectors to depend on a stable repeated item key", () => 
           <Help /><Footer /><Sidebar /><Banner /><Search /><Preview />{${rows}}
         </Screen>;
       }
-    `, "fixture.tsx").find(candidate => candidate.name === "selectedId");
+    `,
+      "fixture.tsx",
+    ).find((candidate) => candidate.name === "selectedId");
     assert.notEqual(finding?.action, "use-observable");
   }
 });
 
 test("does not put a scalar selector inside its own row mount gate", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows }: { rows: Array<{ id: string }> }) {
       const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -6420,7 +7264,9 @@ test("does not put a scalar selector inside its own row mount gate", () => {
         {rows.map(row => selectedId === row.id && <Row key={row.id} onPress={() => setSelectedId(row.id)} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -6439,20 +7285,24 @@ test("keeps scalar selection that has effects, broadcast row reads, or no indepe
          onPress={() => setSelectedId(previous => { audit(previous); return row.id; })} />)}</Screen>;`,
   ];
   for (const body of sources) {
-    const finding = analyzeSource(`
+    const finding = analyzeSource(
+      `
       import { useEffect, useState } from "react";
       export function Results({ rows }: { rows: Array<{ id: string }> }) {
         const [dirty, setDirty] = useState(false);
         const [selectedId, setSelectedId] = useState<string | null>(null);
         ${body}
       }
-    `, "fixture.tsx").find(candidate => candidate.name === "selectedId");
+    `,
+      "fixture.tsx",
+    ).find((candidate) => candidate.name === "selectedId");
     assert.notEqual(finding?.action, "use-observable");
   }
 });
 
 test("isolates row selection and a selected-item footer into separate subscribers", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows }: { rows: Array<{ id: string }> }) {
       const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -6465,13 +7315,16 @@ test("isolates row selection and a selected-item footer into separate subscriber
         <Footer disabled={!selected} onAccept={accept} />
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "selectedId");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "selectedId");
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /footer or detail/);
 });
 
 test("isolates a row-selected id and its non-null footer summary", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows }: { rows: Array<{ id: string }> }) {
       const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -6484,12 +7337,15 @@ test("isolates a row-selected id and its non-null footer summary", () => {
         <Footer enabled={hasSelection} onAccept={accept} />
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "selectedId");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "selectedId");
   assert.equal(finding?.action, "use-observable");
 });
 
 test("isolates a repeated row command and one selected-item detail leaf", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows, loading }: { rows: Array<{ id: string }>; loading: boolean }) {
       const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -6501,12 +7357,15 @@ test("isolates a repeated row command and one selected-item detail leaf", () => 
         <Detail item={selected} open={selected !== null} onClose={() => setSelectedId(null)} />
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "selectedId");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "selectedId");
   assert.equal(finding?.action, "use-observable");
 });
 
 test("isolates an object selection payload across keyed rows and one footer", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     type Item = { id: string; disabled: boolean };
     export function Results({ rows }: { rows: Item[] }) {
@@ -6519,12 +7378,15 @@ test("isolates an object selection payload across keyed rows and one footer", ()
         <Footer disabled={!selected || selected.disabled} onAccept={accept} />
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "selected");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "selected");
   assert.equal(finding?.action, "use-observable");
 });
 
 test("keeps keyed selection whose secondary reads span the owner", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Results({ rows }: { rows: Array<{ id: string }> }) {
       const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -6536,7 +7398,9 @@ test("keeps keyed selection whose secondary reads span the owner", () => {
         <Sidebar /><Banner /><Search /><Preview /><Footer selected={selected} />
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "selectedId");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "selectedId");
   assert.equal(finding?.action, "review-state");
 });
 
@@ -6558,19 +7422,23 @@ test("keeps scalar selection that changes list shape or lacks an item-keyed prod
        <Panel renderFooter={() => <Footer selected={selected} />} />
      </Screen>;`,
   ]) {
-    const finding = analyzeSource(`
+    const finding = analyzeSource(
+      `
       import { useState } from "react";
       export function Results({ rows }: { rows: Array<{ id: string }> }) {
         const [selectedId, setSelectedId] = useState<string | null>(null);
         ${body}
       }
-    `, "fixture.tsx").find(candidate => candidate.name === "selectedId");
+    `,
+      "fixture.tsx",
+    ).find((candidate) => candidate.name === "selectedId");
     assert.equal(finding?.action, "review-state");
   }
 });
 
 test("accepts a memoized event command whose binding matches its JSX prop name", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function Results({ rows }: { rows: Array<{ id: string; run: () => void }> }) {
       const [selectedIndex, setSelectedIndex] = useState(0);
@@ -6581,7 +7449,9 @@ test("accepts a memoized event command whose binding matches its JSX prop name",
           onPointerMove={() => setSelectedIndex(index)} />)}
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "selectedIndex");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "selectedIndex");
   assert.equal(finding?.action, "use-observable");
 });
 
@@ -6591,7 +7461,8 @@ test("keeps a row cursor whose callback is stale or also owns external lifecycle
     `const onKeyDown = useCallback(() => rows[selectedIndex]?.run(), [rows, selectedIndex]);
      useEffect(() => subscribe(onKeyDown), [onKeyDown]);`,
   ]) {
-    const finding = analyzeSource(`
+    const finding = analyzeSource(
+      `
       import { useCallback, useEffect, useState } from "react";
       export function Results({ rows }: { rows: Array<{ id: string; run: () => void }> }) {
         const [selectedIndex, setSelectedIndex] = useState(0);
@@ -6602,13 +7473,16 @@ test("keeps a row cursor whose callback is stale or also owns external lifecycle
             onPointerMove={() => setSelectedIndex(index)} />)}
         </Screen>;
       }
-    `, "fixture.tsx").find(candidate => candidate.name === "selectedIndex");
+    `,
+      "fixture.tsx",
+    ).find((candidate) => candidate.name === "selectedIndex");
     assert.equal(finding?.action, "review-state");
   }
 });
 
 test("moves keyed collection membership into repeated row subscriptions", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
       const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -6621,13 +7495,16 @@ test("moves keyed collection membership into repeated row subscriptions", () => 
         {rows.map(row => <Row key={row.id} selected={selected.has(row.id)} onPress={() => toggle(row.id)} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /per-row/);
 });
 
 test("isolates keyed selection with select-all and partial-selection summaries", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
       const [page, setPage] = useState(1);
@@ -6646,12 +7523,15 @@ test("isolates keyed selection with select-all and partial-selection summaries",
         {rows.map(row => <Row key={row.id} selected={selected.has(row.id)} onPress={() => toggleOne(row.id)} />)}
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "selected");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "selected");
   assert.equal(finding?.action, "use-observable");
 });
 
 test("uses keyed collection behavior rather than state names", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function Gallery({ rows }: { rows: Array<{ id: string; src: string }> }) {
       const [failures, setFailures] = useState<Set<string>>(() => new Set());
@@ -6661,13 +7541,16 @@ test("uses keyed collection behavior rather than state names", () => {
         {rows.map(row => <ImageRow key={row.id} fallback={failures.has(row.id)} onError={() => markFailed(row.id)} />)}
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "failures");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "failures");
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /per-row/);
 });
 
 test("rejects lifecycle and mount-control collections without name heuristics", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function LifecycleRows({ rows }: { rows: Array<{ id: string }> }) {
       const [mounted, setMounted] = useState<Set<string>>(() => new Set());
@@ -6684,14 +7567,20 @@ test("rejects lifecycle and mount-control collections without name heuristics", 
         {rows.map(row => !failed.has(row.id) && <Row key={row.id} onError={() => setFailed(new Set([row.id]))} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   for (const name of ["mounted", "failed"]) {
-    assert.notEqual(findings.find(candidate => candidate.name === name)?.action, "use-observable");
+    assert.notEqual(
+      findings.find((candidate) => candidate.name === name)?.action,
+      "use-observable",
+    );
   }
 });
 
 test("keeps keyed selection when summary membership controls row mounting", () => {
-  const finding = analyzeSource(`
+  const finding = analyzeSource(
+    `
     import { useState } from "react";
     export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
       const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -6701,7 +7590,9 @@ test("keeps keyed selection when summary membership controls row mounting", () =
         {anySelected && rows.map(row => <Row key={row.id} selected={selected.has(row.id)} onPress={() => setSelected(new Set([row.id]))} />)}
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "selected");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "selected");
   assert.equal(finding?.action, "review-state");
 });
 
@@ -6716,7 +7607,8 @@ test("requires a synchronous event-rooted collection update without hidden React
        return new Set(previous).add(id);
      });`,
   ]) {
-    const finding = analyzeSource(`
+    const finding = analyzeSource(
+      `
       import { useState } from "react";
       export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
         const [dirty, setDirty] = useState(false);
@@ -6727,13 +7619,16 @@ test("requires a synchronous event-rooted collection update without hidden React
           {rows.map(row => <Row key={row.id} selected={selected.has(row.id)} onPress={() => toggle(row.id)} />)}
         </Screen>;
       }
-    `, "fixture.tsx").find(candidate => candidate.name === "selected");
+    `,
+      "fixture.tsx",
+    ).find((candidate) => candidate.name === "selected");
     assert.equal(finding?.action, "review-state");
   }
 });
 
 test("recognizes an array selection normalized by one immutable local Set", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
       const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -6748,7 +7643,9 @@ test("recognizes an array selection normalized by one immutable local Set", () =
         {rows.map(row => <Row key={row.id} selected={selectedIdSet.has(row.id)} onPress={() => toggle(row.id)} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
   assert.match(finding?.message ?? "", /per-row/);
 });
@@ -6762,12 +7659,14 @@ test("requires an immutable non-escaping Set normalization for array selection",
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={selectedIdSet.has(row.id)} />)}</main>;
     }
-  `;
-  const escaped = mutable
-    .replace("let selectedIdSet", "const selectedIdSet")
-    .replace("return <main>", "inspect(selectedIdSet); return <main>");
+  `,
+    escaped = mutable
+      .replace("let selectedIdSet", "const selectedIdSet")
+      .replace("return <main>", "inspect(selectedIdSet); return <main>");
   for (const source of [mutable, escaped]) {
-    const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selectedIds");
+    const finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selectedIds",
+    );
     assert.notEqual(finding?.action, "use-observable");
   }
 });
@@ -6783,13 +7682,16 @@ test("does not move array selection when a summary alias controls repeated mount
         <Actions /><Preview />{rows.map(row => hasSelection &&
           <Row key={row.id} selected={selectedIdSet.has(row.id)} />)}</main>;
     }
-  `;
-  const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selectedIds");
+  `,
+    finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selectedIds",
+    );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("recognizes keyed collection membership in a JSX renderItem callback", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
       const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -6801,12 +7703,15 @@ test("recognizes keyed collection membership in a JSX renderItem callback", () =
         <List data={rows} renderItem={renderItem} extraData={selected} />
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("isolates an imperative nullable collection inside a keyed renderItem leaf", () => {
-  const positive = analyzeSource(`
+  const positive = analyzeSource(
+    `
     import { useCallback, useImperativeHandle, useState } from "react";
     export function SelectionList({ rows, ref }: { rows: Array<{ id: string }>; ref: unknown }) {
       const [highlighted, setHighlighted] = useState<Set<string> | null>(null);
@@ -6823,7 +7728,9 @@ test("isolates an imperative nullable collection inside a keyed renderItem leaf"
         <List data={rows} renderItem={renderItem} keyExtractor={item => item.id} />
       </Screen>;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "highlighted");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "highlighted");
   assert.equal(positive?.action, "use-observable");
 
   for (const [renderItem, keyExtractor, expose, extra = ""] of [
@@ -6855,7 +7762,8 @@ test("isolates an imperative nullable collection inside a keyed renderItem leaf"
       `registerRenderer(renderItem);`,
     ],
   ]) {
-    const finding = analyzeSource(`
+    const finding = analyzeSource(
+      `
       import { useCallback, useEffect, useImperativeHandle, useState } from "react";
       export function SelectionList({ rows, ref }: { rows: Array<{ id: string }>; ref: unknown }) {
         const [highlighted, setHighlighted] = useState<Set<string> | null>(null);
@@ -6867,11 +7775,14 @@ test("isolates an imperative nullable collection inside a keyed renderItem leaf"
           <List data={rows} renderItem={renderItem} keyExtractor={${keyExtractor}} />
         </Screen>;
       }
-    `, "fixture.tsx").find(candidate => candidate.name === "highlighted");
+    `,
+      "fixture.tsx",
+    ).find((candidate) => candidate.name === "highlighted");
     assert.notEqual(finding?.action, "use-observable");
   }
 
-  const shadowedHandle = analyzeSource(`
+  const shadowedHandle = analyzeSource(
+    `
     import { useCallback, useImperativeHandle, useState } from "react";
     export function SelectionList({ rows, ref, useImperativeHandle }: {
       rows: Array<{ id: string }>;
@@ -6885,12 +7796,15 @@ test("isolates an imperative nullable collection inside a keyed renderItem leaf"
       useImperativeHandle(ref, () => ({ highlight }), [highlight]);
       return <List data={rows} renderItem={renderItem} keyExtractor={item => item.id} />;
     }
-  `, "fixture.tsx").find(candidate => candidate.name === "highlighted");
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.name === "highlighted");
   assert.notEqual(shadowedHandle?.action, "use-observable");
 });
 
 test("ignores callback dependency references when proving a keyed event command", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function SelectionScreen({ rows }: { rows: Array<{ id: string }> }) {
       const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -6910,12 +7824,15 @@ test("ignores callback dependency references when proving a keyed event command"
         <Help /><Footer /><Sidebar /><Banner /><Search /><List data={rows} renderItem={renderItem} />
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
 test("keeps filtered array selection as review without a general cross-value proof", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function SelectionScreen({ rows, visibleIds }: { rows: Array<{ id: string }>; visibleIds: Set<string> }) {
       const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -6925,7 +7842,9 @@ test("keeps filtered array selection as review without a general cross-value pro
         {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -6948,8 +7867,10 @@ test("isolates filtered keyed selection with one controlled summary leaf", () =>
         {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => toggle(row.id)} />)}
       </Screen>;
     }
-  `;
-  const finding = analyzeSource(source, "fixture.tsx").find(candidate => candidate.name === "selectedIds");
+  `,
+    finding = analyzeSource(source, "fixture.tsx").find(
+      (candidate) => candidate.name === "selectedIds",
+    );
   assert.equal(finding?.action, "use-observable");
 });
 
@@ -6978,8 +7899,10 @@ test("requires a filtered keyed selection to have one exact controlled summary l
           {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
         </Screen>;
       }
-    `;
-    const finding = analyzeSource(source, "fixture.tsx").find(candidate => candidate.name === "selectedIds");
+    `,
+      finding = analyzeSource(source, "fixture.tsx").find(
+        (candidate) => candidate.name === "selectedIds",
+      );
     assert.notEqual(finding?.action, "use-observable", use);
   }
 });
@@ -7006,14 +7929,17 @@ test("requires the filtered selection membership source to remain read-only", ()
           {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
         </Screen>;
       }
-    `;
-    const finding = analyzeSource(source, "fixture.tsx").find(candidate => candidate.name === "selectedIds");
+    `,
+      finding = analyzeSource(source, "fixture.tsx").find(
+        (candidate) => candidate.name === "selectedIds",
+      );
     assert.notEqual(finding?.action, "use-observable", mutation);
   }
 });
 
 test("does not infer filtered selection from a shadowed Set constructor", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function SelectionScreen({ rows, visibleIds, FakeSet }: {
       rows: Array<{ id: string }>;
@@ -7030,12 +7956,15 @@ test("does not infer filtered selection from a shadowed Set constructor", () => 
         {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("isolates keyed array membership with one filtered selection summary leaf", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function Labels({ rows }: { rows: Array<{ id: string; name: string }> }) {
       const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -7049,7 +7978,9 @@ test("isolates keyed array membership with one filtered selection summary leaf",
         {rows.map(row => <Row key={row.id} selected={selectedIdSet.has(row.id)} onPress={() => toggle(row.id)} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-observable");
 });
 
@@ -7061,7 +7992,8 @@ test("keeps filtered selection summaries with split, unstable, or command consum
     `{selectedRows.length > 0 && <aside>{selectedRows.map(row => <Badge key={row.id}>{row.name}</Badge>)}</aside>}
      <button onClick={() => save(selectedRows)}>Save</button>`,
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useState } from "react";
       export function Labels({ rows }: { rows: Array<{ id: string; name: string }> }) {
         const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -7075,13 +8007,16 @@ test("keeps filtered selection summaries with split, unstable, or command consum
           {rows.map(row => <Row key={row.id} selected={selectedIdSet.has(row.id)} onPress={() => toggle(row.id)} />)}
         </Screen>;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.notEqual(finding?.action, "use-observable", summary);
   }
 });
 
 test("does not call array filtering that changes row membership a keyed leaf selection", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function FilteredRows({ rows }: { rows: Array<{ id: string }> }) {
       const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -7090,7 +8025,9 @@ test("does not call array filtering that changes row membership a keyed leaf sel
         {visibleRows.map(row => <Row key={row.id} onPress={() => setSelectedIds([row.id])} />)}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -7104,8 +8041,10 @@ test("does not trace an arbitrary filtered array into keyed membership", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={activeSet.has(row.id)} />)}</main>;
     }
-  `;
-  const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selectedIds");
+  `,
+    finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selectedIds",
+    );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -7118,8 +8057,10 @@ test("does not move a derived keyed alias read by an effect", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={selected.has(row.id)} />)}</main>;
     }
-  `;
-  const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selected");
+  `,
+    finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selected",
+    );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -7131,8 +8072,10 @@ test("requires derived membership to use the repeated row key", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={selected.has(activeId)} />)}</main>;
     }
-  `;
-  const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selected");
+  `,
+    finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selected",
+    );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -7144,8 +8087,10 @@ test("requires a stable item-derived key for mapped membership", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map((row, index) => <Row key={index} selected={selected.has(row.id)} />)}</main>;
     }
-  `;
-  const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selected");
+  `,
+    finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selected",
+    );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -7158,8 +8103,10 @@ test("does not treat render-prop reads as selection commands", () => {
         <Actions /><Preview /><Panel renderLabel={() => Array.from(selected).join(",")} />
         {rows.map(row => <Row key={row.id} selected={selected.has(row.id)} />)}</main>;
     }
-  `;
-  const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selected");
+  `,
+    finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selected",
+    );
   assert.notEqual(finding?.action, "use-observable");
 });
 
@@ -7173,13 +8120,15 @@ test("requires immutable aliases and a stable filter membership source", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={selected.has(row.id)} />)}</main>;
     }
-  `;
-  const opaque = mutable
-    .replace("let active", "const active")
-    .replace("let selected", "const selected")
-    .replace("visible.has(id)", "registry().has(id)");
+  `,
+    opaque = mutable
+      .replace("let active", "const active")
+      .replace("let selected", "const selected")
+      .replace("visible.has(id)", "registry().has(id)");
   for (const source of [mutable, opaque]) {
-    const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selectedIds");
+    const finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selectedIds",
+    );
     assert.notEqual(finding?.action, "use-observable");
   }
 });
@@ -7194,13 +8143,16 @@ test("does not place a collection summary subscription inside every row", () => 
           <Row selected={selected.has(row.id)} /><span>{selected.size}</span>
         </section>)}</main>;
     }
-  `;
-  const finding = analyzeSource(source, "screen.tsx").find(candidate => candidate.name === "selected");
+  `,
+    finding = analyzeSource(source, "screen.tsx").find(
+      (candidate) => candidate.name === "selected",
+    );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("does not move lifecycle membership that controls whether a row exists", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function PremountedSteps({ steps }: { steps: string[] }) {
       const [mounted, setMounted] = useState<Set<number>>(() => new Set([0]));
@@ -7211,12 +8163,15 @@ test("does not move lifecycle membership that controls whether a row exists", ()
         })}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("does not bypass keyed mount-control checks through a local boolean alias", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function FilteredRows({ rows }: { rows: Array<{ id: string }> }) {
       const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -7228,12 +8183,15 @@ test("does not bypass keyed mount-control checks through a local boolean alias",
         })}
       </Screen>;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.notEqual(finding?.action, "use-observable");
 });
 
 test("converts a custom-hook selection cluster into one observable model", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     export function useSelection<T>() {
       const [selecting, setSelecting] = useState(false);
@@ -7244,31 +8202,42 @@ test("converts a custom-hook selection cluster into one observable model", () =>
       }, []);
       return { selecting, selected, toggle };
     }
-  `, "fixture.ts");
-  assert.deepEqual(findings.map(finding => finding.action), ["use-observable", "use-observable"]);
-  assert.ok(findings.every(finding => finding.stateModel?.ownership === "local-observable"));
+  `,
+    "fixture.ts",
+  );
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["use-observable", "use-observable"],
+  );
+  assert.ok(findings.every((finding) => finding.stateModel?.ownership === "local-observable"));
 });
 
 test("does not call an ordinary custom-hook Set resource a selection model without a setter", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useState } from "react";
     export function useCache() {
       const [cache] = useState<Set<string>>(() => new Set());
       return cache;
     }
-  `, "fixture.ts");
+  `,
+    "fixture.ts",
+  );
   assert.equal(finding?.action, "keep-state");
 });
 
 test("does not call custom-hook lifecycle bookkeeping a selection model", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function usePremountedSteps(step: number) {
       const [mounted, setMounted] = useState<ReadonlySet<number>>(() => new Set([step]));
       useEffect(() => { setMounted(previous => new Set(previous).add(step)); }, [step]);
       return mounted;
     }
-  `, "fixture.ts");
+  `,
+    "fixture.ts",
+  );
   assert.equal(finding?.action, "review-state");
 });
 
@@ -7281,7 +8250,7 @@ test("inventories nonstandard React useState bindings as review", () => {
         return <>{tuple[0]}</>;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });
 
@@ -7297,12 +8266,13 @@ test("keeps an effect with paired cleanup", () => {
         return null;
       }
     `),
-    ["keep-effect"]
+    ["keep-effect"],
   );
 });
 
 test("moves a one-shot deferred reveal sink to an observable leaf without replacing its effect", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Screen() {
       const [ready, setReady] = useState(false);
@@ -7312,13 +8282,16 @@ test("moves a one-shot deferred reveal sink to an observable leaf without replac
       }, []);
       return ready ? <HeavyLeaf /> : <Placeholder />;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "ready")?.action, "use-observable");
-  assert.equal(findings.find(finding => finding.hook === "useEffect")?.action, "keep-effect");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "ready")?.action, "use-observable");
+  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "keep-effect");
 });
 
 test("recognizes a one-shot render gate that returns a unique const JSX alias", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Screen() {
       const [ready, setReady] = useState(false);
@@ -7330,8 +8303,10 @@ test("recognizes a one-shot render gate that returns a unique const JSX alias", 
       if (!ready) return placeholder;
       return <HeavyLeaf />;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.name === "ready")?.action, "use-observable");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "ready")?.action, "use-observable");
 });
 
 test("does not treat a nested function JSX return as the owner's render gate", () => {
@@ -7351,7 +8326,7 @@ test("does not treat a nested function JSX return as the owner's render gate", (
         return <Placeholder />;
       }
     `),
-    ["review-state", "keep-effect"]
+    ["review-state", "keep-effect"],
   );
 });
 
@@ -7368,7 +8343,7 @@ test("does not promote a multi-phase or dependency-rearmed reveal sink", () => {
         return phase > 0 ? <HeavyLeaf /> : <Placeholder />;
       }
     `),
-    ["review-state", "keep-effect"]
+    ["review-state", "keep-effect"],
   );
 });
 
@@ -7386,7 +8361,7 @@ test("does not promote deferred booleans used outside a render-selecting gate", 
         return <div>{label && ready}</div>;
       }
     `),
-    ["review-state", "keep-effect"]
+    ["review-state", "keep-effect"],
   );
 });
 
@@ -7405,12 +8380,13 @@ test("does not promote an unreachable nested deferred setter or shadowed cleanup
         return ready ? <HeavyLeaf /> : <Placeholder />;
       }
     `),
-    ["review-state", "keep-effect"]
+    ["review-state", "keep-effect"],
   );
 });
 
 test("matches deferred reveal setters independently in different owners", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function First() {
       const [ready, setReady] = useState(false);
@@ -7422,15 +8398,18 @@ test("matches deferred reveal setters independently in different owners", () => 
       useEffect(() => { const h = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(h); }, []);
       return ready ? <SecondLeaf /> : null;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.deepEqual(
-    findings.filter(finding => finding.hook === "useState").map(finding => finding.action),
-    ["use-observable", "use-observable"]
+    findings.filter((finding) => finding.hook === "useState").map((finding) => finding.action),
+    ["use-observable", "use-observable"],
   );
 });
 
 test("scopes Legend hook provenance to the owning function", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect } from "react";
     import { useValue } from "@legendapp/state/react";
     export function First({ open$ }: { open$: unknown }) {
@@ -7441,12 +8420,15 @@ test("scopes Legend hook provenance to the owning function", () => {
       useEffect(() => report(isOpen), [isOpen]);
       return null;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.hook === "useEffect")?.action, "review-effect");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "review-effect");
 });
 
 test("rejects same-owner shadowed Legend hook provenance", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import { useEffect } from "react";
     import { useValue } from "@legendapp/state/react";
     export function Screen({ open$ }: { open$: unknown }) {
@@ -7455,8 +8437,10 @@ test("rejects same-owner shadowed Legend hook provenance", () => {
       useEffect(() => report(value), [value]);
       return reportOther(false) ? <Panel /> : null;
     }
-  `, "fixture.tsx");
-  assert.equal(findings.find(finding => finding.hook === "useEffect")?.action, "review-effect");
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.hook === "useEffect")?.action, "review-effect");
 });
 
 test("reviews setup-only empty effects because useMount changes Strict Mode semantics", () => {
@@ -7468,12 +8452,13 @@ test("reviews setup-only empty effects because useMount changes Strict Mode sema
         return null;
       }
     `),
-    ["review-effect"]
+    ["review-effect"],
   );
 });
 
 test("keeps one dependency-driven external resource command in React", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect } from "react";
     import { cacheKey, openWorkspace } from "./workspace";
     export function Workspace({ policyId }: { policyId: string | null }) {
@@ -7495,12 +8480,18 @@ test("keeps one dependency-driven external resource command in React", () => {
       }, [client, id]);
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect", "keep-effect"]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    ["keep-effect", "keep-effect", "keep-effect"],
+  );
 });
 
 test("keeps a dependency-driven command with one pure mapped payload projection", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect } from "react";
     import { enqueue } from "./integration";
     export function PureProjection({ result }: { result: { data?: Array<{ media: string }> } }) {
@@ -7532,19 +8523,25 @@ test("keeps a dependency-driven command with one pure mapped payload projection"
       useEffect(() => { enqueue(otherRows.map(row => row.length)); }, [rows]);
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "keep-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    [
+      "keep-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+    ],
+  );
 });
 
 test("keeps externally prepared dependency-driven navigation in React", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect } from "react";
     import { format, isEmptyObject } from "./values";
     import { Navigation, ROUTES } from "./navigation";
@@ -7573,17 +8570,18 @@ test("keeps externally prepared dependency-driven navigation in React", () => {
       useEffect(() => { for (const value of values) Navigation.navigate(value); }, [values]);
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "keep-effect",
-    "keep-effect",
-    "keep-effect",
-    "keep-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    ["keep-effect", "keep-effect", "keep-effect", "keep-effect"],
+  );
 });
 
 test("keeps dependency effects with resolved local callbacks", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import React, { useCallback, useEffect, useRef, useState } from "react";
     import { publish } from "./integration";
     export function Named({ active, id }: { active: boolean; id: string }) {
@@ -7611,17 +8609,18 @@ test("keeps dependency effects with resolved local callbacks", () => {
       notify = () => publish("changed");
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "keep-effect",
-    "keep-effect",
-    "review-effect",
-    "review-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    ["keep-effect", "keep-effect", "review-effect", "review-effect"],
+  );
 });
 
 test("reviews unsafe dependency-driven command preparation", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     import { Navigation } from "./navigation";
     import { subscribe } from "./resource";
@@ -7656,19 +8655,25 @@ test("reviews unsafe dependency-driven command preparation", () => {
       }, [path]);
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    [
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+    ],
+  );
 });
 
 test("keeps one translated external notification in React", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect } from "react";
     import { useTranslation, useTranslation as useI18n } from "react-i18next";
     import { toast } from "sonner";
@@ -7686,12 +8691,18 @@ test("keeps one translated external notification in React", () => {
       }, [translate, error]);
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), ["keep-effect", "keep-effect"]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    ["keep-effect", "keep-effect"],
+  );
 });
 
 test("does not trust local formatters or lookalike translation hooks in external effects", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect } from "react";
     import { useTranslation as useLookalike } from "./translations";
     import { useTranslation } from "react-i18next";
@@ -7722,18 +8733,18 @@ test("does not trust local formatters or lookalike translation hooks in external
       useEffect(() => { if (error) toast.error(t(buildMessage(error))); }, [t, error]);
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    ["review-effect", "review-effect", "review-effect", "review-effect", "review-effect"],
+  );
 });
 
 test("keeps dependency-driven browser-storage persistence in React", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     export function Filters({ ready, workspaceId }: { ready: boolean; workspaceId: string }) {
       const [query, setQuery] = useState("");
@@ -7752,13 +8763,19 @@ test("keeps dependency-driven browser-storage persistence in React", () => {
       }, [query, statuses, ready, workspaceId]);
       return <input value={query} onChange={event => setQuery(event.target.value)} />;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), ["keep-effect"]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    ["keep-effect"],
+  );
   assert.match(effects[0]?.message ?? "", /browser storage/i);
 });
 
 test("does not call storage hydration, scheduling, arbitrary work, or observable reactions persistence", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     import { useValue } from "@legendapp/state/react";
     export function Hydrate({ value, value$ }: { value: string; value$: unknown }) {
@@ -7789,23 +8806,29 @@ test("does not call storage hydration, scheduling, arbitrary work, or observable
       useEffect(() => { window.localStorage.setItem("value", JSON.stringify(value)); }, [value]);
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "keep-effect",
-    "use-observe-effect",
-    "keep-effect",
-    "review-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    [
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "keep-effect",
+      "use-observe-effect",
+      "keep-effect",
+      "review-effect",
+    ],
+  );
   assert.doesNotMatch(effects[7]?.message ?? "", /browser storage/i);
 });
 
 test("reviews local-state, helper, scheduled, multi-command, collection, and subscription effects", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect, useState } from "react";
     import { fetchResource, reportResource, resources, subscribeToResource } from "./resource";
     export function Screen({ id }: { id: string }) {
@@ -7823,19 +8846,24 @@ test("reviews local-state, helper, scheduled, multi-command, collection, and sub
       useEffect(() => { fetchResource({ id, resolve: () => id }); }, [id]);
       return <input value={query} onChange={event => setQuery(event.target.value)} />;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    [
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+    ],
+  );
 });
 
 test("honors an adjacent directive that keeps lifecycle ownership in React", () => {
@@ -7843,7 +8871,8 @@ test("honors an adjacent directive that keeps lifecycle ownership in React", () 
     "react-effect-allow timer: preserve React replay",
     "legend-doctor keep-react-effect",
   ]) {
-    const [finding] = analyzeSource(`
+    const [finding] = analyzeSource(
+      `
       import { useEffect, useRef } from "react";
       export function Screen() {
         const timer = useRef<number | null>(null);
@@ -7853,7 +8882,9 @@ test("honors an adjacent directive that keeps lifecycle ownership in React", () 
         }, []);
         return null;
       }
-    `, "fixture.tsx");
+    `,
+      "fixture.tsx",
+    );
     assert.equal(finding?.action, "keep-effect");
     assert.equal(finding?.confidence, "certain");
     assert.match(finding?.message ?? "", /ownership directive/);
@@ -7916,12 +8947,13 @@ test("keeps effects that operate on committed refs", () => {
         return <><input ref={inputRef} /><div ref={containerRef}>{container?.id}</div></>;
       }
     `),
-    ["review-state", "keep-effect", "keep-effect", "keep-effect"]
+    ["review-state", "keep-effect", "keep-effect", "keep-effect"],
   );
 });
 
 test("keeps committed-ref integrations through immutable receiver aliases", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect, useRef } from "react";
     export function Safe({ index }: { index: number }) {
       const listRef = useRef<HTMLDivElement>(null);
@@ -7956,17 +8988,18 @@ test("keeps committed-ref integrations through immutable receiver aliases", () =
       useEffect(() => { if (index < 0) return; }, [index]);
       return <div ref={listRef} />;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "keep-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    ["keep-effect", "review-effect", "review-effect", "review-effect"],
+  );
 });
 
 test("keeps exact latest-value ref mirrors in React post-commit timing", () => {
-  const findings = analyzeSource(`
+  const findings = analyzeSource(
+    `
     import React, { useEffect, useRef as useLatestRef } from "react";
     export function Named({ value }: { value: string }) {
       const latest = useLatestRef(value);
@@ -7983,13 +9016,21 @@ test("keeps exact latest-value ref mirrors in React post-commit timing", () => {
       React.useEffect(() => { previous.current = value; });
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(findings.map(finding => finding.action), ["keep-effect", "keep-effect", "keep-effect"]);
-  for (const finding of findings) assert.match(finding.message, /committed ref/i);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["keep-effect", "keep-effect", "keep-effect"],
+  );
+  for (const finding of findings) {
+    assert.match(finding.message, /committed ref/i);
+  }
 });
 
 test("keeps exact committed previous-value guards in React post-commit timing", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import React, { useEffect, useRef } from "react";
     export function Exact({ value }: { value: string }) {
       const previous = useRef(value);
@@ -8064,22 +9105,30 @@ test("keeps exact committed previous-value guards in React post-commit timing", 
       }, [value]);
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "keep-effect",
-    "keep-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-  ]);
-  for (const finding of effects.slice(0, 2)) assert.match(finding.message, /committed ref/i);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    [
+      "keep-effect",
+      "keep-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+    ],
+  );
+  for (const finding of effects.slice(0, 2)) {
+    assert.match(finding.message, /committed ref/i);
+  }
 });
 
 test("reviews unproven or behaviorally different ref mirror effects", () => {
-  const effects = analyzeSource(`
+  const effects = analyzeSource(
+    `
     import { useEffect, useRef } from "react";
     export function WrongDependency({ value, other }: { value: string; other: string }) {
       const latest = useRef(value);
@@ -8133,19 +9182,24 @@ test("reviews unproven or behaviorally different ref mirror effects", () => {
       });
       return null;
     }
-  `, "fixture.tsx").filter(finding => finding.hook === "useEffect");
-  assert.deepEqual(effects.map(finding => finding.action), [
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-    "review-effect",
-  ]);
+  `,
+    "fixture.tsx",
+  ).filter((finding) => finding.hook === "useEffect");
+  assert.deepEqual(
+    effects.map((finding) => finding.action),
+    [
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+      "review-effect",
+    ],
+  );
 });
 
 test("keeps a forwarded ref snapshot in React post-commit timing", () => {
@@ -8160,7 +9214,7 @@ test("keeps a forwarded ref snapshot in React post-commit timing", () => {
         return <VirtualGrid container={container} />;
       }
     `),
-    ["review-state", "keep-effect"]
+    ["review-state", "keep-effect"],
   );
 });
 
@@ -8176,7 +9230,7 @@ test("reviews empty ref effects that intentionally capture a render snapshot", (
         return <div ref={containerRef} />;
       }
     `),
-    ["review-effect"]
+    ["review-effect"],
   );
 });
 
@@ -8190,19 +9244,22 @@ test("keeps a direct latest-value ref mirror in post-commit timing", () => {
         return null;
       }
     `),
-    ["keep-effect"]
+    ["keep-effect"],
   );
 });
 
 test("suggests useMount only for module-global setup without owner-local captures", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useEffect } from "react";
     import { warmCache } from "./cache";
     export function App() {
       useEffect(() => { warmCache(); }, []);
       return null;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-mount");
   assert.equal(finding?.disposition, "candidate");
 
@@ -8214,19 +9271,22 @@ test("suggests useMount only for module-global setup without owner-local capture
         return null;
       }
     `),
-    ["review-effect"]
+    ["review-effect"],
   );
 });
 
 test("keeps conditional useUnmount advice as a candidate", () => {
-  const [finding] = analyzeSource(`
+  const [finding] = analyzeSource(
+    `
     import { useEffect } from "react";
     import { release } from "./resource";
     export function App() {
       useEffect(() => () => release(), []);
       return null;
     }
-  `, "fixture.tsx");
+  `,
+    "fixture.tsx",
+  );
   assert.equal(finding?.action, "use-unmount");
   assert.equal(finding?.disposition, "candidate");
 });
@@ -8247,7 +9307,7 @@ test("does not call returned setup work a teardown-only effect", () => {
         }
       `),
       ["keep-effect"],
-      cleanup
+      cleanup,
     );
   }
 });
@@ -8263,7 +9323,7 @@ test("recognizes direct returned cleanup function values", () => {
         }
       `),
       ["use-unmount"],
-      cleanup
+      cleanup,
     );
   }
 });
@@ -8279,7 +9339,7 @@ test("suggests useObserveEffect only for dependencies sourced from useValue", ()
         return null;
       }
     `),
-    ["use-observe-effect"]
+    ["use-observe-effect"],
   );
 });
 
@@ -8295,7 +9355,7 @@ test("allows stable useObservable handles beside changing useValue dependencies"
         return null;
       }
     `),
-    ["use-observe-effect"]
+    ["use-observe-effect"],
   );
 });
 
@@ -8310,7 +9370,7 @@ test("does not infer an observable reaction when the effect never reads the useV
         return null;
       }
     `),
-    ["review-effect"]
+    ["review-effect"],
   );
 });
 
@@ -8333,7 +9393,7 @@ test("does not move deferred useValue reads into an untracked observable reactio
         }
       `),
       ["review-effect"],
-      body
+      body,
     );
   }
 });
@@ -8354,7 +9414,7 @@ test("does not replace async effects or callbacks with observable reactions", ()
         }
       `),
       ["review-effect"],
-      effect
+      effect,
     );
   }
 });
@@ -8372,7 +9432,7 @@ test("tracks useValue reads through synchronous collection callbacks", () => {
         return null;
       }
     `),
-    ["use-observe-effect"]
+    ["use-observe-effect"],
   );
 });
 
@@ -8395,7 +9455,7 @@ test("does not trust collection method names on an unknown scheduler", () => {
         return null;
       }
     `),
-    ["review-effect"]
+    ["review-effect"],
   );
 });
 
@@ -8413,7 +9473,7 @@ test("does not trust a shadowed Array type as a synchronous collection", () => {
         return null;
       }
     `),
-    ["review-effect"]
+    ["review-effect"],
   );
 });
 
@@ -8436,7 +9496,7 @@ test("does not trust reassigned or method-overridden array receivers", () => {
         }
       `),
       ["review-effect"],
-      setup
+      setup,
     );
   }
 });
@@ -8451,6 +9511,6 @@ test("abstains when state is shadowed", () => {
         return <Child callback={callback} />;
       }
     `),
-    ["review-state"]
+    ["review-state"],
   );
 });

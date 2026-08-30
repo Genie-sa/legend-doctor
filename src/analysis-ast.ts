@@ -1,6 +1,7 @@
 import ts from "typescript";
 
-import { isRuntimeFunctionLike, type RuntimeFunctionLike, visit } from "./ast.js";
+import { isRuntimeFunctionLike, visit } from "./ast.js";
+import type { RuntimeFunctionLike } from "./ast.js";
 
 const bindingCountsByOwner = new WeakMap<RuntimeFunctionLike, ReadonlyMap<string, number>>();
 
@@ -18,11 +19,17 @@ function collectBindingDeclarationCounts(owner: RuntimeFunctionLike): ReadonlyMa
   for (const parameter of owner.parameters) {
     incrementBindingCounts(parameter.name, counts);
   }
-  if (!owner.body) return counts;
-  visit(owner.body, node => {
-    if (ts.isVariableDeclaration(node)) incrementBindingCounts(node.name, counts);
+  if (!owner.body) {
+    return counts;
+  }
+  visit(owner.body, (node) => {
+    if (ts.isVariableDeclaration(node)) {
+      incrementBindingCounts(node.name, counts);
+    }
     if (
-      (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isClassDeclaration(node)) &&
+      (ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isClassDeclaration(node)) &&
       node.name
     ) {
       incrementCount(node.name.text, counts);
@@ -39,7 +46,9 @@ function collectBindingDeclarationCounts(owner: RuntimeFunctionLike): ReadonlyMa
 function incrementBindingCounts(binding: ts.BindingName, counts: Map<string, number>): void {
   const names = new Set<string>();
   collectBindingNames(binding, names);
-  for (const name of names) incrementCount(name, counts);
+  for (const name of names) {
+    incrementCount(name, counts);
+  }
 }
 
 function incrementCount(name: string, counts: Map<string, number>): void {
@@ -60,41 +69,55 @@ export function collectBindingNames(name: ts.BindingName, names: Set<string>): v
     return;
   }
   for (const element of name.elements) {
-    if (!ts.isOmittedExpression(element)) collectBindingNames(element.name, names);
+    if (!ts.isOmittedExpression(element)) {
+      collectBindingNames(element.name, names);
+    }
   }
 }
 
 export function containsCallExpression(node: ts.Node): boolean {
   let found = false;
-  visit(node, child => {
-    if (ts.isCallExpression(child)) found = true;
+  visit(node, (child) => {
+    if (ts.isCallExpression(child)) {
+      found = true;
+    }
   });
   return found;
 }
 
 export function containsElementAccess(node: ts.Node): boolean {
   let found = false;
-  visit(node, current => {
-    if (ts.isElementAccessExpression(current)) found = true;
+  visit(node, (current) => {
+    if (ts.isElementAccessExpression(current)) {
+      found = true;
+    }
   });
   return found;
 }
 
 export function exactObjectLiteralKeys(expression: ts.Expression): ReadonlySet<string> | null {
   const value = unwrapTransparentExpression(expression);
-  if (!ts.isObjectLiteralExpression(value)) return null;
+  if (!ts.isObjectLiteralExpression(value)) {
+    return null;
+  }
   const keys = new Set<string>();
   for (const property of value.properties) {
-    if (ts.isSpreadAssignment(property)) return null;
+    if (ts.isSpreadAssignment(property)) {
+      return null;
+    }
     const name = propertyNameText(property.name);
-    if (name === null) return null;
+    if (name === null) {
+      return null;
+    }
     keys.add(name);
   }
   return keys;
 }
 
 export function hookCallName(call: ts.CallExpression): string | null {
-  if (ts.isIdentifier(call.expression)) return call.expression.text;
+  if (ts.isIdentifier(call.expression)) {
+    return call.expression.text;
+  }
   return ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : null;
 }
 
@@ -103,7 +126,7 @@ export function isAssignmentOperator(kind: ts.SyntaxKind): boolean {
 }
 
 export function isDeclarationName(node: ts.Identifier): boolean {
-  const parent = node.parent;
+  const { parent } = node;
   return (
     (ts.isVariableDeclaration(parent) && parent.name === node) ||
     (ts.isBindingElement(parent) && parent.name === node) ||
@@ -116,13 +139,15 @@ export function isDeclarationName(node: ts.Identifier): boolean {
 
 export function isDirectJsxAttributeExpression(
   attribute: ts.JsxAttribute,
-  node: ts.Identifier
+  node: ts.Identifier,
 ): boolean {
-  const initializer = attribute.initializer;
-  return initializer !== undefined &&
+  const { initializer } = attribute;
+  return (
+    initializer !== undefined &&
     ts.isJsxExpression(initializer) &&
     initializer.expression !== undefined &&
-    unwrapTransparentExpression(initializer.expression) === node;
+    unwrapTransparentExpression(initializer.expression) === node
+  );
 }
 
 export function isEvaluationInert(expression: ts.Expression): boolean {
@@ -140,20 +165,25 @@ export function isEvaluationInert(expression: ts.Expression): boolean {
     return true;
   }
   if (ts.isPrefixUnaryExpression(value)) {
-    const numericLiteral = ts.isNumericLiteral(value.operand);
-    const bigintLiteral = ts.isBigIntLiteral(value.operand);
+    const numericLiteral = ts.isNumericLiteral(value.operand),
+      bigintLiteral = ts.isBigIntLiteral(value.operand);
     return (
       (numericLiteral && value.operator === ts.SyntaxKind.PlusToken) ||
       ((numericLiteral || bigintLiteral) &&
-        (value.operator === ts.SyntaxKind.MinusToken || value.operator === ts.SyntaxKind.TildeToken)) ||
+        (value.operator === ts.SyntaxKind.MinusToken ||
+          value.operator === ts.SyntaxKind.TildeToken)) ||
       (value.operator === ts.SyntaxKind.ExclamationToken && isEvaluationInert(value.operand))
     );
   }
-  if (ts.isTypeOfExpression(value)) return isEvaluationInert(value.expression);
+  if (ts.isTypeOfExpression(value)) {
+    return isEvaluationInert(value.expression);
+  }
   if (ts.isConditionalExpression(value)) {
-    return isEvaluationInert(value.condition) &&
+    return (
+      isEvaluationInert(value.condition) &&
       isEvaluationInert(value.whenTrue) &&
-      isEvaluationInert(value.whenFalse);
+      isEvaluationInert(value.whenFalse)
+    );
   }
   if (ts.isBinaryExpression(value)) {
     const operator = value.operatorToken.kind;
@@ -169,16 +199,20 @@ export function isEvaluationInert(expression: ts.Expression): boolean {
     return isEvaluationInert(value.left) && isEvaluationInert(value.right);
   }
   if (ts.isArrayLiteralExpression(value)) {
-    return value.elements.every(element =>
-      !ts.isSpreadElement(element) && isEvaluationInert(element)
+    return value.elements.every(
+      (element) => !ts.isSpreadElement(element) && isEvaluationInert(element),
     );
   }
   if (ts.isObjectLiteralExpression(value)) {
-    return value.properties.every(property => {
-      if (ts.isShorthandPropertyAssignment(property)) return true;
-      return ts.isPropertyAssignment(property) &&
+    return value.properties.every((property) => {
+      if (ts.isShorthandPropertyAssignment(property)) {
+        return true;
+      }
+      return (
+        ts.isPropertyAssignment(property) &&
         !ts.isComputedPropertyName(property.name) &&
-        isEvaluationInert(property.initializer);
+        isEvaluationInert(property.initializer)
+      );
     });
   }
   return false;
@@ -193,17 +227,21 @@ export function isControlledInteractionProp(name: string): boolean {
 }
 
 export function isValueTransitionProp(name: string): boolean {
-  return isControlledInteractionProp(name) ||
+  return (
+    isControlledInteractionProp(name) ||
     /^on(?:Change|Select|Toggle|Update)[A-Z][A-Za-z0-9]*$/.test(name) ||
-    /^on[A-Z][A-Za-z0-9]*(?:Change|Select|Toggle|Update)$/.test(name);
+    /^on[A-Z][A-Za-z0-9]*(?:Change|Select|Toggle|Update)$/.test(name)
+  );
 }
 
 export function isNonValueIdentifier(node: ts.Identifier): boolean {
-  const parent = node.parent;
+  const { parent } = node;
   return (
     (ts.isJsxAttribute(parent) && parent.name === node) ||
     (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
-    (ts.isPropertyAssignment(parent) && parent.name === node && !ts.isComputedPropertyName(parent.name)) ||
+    (ts.isPropertyAssignment(parent) &&
+      parent.name === node &&
+      !ts.isComputedPropertyName(parent.name)) ||
     (ts.isMethodDeclaration(parent) && parent.name === node) ||
     (ts.isPropertyDeclaration(parent) && parent.name === node) ||
     (ts.isPropertySignature(parent) && parent.name === node) ||
@@ -214,10 +252,10 @@ export function isNonValueIdentifier(node: ts.Identifier): boolean {
 
 export function isPureExpression(
   node: ts.Node,
-  allowedCall: (call: ts.CallExpression) => boolean = () => false
+  allowedCall: (call: ts.CallExpression) => boolean = () => false,
 ): boolean {
   let pure = true;
-  visit(node, current => {
+  visit(node, (current) => {
     if (
       ts.isAwaitExpression(current) ||
       ts.isYieldExpression(current) ||
@@ -227,7 +265,8 @@ export function isPureExpression(
       ts.isDeleteExpression(current) ||
       ts.isPostfixUnaryExpression(current) ||
       (ts.isPrefixUnaryExpression(current) &&
-        (current.operator === ts.SyntaxKind.PlusPlusToken || current.operator === ts.SyntaxKind.MinusMinusToken)) ||
+        (current.operator === ts.SyntaxKind.PlusPlusToken ||
+          current.operator === ts.SyntaxKind.MinusMinusToken)) ||
       (ts.isBinaryExpression(current) && isAssignmentOperator(current.operatorToken.kind))
     ) {
       pure = false;
@@ -238,17 +277,27 @@ export function isPureExpression(
 
 export function localBindingNames(
   owner: RuntimeFunctionLike,
-  excluded: ts.Node | null
+  excluded: ts.Node | null,
 ): ReadonlySet<string> {
   const names = new Set<string>();
-  for (const parameter of owner.parameters) collectBindingNames(parameter.name, names);
+  for (const parameter of owner.parameters) {
+    collectBindingNames(parameter.name, names);
+  }
   function walk(node: ts.Node): void {
-    if (node === excluded) return;
-    if (ts.isVariableDeclaration(node)) collectBindingNames(node.name, names);
-    if (ts.isFunctionDeclaration(node) && node.name) names.add(node.name.text);
+    if (node === excluded) {
+      return;
+    }
+    if (ts.isVariableDeclaration(node)) {
+      collectBindingNames(node.name, names);
+    }
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      names.add(node.name.text);
+    }
     node.forEachChild(walk);
   }
-  if (owner.body) walk(owner.body);
+  if (owner.body) {
+    walk(owner.body);
+  }
   return names;
 }
 
@@ -262,15 +311,19 @@ export function rootIdentifier(expression: ts.Expression): ts.Identifier | null 
 
 export function staticPropertyPath(expression: ts.Expression): readonly string[] | null {
   const value = unwrapTransparentExpression(expression);
-  if (ts.isIdentifier(value)) return [value.text];
-  if (!ts.isPropertyAccessExpression(value) || value.questionDotToken) return null;
+  if (ts.isIdentifier(value)) {
+    return [value.text];
+  }
+  if (!ts.isPropertyAccessExpression(value) || value.questionDotToken) {
+    return null;
+  }
   const parent = staticPropertyPath(value.expression);
   return parent ? [...parent, value.name.text] : null;
 }
 
 export function staticPathHasBinding(
   expression: ts.Expression,
-  bindings: ReadonlySet<string>
+  bindings: ReadonlySet<string>,
 ): boolean {
   const path = staticPropertyPath(expression);
   return path !== null && propertyPathHasBinding(path, bindings);
@@ -278,10 +331,12 @@ export function staticPathHasBinding(
 
 export function propertyPathHasBinding(
   path: readonly string[],
-  bindings: ReadonlySet<string>
+  bindings: ReadonlySet<string>,
 ): boolean {
   for (let length = 1; length <= path.length; length += 1) {
-    if (bindings.has(path.slice(0, length).join("."))) return true;
+    if (bindings.has(path.slice(0, length).join("."))) {
+      return true;
+    }
   }
   return false;
 }

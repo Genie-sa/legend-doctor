@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 
 import type { AnalysisReport } from "../src/types.js";
 
-const run = promisify(execFile);
-const CLI_PATH = path.join(import.meta.dirname, "..", "src", "cli.js");
+const run = promisify(execFile),
+  CLI_PATH = path.join(import.meta.dirname, "..", "src", "cli.js");
 
 async function writeFixtureRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cli-"));
@@ -23,7 +23,7 @@ async function writeFixtureRoot(): Promise<string> {
         player$.isPlaying.set(true);
       }
     `,
-    "utf8"
+    "utf8",
   );
   await writeFile(
     path.join(root, "screen.tsx"),
@@ -34,34 +34,43 @@ async function writeFixtureRoot(): Promise<string> {
         return <button onClick={() => setCount(count + 1)}>{count}</button>;
       }
     `,
-    "utf8"
+    "utf8",
   );
   return root;
 }
 
-test("--disposition change keeps only change findings and practices", async t => {
+test("--disposition change keeps only change findings and practices", async (t) => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 
-  const { stdout } = await run(process.execPath, [CLI_PATH, root, "--json", "--disposition", "change"]);
-  const report = JSON.parse(stdout) as AnalysisReport;
+  const { stdout } = await run(process.execPath, [
+      CLI_PATH,
+      root,
+      "--json",
+      "--disposition",
+      "change",
+    ]),
+    report = JSON.parse(stdout) as AnalysisReport;
 
   assert.equal(report.schemaVersion, 1);
   assert.equal(report.findings.length, 0);
   assert.deepEqual(
-    report.practices.map(practice => [practice.action, practice.disposition]),
-    [["assign-observable-fields", "change"]]
+    report.practices.map((practice) => [practice.action, practice.disposition]),
+    [["assign-observable-fields", "change"]],
   );
 });
 
-test("--disposition keep composes with the equals form and drops practices", async t => {
+test("--disposition keep composes with the equals form and drops practices", async (t) => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 
-  const { stdout } = await run(process.execPath, [CLI_PATH, root, "--json", "--disposition=keep"]);
-  const report = JSON.parse(stdout) as AnalysisReport;
+  const { stdout } = await run(process.execPath, [CLI_PATH, root, "--json", "--disposition=keep"]),
+    report = JSON.parse(stdout) as AnalysisReport;
 
-  assert.deepEqual(report.findings.map(finding => finding.disposition), ["keep"]);
+  assert.deepEqual(
+    report.findings.map((finding) => finding.disposition),
+    ["keep"],
+  );
   assert.deepEqual(report.practices, []);
 });
 
@@ -81,7 +90,7 @@ async function runExpectingFailure(args: readonly string[]): Promise<CliFailure>
   throw new Error(`expected CLI failure for: ${args.join(" ")}`);
 }
 
-test("rejects an unknown disposition value as a usage error", async t => {
+test("rejects an unknown disposition value as a usage error", async (t) => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 
@@ -96,7 +105,7 @@ test("rejects an unknown disposition value as a usage error", async t => {
   assert.match(failure.stderr, /--help/);
 });
 
-test("rejects --disposition without a value", async t => {
+test("rejects --disposition without a value", async (t) => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 
@@ -116,7 +125,7 @@ test("rejects an unknown flag and suggests the closest known flag", async () => 
   assert.match(failure.stderr, /--help/);
 });
 
-test("rejects a second positional target", async t => {
+test("rejects a second positional target", async (t) => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 
@@ -126,7 +135,7 @@ test("rejects a second positional target", async t => {
   assert.match(failure.stderr, /extra-target/);
 });
 
-test("rejects --coverage without --json and names the fix", async t => {
+test("rejects --coverage without --json and names the fix", async (t) => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 
@@ -137,9 +146,8 @@ test("rejects --coverage without --json and names the fix", async t => {
 });
 
 test("reports a missing target with the resolved path and exit code 1", async () => {
-  const missing = path.join(os.tmpdir(), "legend-doctor-missing", "nope");
-
-  const failure = await runExpectingFailure([missing, "--json"]);
+  const missing = path.join(os.tmpdir(), "legend-doctor-missing", "nope"),
+    failure = await runExpectingFailure([missing, "--json"]);
 
   assert.equal(failure.code, 1);
   assert.equal(failure.stdout, "");
@@ -175,7 +183,7 @@ test("--version prints the package version", async () => {
   assert.match(stdout, /^legend-doctor \d+\.\d+\.\d+\n$/);
 });
 
-test("text summary names the resolved scan root", async t => {
+test("text summary names the resolved scan root", async (t) => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 
@@ -184,7 +192,7 @@ test("text summary names the resolved scan root", async t => {
   assert.match(stdout, new RegExp(`Scanned \\d+ files under .*${path.basename(root)}`));
 });
 
-test("text output appends the re-run hint when change findings are shown", async t => {
+test("text output appends the re-run hint when change findings are shown", async (t) => {
   const root = await writeFixtureRoot();
   t.after(() => rm(root, { force: true, recursive: true }));
 

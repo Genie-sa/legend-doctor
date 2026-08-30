@@ -27,12 +27,12 @@ fix), exit 1 means the scan failed, exit 0 means the report is complete whatever
 
 ## Dispositions
 
-| Disposition | Action |
-| --- | --- |
-| `change` | Apply the instruction. Structural proof is complete. |
+| Disposition | Action                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| `change`    | Apply the instruction. Structural proof is complete.                                            |
 | `candidate` | Inspect the named source. Edit only when it proves the missing timing, ownership, or type fact. |
-| `keep` | Preserve the current React or lifecycle boundary. |
-| `style` | Apply only when the installed Legend API supports the equivalent form. |
+| `keep`      | Preserve the current React or lifecycle boundary.                                               |
+| `style`     | Apply only when the installed Legend API supports the equivalent form.                          |
 
 Keep a deliberate React effect by preceding it with `// legend-doctor keep-react-effect`; that suppresses its
 `review-effect` finding.

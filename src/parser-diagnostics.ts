@@ -18,13 +18,11 @@ interface SourceFileWithParseDiagnostics extends ts.SourceFile {
  * include the property in its public declaration. Keep that version-sensitive
  * access isolated here so the cached AST remains the single parse authority.
  */
-export function parserDiagnosticsOf(
-  sourceFile: ts.SourceFile
-): readonly AnalysisDiagnostic[] {
+export function parserDiagnosticsOf(sourceFile: ts.SourceFile): readonly AnalysisDiagnostic[] {
   if (!("parseDiagnostics" in sourceFile)) {
     throw new Error("The installed TypeScript parser does not expose parser diagnostics");
   }
-  return [...(sourceFile as SourceFileWithParseDiagnostics).parseDiagnostics].map(diagnostic => ({
+  return [...(sourceFile as SourceFileWithParseDiagnostics).parseDiagnostics].map((diagnostic) => ({
     category: diagnosticCategory(diagnostic.category),
     code: diagnostic.code,
     file: sourceFile.fileName,
@@ -36,13 +34,17 @@ export function parserDiagnosticsOf(
 
 function diagnosticCategory(category: ts.DiagnosticCategory): AnalysisDiagnostic["category"] {
   switch (category) {
-    case ts.DiagnosticCategory.Error:
+    case ts.DiagnosticCategory.Error: {
       return "error";
-    case ts.DiagnosticCategory.Warning:
+    }
+    case ts.DiagnosticCategory.Warning: {
       return "warning";
-    case ts.DiagnosticCategory.Suggestion:
+    }
+    case ts.DiagnosticCategory.Suggestion: {
       return "suggestion";
-    default:
+    }
+    default: {
       return "message";
+    }
   }
 }

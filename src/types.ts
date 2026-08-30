@@ -57,7 +57,13 @@ export interface HookFinding {
   name: string | null;
   stateModel?: {
     ownership: "delete" | "existing-observable" | "local-observable" | "react" | "ref" | "review";
-    subscription: "leaf-react" | "leaf-use-value" | "none" | "owner-react" | "owner-use-value" | "review";
+    subscription:
+      | "leaf-react"
+      | "leaf-use-value"
+      | "none"
+      | "owner-react"
+      | "owner-use-value"
+      | "review";
   };
 }
 

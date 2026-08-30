@@ -12,10 +12,10 @@ import {
   findAncestorUntil,
   nearestNestedFunction,
   nodeWithin,
-  type RuntimeFunctionLike,
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import {
   expressionContainsJsx,
@@ -45,10 +45,11 @@ interface LiteralBooleanLeafOptions {
 export function isLiteralBooleanLeafState(
   state: StateCandidate,
   usage: StateUsage,
-  options: LiteralBooleanLeafOptions
+  options: LiteralBooleanLeafOptions,
 ): boolean {
   const target = [...usage.valueTargets][0] ?? "";
-  return !options.isCustomHookOwner &&
+  return (
+    !options.isCustomHookOwner &&
     hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) &&
     jsxElementCount(state.owner) >= 12 &&
     usage.localRenderReads === 0 &&
@@ -68,14 +69,16 @@ export function isLiteralBooleanLeafState(
     !usage.setterUsesPreviousValue &&
     !usage.shadowed &&
     !usage.escaped &&
-    usage.setterCallNodes.every(call => {
+    usage.setterCallNodes.every((call) => {
       const value = call.arguments[0];
-      return call.arguments.length === 1 &&
+      return (
+        call.arguments.length === 1 &&
         !!value &&
         (value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword) &&
-        (isEventRootedLiteralSetterCall(call, state.owner) ||
-          options.hasMemoizedOptionCommand);
-    });
+        (isEventRootedLiteralSetterCall(call, state.owner) || options.hasMemoizedOptionCommand)
+      );
+    })
+  );
 }
 
 interface MultiSurfaceBooleanOptions {
@@ -89,11 +92,13 @@ interface MultiSurfaceBooleanOptions {
 export function isAdjacentEventBooleanLeafState(
   state: StateCandidate,
   usage: StateUsage,
-  options: MultiSurfaceBooleanOptions
+  options: MultiSurfaceBooleanOptions,
 ): boolean {
-  return usage.effectWrites === 0 &&
-    usage.setterCallNodes.every(call => isEventBooleanSetter(call, state)) &&
-    isAdjacentBooleanLeafState(state, usage, options);
+  return (
+    usage.effectWrites === 0 &&
+    usage.setterCallNodes.every((call) => isEventBooleanSetter(call, state)) &&
+    isAdjacentBooleanLeafState(state, usage, options)
+  );
 }
 
 interface AdjacentEffectBooleanOptions extends MultiSurfaceBooleanOptions {
@@ -103,19 +108,21 @@ interface AdjacentEffectBooleanOptions extends MultiSurfaceBooleanOptions {
 export function isAdjacentEffectBooleanLeafState(
   state: StateCandidate,
   usage: StateUsage,
-  options: AdjacentEffectBooleanOptions
+  options: AdjacentEffectBooleanOptions,
 ): boolean {
-  return options.effectWritesAreDirect &&
+  return (
+    options.effectWritesAreDirect &&
     usage.effectWrites > 0 &&
     usage.effectWrites === usage.setterCalls &&
     usage.setterCallNodes.every(isPureBooleanSetter) &&
-    isAdjacentBooleanLeafState(state, usage, options);
+    isAdjacentBooleanLeafState(state, usage, options)
+  );
 }
 
 function isAdjacentBooleanLeafState(
   state: StateCandidate,
   usage: StateUsage,
-  options: MultiSurfaceBooleanOptions
+  options: MultiSurfaceBooleanOptions,
 ): boolean {
   const ownerElements = jsxElementCount(state.owner);
   if (
@@ -142,37 +149,43 @@ function isAdjacentBooleanLeafState(
   }
 
   const surfaces = conditionalPresentationSurfaces(state, usage, options.pureProjectionImports);
-  if (surfaces === null || surfaces.size < 2 || surfaces.size > 6) return false;
+  if (surfaces === null || surfaces.size < 2 || surfaces.size > 6) {
+    return false;
+  }
   const surfaceElements = [...surfaces.values()].reduce(
     (sum, surface) => sum + surface.elements,
-    0
+    0,
   );
-  if (surfaceElements / ownerElements > 0.4) return false;
+  if (surfaceElements / ownerElements > 0.4) {
+    return false;
+  }
 
-  const expressions = [...surfaces.values()].map(surface => surface.expression);
-  const parent = expressions[0]?.parent;
+  const expressions = [...surfaces.values()].map((surface) => surface.expression),
+    parent = expressions[0]?.parent;
   if (
     !parent ||
     (!ts.isJsxElement(parent) && !ts.isJsxFragment(parent)) ||
-    expressions.some(expression => expression.parent !== parent)
+    expressions.some((expression) => expression.parent !== parent)
   ) {
     return false;
   }
   const children = parent.children.filter(
-    child => !ts.isJsxText(child) || child.text.trim().length > 0
-  );
-  const indexes = expressions
-    .map(expression => children.indexOf(expression))
-    .sort((left, right) => left - right);
-  return children.length > expressions.length &&
+      (child) => !ts.isJsxText(child) || child.text.trim().length > 0,
+    ),
+    indexes = expressions
+      .map((expression) => children.indexOf(expression))
+      .sort((left, right) => left - right);
+  return (
+    children.length > expressions.length &&
     indexes[0] !== -1 &&
-    indexes.every((index, position) => index === indexes[0]! + position);
+    indexes.every((index, position) => index === indexes[0]! + position)
+  );
 }
 
 export function isMultiSurfaceLiteralBooleanState(
   state: StateCandidate,
   usage: StateUsage,
-  options: MultiSurfaceBooleanOptions
+  options: MultiSurfaceBooleanOptions,
 ): boolean {
   const ownerElements = jsxElementCount(state.owner);
   if (
@@ -199,44 +212,49 @@ export function isMultiSurfaceLiteralBooleanState(
     return false;
   }
 
-  const projections = presentationProjections(state, usage, options.pureProjectionImports);
-
-  const surfaces = new Map<number, number>();
+  const projections = presentationProjections(state, usage, options.pureProjectionImports),
+    surfaces = new Map<number, number>();
   let conditionalSurfaces = 0;
   for (const projection of projections.values()) {
     if (
       nearestNestedFunction(projection, state.owner) ||
       nearestRepeatedRenderCall(projection, state.owner) ||
-      !isSafeJsxProjectionReference(
-        projection,
-        state.owner,
-        options.pureProjectionImports
-      )
+      !isSafeJsxProjectionReference(projection, state.owner, options.pureProjectionImports)
     ) {
       return false;
     }
     const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
     if (attribute) {
-      if (!["className", "style"].includes(attribute.name.getText())) return false;
+      if (!["className", "style"].includes(attribute.name.getText())) {
+        return false;
+      }
       surfaces.set(attribute.getStart(), 1);
       continue;
     }
     const expression = findAncestorUntil(projection, ts.isJsxExpression, state.owner);
-    if (!expression?.expression || !isRenderGateReference(projection, state.owner)) return false;
+    if (!expression?.expression || !isRenderGateReference(projection, state.owner)) {
+      return false;
+    }
     let elements = 0;
-    visit(expression.expression, node => {
-      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) elements += 1;
+    visit(expression.expression, (node) => {
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        elements += 1;
+      }
     });
-    if (elements === 0 || elements > 4) return false;
+    if (elements === 0 || elements > 4) {
+      return false;
+    }
     surfaces.set(expression.getStart(), elements);
     conditionalSurfaces += 1;
   }
 
   const surfaceElements = [...surfaces.values()].reduce((sum, elements) => sum + elements, 0);
-  return surfaces.size >= 2 &&
+  return (
+    surfaces.size >= 2 &&
     surfaces.size <= 6 &&
     conditionalSurfaces > 0 &&
-    surfaceElements / ownerElements <= 0.4;
+    surfaceElements / ownerElements <= 0.4
+  );
 }
 
 interface ConditionalPresentationSurface {
@@ -247,11 +265,10 @@ interface ConditionalPresentationSurface {
 function conditionalPresentationSurfaces(
   state: StateCandidate,
   usage: StateUsage,
-  pureProjectionImports: ReadonlySet<string>
+  pureProjectionImports: ReadonlySet<string>,
 ): ReadonlyMap<number, ConditionalPresentationSurface> | null {
-  const projections = presentationProjections(state, usage, pureProjectionImports);
-
-  const surfaces = new Map<number, ConditionalPresentationSurface>();
+  const projections = presentationProjections(state, usage, pureProjectionImports),
+    surfaces = new Map<number, ConditionalPresentationSurface>();
   for (const projection of projections.values()) {
     const condition = renderGateCondition(projection, state.owner);
     if (
@@ -264,12 +281,18 @@ function conditionalPresentationSurfaces(
       return null;
     }
     const expression = findAncestorUntil(projection, ts.isJsxExpression, state.owner);
-    if (!expression?.expression || !isRenderGateReference(projection, state.owner)) return null;
+    if (!expression?.expression || !isRenderGateReference(projection, state.owner)) {
+      return null;
+    }
     let elements = 0;
-    visit(expression.expression, node => {
-      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) elements += 1;
+    visit(expression.expression, (node) => {
+      if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+        elements += 1;
+      }
     });
-    if (elements === 0 || elements > 4) return null;
+    if (elements === 0 || elements > 4) {
+      return null;
+    }
     surfaces.set(expression.getStart(), { elements, expression });
   }
   return surfaces;
@@ -278,19 +301,17 @@ function conditionalPresentationSurfaces(
 function presentationProjections(
   state: StateCandidate,
   usage: StateUsage,
-  pureProjectionImports: ReadonlySet<string>
+  pureProjectionImports: ReadonlySet<string>,
 ): ReadonlyMap<number, ts.Node> {
   const projections = new Map<number, ts.Node>();
   for (const renderNode of usage.directRenderNodes) {
-    const declaration = findAncestorUntil(renderNode, ts.isVariableDeclaration, state.owner);
-    const aliases = declaration?.initializer && containsJsx(declaration.initializer)
-      ? null
-      : oneHopRenderProjectionReferences(
-          state.owner,
-          [renderNode],
-          (expression, reference) =>
-            isSafeProjectionExpression(expression, reference, pureProjectionImports)
-        );
+    const declaration = findAncestorUntil(renderNode, ts.isVariableDeclaration, state.owner),
+      aliases =
+        declaration?.initializer && containsJsx(declaration.initializer)
+          ? null
+          : oneHopRenderProjectionReferences(state.owner, [renderNode], (expression, reference) =>
+              isSafeProjectionExpression(expression, reference, pureProjectionImports),
+            );
     for (const projection of aliases ?? [renderNode]) {
       projections.set(projection.getStart(), projection);
     }
@@ -331,10 +352,7 @@ const BOOLEAN_BINARY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
   ts.SyntaxKind.GreaterThanEqualsToken,
 ]);
 
-function isEventBooleanSetter(
-  call: ts.CallExpression,
-  state: StateCandidate
-): boolean {
+function isEventBooleanSetter(call: ts.CallExpression, state: StateCandidate): boolean {
   const argument = call.arguments[0];
   if (
     call.arguments.length !== 1 ||
@@ -345,28 +363,31 @@ function isEventBooleanSetter(
     return false;
   }
   const callback = nearestNestedFunction(call, state.owner);
-  return !!callback &&
+  return (
+    !!callback &&
     (ts.isArrowFunction(callback) ||
       ts.isFunctionDeclaration(callback) ||
       ts.isFunctionExpression(callback)) &&
     callbackIsIntrinsicEventRooted(callback, state.owner) &&
-    mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]));
+    mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]))
+  );
 }
 
 function isPureBooleanSetter(call: ts.CallExpression): boolean {
   const argument = call.arguments[0];
-  return call.arguments.length === 1 &&
+  return (
+    call.arguments.length === 1 &&
     !!argument &&
-    (isLiteralBooleanSetter(call) ||
-      (isPureExpression(argument) && isBooleanExpression(argument)));
+    (isLiteralBooleanSetter(call) || (isPureExpression(argument) && isBooleanExpression(argument)))
+  );
 }
 
 function callbackIsIntrinsicEventRooted(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): boolean {
-  const inlineAttribute = findAncestorUntil(callback, ts.isJsxAttribute, owner);
-  const inlineInitializer = inlineAttribute?.initializer;
+  const inlineAttribute = findAncestorUntil(callback, ts.isJsxAttribute, owner),
+    inlineInitializer = inlineAttribute?.initializer;
   if (
     inlineAttribute &&
     inlineInitializer &&
@@ -382,11 +403,13 @@ function callbackIsIntrinsicEventRooted(
     : ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
       ? callback.parent.name.text
       : undefined;
-  if (!name || bindingDeclarationCount(owner, name) !== 1) return false;
+  if (!name || bindingDeclarationCount(owner, name) !== 1) {
+    return false;
+  }
 
-  let referenced = false;
-  let safe = true;
-  visit(owner.body, node => {
+  let referenced = false,
+    safe = true;
+  visit(owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -402,39 +425,54 @@ function callbackIsIntrinsicEventRooted(
       safe = false;
       return;
     }
-    if (!attributeIsIntrinsicEvent(attribute)) safe = false;
+    if (!attributeIsIntrinsicEvent(attribute)) {
+      safe = false;
+    }
   });
   return referenced && safe;
 }
 
 function attributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
-  if (!/^on[A-Z]/.test(attribute.name.getText())) return false;
-  const opening = attribute.parent.parent;
-  const tag = (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening))
-    ? opening.tagName
-    : null;
+  if (!/^on[A-Z]/.test(attribute.name.getText())) {
+    return false;
+  }
+  const opening = attribute.parent.parent,
+    tag =
+      ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
+        ? opening.tagName
+        : null;
   return !!tag && ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
 }
 
 function isBooleanExpression(expression: ts.Expression): boolean {
   const value = unwrapTransparentExpression(expression);
-  return (ts.isPrefixUnaryExpression(value) && value.operator === ts.SyntaxKind.ExclamationToken) ||
-    (ts.isBinaryExpression(value) && BOOLEAN_BINARY_OPERATORS.has(value.operatorToken.kind));
+  return (
+    (ts.isPrefixUnaryExpression(value) && value.operator === ts.SyntaxKind.ExclamationToken) ||
+    (ts.isBinaryExpression(value) && BOOLEAN_BINARY_OPERATORS.has(value.operatorToken.kind))
+  );
 }
 
 function directOwnerReturnCount(owner: RuntimeFunctionLike): number {
-  if (!owner.body) return 0;
+  if (!owner.body) {
+    return 0;
+  }
   let returns = 0;
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (ts.isReturnStatement(node) && node.expression) returns += 1;
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (ts.isReturnStatement(node) && node.expression) {
+      returns += 1;
+    }
   });
   return returns;
 }
 
 function containsJsx(node: ts.Node): boolean {
   let found = false;
-  visit(node, candidate => {
-    if (ts.isJsxElement(candidate) || ts.isJsxFragment(candidate) || ts.isJsxSelfClosingElement(candidate)) {
+  visit(node, (candidate) => {
+    if (
+      ts.isJsxElement(candidate) ||
+      ts.isJsxFragment(candidate) ||
+      ts.isJsxSelfClosingElement(candidate)
+    ) {
       found = true;
     }
   });
@@ -443,14 +481,16 @@ function containsJsx(node: ts.Node): boolean {
 
 function isLiteralBooleanSetter(call: ts.CallExpression): boolean {
   const value = call.arguments[0];
-  return call.arguments.length === 1 &&
+  return (
+    call.arguments.length === 1 &&
     !!value &&
-    (value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword);
+    (value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword)
+  );
 }
 
 function isEventRootedLiteralSetterCall(
   call: ts.CallExpression,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): boolean {
   return isInsideJsxEventCallback(call, owner);
 }

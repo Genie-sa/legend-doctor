@@ -12,22 +12,24 @@ export type RuntimeFunctionLike =
   | ts.SetAccessorDeclaration;
 
 const RUNTIME_FUNCTION_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
-  ts.SyntaxKind.ArrowFunction,
-  ts.SyntaxKind.Constructor,
-  ts.SyntaxKind.FunctionDeclaration,
-  ts.SyntaxKind.FunctionExpression,
-  ts.SyntaxKind.GetAccessor,
-  ts.SyntaxKind.MethodDeclaration,
-  ts.SyntaxKind.SetAccessor,
-]);
-const identifiersByNode = new WeakMap<ts.Node, ReadonlyMap<string, readonly ts.Identifier[]>>();
+    ts.SyntaxKind.ArrowFunction,
+    ts.SyntaxKind.Constructor,
+    ts.SyntaxKind.FunctionDeclaration,
+    ts.SyntaxKind.FunctionExpression,
+    ts.SyntaxKind.GetAccessor,
+    ts.SyntaxKind.MethodDeclaration,
+    ts.SyntaxKind.SetAccessor,
+  ]),
+  identifiersByNode = new WeakMap<ts.Node, ReadonlyMap<string, readonly ts.Identifier[]>>();
 
 export function findAncestor<T extends ts.Node>(
   node: ts.Node,
-  predicate: (candidate: ts.Node) => candidate is T
+  predicate: (candidate: ts.Node) => candidate is T,
 ): T | null {
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
-    if (predicate(current)) return current;
+    if (predicate(current)) {
+      return current;
+    }
   }
   return null;
 }
@@ -35,14 +37,16 @@ export function findAncestor<T extends ts.Node>(
 export function findAncestorUntil<T extends ts.Node>(
   node: ts.Node,
   predicate: (candidate: ts.Node) => candidate is T,
-  boundary: ts.Node
+  boundary: ts.Node,
 ): T | null {
   for (
     let current: ts.Node | undefined = node.parent;
     current && current !== boundary;
     current = current.parent
   ) {
-    if (predicate(current)) return current;
+    if (predicate(current)) {
+      return current;
+    }
   }
   return null;
 }
@@ -51,13 +55,20 @@ export function isRuntimeFunctionLike(node: ts.Node): node is RuntimeFunctionLik
   return RUNTIME_FUNCTION_KINDS.has(node.kind);
 }
 
-export function identifiersNamed(node: ts.Node | undefined, name: string): readonly ts.Identifier[] {
-  if (!node) return [];
+export function identifiersNamed(
+  node: ts.Node | undefined,
+  name: string,
+): readonly ts.Identifier[] {
+  if (!node) {
+    return [];
+  }
   let identifiers = identifiersByNode.get(node);
   if (!identifiers) {
     const collected = new Map<string, ts.Identifier[]>();
-    visit(node, candidate => {
-      if (!ts.isIdentifier(candidate)) return;
+    visit(node, (candidate) => {
+      if (!ts.isIdentifier(candidate)) {
+        return;
+      }
       const matches = collected.get(candidate.text) ?? [];
       matches.push(candidate);
       collected.set(candidate.text, matches);
@@ -70,20 +81,22 @@ export function identifiersNamed(node: ts.Node | undefined, name: string): reado
 
 export function isNonProductionHarness(fileName: string): boolean {
   return /(?:^|\/)(?:__tests__|stories|demos)(?:\/|$)|\.(?:spec|test|stories?)\.[cm]?[jt]sx?$/i.test(
-    fileName.split(path.sep).join("/")
+    fileName.split(path.sep).join("/"),
   );
 }
 
 export function nearestNestedFunction(
   node: ts.Node,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): RuntimeFunctionLike | null {
   for (
     let current: ts.Node | undefined = node.parent;
     current && current !== owner;
     current = current.parent
   ) {
-    if (isRuntimeFunctionLike(current)) return current;
+    if (isRuntimeFunctionLike(current)) {
+      return current;
+    }
   }
   return null;
 }
@@ -94,8 +107,12 @@ export function nodeWithin(node: ts.Node, ancestor: ts.Node): boolean {
 
 export function scriptKindForFile(fileName: string): ts.ScriptKind {
   const extension = path.extname(fileName).toLowerCase();
-  if (extension === ".tsx") return ts.ScriptKind.TSX;
-  if (extension === ".jsx") return ts.ScriptKind.JSX;
+  if (extension === ".tsx") {
+    return ts.ScriptKind.TSX;
+  }
+  if (extension === ".jsx") {
+    return ts.ScriptKind.JSX;
+  }
   if (extension === ".js" || extension === ".mjs" || extension === ".cjs") {
     return ts.ScriptKind.JS;
   }
@@ -103,30 +120,36 @@ export function scriptKindForFile(fileName: string): ts.ScriptKind {
 }
 
 export function visit(node: ts.Node | undefined, callback: (node: ts.Node) => void): void {
-  if (!node) return;
+  if (!node) {
+    return;
+  }
   callback(node);
-  node.forEachChild(child => visit(child, callback));
+  node.forEachChild((child) => visit(child, callback));
 }
 
 export function visitSkippingNestedFunctions(
   node: ts.Node,
   allowedFunction: ts.FunctionLikeDeclaration,
-  callback: (node: ts.Node) => void
+  callback: (node: ts.Node) => void,
 ): void {
   callback(node);
-  node.forEachChild(child => {
-    if (isRuntimeFunctionLike(child) && child !== allowedFunction) return;
+  node.forEachChild((child) => {
+    if (isRuntimeFunctionLike(child) && child !== allowedFunction) {
+      return;
+    }
     visitSkippingNestedFunctions(child, allowedFunction, callback);
   });
 }
 
 export function visitSkippingNestedRuntimeFunctions(
   node: ts.Node,
-  callback: (node: ts.Node) => void
+  callback: (node: ts.Node) => void,
 ): void {
   callback(node);
-  node.forEachChild(child => {
-    if (isRuntimeFunctionLike(child)) return;
+  node.forEachChild((child) => {
+    if (isRuntimeFunctionLike(child)) {
+      return;
+    }
     visitSkippingNestedRuntimeFunctions(child, callback);
   });
 }

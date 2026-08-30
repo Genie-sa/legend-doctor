@@ -7,19 +7,12 @@ import {
   unwrapTransparentExpression,
 } from "../analysis-ast.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "../analyze-source.js";
-import {
-  nearestNestedFunction,
-  nodeWithin,
-  type RuntimeFunctionLike,
-  visit,
-  visitSkippingNestedFunctions,
-} from "../ast.js";
-import { isImportedHookCall, type HookImports } from "../imports.js";
+import { nearestNestedFunction, nodeWithin, visit, visitSkippingNestedFunctions } from "../ast.js";
+import type { RuntimeFunctionLike } from "../ast.js";
+import { isImportedHookCall } from "../imports.js";
+import type { HookImports } from "../imports.js";
 import { mutationRegionOnlyCallsStateSetters } from "./effect-drafts.js";
-import {
-  callbackIsEventRooted,
-  hasDirectPrimitiveInitializer,
-} from "./state-proofs.js";
+import { callbackIsEventRooted, hasDirectPrimitiveInitializer } from "./state-proofs.js";
 
 export interface ListenerRefStateCluster {
   action: "use-ref";
@@ -49,55 +42,71 @@ export function findListenerRefStateClusters(
   effects: readonly EffectCandidate[],
   imports: HookImports,
 ): ReadonlyMap<StateCandidate, ListenerRefStateCluster> {
-  const result = new Map<StateCandidate, ListenerRefStateCluster>();
-  const statesByOwner = groupByOwner(states);
+  const result = new Map<StateCandidate, ListenerRefStateCluster>(),
+    statesByOwner = groupByOwner(states);
 
   for (const [owner, ownerStates] of statesByOwner) {
     const callbacks = listenerCallbacks(owner, effects, imports);
-    if (callbacks.size === 0) continue;
+    if (callbacks.size === 0) {
+      continue;
+    }
     const candidates = new Set(
-      ownerStates.filter(state => isListenerRefCandidate(state, usageByState.get(state), callbacks)),
+      ownerStates.filter((state) =>
+        isListenerRefCandidate(state, usageByState.get(state), callbacks),
+      ),
     );
-    if (candidates.size < 2) continue;
+    if (candidates.size < 2) {
+      continue;
+    }
 
     const stateBySetter = new Map(
-      ownerStates.flatMap(state => state.setterName ? [[state.setterName, state] as const] : []),
-    );
-    const candidateRegions = new Map<RuntimeFunctionLike, Set<StateCandidate>>();
+        ownerStates.flatMap((state) =>
+          state.setterName ? [[state.setterName, state] as const] : [],
+        ),
+      ),
+      candidateRegions = new Map<RuntimeFunctionLike, Set<StateCandidate>>();
     for (const state of candidates) {
       const usage = usageByState.get(state);
-      if (!usage) continue;
+      if (!usage) {
+        continue;
+      }
       for (const call of usage.setterCallNodes) {
         const region = nearestNestedFunction(call, owner);
-        if (!region || region === owner) continue;
+        if (!region || region === owner) {
+          continue;
+        }
         const members = candidateRegions.get(region) ?? new Set<StateCandidate>();
         members.add(state);
         candidateRegions.set(region, members);
       }
     }
 
-    const claimed = new Set<StateCandidate>();
-    const regions = [...candidateRegions].sort(([left], [right]) => left.getStart() - right.getStart());
+    const claimed = new Set<StateCandidate>(),
+      regions = [...candidateRegions].sort(([left], [right]) => left.getStart() - right.getStart());
     for (const [region, regionMembers] of regions) {
       if (
         regionMembers.size < 2 ||
-        [...regionMembers].some(state => claimed.has(state)) ||
+        [...regionMembers].some((state) => claimed.has(state)) ||
         !regionIsSynchronousEvent(region, owner) ||
         !regionWritesOnlyMembers(region, regionMembers, stateBySetter)
       ) {
         continue;
       }
-      const members = [...regionMembers].sort((left, right) => left.call.getStart() - right.call.getStart());
-      const primary = members[0];
-      if (!primary) continue;
-      const names = members.map(state => state.valueName);
-      const cluster: ListenerRefStateCluster = {
-        action: "use-ref",
-        id: `state-cluster:listener-ref:${owner.getStart()}:${names.join(",")}`,
-        members,
-        message: `Replace the listener-only state cluster (${names.map(name => `\`${name}\``).join(", ")}) with refs as one migration; rewrite every read and write through \`.current\`, remove those values from memoized callback dependencies, and preserve each existing listener effect, registration target, event, guard, and cleanup.`,
-        primary,
-      };
+      const members = [...regionMembers].sort(
+          (left, right) => left.call.getStart() - right.call.getStart(),
+        ),
+        primary = members[0];
+      if (!primary) {
+        continue;
+      }
+      const names = members.map((state) => state.valueName),
+        cluster: ListenerRefStateCluster = {
+          action: "use-ref",
+          id: `state-cluster:listener-ref:${owner.getStart()}:${names.join(",")}`,
+          members,
+          message: `Replace the listener-only state cluster (${names.map((name) => `\`${name}\``).join(", ")}) with refs as one migration; rewrite every read and write through \`.current\`, remove those values from memoized callback dependencies, and preserve each existing listener effect, registration target, event, guard, and cleanup.`,
+          primary,
+        };
       for (const member of members) {
         claimed.add(member);
         result.set(member, cluster);
@@ -125,29 +134,44 @@ function listenerCallbacks(
   effects: readonly EffectCandidate[],
   imports: HookImports,
 ): ReadonlyMap<string, CallbackBinding> {
-  const callbacks = callbackBindings(owner, imports);
-  const allowedByName = new Map<string, Set<ts.Identifier>>();
+  const callbacks = callbackBindings(owner, imports),
+    allowedByName = new Map<string, Set<ts.Identifier>>();
 
   for (const effect of effects) {
-    if (effect.owner !== owner || !effect.callback || isAsync(effect.callback)) continue;
+    if (effect.owner !== owner || !effect.callback || isAsync(effect.callback)) {
+      continue;
+    }
     const cleanup = effectCleanup(effect.callback);
-    if (!cleanup) continue;
-    const additions = collectListenerCalls(effect.callback.body, "addEventListener", effect.callback);
-    const removals = collectListenerCalls(cleanup.body, "removeEventListener", cleanup);
+    if (!cleanup) {
+      continue;
+    }
+    const additions = collectListenerCalls(
+        effect.callback.body,
+        "addEventListener",
+        effect.callback,
+      ),
+      removals = collectListenerCalls(cleanup.body, "removeEventListener", cleanup);
     for (const addition of additions) {
       const binding = callbacks.get(addition.callback.text);
-      if (!binding) continue;
-      const matches = removals.filter(removal =>
-        removal.callback.text === addition.callback.text &&
-        expressionsMatch(removal.event, addition.event) &&
-        optionsMatch(removal.options, addition.options) &&
-        expressionsMatch(removal.target, addition.target)
+      if (!binding) {
+        continue;
+      }
+      const matches = removals.filter(
+        (removal) =>
+          removal.callback.text === addition.callback.text &&
+          expressionsMatch(removal.event, addition.event) &&
+          optionsMatch(removal.options, addition.options) &&
+          expressionsMatch(removal.target, addition.target),
       );
-      if (matches.length !== 1) continue;
-      const dependency = effect.dependencies?.elements.find(element =>
-        ts.isIdentifier(element) && element.text === binding.name
+      if (matches.length !== 1) {
+        continue;
+      }
+      const dependency = effect.dependencies?.elements.find(
+        (element) => ts.isIdentifier(element) && element.text === binding.name,
       );
-      if (!dependency || !ts.isIdentifier(dependency)) continue;
+      if (!dependency || !ts.isIdentifier(dependency)) {
+        continue;
+      }
       const allowed = allowedByName.get(binding.name) ?? new Set<ts.Identifier>();
       allowed.add(addition.callback);
       allowed.add(matches[0]!.callback);
@@ -159,7 +183,9 @@ function listenerCallbacks(
   const listeners = new Map<string, CallbackBinding>();
   for (const [name, allowedReferences] of allowedByName) {
     const binding = callbacks.get(name);
-    if (!binding || !callbackReferencesAreConfined(owner, binding, allowedReferences)) continue;
+    if (!binding || !callbackReferencesAreConfined(owner, binding, allowedReferences)) {
+      continue;
+    }
     listeners.set(name, binding);
   }
   return listeners;
@@ -170,19 +196,24 @@ function callbackBindings(
   imports: HookImports,
 ): ReadonlyMap<string, CallbackBinding> {
   const callbacks = new Map<string, CallbackBinding>();
-  visit(owner.body, node => {
+  visit(owner.body, (node) => {
     if (
       !ts.isVariableDeclaration(node) ||
       !ts.isIdentifier(node.name) ||
       !node.initializer ||
       !ts.isCallExpression(node.initializer) ||
-      !isImportedHookCall(node.initializer, imports.useCallback, imports.reactNamespaces, "useCallback") ||
+      !isImportedHookCall(
+        node.initializer,
+        imports.useCallback,
+        imports.reactNamespaces,
+        "useCallback",
+      ) ||
       bindingDeclarationCount(owner, node.name.text) !== 1
     ) {
       return;
     }
-    const callback = node.initializer.arguments[0];
-    const dependencies = node.initializer.arguments[1];
+    const callback = node.initializer.arguments[0],
+      dependencies = node.initializer.arguments[1];
     if (
       !callback ||
       (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -206,11 +237,15 @@ function callbackBindings(
 function effectCleanup(
   callback: ts.ArrowFunction | ts.FunctionExpression,
 ): ts.ArrowFunction | ts.FunctionExpression | null {
-  if (!ts.isBlock(callback.body)) return null;
-  const returns = callback.body.statements.filter(ts.isReturnStatement);
-  const expression = returns.length === 1 ? returns[0]!.expression : undefined;
-  const cleanup = expression ? unwrapTransparentExpression(expression) : null;
-  return cleanup && (ts.isArrowFunction(cleanup) || ts.isFunctionExpression(cleanup)) && !isAsync(cleanup)
+  if (!ts.isBlock(callback.body)) {
+    return null;
+  }
+  const returns = callback.body.statements.filter(ts.isReturnStatement),
+    expression = returns.length === 1 ? returns[0]!.expression : undefined,
+    cleanup = expression ? unwrapTransparentExpression(expression) : null;
+  return cleanup &&
+    (ts.isArrowFunction(cleanup) || ts.isFunctionExpression(cleanup)) &&
+    !isAsync(cleanup)
     ? cleanup
     : null;
 }
@@ -221,7 +256,7 @@ function collectListenerCalls(
   boundary: ts.ArrowFunction | ts.FunctionExpression,
 ): readonly ListenerCall[] {
   const calls: ListenerCall[] = [];
-  visitSkippingNestedFunctions(body, boundary, node => {
+  visitSkippingNestedFunctions(body, boundary, (node) => {
     if (
       !ts.isCallExpression(node) ||
       !ts.isPropertyAccessExpression(node.expression) ||
@@ -242,11 +277,15 @@ function collectListenerCalls(
 }
 
 function expressionsMatch(left: ts.Expression, right: ts.Expression): boolean {
-  return unwrapTransparentExpression(left).getText() === unwrapTransparentExpression(right).getText();
+  return (
+    unwrapTransparentExpression(left).getText() === unwrapTransparentExpression(right).getText()
+  );
 }
 
 function optionsMatch(left: ts.Expression | undefined, right: ts.Expression | undefined): boolean {
-  if (!left || !right) return left === right;
+  if (!left || !right) {
+    return left === right;
+  }
   return expressionsMatch(left, right);
 }
 
@@ -255,9 +294,9 @@ function callbackReferencesAreConfined(
   binding: CallbackBinding,
   allowedReferences: ReadonlySet<ts.Identifier>,
 ): boolean {
-  let safe = true;
-  let references = 0;
-  visit(owner.body, node => {
+  let safe = true,
+    references = 0;
+  visit(owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -269,7 +308,9 @@ function callbackReferencesAreConfined(
       return;
     }
     references += 1;
-    if (!allowedReferences.has(node)) safe = false;
+    if (!allowedReferences.has(node)) {
+      safe = false;
+    }
   });
   return safe && references > 0;
 }
@@ -291,14 +332,14 @@ function isListenerRefCandidate(
     usage.setterUsesPreviousValue ||
     usage.shadowed ||
     usage.escaped ||
-    usage.setterCallNodes.some(call => !setterRegionIsSynchronous(call, state.owner))
+    usage.setterCallNodes.some((call) => !setterRegionIsSynchronous(call, state.owner))
   ) {
     return false;
   }
 
-  let listenerRead = false;
-  let safe = true;
-  visit(state.owner.body, node => {
+  let listenerRead = false,
+    safe = true;
+  visit(state.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -311,21 +352,27 @@ function isListenerRefCandidate(
     }
     const listener = listenerContaining(node, callbacks);
     if (listener) {
-      if (!listener.dependencies.elements.some(element =>
-        ts.isIdentifier(element) && element.text === state.valueName
-      )) {
+      if (
+        !listener.dependencies.elements.some(
+          (element) => ts.isIdentifier(element) && element.text === state.valueName,
+        )
+      ) {
         safe = false;
         return;
       }
       listenerRead = true;
       return;
     }
-    if ([...callbacks.values()].some(binding => nodeWithin(node, binding.dependencies))) return;
+    if ([...callbacks.values()].some((binding) => nodeWithin(node, binding.dependencies))) {
+      return;
+    }
     const callback = nearestNestedFunction(node, state.owner);
     if (
       callback &&
       callback !== state.owner &&
-      (ts.isArrowFunction(callback) || ts.isFunctionDeclaration(callback) || ts.isFunctionExpression(callback)) &&
+      (ts.isArrowFunction(callback) ||
+        ts.isFunctionDeclaration(callback) ||
+        ts.isFunctionExpression(callback)) &&
       !isAsync(callback) &&
       !containsAwaitOrYield(callback.body) &&
       callbackIsEventRooted(callback, state.owner, state.valueName, new Set())
@@ -342,7 +389,9 @@ function listenerContaining(
   callbacks: ReadonlyMap<string, CallbackBinding>,
 ): CallbackBinding | null {
   for (const binding of callbacks.values()) {
-    if (nodeWithin(node, binding.callback.body)) return binding;
+    if (nodeWithin(node, binding.callback.body)) {
+      return binding;
+    }
   }
   return null;
 }
@@ -352,11 +401,18 @@ function setterRegionIsSynchronous(call: ts.CallExpression, owner: RuntimeFuncti
   return !!region && region !== owner && !isAsync(region) && !containsAwaitOrYield(region.body);
 }
 
-function regionIsSynchronousEvent(region: RuntimeFunctionLike, owner: RuntimeFunctionLike): boolean {
-  return !isAsync(region) &&
+function regionIsSynchronousEvent(
+  region: RuntimeFunctionLike,
+  owner: RuntimeFunctionLike,
+): boolean {
+  return (
+    !isAsync(region) &&
     !containsAwaitOrYield(region.body) &&
-    (ts.isArrowFunction(region) || ts.isFunctionDeclaration(region) || ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted(region, owner, "", new Set());
+    (ts.isArrowFunction(region) ||
+      ts.isFunctionDeclaration(region) ||
+      ts.isFunctionExpression(region)) &&
+    callbackIsEventRooted(region, owner, "", new Set())
+  );
 }
 
 function regionWritesOnlyMembers(
@@ -365,27 +421,37 @@ function regionWritesOnlyMembers(
   stateBySetter: ReadonlyMap<string, StateCandidate>,
 ): boolean {
   const memberSetters = new Set(
-    [...members].flatMap(state => state.setterName ? [state.setterName] : []),
+    [...members].flatMap((state) => (state.setterName ? [state.setterName] : [])),
   );
   let safe = true;
-  if (!region.body) return false;
-  visitSkippingNestedFunctions(region.body, region, node => {
-    if (!safe || !ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) return;
+  if (!region.body) {
+    return false;
+  }
+  visitSkippingNestedFunctions(region.body, region, (node) => {
+    if (!safe || !ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
+      return;
+    }
     const state = stateBySetter.get(node.expression.text);
-    if (state && !members.has(state)) safe = false;
+    if (state && !members.has(state)) {
+      safe = false;
+    }
   });
   return safe && mutationRegionOnlyCallsStateSetters(region, memberSetters);
 }
 
 function isAsync(node: RuntimeFunctionLike): boolean {
-  return node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true;
+  return node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true;
 }
 
 function containsAwaitOrYield(node: ts.Node | undefined): boolean {
-  if (!node) return true;
+  if (!node) {
+    return true;
+  }
   let found = false;
-  visit(node, current => {
-    if (ts.isAwaitExpression(current) || ts.isYieldExpression(current)) found = true;
+  visit(node, (current) => {
+    if (ts.isAwaitExpression(current) || ts.isYieldExpression(current)) {
+      found = true;
+    }
   });
   return found;
 }

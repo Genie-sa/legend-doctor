@@ -2,18 +2,18 @@
 
 ## Current verified baseline
 
-| Measure | Result |
-| --- | ---: |
-| App roots | 12 |
-| Source targets | 222 |
-| Hooks analyzed | 2,342 |
-| Manual hook labels | 791 |
-| Known misses | 1 |
-| State groups | 18/18 |
-| Legend practices | 100/100 |
-| Actionable precision | 100% (424/424) |
-| Actionable recall | 99.8% (424/425) |
-| Unit tests | 520/520 |
+| Measure              |          Result |
+| -------------------- | --------------: |
+| App roots            |              12 |
+| Source targets       |             222 |
+| Hooks analyzed       |           2,342 |
+| Manual hook labels   |             791 |
+| Known misses         |               1 |
+| State groups         |           18/18 |
+| Legend practices     |         100/100 |
+| Actionable precision |  100% (424/424) |
+| Actionable recall    | 99.8% (424/425) |
+| Unit tests           |         520/520 |
 
 The latest phase deletes self-contained React state cycles whose current value is used only to calculate an inert argument
 for their own setter. The exact current 222-target action delta against `eb4f9b9` is:

@@ -10,10 +10,10 @@ import {
 import {
   findAncestorUntil,
   nodeWithin,
-  type RuntimeFunctionLike,
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../ast.js";
+import type { RuntimeFunctionLike } from "../ast.js";
 import type { StateCandidate, StateUsage } from "../analyze-source.js";
 import type { ChildContractResolver } from "./child-contract.js";
 import { isRenderGateReference } from "./deferred-reveal.js";
@@ -44,7 +44,7 @@ interface PropertyWrite {
 export function isPropertyLocalObjectDraftState(
   state: StateCandidate,
   usage: StateUsage,
-  proofs: ObjectDraftProofs
+  proofs: ObjectDraftProofs,
 ): boolean {
   if (
     !state.setterName ||
@@ -69,15 +69,17 @@ export function isPropertyLocalObjectDraftState(
   }
 
   const properties = typedStringDraftProperties(state);
-  if (!properties || usage.setterCalls !== properties.size) return false;
+  if (!properties || usage.setterCalls !== properties.size) {
+    return false;
+  }
 
-  const writes = usage.setterCallNodes.map(call =>
-    exactPropertyWrite(call, state, proofs.childContracts)
+  const writes = usage.setterCallNodes.map((call) =>
+    exactPropertyWrite(call, state, proofs.childContracts),
   );
   if (
-    writes.some(write => write === null) ||
-    new Set(writes.map(write => write?.property)).size !== properties.size ||
-    writes.some(write => !write || !properties.has(write.property))
+    writes.some((write) => write === null) ||
+    new Set(writes.map((write) => write?.property)).size !== properties.size ||
+    writes.some((write) => !write || !properties.has(write.property))
   ) {
     return false;
   }
@@ -85,58 +87,63 @@ export function isPropertyLocalObjectDraftState(
   const references = stateReferences(state);
   if (
     references.length === 0 ||
-    references.some(reference => {
+    references.some((reference) => {
       const access = directPropertyAccess(reference);
       return !access || !properties.has(access.name.text);
     }) ||
-    !hasOnlyEventCommandReads(
-      state,
-      new Set(usage.directRenderNodes),
-      proofs.eventCallbacks
-    )
+    !hasOnlyEventCommandReads(state, new Set(usage.directRenderNodes), proofs.eventCallbacks)
   ) {
     return false;
   }
 
   const sinks: ts.Node[] = [];
   for (const node of usage.directRenderNodes) {
-    if (!ts.isIdentifier(node)) return false;
+    if (!ts.isIdentifier(node)) {
+      return false;
+    }
     const resolved = projectionSinks(state, node, properties);
-    if (!resolved) return false;
+    if (!resolved) {
+      return false;
+    }
     for (const reference of resolved) {
-      const subtree = nearestJsxElement(reference, state.owner);
-      const maximumLeafSize = Math.max(4, Math.floor(jsxElementCount(state.owner) * 0.4));
-      if (!subtree || jsxElementCountIn(subtree) > maximumLeafSize) return false;
-      if (!sinks.includes(subtree)) sinks.push(subtree);
+      const subtree = nearestJsxElement(reference, state.owner),
+        maximumLeafSize = Math.max(4, Math.floor(jsxElementCount(state.owner) * 0.4));
+      if (!subtree || jsxElementCountIn(subtree) > maximumLeafSize) {
+        return false;
+      }
+      if (!sinks.includes(subtree)) {
+        sinks.push(subtree);
+      }
     }
   }
 
   const returned = uniqueReturnedExpression(state.owner);
-  return !!returned &&
+  return (
+    !!returned &&
     sinks.length >= 2 &&
-    hasIndependentRenderCutWitness(
-      returned,
-      sinks,
-      proofs.localComponents,
-      proofs.sourceComponents
-    );
+    hasIndependentRenderCutWitness(returned, sinks, proofs.localComponents, proofs.sourceComponents)
+  );
 }
 
 function typedStringDraftProperties(state: StateCandidate): ReadonlySet<string> | null {
   const initial = state.call.arguments[0] && unwrapTransparentExpression(state.call.arguments[0]!);
-  if (!initial || !ts.isIdentifier(initial)) return null;
+  if (!initial || !ts.isIdentifier(initial)) {
+    return null;
+  }
 
   const declarations: ts.VariableDeclaration[] = [];
   for (const statement of state.call.getSourceFile().statements) {
-    if (!ts.isVariableStatement(statement)) continue;
+    if (!ts.isVariableStatement(statement)) {
+      continue;
+    }
     for (const declaration of statement.declarationList.declarations) {
       if (ts.isIdentifier(declaration.name) && declaration.name.text === initial.text) {
         declarations.push(declaration);
       }
     }
   }
-  const declaration = declarations.length === 1 ? declarations[0] : null;
-  const object = declaration?.initializer && unwrapTransparentExpression(declaration.initializer);
+  const declaration = declarations.length === 1 ? declarations[0] : null,
+    object = declaration?.initializer && unwrapTransparentExpression(declaration.initializer);
   if (
     !declaration?.type ||
     !ts.isTypeReferenceNode(declaration.type) ||
@@ -152,30 +159,37 @@ function typedStringDraftProperties(state: StateCandidate): ReadonlySet<string> 
     return null;
   }
 
-  const typeName = declaration.type.typeName.text;
-  const types = state.call.getSourceFile().statements.filter(
-    (statement): statement is ts.InterfaceDeclaration =>
-      ts.isInterfaceDeclaration(statement) && statement.name.text === typeName
-  );
-  const type = types.length === 1 ? types[0] : null;
+  const typeName = declaration.type.typeName.text,
+    types = state.call
+      .getSourceFile()
+      .statements.filter(
+        (statement): statement is ts.InterfaceDeclaration =>
+          ts.isInterfaceDeclaration(statement) && statement.name.text === typeName,
+      ),
+    type = types.length === 1 ? types[0] : null;
   if (
     !type ||
     type.members.length !== object.properties.length ||
-    type.members.some(member =>
-      !ts.isPropertySignature(member) ||
-      member.questionToken !== undefined ||
-      member.type?.kind !== ts.SyntaxKind.StringKeyword ||
-      !member.name ||
-      (!ts.isIdentifier(member.name) && !ts.isStringLiteralLike(member.name))
+    type.members.some(
+      (member) =>
+        !ts.isPropertySignature(member) ||
+        member.questionToken !== undefined ||
+        member.type?.kind !== ts.SyntaxKind.StringKeyword ||
+        !member.name ||
+        (!ts.isIdentifier(member.name) && !ts.isStringLiteralLike(member.name)),
     )
   ) {
     return null;
   }
 
-  const names = new Set(type.members.map(member =>
-    (member as ts.PropertySignature).name.getText().replace(/^['"]|['"]$/g, "")
-  ));
-  if (names.size !== type.members.length) return null;
+  const names = new Set(
+    type.members.map((member) =>
+      (member as ts.PropertySignature).name.getText().replaceAll(/^['"]|['"]$/g, ""),
+    ),
+  );
+  if (names.size !== type.members.length) {
+    return null;
+  }
   for (const property of object.properties) {
     if (
       !ts.isPropertyAssignment(property) ||
@@ -192,10 +206,10 @@ function typedStringDraftProperties(state: StateCandidate): ReadonlySet<string> 
 function moduleConstantOnlySeedsState(
   state: StateCandidate,
   declaration: ts.VariableDeclaration,
-  name: string
+  name: string,
 ): boolean {
   let safe = true;
-  visit(state.call.getSourceFile(), node => {
+  visit(state.call.getSourceFile(), (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -210,7 +224,8 @@ function moduleConstantOnlySeedsState(
       return;
     }
     const call = node.parent;
-    safe = ts.isCallExpression(call) &&
+    safe =
+      ts.isCallExpression(call) &&
       call.arguments[0] === node &&
       call.expression.getText() === state.call.expression.getText();
   });
@@ -220,26 +235,31 @@ function moduleConstantOnlySeedsState(
 function exactPropertyWrite(
   call: ts.CallExpression,
   state: StateCandidate,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): PropertyWrite | null {
-  if (call.arguments.length !== 1) return null;
+  if (call.arguments.length !== 1) {
+    return null;
+  }
   const updater = unwrapTransparentExpression(call.arguments[0]!);
   if (
     (!ts.isArrowFunction(updater) && !ts.isFunctionExpression(updater)) ||
-    updater.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
+    updater.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     updater.parameters.length !== 1 ||
     !ts.isIdentifier(updater.parameters[0]!.name) ||
     ts.isBlock(updater.body)
   ) {
     return null;
   }
-  const previous = updater.parameters[0]!.name.text;
-  const object = unwrapTransparentExpression(updater.body);
-  if (!ts.isObjectLiteralExpression(object) || object.properties.length !== 2) return null;
-  const [spread, assignment] = object.properties;
-  const spreadValue = spread && ts.isSpreadAssignment(spread)
-    ? unwrapTransparentExpression(spread.expression)
-    : null;
+  const previous = updater.parameters[0]!.name.text,
+    object = unwrapTransparentExpression(updater.body);
+  if (!ts.isObjectLiteralExpression(object) || object.properties.length !== 2) {
+    return null;
+  }
+  const [spread, assignment] = object.properties,
+    spreadValue =
+      spread && ts.isSpreadAssignment(spread)
+        ? unwrapTransparentExpression(spread.expression)
+        : null;
   if (
     !spreadValue ||
     !ts.isIdentifier(spreadValue) ||
@@ -262,12 +282,13 @@ function exactPropertyWrite(
 function deferredSetterOnlyOpening(
   call: ts.CallExpression,
   owner: RuntimeFunctionLike,
-  childContracts: ChildContractResolver | null
+  childContracts: ChildContractResolver | null,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  const attribute = findAncestorUntil(call, ts.isJsxAttribute, owner);
-  const expression = attribute?.initializer && ts.isJsxExpression(attribute.initializer)
-    ? attribute.initializer.expression
-    : null;
+  const attribute = findAncestorUntil(call, ts.isJsxAttribute, owner),
+    expression =
+      attribute?.initializer && ts.isJsxExpression(attribute.initializer)
+        ? attribute.initializer.expression
+        : null;
   if (
     !attribute ||
     !/^on[A-Z]/.test(attribute.name.getText()) ||
@@ -279,40 +300,47 @@ function deferredSetterOnlyOpening(
     return null;
   }
   const opening = attribute.parent.parent;
-  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) return null;
+  if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) {
+    return null;
+  }
   const component = opening.tagName.getText();
-  if (/^[a-z]/.test(component)) return opening;
+  if (/^[a-z]/.test(component)) {
+    return opening;
+  }
   return childContracts &&
     (childContracts.frameworkEventComponent(component) ||
       childContracts.componentCallbackPropIsDeferred(component, attribute.name.getText()))
-      ? opening
-      : null;
+    ? opening
+    : null;
 }
 
 function openingReadsProperty(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   stateName: string,
-  property: string
+  property: string,
 ): boolean {
-  return opening.attributes.properties.some(candidate => {
-    const expression = ts.isJsxAttribute(candidate) &&
-      candidate.name.getText() === "value" &&
-      candidate.initializer &&
-      ts.isJsxExpression(candidate.initializer)
-      ? candidate.initializer.expression
-      : null;
-    const access = expression && unwrapTransparentExpression(expression);
-    return !!access &&
+  return opening.attributes.properties.some((candidate) => {
+    const expression =
+        ts.isJsxAttribute(candidate) &&
+        candidate.name.getText() === "value" &&
+        candidate.initializer &&
+        ts.isJsxExpression(candidate.initializer)
+          ? candidate.initializer.expression
+          : null,
+      access = expression && unwrapTransparentExpression(expression);
+    return (
+      !!access &&
       ts.isPropertyAccessExpression(access) &&
       ts.isIdentifier(unwrapTransparentExpression(access.expression)) &&
       access.expression.getText() === stateName &&
-      access.name.text === property;
+      access.name.text === property
+    );
   });
 }
 
 function stateReferences(state: StateCandidate): ts.Identifier[] {
   const references: ts.Identifier[] = [];
-  visit(state.owner.body, node => {
+  visit(state.owner.body, (node) => {
     if (
       ts.isIdentifier(node) &&
       node.text === state.valueName &&
@@ -334,7 +362,7 @@ function directPropertyAccess(node: ts.Identifier): ts.PropertyAccessExpression 
 
 function bindingIsReferenced(node: ts.Node, name: string): boolean {
   let referenced = false;
-  visit(node, candidate => {
+  visit(node, (candidate) => {
     if (
       ts.isIdentifier(candidate) &&
       candidate.text === name &&
@@ -350,37 +378,43 @@ function bindingIsReferenced(node: ts.Node, name: string): boolean {
 function projectionSinks(
   state: StateCandidate,
   initial: ts.Identifier,
-  stringProperties: ReadonlySet<string>
+  stringProperties: ReadonlySet<string>,
 ): readonly ts.Identifier[] | null {
   let references: readonly ts.Identifier[] = [initial];
   for (let hop = 0; hop < 4; hop += 1) {
-    if (references.every(reference => nearestJsxElement(reference, state.owner))) {
-      return references.every(reference =>
-        !isRenderGateReference(reference, state.owner) &&
-        isSafeJsxProjectionReference(reference, state.owner)
-      ) ? references : null;
+    if (references.every((reference) => nearestJsxElement(reference, state.owner))) {
+      return references.every(
+        (reference) =>
+          !isRenderGateReference(reference, state.owner) &&
+          isSafeJsxProjectionReference(reference, state.owner),
+      )
+        ? references
+        : null;
     }
 
     const declarations = new Set(
-      references.map(reference => findAncestorUntil(reference, ts.isVariableDeclaration, state.owner))
-    );
-    const declaration = declarations.size === 1 ? [...declarations][0] : null;
+        references.map((reference) =>
+          findAncestorUntil(reference, ts.isVariableDeclaration, state.owner),
+        ),
+      ),
+      declaration = declarations.size === 1 ? [...declarations][0] : null;
     if (
       !declaration?.initializer ||
       !ts.isIdentifier(declaration.name) ||
-      !references.every(reference => nodeWithin(reference, declaration.initializer!)) ||
+      !references.every((reference) => nodeWithin(reference, declaration.initializer!)) ||
       !ts.isVariableDeclarationList(declaration.parent) ||
       (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
       bindingDeclarationCount(state.owner, declaration.name.text) !== 1 ||
-      !isPureExpression(
-        declaration.initializer,
-        call => safeStringTrim(call, state.valueName, stringProperties)
+      !isPureExpression(declaration.initializer, (call) =>
+        safeStringTrim(call, state.valueName, stringProperties),
       )
     ) {
       return null;
     }
     references = bindingReferences(state.owner, declaration.name);
-    if (references.length === 0) return null;
+    if (references.length === 0) {
+      return null;
+    }
   }
   return null;
 }
@@ -388,25 +422,27 @@ function projectionSinks(
 function safeStringTrim(
   call: ts.CallExpression,
   stateName: string,
-  stringProperties: ReadonlySet<string>
+  stringProperties: ReadonlySet<string>,
 ): boolean {
-  const callee = call.expression;
-  const receiver = ts.isPropertyAccessExpression(callee)
-    ? unwrapTransparentExpression(callee.expression)
-    : null;
-  return call.arguments.length === 0 &&
+  const callee = call.expression,
+    receiver = ts.isPropertyAccessExpression(callee)
+      ? unwrapTransparentExpression(callee.expression)
+      : null;
+  return (
+    call.arguments.length === 0 &&
     ts.isPropertyAccessExpression(callee) &&
     callee.name.text === "trim" &&
     !!receiver &&
     ts.isPropertyAccessExpression(receiver) &&
     ts.isIdentifier(unwrapTransparentExpression(receiver.expression)) &&
     receiver.expression.getText() === stateName &&
-    stringProperties.has(receiver.name.text);
+    stringProperties.has(receiver.name.text)
+  );
 }
 
 function bindingReferences(owner: RuntimeFunctionLike, binding: ts.Identifier): ts.Identifier[] {
   const references: ts.Identifier[] = [];
-  visit(owner.body, node => {
+  visit(owner.body, (node) => {
     if (
       ts.isIdentifier(node) &&
       node !== binding &&
@@ -422,22 +458,28 @@ function bindingReferences(owner: RuntimeFunctionLike, binding: ts.Identifier): 
 
 function nearestJsxElement(
   node: ts.Node,
-  owner: RuntimeFunctionLike
+  owner: RuntimeFunctionLike,
 ): ts.JsxElement | ts.JsxSelfClosingElement | null {
   return findAncestorUntil(
     node,
     (candidate): candidate is ts.JsxElement | ts.JsxSelfClosingElement =>
       ts.isJsxElement(candidate) || ts.isJsxSelfClosingElement(candidate),
-    owner
+    owner,
   );
 }
 
 function uniqueReturnedExpression(owner: RuntimeFunctionLike): ts.Expression | null {
-  if (!owner.body) return null;
-  if (!ts.isBlock(owner.body)) return owner.body;
+  if (!owner.body) {
+    return null;
+  }
+  if (!ts.isBlock(owner.body)) {
+    return owner.body;
+  }
   const returns: ts.Expression[] = [];
-  visitSkippingNestedRuntimeFunctions(owner.body, node => {
-    if (ts.isReturnStatement(node) && node.expression) returns.push(node.expression);
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (ts.isReturnStatement(node) && node.expression) {
+      returns.push(node.expression);
+    }
   });
   return returns.length === 1 ? returns[0]! : null;
 }

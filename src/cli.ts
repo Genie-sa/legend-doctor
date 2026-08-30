@@ -10,21 +10,18 @@ import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types
 
 type Disposition = HookFinding["disposition"] | LegendPracticeFinding["disposition"];
 
-const DISPOSITIONS: readonly Disposition[] = ["candidate", "change", "keep", "style"];
-
-const BOOLEAN_FLAGS = new Map<string, "actionable" | "coverage" | "help" | "json" | "version">([
-  ["--actionable", "actionable"],
-  ["--coverage", "coverage"],
-  ["--help", "help"],
-  ["-h", "help"],
-  ["--json", "json"],
-  ["--version", "version"],
-  ["-v", "version"],
-]);
-
-const KNOWN_FLAGS = ["--actionable", "--coverage", "--disposition", "--help", "--json", "--version"];
-
-const HELP = `legend-doctor — read-only React hook and Legend State triage for coding agents
+const DISPOSITIONS: readonly Disposition[] = ["candidate", "change", "keep", "style"],
+  BOOLEAN_FLAGS = new Map<string, "actionable" | "coverage" | "help" | "json" | "version">([
+    ["--actionable", "actionable"],
+    ["--coverage", "coverage"],
+    ["--help", "help"],
+    ["-h", "help"],
+    ["--json", "json"],
+    ["--version", "version"],
+    ["-v", "version"],
+  ]),
+  KNOWN_FLAGS = ["--actionable", "--coverage", "--disposition", "--help", "--json", "--version"],
+  HELP = `legend-doctor — read-only React hook and Legend State triage for coding agents
 
 Usage
   legend-doctor [target] [flags]
@@ -93,13 +90,13 @@ async function main(): Promise<void> {
   }
   const target = path.resolve(options.target ?? process.cwd());
   await assertReadableTarget(target);
-  const detailed = options.coverage ? await analyzePathDetailed(target) : null;
-  const report = detailed?.report ?? await analyzePath(target);
-  const outputReport = filterReport(report, options.actionable, options.disposition);
+  const detailed = options.coverage ? await analyzePathDetailed(target) : null,
+    report = detailed?.report ?? (await analyzePath(target)),
+    outputReport = filterReport(report, options.actionable, options.disposition);
   process.stdout.write(
     options.json
       ? `${JSON.stringify(detailed ? { ...detailed, report: outputReport } : outputReport, null, 2)}\n`
-      : `${formatTextReport(outputReport, target)}\n`
+      : `${formatTextReport(outputReport, target)}\n`,
   );
 }
 
@@ -114,14 +111,16 @@ function parseArguments(args: readonly string[]): CliOptions {
     version: false,
   };
   for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index]!;
-    const booleanFlag = BOOLEAN_FLAGS.get(argument);
+    const argument = args[index]!,
+      booleanFlag = BOOLEAN_FLAGS.get(argument);
     if (booleanFlag) {
       options[booleanFlag] = true;
     } else if (argument === "--disposition" || argument.startsWith("--disposition=")) {
-      const inline = argument.startsWith("--disposition=");
-      const value = inline ? argument.slice("--disposition=".length) : args[index + 1];
-      if (!inline) index += 1;
+      const inline = argument.startsWith("--disposition="),
+        value = inline ? argument.slice("--disposition=".length) : args[index + 1];
+      if (!inline) {
+        index += 1;
+      }
       options.disposition = parseDisposition(value);
     } else if (argument.startsWith("-") && argument !== "-") {
       throw new UsageError(unknownFlagMessage(argument));
@@ -129,7 +128,7 @@ function parseArguments(args: readonly string[]): CliOptions {
       options.target = argument;
     } else {
       throw new UsageError(
-        `unexpected extra argument '${argument}'; pass exactly one target, got '${options.target}' first`
+        `unexpected extra argument '${argument}'; pass exactly one target, got '${options.target}' first`,
       );
     }
   }
@@ -141,21 +140,19 @@ function parseArguments(args: readonly string[]): CliOptions {
 
 function parseDisposition(value: string | undefined): Disposition {
   if (value === undefined || value.startsWith("-")) {
-    throw new UsageError(
-      `--disposition needs a value: ${DISPOSITIONS.join(" | ")}`
-    );
+    throw new UsageError(`--disposition needs a value: ${DISPOSITIONS.join(" | ")}`);
   }
   if (!(DISPOSITIONS as readonly string[]).includes(value)) {
     throw new UsageError(
-      `--disposition must be one of: ${[...DISPOSITIONS].sort().join(", ")}; got '${value}'`
+      `--disposition must be one of: ${[...DISPOSITIONS].sort().join(", ")}; got '${value}'`,
     );
   }
   return value as Disposition;
 }
 
 function unknownFlagMessage(argument: string): string {
-  const flag = argument.split("=", 1)[0]!;
-  const suggestion = closestFlag(flag);
+  const flag = argument.split("=", 1)[0]!,
+    suggestion = closestFlag(flag);
   return suggestion
     ? `unknown flag '${flag}'; did you mean '${suggestion}'?`
     : `unknown flag '${flag}'`;
@@ -194,32 +191,34 @@ async function assertReadableTarget(target: string): Promise<void> {
 }
 
 async function packageVersion(): Promise<string> {
-  const manifest = await readFile(new URL("../../package.json", import.meta.url), "utf8");
-  const { version } = JSON.parse(manifest) as { version: string };
+  const manifest = await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    { version } = JSON.parse(manifest) as { version: string };
   return version;
 }
 
 function filterReport(
   report: AnalysisReport,
   actionableOnly: boolean,
-  disposition: Disposition | null
+  disposition: Disposition | null,
 ): AnalysisReport {
   const findings = actionableOnly ? agentFindings(report.findings) : report.findings;
   return {
     ...report,
     findings: disposition
-      ? findings.filter(finding => finding.disposition === disposition)
+      ? findings.filter((finding) => finding.disposition === disposition)
       : findings,
     practices: disposition
-      ? report.practices.filter(practice => practice.disposition === disposition)
+      ? report.practices.filter((practice) => practice.disposition === disposition)
       : report.practices,
   };
 }
 
 main().catch((error: unknown) => {
-  const usage = error instanceof UsageError;
-  const message = error instanceof Error ? error.message : String(error);
+  const usage = error instanceof UsageError,
+    message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`legend-doctor: ${message}\n`);
-  if (usage) process.stderr.write("Run `legend-doctor --help` for usage.\n");
+  if (usage) {
+    process.stderr.write("Run `legend-doctor --help` for usage.\n");
+  }
   process.exitCode = usage ? 2 : 1;
 });

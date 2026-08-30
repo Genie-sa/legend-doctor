@@ -14,25 +14,32 @@ export function findLegacyUseValuePractices(
   fileName: string,
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
-  installedLegendState: InstalledLegendState | null = null
+  installedLegendState: InstalledLegendState | null = null,
 ): readonly LegendPracticeFinding[] {
   if (imports.legacyUseValue.size === 0 && imports.legendReactNamespaces.size === 0) {
     return [];
   }
-  if (installedLegendState?.useValueExport === "missing") return [];
-  const shadowed = localBindingNames(sourceFile);
-  const findings: LegendPracticeFinding[] = [];
-  visit(sourceFile, node => {
-    if (!ts.isCallExpression(node) || !isLegacyHookCall(node, imports, shadowed)) return;
-    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-    const current = node.expression.getText(sourceFile);
-    const directObservable = node.arguments.length === 1
-      ? directObservableSelectorPath(node.arguments[0]!, observableBindings)
-      : null;
-    const preservedArguments = node.arguments.map(argument => argument.getText(sourceFile)).join(", ");
-    const replacement = directObservable
-      ? `useValue(${directObservable.getText(sourceFile)})`
-      : `useValue(${preservedArguments})`;
+  if (installedLegendState?.useValueExport === "missing") {
+    return [];
+  }
+  const shadowed = localBindingNames(sourceFile),
+    findings: LegendPracticeFinding[] = [];
+  visit(sourceFile, (node) => {
+    if (!ts.isCallExpression(node) || !isLegacyHookCall(node, imports, shadowed)) {
+      return;
+    }
+    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)),
+      current = node.expression.getText(sourceFile),
+      directObservable =
+        node.arguments.length === 1
+          ? directObservableSelectorPath(node.arguments[0]!, observableBindings)
+          : null,
+      preservedArguments = node.arguments
+        .map((argument) => argument.getText(sourceFile))
+        .join(", "),
+      replacement = directObservable
+        ? `useValue(${directObservable.getText(sourceFile)})`
+        : `useValue(${preservedArguments})`;
     findings.push({
       action: "replace-legacy-use-value",
       confidence: "certain",
@@ -55,7 +62,9 @@ export function findLegacyUseValuePractices(
 }
 
 function installedUseValueEvidence(installed: InstalledLegendState | null): string[] {
-  if (!installed) return [];
+  if (!installed) {
+    return [];
+  }
   if (installed.useValueExport === "alias") {
     return [
       `useValue is an alias of useSelector in the installed @legendapp/state@${installed.version}; ` +
@@ -77,22 +86,24 @@ function installedUseValueEvidence(installed: InstalledLegendState | null): stri
 function isLegacyHookCall(
   call: ts.CallExpression,
   imports: HookImports,
-  shadowed: ReadonlySet<string>
+  shadowed: ReadonlySet<string>,
 ): boolean {
-  const expression = call.expression;
+  const { expression } = call;
   if (ts.isIdentifier(expression)) {
     return imports.legacyUseValue.has(expression.text) && !shadowed.has(expression.text);
   }
-  return ts.isPropertyAccessExpression(expression) &&
+  return (
+    ts.isPropertyAccessExpression(expression) &&
     ts.isIdentifier(expression.expression) &&
     imports.legendReactNamespaces.has(expression.expression.text) &&
     !shadowed.has(expression.expression.text) &&
-    LEGACY_HOOKS.has(expression.name.text);
+    LEGACY_HOOKS.has(expression.name.text)
+  );
 }
 
 function localBindingNames(sourceFile: ts.SourceFile): ReadonlySet<string> {
   const names = new Set<string>();
-  visit(sourceFile, node => {
+  visit(sourceFile, (node) => {
     if (ts.isVariableDeclaration(node) || ts.isParameter(node)) {
       collectBindingNames(node.name, names);
       return;

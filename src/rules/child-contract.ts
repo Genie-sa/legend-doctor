@@ -22,7 +22,8 @@ import {
   isSynchronousRenderCallback,
   uniqueVariableDeclaration,
 } from "./state-proofs.js";
-import { collectHookImports, isImportedHookCall, type HookImports } from "../imports.js";
+import { collectHookImports, isImportedHookCall } from "../imports.js";
+import type { HookImports } from "../imports.js";
 
 export interface ChildComponentSource {
   readonly body: ts.ConciseBody;
@@ -30,10 +31,7 @@ export interface ChildComponentSource {
   readonly file: string;
   readonly invocation?: ts.JsxOpeningElement | ts.JsxSelfClosingElement;
   readonly invocationOwner?: ChildComponentSource;
-  readonly owner:
-    | ts.ArrowFunction
-    | ts.FunctionDeclaration
-    | ts.FunctionExpression;
+  readonly owner: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression;
   readonly reactWrapped?: boolean;
 }
 
@@ -51,33 +49,29 @@ export interface ChildContractResolver {
   componentArrayItemCallbackIsDeferred(
     componentName: string,
     propName: string,
-    callbackProperty: string
+    callbackProperty: string,
   ): boolean;
   callbackRegistrationIsDeferred(
     ownerBinding: string,
     method: string,
-    argumentIndex: number
-  ): boolean;
-  callbackPropertyIsDeferred(
-    hookName: string,
     argumentIndex: number,
-    property: string
   ): boolean;
+  callbackPropertyIsDeferred(hookName: string, argumentIndex: number, property: string): boolean;
   hookStateHasKeyedRowConsumer(
     hookName: string,
     stateProperty: string,
-    setterProperty: string
+    setterProperty: string,
   ): boolean;
   componentPropCallbackIsDeferred(
     componentName: string,
     propName: string,
-    callbackProperty: string
+    callbackProperty: string,
   ): boolean;
   componentCallbackPropIsDeferred(componentName: string, propName: string): boolean;
   componentCallbackPropIsDeferredAtInvocation(
     componentName: string,
     propName: string,
-    invocation: ts.JsxOpeningElement | ts.JsxSelfClosingElement
+    invocation: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   ): boolean;
   componentCallbackPropRunsOnlyInReactEffect(componentName: string, propName: string): boolean;
   frameworkEventComponent(componentName: string): boolean;
@@ -85,17 +79,17 @@ export interface ChildContractResolver {
   resolveComponent(name: string): ChildComponentSource | null;
 }
 
-const MAX_TRACKED_NAMES = 8;
-const TRACKED_ARRAY_ITERATION_METHODS = new Set([
-  "every",
-  "filter",
-  "find",
-  "findIndex",
-  "flatMap",
-  "forEach",
-  "map",
-  "some",
-]);
+const MAX_TRACKED_NAMES = 8,
+  TRACKED_ARRAY_ITERATION_METHODS = new Set([
+    "every",
+    "filter",
+    "find",
+    "findIndex",
+    "flatMap",
+    "forEach",
+    "map",
+    "some",
+  ]);
 
 /**
  * Proves that a child component consumes one prop as a pure render value:
@@ -104,21 +98,28 @@ const TRACKED_ARRAY_ITERATION_METHODS = new Set([
  * writes, forwarding, or other calls. Only then can the owner keep the
  * observable and the call site subscribe without changing behavior.
  */
-export function propIsLeafRenderConsumer(
-  source: ChildComponentSource,
-  propName: string
-): boolean {
+export function propIsLeafRenderConsumer(source: ChildComponentSource, propName: string): boolean {
   const bound = boundPropIdentifier(source.owner, propName);
-  if (!bound || !source.owner.body) return false;
-  if (bindingDeclarationCount(source.owner, bound.text) !== 1) return false;
+  if (!bound || !source.owner.body) {
+    return false;
+  }
+  if (bindingDeclarationCount(source.owner, bound.text) !== 1) {
+    return false;
+  }
 
-  let safe = true;
-  let renderReads = 0;
+  let safe = true,
+    renderReads = 0;
   const tracked = new Set([bound.text]);
-  visit(source.owner.body, node => {
-    if (!safe || !ts.isIdentifier(node) || !tracked.has(node.text)) return;
-    if (isNonValueIdentifier(node)) return;
-    if (isBindingName(node)) return;
+  visit(source.owner.body, (node) => {
+    if (!safe || !ts.isIdentifier(node) || !tracked.has(node.text)) {
+      return;
+    }
+    if (isNonValueIdentifier(node)) {
+      return;
+    }
+    if (isBindingName(node)) {
+      return;
+    }
     if (findAncestor(node, isRuntimeFunctionLike) !== source.owner) {
       safe = false;
       return;
@@ -140,7 +141,9 @@ export function propIsLeafRenderConsumer(
       renderReads += 1;
       return;
     }
-    if (tracksPureProjection(node, source.owner, tracked)) return;
+    if (tracksPureProjection(node, source.owner, tracked)) {
+      return;
+    }
     safe = false;
   });
   return safe && renderReads > 0;
@@ -154,16 +157,22 @@ export function propIsLeafRenderConsumer(
  */
 export function propIsPrimitiveValueConsumer(
   source: ChildComponentSource,
-  propName: string
+  propName: string,
 ): boolean {
-  if (source.reactWrapped) return false;
-  const bound = boundPropIdentifier(source.owner, propName);
-  const type = declaredPropType(source, propName);
-  if (!bound || !type || !primitiveValueType(type)) return false;
-  if (bindingDeclarationCount(source.owner, bound.text) !== 1) return false;
+  if (source.reactWrapped) {
+    return false;
+  }
+  const bound = boundPropIdentifier(source.owner, propName),
+    type = declaredPropType(source, propName);
+  if (!bound || !type || !primitiveValueType(type)) {
+    return false;
+  }
+  if (bindingDeclarationCount(source.owner, bound.text) !== 1) {
+    return false;
+  }
 
   let reads = 0;
-  visit(source.owner.body, node => {
+  visit(source.owner.body, (node) => {
     if (
       ts.isIdentifier(node) &&
       node !== bound &&
@@ -177,21 +186,22 @@ export function propIsPrimitiveValueConsumer(
   return reads > 0;
 }
 
-function declaredPropType(
-  source: ChildComponentSource,
-  propName: string
-): ts.TypeNode | null {
+function declaredPropType(source: ChildComponentSource, propName: string): ts.TypeNode | null {
   const parameter = source.owner.parameters[0];
-  if (!parameter?.type || source.owner.parameters.length !== 1) return null;
+  if (!parameter?.type || source.owner.parameters.length !== 1) {
+    return null;
+  }
   let propsType = parameter.type;
-  while (ts.isParenthesizedTypeNode(propsType)) propsType = propsType.type;
+  while (ts.isParenthesizedTypeNode(propsType)) {
+    propsType = propsType.type;
+  }
 
   let members: ts.NodeArray<ts.TypeElement> | null = null;
   if (ts.isTypeLiteralNode(propsType)) {
     members = propsType.members;
   } else if (ts.isTypeReferenceNode(propsType) && ts.isIdentifier(propsType.typeName)) {
-    const typeName = propsType.typeName.text;
-    const declarations: Array<ts.InterfaceDeclaration | ts.TypeAliasDeclaration> = [];
+    const typeName = propsType.typeName.text,
+      declarations: (ts.InterfaceDeclaration | ts.TypeAliasDeclaration)[] = [];
     for (const statement of source.owner.getSourceFile().statements) {
       if (
         (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
@@ -200,25 +210,35 @@ function declaredPropType(
         declarations.push(statement);
       }
     }
-    if (declarations.length !== 1) return null;
+    if (declarations.length !== 1) {
+      return null;
+    }
     const declaration = declarations[0]!;
     if (ts.isInterfaceDeclaration(declaration)) {
-      if (declaration.heritageClauses?.length) return null;
+      if (declaration.heritageClauses?.length) {
+        return null;
+      }
       members = declaration.members;
     } else {
       let alias = declaration.type;
-      while (ts.isParenthesizedTypeNode(alias)) alias = alias.type;
-      if (!ts.isTypeLiteralNode(alias)) return null;
+      while (ts.isParenthesizedTypeNode(alias)) {
+        alias = alias.type;
+      }
+      if (!ts.isTypeLiteralNode(alias)) {
+        return null;
+      }
       members = alias.members;
     }
   }
-  if (!members) return null;
+  if (!members) {
+    return null;
+  }
 
   const properties = members.filter(
     (member): member is ts.PropertySignature =>
-      ts.isPropertySignature(member) && staticPropertyName(member.name) === propName
+      ts.isPropertySignature(member) && staticPropertyName(member.name) === propName,
   );
-  return properties.length === 1 ? properties[0]!.type ?? null : null;
+  return properties.length === 1 ? (properties[0]!.type ?? null) : null;
 }
 
 function staticPropertyName(name: ts.PropertyName): string | null {
@@ -229,22 +249,28 @@ function staticPropertyName(name: ts.PropertyName): string | null {
 }
 
 function primitiveValueType(type: ts.TypeNode): boolean {
-  if (ts.isParenthesizedTypeNode(type)) return primitiveValueType(type.type);
+  if (ts.isParenthesizedTypeNode(type)) {
+    return primitiveValueType(type.type);
+  }
   if (ts.isUnionTypeNode(type)) {
     return type.types.length > 0 && type.types.every(primitiveValueType);
   }
   if (ts.isLiteralTypeNode(type)) {
-    return ts.isStringLiteral(type.literal) ||
+    return (
+      ts.isStringLiteral(type.literal) ||
       ts.isNumericLiteral(type.literal) ||
       type.literal.kind === ts.SyntaxKind.TrueKeyword ||
       type.literal.kind === ts.SyntaxKind.FalseKeyword ||
-      type.literal.kind === ts.SyntaxKind.NullKeyword;
+      type.literal.kind === ts.SyntaxKind.NullKeyword
+    );
   }
-  return type.kind === ts.SyntaxKind.BooleanKeyword ||
+  return (
+    type.kind === ts.SyntaxKind.BooleanKeyword ||
     type.kind === ts.SyntaxKind.StringKeyword ||
     type.kind === ts.SyntaxKind.NumberKeyword ||
     type.kind === ts.SyntaxKind.BigIntKeyword ||
-    type.kind === ts.SyntaxKind.UndefinedKeyword;
+    type.kind === ts.SyntaxKind.UndefinedKeyword
+  );
 }
 
 /**
@@ -257,17 +283,21 @@ export function propDefersArrayItemCallback(
   source: ChildComponentSource,
   propName: string,
   callbackProp: string,
-  resolver?: CallbackContractSourceResolver
+  resolver?: CallbackContractSourceResolver,
 ): boolean {
   const bound = boundPropIdentifier(source.owner, propName);
-  if (!bound || !source.owner.body) return false;
-  if (bindingDeclarationCount(source.owner, bound.text) !== 1) return false;
+  if (!bound || !source.owner.body) {
+    return false;
+  }
+  if (bindingDeclarationCount(source.owner, bound.text) !== 1) {
+    return false;
+  }
 
   const arrayNames = new Set([bound.text]);
   let addedAlias = true;
   while (addedAlias && arrayNames.size < MAX_TRACKED_NAMES) {
     addedAlias = false;
-    visit(source.owner.body, node => {
+    visit(source.owner.body, (node) => {
       if (
         !ts.isVariableDeclaration(node) ||
         !ts.isIdentifier(node.name) ||
@@ -284,15 +314,17 @@ export function propDefersArrayItemCallback(
       addedAlias = true;
     });
   }
-  if (!arrayBindingsStayWithinTrackedConsumers(source, arrayNames)) return false;
+  if (!arrayBindingsStayWithinTrackedConsumers(source, arrayNames)) {
+    return false;
+  }
 
   const itemNames = new Set<string>();
-  visit(source.owner.body, node => {
+  visit(source.owner.body, (node) => {
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
       node.initializer &&
-      [...arrayNames].some(name => isArrayItemLookup(node.initializer!, name))
+      [...arrayNames].some((name) => isArrayItemLookup(node.initializer!, name))
     ) {
       itemNames.add(node.name.text);
     }
@@ -305,11 +337,13 @@ export function propDefersArrayItemCallback(
       itemNames.add(node.parameters[0].name.text);
     }
   });
-  if (itemNames.size === 0) return false;
+  if (itemNames.size === 0) {
+    return false;
+  }
 
-  let references = 0;
-  let safe = true;
-  visit(source.owner.body, node => {
+  let references = 0,
+    safe = true;
+  visit(source.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -329,7 +363,8 @@ export function propDefersArrayItemCallback(
     }
     if (!ts.isPropertyAccessExpression(member) || member.expression !== node) {
       const callback = nearestNestedFunction(node, source.owner);
-      safe = callback !== null &&
+      safe =
+        callback !== null &&
         callback !== source.owner &&
         (ts.isArrowFunction(callback) ||
           ts.isFunctionDeclaration(callback) ||
@@ -339,11 +374,13 @@ export function propDefersArrayItemCallback(
           source.owner,
           source.deferredCallbackHooks,
           resolver ? source : undefined,
-          resolver
+          resolver,
         );
       return;
     }
-    if (member.name.text !== callbackProp) return;
+    if (member.name.text !== callbackProp) {
+      return;
+    }
 
     references += 1;
     if (ts.isCallExpression(member.parent) && member.parent.expression === member) {
@@ -359,22 +396,24 @@ export function propDefersArrayItemCallback(
           source.owner,
           source.deferredCallbackHooks,
           resolver ? source : undefined,
-          resolver
+          resolver,
         )
       ) {
         safe = false;
       }
       return;
     }
-    if (callbackReferenceIsObservationOnly(member)) return;
+    if (callbackReferenceIsObservationOnly(member)) {
+      return;
+    }
 
     const attribute = findAncestorUntil(member, ts.isJsxAttribute, source.owner);
     if (!resolver || !attribute || !jsxAttributeDirectlyCarries(attribute, member)) {
       safe = false;
       return;
     }
-    const prop = attribute.name.getText();
-    const target = jsxOwnerTarget(attribute);
+    const prop = attribute.name.getText(),
+      target = jsxOwnerTarget(attribute);
     if (!/^on[A-Z]/.test(prop) || !target) {
       safe = false;
       return;
@@ -394,7 +433,7 @@ export function propDefersArrayItemCallback(
         [prop],
         resolver,
         new Set(),
-        0
+        0,
       )
     ) {
       safe = false;
@@ -403,25 +442,27 @@ export function propDefersArrayItemCallback(
   return safe && references > 0;
 }
 
-function spreadCallbackIsOverridden(
-  spread: ts.SpreadAssignment,
-  callbackProp: string
-): boolean {
+function spreadCallbackIsOverridden(spread: ts.SpreadAssignment, callbackProp: string): boolean {
   const object = spread.parent;
-  if (!ts.isObjectLiteralExpression(object)) return false;
+  if (!ts.isObjectLiteralExpression(object)) {
+    return false;
+  }
   const following = object.properties.slice(object.properties.indexOf(spread) + 1);
-  return !following.some(ts.isSpreadAssignment) &&
-    following.some(property =>
-      !ts.isSpreadAssignment(property) && propertyName(property.name) === callbackProp
-    );
+  return (
+    !following.some(ts.isSpreadAssignment) &&
+    following.some(
+      (property) =>
+        !ts.isSpreadAssignment(property) && propertyName(property.name) === callbackProp,
+    )
+  );
 }
 
 function arrayBindingsStayWithinTrackedConsumers(
   source: ChildComponentSource,
-  arrayNames: ReadonlySet<string>
+  arrayNames: ReadonlySet<string>,
 ): boolean {
   let safe = true;
-  visit(source.owner.body, node => {
+  visit(source.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -431,16 +472,15 @@ function arrayBindingsStayWithinTrackedConsumers(
     ) {
       return;
     }
-    const value = climbTransparentExpression(node);
-    const member = value.parent;
-    if (
-      !ts.isPropertyAccessExpression(member) ||
-      member.expression !== value
-    ) {
+    const value = climbTransparentExpression(node),
+      member = value.parent;
+    if (!ts.isPropertyAccessExpression(member) || member.expression !== value) {
       safe = false;
       return;
     }
-    if (member.name.text === "length") return;
+    if (member.name.text === "length") {
+      return;
+    }
     if (
       ts.isCallExpression(member.parent) &&
       member.parent.expression === member &&
@@ -464,7 +504,7 @@ export function propObjectCallbackIsDeferred(
   source: ChildComponentSource,
   propName: string,
   callbackProperty: string,
-  resolver: CallbackContractSourceResolver
+  resolver: CallbackContractSourceResolver,
 ): boolean {
   return sourceInputCallbackIsDeferred(
     source,
@@ -472,23 +512,16 @@ export function propObjectCallbackIsDeferred(
     [propName, callbackProperty],
     resolver,
     new Set(),
-    0
+    0,
   );
 }
 
 export function propCallbackIsDeferred(
   source: ChildComponentSource,
   propName: string,
-  resolver: CallbackContractSourceResolver
+  resolver: CallbackContractSourceResolver,
 ): boolean {
-  return sourceInputCallbackIsDeferred(
-    source,
-    0,
-    [propName],
-    resolver,
-    new Set(),
-    0
-  );
+  return sourceInputCallbackIsDeferred(source, 0, [propName], resolver, new Set(), 0);
 }
 
 /**
@@ -500,16 +533,20 @@ export function propCallbackIsDeferred(
  */
 export function propCallbackRunsOnlyInReactEffect(
   source: ChildComponentSource,
-  propName: string
+  propName: string,
 ): boolean {
   const bound = boundPropIdentifier(source.owner, propName);
-  if (!bound || !source.owner.body) return false;
-  if (bindingDeclarationCount(source.owner, bound.text) !== 1) return false;
+  if (!bound || !source.owner.body) {
+    return false;
+  }
+  if (bindingDeclarationCount(source.owner, bound.text) !== 1) {
+    return false;
+  }
 
   const imports = collectHookImports(source.owner.getSourceFile());
-  let invocations = 0;
-  let safe = true;
-  visit(source.owner.body, node => {
+  let invocations = 0,
+    safe = true;
+  visit(source.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -521,8 +558,12 @@ export function propCallbackRunsOnlyInReactEffect(
       return;
     }
     const usage = reactEffectCallbackUsage(node, source.owner, imports);
-    if (usage === "invoke") invocations += 1;
-    if (usage === null) safe = false;
+    if (usage === "invoke") {
+      invocations += 1;
+    }
+    if (usage === null) {
+      safe = false;
+    }
   });
   return safe && invocations > 0;
 }
@@ -530,18 +571,18 @@ export function propCallbackRunsOnlyInReactEffect(
 function reactEffectCallbackUsage(
   reference: ts.Identifier,
   owner: ChildComponentSource["owner"],
-  imports: HookImports
+  imports: HookImports,
 ): "dependency" | "invoke" | "observe" | null {
   let current: ts.Node = reference;
   while (current.parent && current.parent !== owner) {
-    const parent = current.parent;
+    const { parent } = current;
     if (ts.isCallExpression(parent) && isReactEffectCall(parent, imports)) {
-      const effect = parent.arguments[0];
-      const dependencies = parent.arguments[1];
+      const effect = parent.arguments[0],
+        dependencies = parent.arguments[1];
       if (
         dependencies &&
         ts.isArrayLiteralExpression(dependencies) &&
-        dependencies.elements.some(element => unwrapTransparentExpression(element) === reference)
+        dependencies.elements.some((element) => unwrapTransparentExpression(element) === reference)
       ) {
         return "dependency";
       }
@@ -553,7 +594,9 @@ function reactEffectCallbackUsage(
       ) {
         return null;
       }
-      if (callbackReferenceIsObservationOnly(reference)) return "observe";
+      if (callbackReferenceIsObservationOnly(reference)) {
+        return "observe";
+      }
       const expression = climbTransparentExpression(reference);
       return ts.isCallExpression(expression.parent) && expression.parent.expression === expression
         ? "invoke"
@@ -565,14 +608,16 @@ function reactEffectCallbackUsage(
 }
 
 function isReactEffectCall(call: ts.CallExpression, imports: HookImports): boolean {
-  return isImportedHookCall(call, imports.useEffect, imports.reactNamespaces, "useEffect") ||
+  return (
+    isImportedHookCall(call, imports.useEffect, imports.reactNamespaces, "useEffect") ||
     isImportedHookCall(call, imports.useLayoutEffect, imports.reactNamespaces, "useLayoutEffect") ||
     isImportedHookCall(
       call,
       imports.useInsertionEffect,
       imports.reactNamespaces,
-      "useInsertionEffect"
-    );
+      "useInsertionEffect",
+    )
+  );
 }
 
 interface TrackedCallbackPath {
@@ -585,20 +630,21 @@ interface CallbackReturnTarget {
   source: ChildComponentSource;
 }
 
-const MAX_CALLBACK_PATH_DEPTH = 32;
-const CALLBACK_IDENTITY_HOOKS = new Set([
-  "useCallback",
-  "useEffect",
-  "useInsertionEffect",
-  "useLayoutEffect",
-  "useMemo",
-]);
-
-const reactNamespacesBySourceFile = new WeakMap<ts.SourceFile, ReadonlySet<string>>();
+const MAX_CALLBACK_PATH_DEPTH = 32,
+  CALLBACK_IDENTITY_HOOKS = new Set([
+    "useCallback",
+    "useEffect",
+    "useInsertionEffect",
+    "useLayoutEffect",
+    "useMemo",
+  ]),
+  reactNamespacesBySourceFile = new WeakMap<ts.SourceFile, ReadonlySet<string>>();
 
 function reactNamespacesFor(sourceFile: ts.SourceFile): ReadonlySet<string> {
   const cached = reactNamespacesBySourceFile.get(sourceFile);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   const namespaces = collectHookImports(sourceFile).reactNamespaces;
   reactNamespacesBySourceFile.set(sourceFile, namespaces);
   return namespaces;
@@ -611,36 +657,44 @@ function sourceInputCallbackIsDeferred(
   resolver: CallbackContractSourceResolver,
   visited: ReadonlySet<string>,
   depth: number,
-  returnTarget: CallbackReturnTarget | null = null
+  returnTarget: CallbackReturnTarget | null = null,
 ): boolean {
-  if (depth > MAX_CALLBACK_PATH_DEPTH || !source.owner.body) return false;
-  const parameter = source.owner.parameters[argumentIndex];
-  const tracked = parameter ? bindCallbackPath(parameter.name, path) : null;
-  return tracked !== null && trackedCallbackPathIsDeferred(
-    source,
-    tracked,
-    resolver,
-    visited,
-    depth,
-    returnTarget
+  if (depth > MAX_CALLBACK_PATH_DEPTH || !source.owner.body) {
+    return false;
+  }
+  const parameter = source.owner.parameters[argumentIndex],
+    tracked = parameter ? bindCallbackPath(parameter.name, path) : null;
+  return (
+    tracked !== null &&
+    trackedCallbackPathIsDeferred(source, tracked, resolver, visited, depth, returnTarget)
   );
 }
 
 function bindCallbackPath(
   binding: ts.BindingName,
-  path: readonly string[]
+  path: readonly string[],
 ): TrackedCallbackPath | null {
-  if (ts.isIdentifier(binding)) return { name: binding.text, path };
-  if (!ts.isObjectBindingPattern(binding)) return null;
+  if (ts.isIdentifier(binding)) {
+    return { name: binding.text, path };
+  }
+  if (!ts.isObjectBindingPattern(binding)) {
+    return null;
+  }
   const [head, ...tail] = path;
-  if (!head) return null;
+  if (!head) {
+    return null;
+  }
   let rest: ts.Identifier | null = null;
   for (const element of binding.elements) {
     if (element.dotDotDotToken) {
-      if (ts.isIdentifier(element.name)) rest = element.name;
+      if (ts.isIdentifier(element.name)) {
+        rest = element.name;
+      }
       continue;
     }
-    if (!ts.isIdentifier(element.name)) continue;
+    if (!ts.isIdentifier(element.name)) {
+      continue;
+    }
     if (bindingElementPropertyName(element) === head) {
       return { name: element.name.text, path: tail };
     }
@@ -654,7 +708,7 @@ function trackedCallbackPathIsDeferred(
   resolver: CallbackContractSourceResolver,
   visited: ReadonlySet<string>,
   depth: number,
-  returnTarget: CallbackReturnTarget | null = null
+  returnTarget: CallbackReturnTarget | null = null,
 ): boolean {
   if (
     depth > MAX_CALLBACK_PATH_DEPTH ||
@@ -663,16 +717,22 @@ function trackedCallbackPathIsDeferred(
     return false;
   }
   const invocationKey = source.invocation
-    ? `${source.invocation.getSourceFile().fileName}:${source.invocation.pos}`
-    : "";
-  const key = `${source.file}\0${source.owner.pos}\0${invocationKey}\0${tracked.name}\0${tracked.path.join(".")}`;
-  if (visited.has(key)) return false;
+      ? `${source.invocation.getSourceFile().fileName}:${source.invocation.pos}`
+      : "",
+    key = `${source.file}\0${source.owner.pos}\0${invocationKey}\0${tracked.name}\0${tracked.path.join(".")}`;
+  if (visited.has(key)) {
+    return false;
+  }
   const nextVisited = new Set(visited).add(key);
-  let references = 0;
-  let safe = true;
+  let references = 0,
+    safe = true;
   for (const node of identifiersNamed(source.owner.body, tracked.name)) {
-    if (!safe) break;
-    if (isBindingName(node) || isNonValueIdentifier(node)) continue;
+    if (!safe) {
+      break;
+    }
+    if (isBindingName(node) || isNonValueIdentifier(node)) {
+      continue;
+    }
     references += 1;
     safe = callbackPathReferenceIsDeferred(
       source,
@@ -681,7 +741,7 @@ function trackedCallbackPathIsDeferred(
       resolver,
       nextVisited,
       depth,
-      returnTarget
+      returnTarget,
     );
   }
   return safe && references > 0;
@@ -694,21 +754,24 @@ function callbackPathReferenceIsDeferred(
   resolver: CallbackContractSourceResolver,
   visited: ReadonlySet<string>,
   depth: number,
-  returnTarget: CallbackReturnTarget | null
+  returnTarget: CallbackReturnTarget | null,
 ): boolean {
-  const expression = climbTransparentExpression(reference);
-  const [head, ...tail] = path;
+  const expression = climbTransparentExpression(reference),
+    [head, ...tail] = path;
   if (head) {
     const access = staticPropertyAccessFrom(expression);
     if (access) {
-      return access.name !== head || callbackPathExpressionIsDeferred(
-        source,
-        access.expression,
-        tail,
-        resolver,
-        visited,
-        depth,
-        returnTarget
+      return (
+        access.name !== head ||
+        callbackPathExpressionIsDeferred(
+          source,
+          access.expression,
+          tail,
+          resolver,
+          visited,
+          depth,
+          returnTarget,
+        )
       );
     }
     const destructured = destructuredCallbackPath(source.owner, expression, path);
@@ -719,7 +782,7 @@ function callbackPathReferenceIsDeferred(
         resolver,
         visited,
         depth + 1,
-        returnTarget
+        returnTarget,
       );
     }
   }
@@ -730,7 +793,7 @@ function callbackPathReferenceIsDeferred(
     resolver,
     visited,
     depth,
-    returnTarget
+    returnTarget,
   );
 }
 
@@ -741,10 +804,10 @@ function callbackPathExpressionIsDeferred(
   resolver: CallbackContractSourceResolver,
   visited: ReadonlySet<string>,
   depth: number,
-  returnTarget: CallbackReturnTarget | null
+  returnTarget: CallbackReturnTarget | null,
 ): boolean {
-  const value = climbTransparentExpression(expression);
-  const alias = directConstAlias(value, source.owner);
+  const value = climbTransparentExpression(expression),
+    alias = directConstAlias(value, source.owner);
   if (alias) {
     return trackedCallbackPathIsDeferred(
       source,
@@ -752,22 +815,18 @@ function callbackPathExpressionIsDeferred(
       resolver,
       visited,
       depth + 1,
-      returnTarget
+      returnTarget,
     );
   }
 
   if (returnTarget) {
     const returnedPath = returnedCallbackPath(value, path, source.owner);
-    if (returnedPath === "ignored") return true;
+    if (returnedPath === "ignored") {
+      return true;
+    }
     if (
       returnedPath &&
-      callResultCallbackIsDeferred(
-        returnTarget,
-        returnedPath,
-        resolver,
-        visited,
-        depth + 1
-      )
+      callResultCallbackIsDeferred(returnTarget, returnedPath, resolver, visited, depth + 1)
     ) {
       return true;
     }
@@ -796,13 +855,16 @@ function callbackPathExpressionIsDeferred(
       return true;
     }
     const child = target ? resolver.resolveComponent(source.file, target) : null;
-    return child !== null && sourceInputCallbackIsDeferred(
-      atJsxInvocation(child, attribute, source),
-      0,
-      [attribute.name.getText(), ...path],
-      resolver,
-      visited,
-      depth + 1
+    return (
+      child !== null &&
+      sourceInputCallbackIsDeferred(
+        atJsxInvocation(child, attribute, source),
+        0,
+        [attribute.name.getText(), ...path],
+        resolver,
+        visited,
+        depth + 1,
+      )
     );
   }
 
@@ -823,13 +885,16 @@ function callbackPathExpressionIsDeferred(
       return true;
     }
     const child = target ? resolver.resolveComponent(source.file, target) : null;
-    return child !== null && sourceInputCallbackIsDeferred(
-      atJsxInvocation(child, spread, source),
-      0,
-      path,
-      resolver,
-      visited,
-      depth + 1
+    return (
+      child !== null &&
+      sourceInputCallbackIsDeferred(
+        atJsxInvocation(child, spread, source),
+        0,
+        path,
+        resolver,
+        visited,
+        depth + 1,
+      )
     );
   }
 
@@ -838,21 +903,21 @@ function callbackPathExpressionIsDeferred(
     isHookDependencyReference(
       value,
       CALLBACK_IDENTITY_HOOKS,
-      reactNamespacesFor(source.owner.getSourceFile())
+      reactNamespacesFor(source.owner.getSourceFile()),
     )
   ) {
     return true;
   }
 
-  if (path.length === 0 && callbackReferenceIsObservationOnly(value)) return true;
+  if (path.length === 0 && callbackReferenceIsObservationOnly(value)) {
+    return true;
+  }
 
   if (path.length === 0) {
-    const arrayPublication = deferredArrayItemCallbackPublication(
-      source,
-      value,
-      resolver
-    );
-    if (arrayPublication !== null) return arrayPublication;
+    const arrayPublication = deferredArrayItemCallbackPublication(source, value, resolver);
+    if (arrayPublication !== null) {
+      return arrayPublication;
+    }
   }
 
   if (path.length === 0) {
@@ -865,7 +930,7 @@ function callbackPathExpressionIsDeferred(
         publication.contextName,
         publication.property,
         visited,
-        depth + 1
+        depth + 1,
       )
     ) {
       return true;
@@ -876,22 +941,19 @@ function callbackPathExpressionIsDeferred(
     const callback = nearestNestedFunction(value, source.owner);
     if (
       callback &&
-      (ts.isArrowFunction(callback) || ts.isFunctionDeclaration(callback) || ts.isFunctionExpression(callback)) &&
-      (callbackIsDeferredByJsx(
-        callback,
-        source,
-        resolver,
-        visited,
-        depth + 1
-      ) || callbackInvocationIsDeferred(
-        callback,
-        source.owner,
-        source.deferredCallbackHooks,
-        source,
-        resolver,
-        visited,
-        depth + 1
-      ))
+      (ts.isArrowFunction(callback) ||
+        ts.isFunctionDeclaration(callback) ||
+        ts.isFunctionExpression(callback)) &&
+      (callbackIsDeferredByJsx(callback, source, resolver, visited, depth + 1) ||
+        callbackInvocationIsDeferred(
+          callback,
+          source.owner,
+          source.deferredCallbackHooks,
+          source,
+          resolver,
+          visited,
+          depth + 1,
+        ))
     ) {
       return true;
     }
@@ -900,14 +962,17 @@ function callbackPathExpressionIsDeferred(
   const objectForward = forwardedObjectCall(value, source.owner);
   if (objectForward) {
     const hook = resolver.resolveHook(source.file, objectForward.hookName);
-    return hook !== null && sourceInputCallbackIsDeferred(
-      hook,
-      objectForward.argumentIndex,
-      [objectForward.property, ...path],
-      resolver,
-      visited,
-      depth + 1,
-      { call: objectForward.call, source }
+    return (
+      hook !== null &&
+      sourceInputCallbackIsDeferred(
+        hook,
+        objectForward.argumentIndex,
+        [objectForward.property, ...path],
+        resolver,
+        visited,
+        depth + 1,
+        { call: objectForward.call, source },
+      )
     );
   }
 
@@ -915,23 +980,22 @@ function callbackPathExpressionIsDeferred(
   if (directCall) {
     if (
       path.length === 0 &&
-      resolver.hookCallbackIsDeferred(
-        source.file,
-        directCall.hookName,
-        directCall.argumentIndex
-      )
+      resolver.hookCallbackIsDeferred(source.file, directCall.hookName, directCall.argumentIndex)
     ) {
       return true;
     }
     const hook = resolver.resolveHook(source.file, directCall.hookName);
-    return hook !== null && sourceInputCallbackIsDeferred(
-      hook,
-      directCall.argumentIndex,
-      path,
-      resolver,
-      visited,
-      depth + 1,
-      { call: directCall.call, source }
+    return (
+      hook !== null &&
+      sourceInputCallbackIsDeferred(
+        hook,
+        directCall.argumentIndex,
+        path,
+        resolver,
+        visited,
+        depth + 1,
+        { call: directCall.call, source },
+      )
     );
   }
 
@@ -941,7 +1005,7 @@ function callbackPathExpressionIsDeferred(
 function deferredArrayItemCallbackPublication(
   source: ChildComponentSource,
   callback: ts.Expression,
-  resolver: CallbackContractSourceResolver
+  resolver: CallbackContractSourceResolver,
 ): boolean | null {
   const property = callback.parent;
   if (
@@ -950,12 +1014,12 @@ function deferredArrayItemCallbackPublication(
   ) {
     return null;
   }
-  const callbackProperty = propertyName(property.name);
-  const object = property.parent;
-  const carriedObject = ts.isObjectLiteralExpression(object)
-    ? climbTransparentExpression(object)
-    : null;
-  const array = carriedObject?.parent;
+  const callbackProperty = propertyName(property.name),
+    object = property.parent,
+    carriedObject = ts.isObjectLiteralExpression(object)
+      ? climbTransparentExpression(object)
+      : null,
+    array = carriedObject?.parent;
   if (
     !callbackProperty ||
     !ts.isObjectLiteralExpression(object) ||
@@ -963,16 +1027,17 @@ function deferredArrayItemCallbackPublication(
     !ts.isArrayLiteralExpression(array) ||
     !array.elements.includes(carriedObject) ||
     object.properties.some(ts.isSpreadAssignment) ||
-    object.properties.filter(member =>
-      (ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member)) &&
-      propertyName(member.name) === callbackProperty
+    object.properties.filter(
+      (member) =>
+        (ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member)) &&
+        propertyName(member.name) === callbackProperty,
     ).length !== 1
   ) {
     return null;
   }
 
-  const carriedArray = climbTransparentExpression(array);
-  const declaration = carriedArray.parent;
+  const carriedArray = climbTransparentExpression(array),
+    declaration = carriedArray.parent;
   if (
     !ts.isVariableDeclaration(declaration) ||
     declaration.initializer !== carriedArray ||
@@ -985,9 +1050,9 @@ function deferredArrayItemCallbackPublication(
   }
   const arrayBinding = declaration.name.text;
 
-  let publications = 0;
-  let safe = true;
-  visit(source.owner.body, node => {
+  let publications = 0,
+    safe = true;
+  visit(source.owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -1003,15 +1068,15 @@ function deferredArrayItemCallbackPublication(
       safe = false;
       return;
     }
-    const target = jsxOwnerTarget(attribute);
-    const child = target ? resolver.resolveComponent(source.file, target) : null;
+    const target = jsxOwnerTarget(attribute),
+      child = target ? resolver.resolveComponent(source.file, target) : null;
     if (
       !child ||
       !propDefersArrayItemCallback(
         atJsxInvocation(child, attribute, source),
         attribute.name.getText(),
         callbackProperty,
-        resolver
+        resolver,
       )
     ) {
       safe = false;
@@ -1023,9 +1088,9 @@ function deferredArrayItemCallbackPublication(
 }
 
 function staticPropertyAccessFrom(
-  expression: ts.Expression
+  expression: ts.Expression,
 ): { expression: ts.Expression; name: string } | null {
-  const parent = expression.parent;
+  const { parent } = expression;
   if (ts.isPropertyAccessExpression(parent) && parent.expression === expression) {
     return { expression: parent, name: parent.name.text };
   }
@@ -1041,14 +1106,16 @@ function staticPropertyAccessFrom(
 }
 
 function callbackReferenceIsObservationOnly(expression: ts.Expression): boolean {
-  const parent = expression.parent;
+  const { parent } = expression;
   if (
     (ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isDoStatement(parent)) &&
     parent.expression === expression
   ) {
     return true;
   }
-  if (ts.isConditionalExpression(parent) && parent.condition === expression) return true;
+  if (ts.isConditionalExpression(parent) && parent.condition === expression) {
+    return true;
+  }
   if (
     ts.isPrefixUnaryExpression(parent) &&
     parent.operand === expression &&
@@ -1056,9 +1123,15 @@ function callbackReferenceIsObservationOnly(expression: ts.Expression): boolean 
   ) {
     return true;
   }
-  if (ts.isTypeOfExpression(parent) && parent.expression === expression) return true;
-  if (ts.isTypeQueryNode(parent) && parent.exprName === expression) return true;
-  if (!ts.isBinaryExpression(parent)) return false;
+  if (ts.isTypeOfExpression(parent) && parent.expression === expression) {
+    return true;
+  }
+  if (ts.isTypeQueryNode(parent) && parent.exprName === expression) {
+    return true;
+  }
+  if (!ts.isBinaryExpression(parent)) {
+    return false;
+  }
   if (
     [
       ts.SyntaxKind.EqualsEqualsEqualsToken,
@@ -1070,9 +1143,10 @@ function callbackReferenceIsObservationOnly(expression: ts.Expression): boolean 
     return true;
   }
   return (
-    parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
-    parent.operatorToken.kind === ts.SyntaxKind.BarBarToken
-  ) && expressionFeedsBooleanControl(parent);
+    (parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+      parent.operatorToken.kind === ts.SyntaxKind.BarBarToken) &&
+    expressionFeedsBooleanControl(parent)
+  );
 }
 
 function expressionFeedsBooleanControl(expression: ts.Expression): boolean {
@@ -1084,19 +1158,21 @@ function expressionFeedsBooleanControl(expression: ts.Expression): boolean {
   ) {
     current = current.parent;
   }
-  const parent = current.parent;
-  return ((ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isDoStatement(parent)) &&
+  const { parent } = current;
+  return (
+    ((ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isDoStatement(parent)) &&
       parent.expression === current) ||
     (ts.isConditionalExpression(parent) && parent.condition === current) ||
     (ts.isPrefixUnaryExpression(parent) &&
       parent.operator === ts.SyntaxKind.ExclamationToken &&
-      parent.operand === current);
+      parent.operand === current)
+  );
 }
 
 function returnedCallbackPath(
   value: ts.Expression,
   path: readonly string[],
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): readonly string[] | "ignored" | null {
   const directReturn = findAncestorUntil(value, ts.isReturnStatement, owner);
   if (
@@ -1107,7 +1183,9 @@ function returnedCallbackPath(
     return path;
   }
   const object = findAncestorUntil(value, ts.isObjectLiteralExpression, owner);
-  if (!object) return null;
+  if (!object) {
+    return null;
+  }
   const objectReturn = findAncestorUntil(object, ts.isReturnStatement, owner);
   if (
     !objectReturn?.expression ||
@@ -1116,15 +1194,22 @@ function returnedCallbackPath(
   ) {
     return null;
   }
-  const index = object.properties.findIndex(member => nodeWithin(value, member));
-  const member = index >= 0 ? object.properties[index] : null;
-  if (!member) return null;
+  const index = object.properties.findIndex((member) => nodeWithin(value, member)),
+    member = index !== -1 ? object.properties[index] : null;
+  if (!member) {
+    return null;
+  }
   if (ts.isSpreadAssignment(member)) {
-    const head = path[0];
-    const overridden = head && object.properties.slice(index + 1).some(candidate =>
-      (ts.isPropertyAssignment(candidate) || ts.isShorthandPropertyAssignment(candidate)) &&
-      propertyName(candidate.name) === head
-    );
+    const head = path[0],
+      overridden =
+        head &&
+        object.properties
+          .slice(index + 1)
+          .some(
+            (candidate) =>
+              (ts.isPropertyAssignment(candidate) || ts.isShorthandPropertyAssignment(candidate)) &&
+              propertyName(candidate.name) === head,
+          );
     return overridden ? "ignored" : path;
   }
   if (!ts.isPropertyAssignment(member) && !ts.isShorthandPropertyAssignment(member)) {
@@ -1139,26 +1224,31 @@ function callResultCallbackIsDeferred(
   path: readonly string[],
   resolver: CallbackContractSourceResolver,
   visited: ReadonlySet<string>,
-  depth: number
+  depth: number,
 ): boolean {
-  const expression = climbTransparentExpression(target.call);
-  const alias = directConstAlias(expression, target.source.owner);
-  return alias !== null && trackedCallbackPathIsDeferred(
-    target.source,
-    { name: alias.text, path },
-    resolver,
-    visited,
-    depth
+  const expression = climbTransparentExpression(target.call),
+    alias = directConstAlias(expression, target.source.owner);
+  return (
+    alias !== null &&
+    trackedCallbackPathIsDeferred(
+      target.source,
+      { name: alias.text, path },
+      resolver,
+      visited,
+      depth,
+    )
   );
 }
 
 function destructuredCallbackPath(
   owner: ChildComponentSource["owner"],
   expression: ts.Expression,
-  path: readonly string[]
+  path: readonly string[],
 ): TrackedCallbackPath | null {
   const [head, ...tail] = path;
-  if (!head) return null;
+  if (!head) {
+    return null;
+  }
   const declaration = findAncestorUntil(expression, ts.isVariableDeclaration, owner);
   if (
     !declaration?.initializer ||
@@ -1167,33 +1257,33 @@ function destructuredCallbackPath(
   ) {
     return null;
   }
-  const matches = declaration.name.elements.filter(element =>
-    !element.dotDotDotToken &&
-    ts.isIdentifier(element.name) &&
-    bindingElementPropertyName(element) === head
-  );
-  const match = matches.length === 1 ? matches[0] : null;
-  return match && ts.isIdentifier(match.name)
-    ? { name: match.name.text, path: tail }
-    : null;
+  const matches = declaration.name.elements.filter(
+      (element) =>
+        !element.dotDotDotToken &&
+        ts.isIdentifier(element.name) &&
+        bindingElementPropertyName(element) === head,
+    ),
+    match = matches.length === 1 ? matches[0] : null;
+  return match && ts.isIdentifier(match.name) ? { name: match.name.text, path: tail } : null;
 }
 
-function expressionCarriesValue(
-  expression: ts.Expression,
-  value: ts.Expression
-): boolean {
+function expressionCarriesValue(expression: ts.Expression, value: ts.Expression): boolean {
   const unwrapped = unwrapTransparentExpression(expression);
-  if (unwrapped === value) return true;
+  if (unwrapped === value) {
+    return true;
+  }
   if (
     !ts.isBinaryExpression(unwrapped) ||
     unwrapped.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken
   ) {
     return false;
   }
-  const left = unwrapTransparentExpression(unwrapped.left);
-  const right = unwrapTransparentExpression(unwrapped.right);
-  return (left === value && isEmptyObjectLiteral(right)) ||
-    (right === value && isEmptyObjectLiteral(left));
+  const left = unwrapTransparentExpression(unwrapped.left),
+    right = unwrapTransparentExpression(unwrapped.right);
+  return (
+    (left === value && isEmptyObjectLiteral(right)) ||
+    (right === value && isEmptyObjectLiteral(left))
+  );
 }
 
 function isEmptyObjectLiteral(expression: ts.Expression): boolean {
@@ -1202,7 +1292,7 @@ function isEmptyObjectLiteral(expression: ts.Expression): boolean {
 
 function directConstAlias(
   expression: ts.Expression,
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): ts.Identifier | null {
   const declaration = expression.parent;
   if (
@@ -1220,7 +1310,7 @@ function directConstAlias(
 
 function forwardedObjectCall(
   expression: ts.Expression,
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): { argumentIndex: number; call: ts.CallExpression; hookName: string; property: string } | null {
   const member = expression.parent;
   if (
@@ -1230,26 +1320,32 @@ function forwardedObjectCall(
     return null;
   }
   const object = member.parent;
-  if (!ts.isObjectLiteralExpression(object)) return null;
+  if (!ts.isObjectLiteralExpression(object)) {
+    return null;
+  }
   const call = findAncestorUntil(object, ts.isCallExpression, owner);
-  if (!call) return null;
-  const argumentIndex = call.arguments.findIndex(argument => nodeWithin(object, argument));
-  const hookName = hookCallName(call);
-  const property = propertyName(member.name);
-  return argumentIndex >= 0 && hookName && property
+  if (!call) {
+    return null;
+  }
+  const argumentIndex = call.arguments.findIndex((argument) => nodeWithin(object, argument)),
+    hookName = hookCallName(call),
+    property = propertyName(member.name);
+  return argumentIndex !== -1 && hookName && property
     ? { argumentIndex, call, hookName, property }
     : null;
 }
 
 function directCallArgument(
   expression: ts.Expression,
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): { argumentIndex: number; call: ts.CallExpression; hookName: string } | null {
   const call = findAncestorUntil(expression, ts.isCallExpression, owner);
-  if (!call || nodeWithin(expression, call.expression)) return null;
-  const argumentIndex = call.arguments.findIndex(argument => nodeWithin(expression, argument));
-  const hookName = hookCallName(call);
-  return argumentIndex >= 0 && hookName ? { argumentIndex, call, hookName } : null;
+  if (!call || nodeWithin(expression, call.expression)) {
+    return null;
+  }
+  const argumentIndex = call.arguments.findIndex((argument) => nodeWithin(expression, argument)),
+    hookName = hookCallName(call);
+  return argumentIndex !== -1 && hookName ? { argumentIndex, call, hookName } : null;
 }
 
 function climbTransparentExpression(expression: ts.Expression): ts.Expression {
@@ -1269,13 +1365,15 @@ function climbTransparentExpression(expression: ts.Expression): ts.Expression {
 
 function jsxAttributeDirectlyCarries(
   attribute: ts.JsxAttribute,
-  expression: ts.Expression
+  expression: ts.Expression,
 ): boolean {
-  const initializer = attribute.initializer;
-  return initializer !== undefined &&
+  const { initializer } = attribute;
+  return (
+    initializer !== undefined &&
     ts.isJsxExpression(initializer) &&
     initializer.expression !== undefined &&
-    unwrapTransparentExpression(initializer.expression) === unwrapTransparentExpression(expression);
+    unwrapTransparentExpression(initializer.expression) === unwrapTransparentExpression(expression)
+  );
 }
 
 function jsxOwnerTarget(attribute: ts.JsxAttribute | ts.JsxSpreadAttribute): string | null {
@@ -1284,28 +1382,26 @@ function jsxOwnerTarget(attribute: ts.JsxAttribute | ts.JsxSpreadAttribute): str
 }
 
 function jsxOwnerOpening(
-  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute
+  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  const attributes = attribute.parent;
-  const opening = ts.isJsxAttributes(attributes) ? attributes.parent : null;
+  const attributes = attribute.parent,
+    opening = ts.isJsxAttributes(attributes) ? attributes.parent : null;
   return opening && (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening))
     ? opening
     : null;
 }
 
-function jsxOwnerIsIntrinsic(
-  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute
-): boolean {
+function jsxOwnerIsIntrinsic(attribute: ts.JsxAttribute | ts.JsxSpreadAttribute): boolean {
   const opening = jsxOwnerOpening(attribute);
-  return opening !== null &&
-    ts.isIdentifier(opening.tagName) &&
-    /^[a-z]/.test(opening.tagName.text);
+  return (
+    opening !== null && ts.isIdentifier(opening.tagName) && /^[a-z]/.test(opening.tagName.text)
+  );
 }
 
 function atJsxInvocation(
   source: ChildComponentSource,
   attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
-  invocationOwner?: ChildComponentSource
+  invocationOwner?: ChildComponentSource,
 ): ChildComponentSource {
   const invocation = jsxOwnerOpening(attribute);
   return invocation
@@ -1315,11 +1411,15 @@ function atJsxInvocation(
 
 function jsxOwnerIsDeferredEventTarget(
   attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
-  source?: ChildComponentSource
+  source?: ChildComponentSource,
 ): boolean {
-  if (jsxOwnerIsIntrinsic(attribute)) return true;
+  if (jsxOwnerIsIntrinsic(attribute)) {
+    return true;
+  }
   const opening = jsxOwnerOpening(attribute);
-  if (!source?.invocation || !opening || !ts.isIdentifier(opening.tagName)) return false;
+  if (!source?.invocation || !opening || !ts.isIdentifier(opening.tagName)) {
+    return false;
+  }
 
   const declaration = uniqueVariableDeclaration(source.body, opening.tagName.text);
   if (
@@ -1333,39 +1433,49 @@ function jsxOwnerIsDeferredEventTarget(
   }
 
   const initializer = unwrapTransparentExpression(declaration.initializer);
-  if (!ts.isConditionalExpression(initializer)) return false;
+  if (!ts.isConditionalExpression(initializer)) {
+    return false;
+  }
   const condition = unwrapTransparentExpression(initializer.condition);
-  if (!ts.isIdentifier(condition)) return false;
-  const conditionValue = booleanPropAtInvocation(source, condition);
-  const selected = conditionValue === true
-    ? initializer.whenTrue
-    : conditionValue === false
-      ? initializer.whenFalse
-      : null;
-  if (!selected) return false;
+  if (!ts.isIdentifier(condition)) {
+    return false;
+  }
+  const conditionValue = booleanPropAtInvocation(source, condition),
+    selected =
+      conditionValue === true
+        ? initializer.whenTrue
+        : conditionValue === false
+          ? initializer.whenFalse
+          : null;
+  if (!selected) {
+    return false;
+  }
   const target = unwrapTransparentExpression(selected);
   return ts.isStringLiteralLike(target) && /^[a-z]/.test(target.text);
 }
 
 function booleanPropAtInvocation(
   source: ChildComponentSource,
-  binding: ts.Identifier
+  binding: ts.Identifier,
 ): boolean | null {
   const parameter = source.owner.parameters[0];
-  if (!parameter || !ts.isObjectBindingPattern(parameter.name)) return null;
-  const matches = parameter.name.elements.filter(element =>
-    !element.dotDotDotToken &&
-    ts.isIdentifier(element.name) &&
-    element.name.text === binding.text
-  );
-  const element = matches.length === 1 ? matches[0] : null;
-  const propName = element ? bindingElementPropertyName(element) : null;
+  if (!parameter || !ts.isObjectBindingPattern(parameter.name)) {
+    return null;
+  }
+  const matches = parameter.name.elements.filter(
+      (element) =>
+        !element.dotDotDotToken &&
+        ts.isIdentifier(element.name) &&
+        element.name.text === binding.text,
+    ),
+    element = matches.length === 1 ? matches[0] : null,
+    propName = element ? bindingElementPropertyName(element) : null;
   if (!element || !propName || bindingDeclarationCount(source.owner, binding.text) !== 1) {
     return null;
   }
 
   let written = false;
-  visit(source.body, node => {
+  visit(source.body, (node) => {
     if (
       ts.isIdentifier(node) &&
       node.text === binding.text &&
@@ -1376,10 +1486,14 @@ function booleanPropAtInvocation(
       written = true;
     }
   });
-  if (written) return null;
+  if (written) {
+    return null;
+  }
 
   const value = booleanPropValueAtInvocation(source, propName);
-  if (value !== "absent") return value;
+  if (value !== "absent") {
+    return value;
+  }
   return element.initializer
     ? booleanLiteral(unwrapTransparentExpression(element.initializer))
     : null;
@@ -1387,13 +1501,17 @@ function booleanPropAtInvocation(
 
 function booleanPropValueAtInvocation(
   source: ChildComponentSource,
-  propName: string
+  propName: string,
 ): boolean | "absent" | null {
-  if (!source.invocation) return null;
+  if (!source.invocation) {
+    return null;
+  }
   let value: boolean | "absent" = "absent";
   for (const attribute of source.invocation.attributes.properties) {
     if (ts.isJsxAttribute(attribute)) {
-      if (attribute.name.getText() !== propName) continue;
+      if (attribute.name.getText() !== propName) {
+        continue;
+      }
       if (!attribute.initializer) {
         value = true;
         continue;
@@ -1402,19 +1520,21 @@ function booleanPropValueAtInvocation(
         return null;
       }
       const explicit = booleanLiteral(
-        unwrapTransparentExpression(attribute.initializer.expression)
+        unwrapTransparentExpression(attribute.initializer.expression),
       );
-      if (explicit === null) return null;
+      if (explicit === null) {
+        return null;
+      }
       value = explicit;
       continue;
     }
-    const spread = booleanPropFromSpread(
-      source.invocationOwner,
-      attribute.expression,
-      propName
-    );
-    if (spread === null) return null;
-    if (spread !== "absent") value = spread;
+    const spread = booleanPropFromSpread(source.invocationOwner, attribute.expression, propName);
+    if (spread === null) {
+      return null;
+    }
+    if (spread !== "absent") {
+      value = spread;
+    }
   }
   return value;
 }
@@ -1422,23 +1542,26 @@ function booleanPropValueAtInvocation(
 function booleanPropFromSpread(
   owner: ChildComponentSource | undefined,
   expression: ts.Expression,
-  propName: string
+  propName: string,
 ): boolean | "absent" | null {
   const value = unwrapTransparentExpression(expression);
-  if (!owner || !ts.isIdentifier(value)) return null;
+  if (!owner || !ts.isIdentifier(value)) {
+    return null;
+  }
   const parameter = owner.owner.parameters[0];
-  if (!parameter || !ts.isObjectBindingPattern(parameter.name)) return null;
-  const rest = parameter.name.elements.filter(element =>
-    element.dotDotDotToken &&
-    ts.isIdentifier(element.name) &&
-    element.name.text === value.text
+  if (!parameter || !ts.isObjectBindingPattern(parameter.name)) {
+    return null;
+  }
+  const rest = parameter.name.elements.filter(
+    (element) =>
+      element.dotDotDotToken && ts.isIdentifier(element.name) && element.name.text === value.text,
   );
   if (rest.length !== 1 || bindingDeclarationCount(owner.owner, value.text) !== 1) {
     return null;
   }
 
   let safe = true;
-  visit(owner.body, node => {
+  visit(owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -1453,30 +1576,37 @@ function booleanPropFromSpread(
       safe = false;
     }
   });
-  if (!safe) return null;
+  if (!safe) {
+    return null;
+  }
 
-  const excluded = parameter.name.elements.some(element =>
-    !element.dotDotDotToken && bindingElementPropertyName(element) === propName
+  const excluded = parameter.name.elements.some(
+    (element) => !element.dotDotDotToken && bindingElementPropertyName(element) === propName,
   );
   return excluded ? "absent" : booleanPropValueAtInvocation(owner, propName);
 }
 
 function booleanLiteral(expression: ts.Expression): boolean | null {
-  if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
-  if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
+  if (expression.kind === ts.SyntaxKind.TrueKeyword) {
+    return true;
+  }
+  if (expression.kind === ts.SyntaxKind.FalseKeyword) {
+    return false;
+  }
   return null;
 }
 
 function referenceIsWithinWriteTarget(
   reference: ts.Identifier,
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): boolean {
-  for (let current: ts.Node = reference; current.parent && current.parent !== owner; current = current.parent) {
-    const parent = current.parent;
-    if (
-      ts.isBinaryExpression(parent) &&
-      isAssignmentOperator(parent.operatorToken.kind)
-    ) {
+  for (
+    let current: ts.Node = reference;
+    current.parent && current.parent !== owner;
+    current = current.parent
+  ) {
+    const { parent } = current;
+    if (ts.isBinaryExpression(parent) && isAssignmentOperator(parent.operatorToken.kind)) {
       return nodeWithin(reference, parent.left);
     }
     if (
@@ -1488,18 +1618,16 @@ function referenceIsWithinWriteTarget(
     ) {
       return true;
     }
-    if (ts.isDeleteExpression(parent) && parent.expression === current) return true;
+    if (ts.isDeleteExpression(parent) && parent.expression === current) {
+      return true;
+    }
     if (
       (ts.isForInStatement(parent) || ts.isForOfStatement(parent)) &&
       nodeWithin(reference, parent.initializer)
     ) {
       return true;
     }
-    if (
-      ts.isStatement(parent) ||
-      ts.isCallExpression(parent) ||
-      isRuntimeFunctionLike(parent)
-    ) {
+    if (ts.isStatement(parent) || ts.isCallExpression(parent) || isRuntimeFunctionLike(parent)) {
       return false;
     }
   }
@@ -1507,9 +1635,7 @@ function referenceIsWithinWriteTarget(
 }
 
 function jsxTagName(name: ts.JsxTagNameExpression): string | null {
-  return ts.isIdentifier(name) || ts.isPropertyAccessExpression(name)
-    ? name.getText()
-    : null;
+  return ts.isIdentifier(name) || ts.isPropertyAccessExpression(name) ? name.getText() : null;
 }
 
 function bindingElementPropertyName(element: ts.BindingElement): string | null {
@@ -1527,18 +1653,23 @@ interface ContextPublication {
 
 function memoizedContextPublication(
   expression: ts.Expression,
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): ContextPublication | null {
   const member = expression.parent;
   if (
     !ts.isShorthandPropertyAssignment(member) &&
-    !(ts.isPropertyAssignment(member) && unwrapTransparentExpression(member.initializer) === expression)
+    !(
+      ts.isPropertyAssignment(member) &&
+      unwrapTransparentExpression(member.initializer) === expression
+    )
   ) {
     return null;
   }
-  const property = propertyName(member.name);
-  const object = member.parent;
-  if (!property || !ts.isObjectLiteralExpression(object)) return null;
+  const property = propertyName(member.name),
+    object = member.parent;
+  if (!property || !ts.isObjectLiteralExpression(object)) {
+    return null;
+  }
   const call = findAncestorUntil(object, ts.isCallExpression, owner);
   if (
     !call ||
@@ -1549,8 +1680,8 @@ function memoizedContextPublication(
   ) {
     return null;
   }
-  const carriedCall = climbTransparentExpression(call);
-  const declaration = carriedCall.parent;
+  const carriedCall = climbTransparentExpression(call),
+    declaration = carriedCall.parent;
   if (
     !ts.isVariableDeclaration(declaration) ||
     declaration.initializer !== carriedCall ||
@@ -1560,10 +1691,10 @@ function memoizedContextPublication(
     return null;
   }
   const bindingName = declaration.name.text;
-  let references = 0;
-  let contextName: string | null = null;
-  let safe = true;
-  visit(owner.body, node => {
+  let references = 0,
+    contextName: string | null = null,
+    safe = true;
+  visit(owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -1574,34 +1705,27 @@ function memoizedContextPublication(
       return;
     }
     references += 1;
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
-    const provider = attribute && jsxContextProvider(attribute, node);
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner),
+      provider = attribute && jsxContextProvider(attribute, node);
     if (!provider || (contextName !== null && contextName !== provider)) {
       safe = false;
       return;
     }
     contextName = provider;
   });
-  return safe && references > 0 && contextName
-    ? { contextName, property }
-    : null;
+  return safe && references > 0 && contextName ? { contextName, property } : null;
 }
 
-function jsxContextProvider(
-  attribute: ts.JsxAttribute,
-  expression: ts.Expression
-): string | null {
-  if (
-    attribute.name.getText() !== "value" ||
-    !jsxAttributeDirectlyCarries(attribute, expression)
-  ) {
+function jsxContextProvider(attribute: ts.JsxAttribute, expression: ts.Expression): string | null {
+  if (attribute.name.getText() !== "value" || !jsxAttributeDirectlyCarries(attribute, expression)) {
     return null;
   }
-  const attributes = attribute.parent;
-  const opening = ts.isJsxAttributes(attributes) ? attributes.parent : null;
-  const tag = opening && (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening))
-    ? opening.tagName
-    : null;
+  const attributes = attribute.parent,
+    opening = ts.isJsxAttributes(attributes) ? attributes.parent : null,
+    tag =
+      opening && (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening))
+        ? opening.tagName
+        : null;
   return tag &&
     ts.isPropertyAccessExpression(tag) &&
     ts.isIdentifier(tag.expression) &&
@@ -1616,18 +1740,24 @@ function contextPropertyConsumersAreDeferred(
   contextName: string,
   property: string,
   visited: ReadonlySet<string>,
-  depth: number
+  depth: number,
 ): boolean {
-  if (depth > MAX_CALLBACK_PATH_DEPTH) return false;
+  if (depth > MAX_CALLBACK_PATH_DEPTH) {
+    return false;
+  }
   const readers = resolver.contextReaderHooks(providerFile, contextName);
-  let consumed = false;
-  let safe = readers.size > 0;
+  let consumed = false,
+    safe = readers.size > 0;
   for (const [file, hookNames] of readers) {
     const sourceFile = resolver.sourceFile(file);
-    if (!sourceFile) return false;
+    if (!sourceFile) {
+      return false;
+    }
     for (const hookName of hookNames) {
       for (const node of identifiersNamed(sourceFile, hookName)) {
-        if (!safe) break;
+        if (!safe) {
+          break;
+        }
         if (
           isDeclarationName(node) ||
           isNonValueIdentifier(node) ||
@@ -1651,33 +1781,32 @@ function contextPropertyConsumersAreDeferred(
           safe = false;
           continue;
         }
-        const carriedCall = climbTransparentExpression(call);
-        const declaration = carriedCall.parent;
-        if (
-          !ts.isVariableDeclaration(declaration) ||
-          declaration.initializer !== carriedCall
-        ) {
+        const carriedCall = climbTransparentExpression(call),
+          declaration = carriedCall.parent;
+        if (!ts.isVariableDeclaration(declaration) || declaration.initializer !== carriedCall) {
           safe = false;
           continue;
         }
         const tracked = bindCallbackPath(declaration.name, [property]);
         if (!tracked) {
-          if (objectBindingOmitsProperty(declaration.name, property)) continue;
+          if (objectBindingOmitsProperty(declaration.name, property)) {
+            continue;
+          }
           safe = false;
           continue;
         }
         consumed = true;
         safe = trackedCallbackPathIsDeferred(
           {
-            owner,
             body: owner.body,
-            file,
             deferredCallbackHooks: resolver.deferredCallbackHooks(file),
+            file,
+            owner,
           },
           tracked,
           resolver,
           visited,
-          depth
+          depth,
         );
       }
     }
@@ -1687,17 +1816,23 @@ function contextPropertyConsumersAreDeferred(
 
 function isModuleBindingReference(node: ts.Identifier): boolean {
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
-    if (ts.isImportDeclaration(current) || ts.isExportDeclaration(current)) return true;
-    if (ts.isSourceFile(current) || isRuntimeFunctionLike(current)) return false;
+    if (ts.isImportDeclaration(current) || ts.isExportDeclaration(current)) {
+      return true;
+    }
+    if (ts.isSourceFile(current) || isRuntimeFunctionLike(current)) {
+      return false;
+    }
   }
   return false;
 }
 
 function objectBindingOmitsProperty(binding: ts.BindingName, property: string): boolean {
-  return ts.isObjectBindingPattern(binding) &&
-    !binding.elements.some(element =>
-      element.dotDotDotToken || bindingElementPropertyName(element) === property
-    );
+  return (
+    ts.isObjectBindingPattern(binding) &&
+    !binding.elements.some(
+      (element) => element.dotDotDotToken || bindingElementPropertyName(element) === property,
+    )
+  );
 }
 
 function propertyName(name: ts.PropertyName): string | null {
@@ -1707,38 +1842,41 @@ function propertyName(name: ts.PropertyName): string | null {
 }
 
 function isArrayItemLookup(expression: ts.Expression, arrayName: string): boolean {
-  return ts.isCallExpression(expression) &&
+  return (
+    ts.isCallExpression(expression) &&
     ts.isPropertyAccessExpression(expression.expression) &&
     ts.isIdentifier(expression.expression.expression) &&
     expression.expression.expression.text === arrayName &&
-    expression.expression.name.text === "at";
+    expression.expression.name.text === "at"
+  );
 }
 
-function isFilteredArrayAlias(
-  expression: ts.Expression,
-  arrayNames: ReadonlySet<string>
-): boolean {
+function isFilteredArrayAlias(expression: ts.Expression, arrayNames: ReadonlySet<string>): boolean {
   const call = unwrapTransparentExpression(expression);
-  return ts.isCallExpression(call) &&
+  return (
+    ts.isCallExpression(call) &&
     ts.isPropertyAccessExpression(call.expression) &&
     ts.isIdentifier(call.expression.expression) &&
     arrayNames.has(call.expression.expression.text) &&
     call.expression.name.text === "filter" &&
     call.arguments[0] !== undefined &&
-    (ts.isArrowFunction(call.arguments[0]) || ts.isFunctionExpression(call.arguments[0]));
+    (ts.isArrowFunction(call.arguments[0]) || ts.isFunctionExpression(call.arguments[0]))
+  );
 }
 
 function isArrayIterationCallback(
   callback: ts.ArrowFunction | ts.FunctionExpression,
-  arrayNames: ReadonlySet<string>
+  arrayNames: ReadonlySet<string>,
 ): boolean {
   const call = callback.parent;
-  return ts.isCallExpression(call) &&
+  return (
+    ts.isCallExpression(call) &&
     call.arguments[0] === callback &&
     ts.isPropertyAccessExpression(call.expression) &&
     ts.isIdentifier(call.expression.expression) &&
     arrayNames.has(call.expression.expression.text) &&
-    TRACKED_ARRAY_ITERATION_METHODS.has(call.expression.name.text);
+    TRACKED_ARRAY_ITERATION_METHODS.has(call.expression.name.text)
+  );
 }
 
 function callbackInvocationIsDeferred(
@@ -1749,52 +1887,63 @@ function callbackInvocationIsDeferred(
   resolver?: CallbackContractSourceResolver,
   visited: ReadonlySet<string> = new Set(),
   depth = 0,
-  seenCallbacks: ReadonlySet<number> = new Set()
+  seenCallbacks: ReadonlySet<number> = new Set(),
 ): boolean {
-  if (depth > MAX_CALLBACK_PATH_DEPTH || seenCallbacks.has(callback.pos)) return false;
-  const nextCallbacks = new Set(seenCallbacks).add(callback.pos);
-  const synchronous = isSynchronousRenderCallback(callback);
-  const immediateHook = callbackRunsInImmediateReactHook(callback);
+  if (depth > MAX_CALLBACK_PATH_DEPTH || seenCallbacks.has(callback.pos)) {
+    return false;
+  }
+  const nextCallbacks = new Set(seenCallbacks).add(callback.pos),
+    synchronous = isSynchronousRenderCallback(callback),
+    immediateHook = callbackRunsInImmediateReactHook(callback);
   if (synchronous || immediateHook) {
     return false;
   }
   const name = callbackBindingName(callback, owner);
   if (!name) {
-    return !ts.isFunctionDeclaration(callback) &&
+    return (
+      !ts.isFunctionDeclaration(callback) &&
       (callbackIsStoredInProperty(callback) ||
-        callbackRunsInProvenDeferredHook(callback, deferredCallbackHooks));
+        callbackRunsInProvenDeferredHook(callback, deferredCallbackHooks))
+    );
   }
 
-  let referenced = false;
-  let safe = true;
+  let referenced = false,
+    safe = true;
   for (const node of identifiersNamed(owner.body, name)) {
-    if (!safe) break;
-    if (isBindingName(node) || isNonValueIdentifier(node)) continue;
+    if (!safe) {
+      break;
+    }
+    if (isBindingName(node) || isNonValueIdentifier(node)) {
+      continue;
+    }
     referenced = true;
     if (
       isHookDependencyReference(
         node,
         CALLBACK_IDENTITY_HOOKS,
-        reactNamespacesFor(owner.getSourceFile())
+        reactNamespacesFor(owner.getSourceFile()),
       )
     ) {
       continue;
     }
-    if (callbackReferenceIsObservationOnly(node)) continue;
+    if (callbackReferenceIsObservationOnly(node)) {
+      continue;
+    }
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
     if (
       attribute &&
       /^on[A-Z]/.test(attribute.name.getText()) &&
       jsxAttributeCarriesCallbackIdentity(attribute, node)
     ) {
-      if (jsxOwnerIsDeferredEventTarget(attribute, source)) continue;
+      if (jsxOwnerIsDeferredEventTarget(attribute, source)) {
+        continue;
+      }
       const target = jsxOwnerTarget(attribute);
       if (source && resolver && target && resolver.frameworkEventComponent(source.file, target)) {
         continue;
       }
-      const child = source && resolver && target
-        ? resolver.resolveComponent(source.file, target)
-        : null;
+      const child =
+        source && resolver && target ? resolver.resolveComponent(source.file, target) : null;
       if (
         child &&
         sourceInputCallbackIsDeferred(
@@ -1803,23 +1952,19 @@ function callbackInvocationIsDeferred(
           [attribute.name.getText()],
           resolver!,
           visited,
-          depth + 1
+          depth + 1,
         )
       ) {
         continue;
       }
     }
-    if (identifierRunsInProvenDeferredHook(node, deferredCallbackHooks)) continue;
+    if (identifierRunsInProvenDeferredHook(node, deferredCallbackHooks)) {
+      continue;
+    }
     if (
       source &&
       resolver &&
-      higherOrderCallDefersCallback(
-        node,
-        source,
-        resolver,
-        visited,
-        depth + 1
-      )
+      higherOrderCallDefersCallback(node, source, resolver, visited, depth + 1)
     ) {
       continue;
     }
@@ -1840,7 +1985,7 @@ function callbackInvocationIsDeferred(
             resolver,
             visited,
             depth + 1,
-            nextCallbacks
+            nextCallbacks,
           ))
       ) {
         continue;
@@ -1853,7 +1998,7 @@ function callbackInvocationIsDeferred(
 
 function jsxAttributeCarriesCallbackIdentity(
   attribute: ts.JsxAttribute,
-  callback: ts.Expression
+  callback: ts.Expression,
 ): boolean {
   let value = climbTransparentExpression(callback);
   if (
@@ -1870,11 +2015,13 @@ function callbackIsDeferredByJsx(
   source: ChildComponentSource,
   resolver: CallbackContractSourceResolver,
   visited: ReadonlySet<string>,
-  depth: number
+  depth: number,
 ): boolean {
-  if (ts.isFunctionDeclaration(callback) || depth > MAX_CALLBACK_PATH_DEPTH) return false;
-  const expression = climbTransparentExpression(callback);
-  const attribute = findAncestorUntil(expression, ts.isJsxAttribute, source.owner);
+  if (ts.isFunctionDeclaration(callback) || depth > MAX_CALLBACK_PATH_DEPTH) {
+    return false;
+  }
+  const expression = climbTransparentExpression(callback),
+    attribute = findAncestorUntil(expression, ts.isJsxAttribute, source.owner);
   if (
     !attribute ||
     !/^on[A-Z]/.test(attribute.name.getText()) ||
@@ -1882,17 +2029,24 @@ function callbackIsDeferredByJsx(
   ) {
     return false;
   }
-  if (jsxOwnerIsDeferredEventTarget(attribute, source)) return true;
+  if (jsxOwnerIsDeferredEventTarget(attribute, source)) {
+    return true;
+  }
   const target = jsxOwnerTarget(attribute);
-  if (target && resolver.frameworkEventComponent(source.file, target)) return true;
+  if (target && resolver.frameworkEventComponent(source.file, target)) {
+    return true;
+  }
   const child = target ? resolver.resolveComponent(source.file, target) : null;
-  return child !== null && sourceInputCallbackIsDeferred(
-    atJsxInvocation(child, attribute, source),
-    0,
-    [attribute.name.getText()],
-    resolver,
-    visited,
-    depth + 1
+  return (
+    child !== null &&
+    sourceInputCallbackIsDeferred(
+      atJsxInvocation(child, attribute, source),
+      0,
+      [attribute.name.getText()],
+      resolver,
+      visited,
+      depth + 1,
+    )
   );
 }
 
@@ -1901,14 +2055,18 @@ function higherOrderCallDefersCallback(
   source: ChildComponentSource,
   resolver: CallbackContractSourceResolver,
   visited: ReadonlySet<string>,
-  depth: number
+  depth: number,
 ): boolean {
-  if (depth > MAX_CALLBACK_PATH_DEPTH) return false;
+  if (depth > MAX_CALLBACK_PATH_DEPTH) {
+    return false;
+  }
   const call = findAncestor(callback, ts.isCallExpression);
-  if (!call || nodeWithin(callback, call.expression)) return false;
-  const argumentIndex = call.arguments.findIndex(argument => nodeWithin(callback, argument));
-  const deferredResult = argumentIndex >= 0 &&
-    callResultIsDeferredEvent(call, source, resolver, visited, depth);
+  if (!call || nodeWithin(callback, call.expression)) {
+    return false;
+  }
+  const argumentIndex = call.arguments.findIndex((argument) => nodeWithin(callback, argument)),
+    deferredResult =
+      argumentIndex !== -1 && callResultIsDeferredEvent(call, source, resolver, visited, depth);
   if (!deferredResult) {
     return false;
   }
@@ -1917,12 +2075,13 @@ function higherOrderCallDefersCallback(
     return false;
   }
   const hookBinding = returnedHookFunctionBinding(source.owner, callee.text);
-  if (!hookBinding) return false;
-  const hook = resolver.resolveHook(source.file, hookBinding.hookName);
-  const factory = hook
-    ? returnedLocalFunction(hook, hookBinding.property)
-    : null;
-  const deferredParameter = factory !== null && higherOrderFunctionDefersParameter(factory, argumentIndex);
+  if (!hookBinding) {
+    return false;
+  }
+  const hook = resolver.resolveHook(source.file, hookBinding.hookName),
+    factory = hook ? returnedLocalFunction(hook, hookBinding.property) : null,
+    deferredParameter =
+      factory !== null && higherOrderFunctionDefersParameter(factory, argumentIndex);
   return deferredParameter;
 }
 
@@ -1931,17 +2090,18 @@ function callResultIsDeferredEvent(
   source: ChildComponentSource,
   resolver: CallbackContractSourceResolver,
   visited: ReadonlySet<string>,
-  depth: number
+  depth: number,
 ): boolean {
   let result: ts.Expression = climbTransparentExpression(call);
   if (
     ts.isConditionalExpression(result.parent) &&
     (result.parent.whenTrue === result || result.parent.whenFalse === result)
   ) {
-    const other = result.parent.whenTrue === result
-      ? result.parent.whenFalse
-      : result.parent.whenTrue;
-    if (!isNullishExpression(other, source.owner)) return false;
+    const other =
+      result.parent.whenTrue === result ? result.parent.whenFalse : result.parent.whenTrue;
+    if (!isNullishExpression(other, source.owner)) {
+      return false;
+    }
     result = result.parent;
   }
   const attribute = findAncestorUntil(result, ts.isJsxAttribute, source.owner);
@@ -1952,37 +2112,46 @@ function callResultIsDeferredEvent(
   ) {
     return false;
   }
-  if (jsxOwnerIsDeferredEventTarget(attribute, source)) return true;
+  if (jsxOwnerIsDeferredEventTarget(attribute, source)) {
+    return true;
+  }
   const target = jsxOwnerTarget(attribute);
-  if (target && resolver.frameworkEventComponent(source.file, target)) return true;
+  if (target && resolver.frameworkEventComponent(source.file, target)) {
+    return true;
+  }
   const child = target ? resolver.resolveComponent(source.file, target) : null;
-  return child !== null && sourceInputCallbackIsDeferred(
-    atJsxInvocation(child, attribute, source),
-    0,
-    [attribute.name.getText()],
-    resolver,
-    visited,
-    depth + 1
+  return (
+    child !== null &&
+    sourceInputCallbackIsDeferred(
+      atJsxInvocation(child, attribute, source),
+      0,
+      [attribute.name.getText()],
+      resolver,
+      visited,
+      depth + 1,
+    )
   );
 }
 
 function isNullishExpression(
   expression: ts.Expression,
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): boolean {
   const value = unwrapTransparentExpression(expression);
-  return value.kind === ts.SyntaxKind.NullKeyword ||
+  return (
+    value.kind === ts.SyntaxKind.NullKeyword ||
     (ts.isIdentifier(value) &&
       value.text === "undefined" &&
-      bindingDeclarationCount(owner, "undefined") === 0);
+      bindingDeclarationCount(owner, "undefined") === 0)
+  );
 }
 
 function returnedHookFunctionBinding(
   owner: ChildComponentSource["owner"],
-  localName: string
+  localName: string,
 ): { hookName: string; property: string } | null {
   let binding: { hookName: string; property: string } | null = null;
-  visit(owner.body, node => {
+  visit(owner.body, (node) => {
     if (
       binding ||
       !ts.isVariableDeclaration(node) ||
@@ -1991,54 +2160,68 @@ function returnedHookFunctionBinding(
     ) {
       return;
     }
-    const matches = node.name.elements.filter(element =>
-      ts.isIdentifier(element.name) && element.name.text === localName
-    );
-    const match = matches.length === 1 ? matches[0] : null;
-    const call = unwrapTransparentExpression(node.initializer);
-    const hookName = ts.isCallExpression(call) ? hookCallName(call) : null;
-    const property = match ? bindingElementPropertyName(match) : null;
-    if (hookName && property) binding = { hookName, property };
+    const matches = node.name.elements.filter(
+        (element) => ts.isIdentifier(element.name) && element.name.text === localName,
+      ),
+      match = matches.length === 1 ? matches[0] : null,
+      call = unwrapTransparentExpression(node.initializer),
+      hookName = ts.isCallExpression(call) ? hookCallName(call) : null,
+      property = match ? bindingElementPropertyName(match) : null;
+    if (hookName && property) {
+      binding = { hookName, property };
+    }
   });
   return binding;
 }
 
 function returnedLocalFunction(
   source: ChildComponentSource,
-  property: string
+  property: string,
 ): ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null {
   const names = new Set<string>();
   let safe = true;
-  visit(source.owner.body, node => {
-    if (!safe || !ts.isReturnStatement(node) || !node.expression) return;
-    if (findAncestor(node, isRuntimeFunctionLike) !== source.owner) return;
+  visit(source.owner.body, (node) => {
+    if (!safe || !ts.isReturnStatement(node) || !node.expression) {
+      return;
+    }
+    if (findAncestor(node, isRuntimeFunctionLike) !== source.owner) {
+      return;
+    }
     const returned = unwrapTransparentExpression(node.expression);
     if (!ts.isObjectLiteralExpression(returned)) {
       safe = false;
       return;
     }
-    const matches = returned.properties.filter(member =>
-      (ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member)) &&
-      propertyName(member.name) === property
-    );
-    const match = matches.length === 1 ? matches[0] : null;
-    const value = match && ts.isShorthandPropertyAssignment(match)
-      ? match.name
-      : match && ts.isPropertyAssignment(match)
-        ? unwrapTransparentExpression(match.initializer)
-        : null;
+    const matches = returned.properties.filter(
+        (member) =>
+          (ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member)) &&
+          propertyName(member.name) === property,
+      ),
+      match = matches.length === 1 ? matches[0] : null,
+      value =
+        match && ts.isShorthandPropertyAssignment(match)
+          ? match.name
+          : match && ts.isPropertyAssignment(match)
+            ? unwrapTransparentExpression(match.initializer)
+            : null;
     if (!value || !ts.isIdentifier(value)) {
       safe = false;
       return;
     }
     names.add(value.text);
   });
-  if (!safe || names.size !== 1) return null;
+  if (!safe || names.size !== 1) {
+    return null;
+  }
   const name = names.values().next().value;
-  if (!name || bindingDeclarationCount(source.owner, name) !== 1) return null;
+  if (!name || bindingDeclarationCount(source.owner, name) !== 1) {
+    return null;
+  }
   let result: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression | null = null;
-  visit(source.owner.body, node => {
-    if (result) return;
+  visit(source.owner.body, (node) => {
+    if (result) {
+      return;
+    }
     if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
       result = node;
       return;
@@ -2061,7 +2244,8 @@ function returnedLocalFunction(
       hookCallName(initializer) === "useCallback" &&
       bindingDeclarationCount(source.owner, "useCallback") === 0 &&
       initializer.arguments[0] &&
-      (ts.isArrowFunction(initializer.arguments[0]) || ts.isFunctionExpression(initializer.arguments[0]))
+      (ts.isArrowFunction(initializer.arguments[0]) ||
+        ts.isFunctionExpression(initializer.arguments[0]))
     ) {
       result = initializer.arguments[0];
     }
@@ -2071,14 +2255,16 @@ function returnedLocalFunction(
 
 function higherOrderFunctionDefersParameter(
   factory: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  argumentIndex: number
+  argumentIndex: number,
 ): boolean {
   const parameter = factory.parameters[argumentIndex];
-  if (!parameter || !ts.isIdentifier(parameter.name)) return false;
+  if (!parameter || !ts.isIdentifier(parameter.name)) {
+    return false;
+  }
   const parameterName = parameter.name.text;
-  let references = 0;
-  let safe = true;
-  visit(factory.body, node => {
+  let references = 0,
+    safe = true;
+  visit(factory.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -2089,9 +2275,11 @@ function higherOrderFunctionDefersParameter(
       return;
     }
     references += 1;
-    if (callbackReferenceIsObservationOnly(node)) return;
-    const call = findAncestorUntil(node, ts.isCallExpression, factory);
-    const wrapper = nearestNestedFunction(node, factory);
+    if (callbackReferenceIsObservationOnly(node)) {
+      return;
+    }
+    const call = findAncestorUntil(node, ts.isCallExpression, factory),
+      wrapper = nearestNestedFunction(node, factory);
     if (
       !call ||
       nodeWithin(node, call.expression) === false ||
@@ -2107,29 +2295,37 @@ function higherOrderFunctionDefersParameter(
 
 function functionIsDirectlyReturned(
   callback: ts.ArrowFunction | ts.FunctionExpression,
-  owner: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression
+  owner: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
 ): boolean {
-  if (!owner.body) return false;
+  if (!owner.body) {
+    return false;
+  }
   if (!ts.isBlock(owner.body)) {
     return unwrapTransparentExpression(owner.body) === callback;
   }
   const statement = findAncestorUntil(callback, ts.isReturnStatement, owner);
-  return statement?.expression !== undefined &&
-    unwrapTransparentExpression(statement.expression) === callback;
+  return (
+    statement?.expression !== undefined &&
+    unwrapTransparentExpression(statement.expression) === callback
+  );
 }
 
 function callbackBindingName(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): string | null {
-  if (ts.isFunctionDeclaration(callback)) return callback.name?.text ?? null;
+  if (ts.isFunctionDeclaration(callback)) {
+    return callback.name?.text ?? null;
+  }
   if (ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)) {
     return callback.parent.name.text;
   }
   const call = memoizedCallbackIdentityCall(callback, owner);
-  if (!call) return null;
-  const expression = climbTransparentExpression(call);
-  const declaration = expression.parent;
+  if (!call) {
+    return null;
+  }
+  const expression = climbTransparentExpression(call),
+    declaration = expression.parent;
   return ts.isVariableDeclaration(declaration) &&
     declaration.initializer === expression &&
     ts.isIdentifier(declaration.name) &&
@@ -2140,7 +2336,7 @@ function callbackBindingName(
 
 function memoizedCallbackIdentityCall(
   callback: ts.ArrowFunction | ts.FunctionExpression,
-  owner: ChildComponentSource["owner"]
+  owner: ChildComponentSource["owner"],
 ): ts.CallExpression | null {
   const direct = callback.parent;
   if (
@@ -2151,9 +2347,11 @@ function memoizedCallbackIdentityCall(
   ) {
     return direct;
   }
-  const returned = climbTransparentExpression(callback);
-  const factory = returned.parent;
-  if (!ts.isArrowFunction(factory) || factory.body !== returned) return null;
+  const returned = climbTransparentExpression(callback),
+    factory = returned.parent;
+  if (!ts.isArrowFunction(factory) || factory.body !== returned) {
+    return null;
+  }
   const memo = factory.parent;
   return ts.isCallExpression(memo) &&
     memo.arguments[0] === factory &&
@@ -2165,33 +2363,42 @@ function memoizedCallbackIdentityCall(
 
 function identifierRunsInProvenDeferredHook(
   identifier: ts.Identifier,
-  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
 ): boolean {
   const call = findAncestor(identifier, ts.isCallExpression);
-  if (!call || nodeWithin(identifier, call.expression)) return false;
-  const argumentIndex = call.arguments.findIndex(argument => nodeWithin(identifier, argument));
-  const hookName = hookCallName(call);
-  return argumentIndex >= 0 && hookName !== null &&
-    deferredCallbackHooks.get(hookName)?.has(argumentIndex) === true;
+  if (!call || nodeWithin(identifier, call.expression)) {
+    return false;
+  }
+  const argumentIndex = call.arguments.findIndex((argument) => nodeWithin(identifier, argument)),
+    hookName = hookCallName(call);
+  return (
+    argumentIndex !== -1 &&
+    hookName !== null &&
+    deferredCallbackHooks.get(hookName)?.has(argumentIndex) === true
+  );
 }
 
 function callbackRunsInProvenDeferredHook(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>
+  deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>,
 ): boolean {
-  if (ts.isFunctionDeclaration(callback)) return false;
+  if (ts.isFunctionDeclaration(callback)) {
+    return false;
+  }
   const call = callback.parent;
-  if (!ts.isCallExpression(call)) return false;
-  const argumentIndex = call.arguments.indexOf(callback);
-  const hookName = hookCallName(call);
-  return argumentIndex >= 0 &&
+  if (!ts.isCallExpression(call)) {
+    return false;
+  }
+  const argumentIndex = call.arguments.indexOf(callback),
+    hookName = hookCallName(call);
+  return (
+    argumentIndex !== -1 &&
     hookName !== null &&
-    deferredCallbackHooks.get(hookName)?.has(argumentIndex) === true;
+    deferredCallbackHooks.get(hookName)?.has(argumentIndex) === true
+  );
 }
 
-function callbackIsStoredInProperty(
-  callback: ts.ArrowFunction | ts.FunctionExpression
-): boolean {
+function callbackIsStoredInProperty(callback: ts.ArrowFunction | ts.FunctionExpression): boolean {
   let expression: ts.Expression = callback;
   while (
     (ts.isParenthesizedExpression(expression.parent) ||
@@ -2209,16 +2416,19 @@ function callbackIsStoredInProperty(
   ) {
     expression = expression.parent;
   }
-  return ts.isPropertyAssignment(expression.parent) &&
-    expression.parent.initializer === expression;
+  return ts.isPropertyAssignment(expression.parent) && expression.parent.initializer === expression;
 }
 
 function callbackRunsInImmediateReactHook(
-  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
 ): boolean {
-  if (ts.isFunctionDeclaration(callback)) return false;
+  if (ts.isFunctionDeclaration(callback)) {
+    return false;
+  }
   const call = callback.parent;
-  if (!ts.isCallExpression(call) || !call.arguments.includes(callback)) return false;
+  if (!ts.isCallExpression(call) || !call.arguments.includes(callback)) {
+    return false;
+  }
   return [
     "useEffect",
     "useInsertionEffect",
@@ -2231,31 +2441,47 @@ function callbackRunsInImmediateReactHook(
 
 function boundPropIdentifier(
   owner: ChildComponentSource["owner"],
-  propName: string
+  propName: string,
 ): ts.Identifier | null {
   const parameter = owner.parameters[0];
-  if (!parameter || owner.parameters.length !== 1) return null;
-  if (!ts.isObjectBindingPattern(parameter.name)) return null;
+  if (!parameter || owner.parameters.length !== 1) {
+    return null;
+  }
+  if (!ts.isObjectBindingPattern(parameter.name)) {
+    return null;
+  }
   let restBinding: ts.Identifier | null = null;
   for (const element of parameter.name.elements) {
-    if (!ts.isBindingElement(element)) continue;
-    if (element.dotDotDotToken) {
-      if (ts.isIdentifier(element.name)) restBinding = element.name;
+    if (!ts.isBindingElement(element)) {
       continue;
     }
-    if (!ts.isIdentifier(element.name)) continue;
+    if (element.dotDotDotToken) {
+      if (ts.isIdentifier(element.name)) {
+        restBinding = element.name;
+      }
+      continue;
+    }
+    if (!ts.isIdentifier(element.name)) {
+      continue;
+    }
     const source =
       element.propertyName && ts.isIdentifier(element.propertyName)
         ? element.propertyName.text
         : element.name.text;
-    if (source === propName) return element.name;
+    if (source === propName) {
+      return element.name;
+    }
   }
-  if (!restBinding || !owner.body) return null;
-  if (bindingDeclarationCount(owner, restBinding.text) !== 1) return null;
+  if (!restBinding || !owner.body) {
+    return null;
+  }
+  if (bindingDeclarationCount(owner, restBinding.text) !== 1) {
+    return null;
+  }
 
-  let bound: ts.Identifier | null = null;
-  let safe = true;
-  visit(owner.body, node => {
+  let bound: ts.Identifier | null = null,
+    safe = true;
+  visit(owner.body, (node) => {
     if (
       !safe ||
       !ts.isIdentifier(node) ||
@@ -2286,7 +2512,9 @@ function boundPropIdentifier(
         element.propertyName && ts.isIdentifier(element.propertyName)
           ? element.propertyName.text
           : element.name.text;
-      if (source !== propName || bound !== null) continue;
+      if (source !== propName || bound !== null) {
+        continue;
+      }
       bound = element.name;
     }
   });
@@ -2294,7 +2522,7 @@ function boundPropIdentifier(
 }
 
 function isBindingName(node: ts.Identifier): boolean {
-  const parent = node.parent;
+  const { parent } = node;
   return (
     ts.isBindingElement(parent) ||
     ts.isVariableDeclaration(parent) ||
@@ -2303,7 +2531,7 @@ function isBindingName(node: ts.Identifier): boolean {
 }
 
 function referenceIsWritten(node: ts.Identifier): boolean {
-  const parent = node.parent;
+  const { parent } = node;
   return (
     (ts.isBinaryExpression(parent) &&
       parent.left === node &&
@@ -2315,8 +2543,8 @@ function referenceIsWritten(node: ts.Identifier): boolean {
 }
 
 function isCustomJsxTag(attribute: ts.JsxAttribute): boolean {
-  const container: ts.Node = attribute.parent;
-  const element = ts.isJsxAttributes(container) ? container.parent : container;
+  const container: ts.Node = attribute.parent,
+    element = ts.isJsxAttributes(container) ? container.parent : container;
   if (!ts.isJsxOpeningElement(element) && !ts.isJsxSelfClosingElement(element)) {
     return true;
   }
@@ -2324,7 +2552,9 @@ function isCustomJsxTag(attribute: ts.JsxAttribute): boolean {
   return /^[A-Z]/.test(tag) || tag.includes(".");
 }
 
-function isJsxNode(node: ts.Node): node is ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment | ts.JsxExpression {
+function isJsxNode(
+  node: ts.Node,
+): node is ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment | ts.JsxExpression {
   return (
     ts.isJsxElement(node) ||
     ts.isJsxSelfClosingElement(node) ||
@@ -2342,7 +2572,7 @@ function isJsxNode(node: ts.Node): node is ts.JsxElement | ts.JsxSelfClosingElem
 function tracksPureProjection(
   node: ts.Identifier,
   owner: ChildComponentSource["owner"],
-  tracked: Set<string>
+  tracked: Set<string>,
 ): boolean {
   const declaration = findAncestorUntil(node, ts.isVariableDeclaration, owner);
   if (
@@ -2357,24 +2587,30 @@ function tracksPureProjection(
   ) {
     return false;
   }
-  let depth = 0;
-  let pure = true;
-  visit(declaration.initializer, current => {
-    if (!pure) return;
+  let depth = 0,
+    pure = true;
+  visit(declaration.initializer, (current) => {
+    if (!pure) {
+      return;
+    }
     if (
       ts.isCallExpression(current) ||
       ts.isNewExpression(current) ||
       ts.isAwaitExpression(current) ||
       ts.isYieldExpression(current) ||
       ts.isSpreadElement(current) ||
-      ts.isBinaryExpression(current) && isAssignmentOperator(current.operatorToken.kind)
+      (ts.isBinaryExpression(current) && isAssignmentOperator(current.operatorToken.kind))
     ) {
       pure = false;
       return;
     }
-    if (ts.isIdentifier(current) && tracked.has(current.text)) depth += 1;
+    if (ts.isIdentifier(current) && tracked.has(current.text)) {
+      depth += 1;
+    }
   });
-  if (!pure || depth === 0) return false;
+  if (!pure || depth === 0) {
+    return false;
+  }
   tracked.add(declaration.name.text);
   return true;
 }

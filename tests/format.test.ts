@@ -20,7 +20,10 @@ function finding(disposition: HookFinding["disposition"]): HookFinding {
 
 test("agent output includes candidates and changes but hides keeps", () => {
   const findings = [finding("keep"), finding("candidate"), finding("change")];
-  assert.deepEqual(agentFindings(findings).map(item => item.disposition), ["candidate", "change"]);
+  assert.deepEqual(
+    agentFindings(findings).map((item) => item.disposition),
+    ["candidate", "change"],
+  );
 });
 
 test("text output includes Legend practice findings", () => {
@@ -28,15 +31,17 @@ test("text output includes Legend practice findings", () => {
     files: 1,
     findings: [],
     hooks: { effects: 0, states: 0, total: 0 },
-    practices: [{
-      action: "batch-observable-writes",
-      confidence: "probable",
-      disposition: "change",
-      evidence: [],
-      location: { column: 3, file: "store.ts", line: 8 },
-      message: "Batch these writes.",
-      practice: "batch",
-    }],
+    practices: [
+      {
+        action: "batch-observable-writes",
+        confidence: "probable",
+        disposition: "change",
+        evidence: [],
+        location: { column: 3, file: "store.ts", line: 8 },
+        message: "Batch these writes.",
+        practice: "batch",
+      },
+    ],
     schemaVersion: 1,
   });
   assert.match(output, /store\.ts:8:3 \[batch-observable-writes\]/);
@@ -47,16 +52,18 @@ test("text output includes Legend practice findings", () => {
 test("text output surfaces the keep-react-effect directive for review-effect findings", () => {
   const output = formatTextReport({
     files: 1,
-    findings: [{
-      action: "review-effect",
-      confidence: "probable",
-      disposition: "candidate",
-      evidence: [],
-      hook: "useEffect",
-      location: { column: 1, file: "fixture.tsx", line: 3 },
-      message: "Review this effect.",
-      name: null,
-    }],
+    findings: [
+      {
+        action: "review-effect",
+        confidence: "probable",
+        disposition: "candidate",
+        evidence: [],
+        hook: "useEffect",
+        location: { column: 1, file: "fixture.tsx", line: 3 },
+        message: "Review this effect.",
+        name: null,
+      },
+    ],
     hooks: { effects: 1, states: 0, total: 1 },
     practices: [],
     schemaVersion: 1,

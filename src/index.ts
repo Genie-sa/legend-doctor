@@ -1,8 +1,4 @@
-export {
-  analyzePath,
-  analyzePathDetailed,
-  createAnalysisContext,
-} from "./analyze-path.js";
+export { analyzePath, analyzePathDetailed, createAnalysisContext } from "./analyze-path.js";
 export { analyzeSource } from "./analyze-source.js";
 export { AnalysisProject, createAnalysisFile } from "./analysis-project.js";
 export { createSemanticContext } from "./semantic-context.js";
@@ -23,11 +19,7 @@ export type {
   AnalysisCoverageStatus,
   AnalysisCoverageTarget,
 } from "./analysis-coverage.js";
-export type {
-  AnalysisDiagnostic,
-  AnalysisDialect,
-  AnalysisFile,
-} from "./analysis-project.js";
+export type { AnalysisDiagnostic, AnalysisDialect, AnalysisFile } from "./analysis-project.js";
 export type {
   CreateSemanticContextOptions,
   ImportProvenance,

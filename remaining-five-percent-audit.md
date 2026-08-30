@@ -25,20 +25,20 @@ The shared analysis foundation is complete enough to stop architectural patching
 
 ## Full-app action inventory
 
-| App | Hooks | `useState` | `useEffect` | Practices |
-| --- | ---: | ---: | ---: | ---: |
-| Tree Map | 652 | 547 | 105 | 0 |
-| Tree Wallet | 217 | 135 | 82 | 0 |
-| Memoria src | 269 | 158 | 111 | 24 |
-| Memoria app | 13 | 1 | 12 | 0 |
-| Legend Music | 51 | 32 | 19 | 44 |
-| Excalidraw | 183 | 80 | 103 | 0 |
-| Expensify | 2,952 | 1,498 | 1,454 | 0 |
-| Formbricks | 1,086 | 817 | 269 | 0 |
-| Outline | 618 | 326 | 292 | 0 |
-| Genie Courses | 29 | 0 | 29 | 5 |
-| Open WebUI RN | 0 | 0 | 0 | 3 |
-| Hoalu | 77 | 53 | 24 | 1 |
+| App           | Hooks | `useState` | `useEffect` | Practices |
+| ------------- | ----: | ---------: | ----------: | --------: |
+| Tree Map      |   652 |        547 |         105 |         0 |
+| Tree Wallet   |   217 |        135 |          82 |         0 |
+| Memoria src   |   269 |        158 |         111 |        24 |
+| Memoria app   |    13 |          1 |          12 |         0 |
+| Legend Music  |    51 |         32 |          19 |        44 |
+| Excalidraw    |   183 |         80 |         103 |         0 |
+| Expensify     | 2,952 |      1,498 |       1,454 |         0 |
+| Formbricks    | 1,086 |        817 |         269 |         0 |
+| Outline       |   618 |        326 |         292 |         0 |
+| Genie Courses |    29 |          0 |          29 |         5 |
+| Open WebUI RN |     0 |          0 |           0 |         3 |
+| Hoalu         |    77 |         53 |          24 |         1 |
 
 Across full apps the tool emits 401 `use-observable`, 16 `move-state-down`, 39 `use-ref`, 97 `use-unmount`, 40 `use-mount`, six `use-observe-effect`, and 2,855/1,256 conservative state/effect reviews. The safety closeout also removed the only automatic `move-to-event` recommendation.
 
@@ -46,15 +46,15 @@ Across full apps the tool emits 401 `use-observable`, 16 `move-state-down`, 39 `
 
 The misses do not form one last universal rule:
 
-| Family | Labels | Independent shapes | Decision |
-| --- | ---: | ---: | --- |
-| Keyed/derived selection models | 3 | 1 app root | Defer; existing keyed proof is already specialized and these need broader summary/payload contracts. |
-| Legend Music multi-surface state machines | 6 | 4 runtime clusters | Defer; alternate platform branches and async finalizers require whole-cluster ownership proof. |
-| Strict subtree ownership | 2 | 2 | Defer; parent reset/unmount correlation and throttled effect ownership are different proofs. |
-| Async/controlled leaf edges | 4 | 4 | Defer; transition callback provenance, companion writes, and conditional lifetime differ. |
-| Effect keep classification | 4 | 4 | Defer; no five-case actionable family and React timing already remains safe under review. |
-| One-hop observable mirror | 1 | 1 | Defer; requires cross-file hook summary, not a name heuristic. |
-| Cohesive leaf keep | 1 | 1 | Deliberate abstention boundary. |
+| Family                                    | Labels | Independent shapes | Decision                                                                                             |
+| ----------------------------------------- | -----: | -----------------: | ---------------------------------------------------------------------------------------------------- |
+| Keyed/derived selection models            |      3 |         1 app root | Defer; existing keyed proof is already specialized and these need broader summary/payload contracts. |
+| Legend Music multi-surface state machines |      6 | 4 runtime clusters | Defer; alternate platform branches and async finalizers require whole-cluster ownership proof.       |
+| Strict subtree ownership                  |      2 |                  2 | Defer; parent reset/unmount correlation and throttled effect ownership are different proofs.         |
+| Async/controlled leaf edges               |      4 |                  4 | Defer; transition callback provenance, companion writes, and conditional lifetime differ.            |
+| Effect keep classification                |      4 |                  4 | Defer; no five-case actionable family and React timing already remains safe under review.            |
+| One-hop observable mirror                 |      1 |                  1 | Defer; requires cross-file hook summary, not a name heuristic.                                       |
+| Cohesive leaf keep                        |      1 |                  1 | Deliberate abstention boundary.                                                                      |
 
 This is the stop signal: closing all 21 now would require at least six unrelated proof families. That would optimize the score, not the product.
 
@@ -78,19 +78,19 @@ Earlier accepted Goal 2 action deltas versus the then-current `main`:
 
 Exact per-app phase impact:
 
-| App root | Goal 1: cached analysis/coverage | Goal 2: co-write proof | Closeout hardening/final rule set |
-| --- | ---: | ---: | ---: |
-| Tree Map | 0 | 0 | -2 automatic actions |
-| Tree Wallet | 0 | 0 | 0 |
-| Memoria src | 0 | 0 | 0 |
-| Memoria app | 0 | 0 | 0 |
-| Legend Music | 0 | 0 | 0 |
-| Excalidraw | 0 | 0 | 0 |
-| Expensify | 0 | +1 `use-observable` | -9 automatic actions |
-| Formbricks | 0 | +2 grouped `use-observable` | -4 automatic actions |
-| Outline | 0 | 0 | -1 automatic action |
-| Genie Courses | 0 | 0 | 0 |
-| Open WebUI RN | 0 | 0 | 0 |
+| App root      | Goal 1: cached analysis/coverage |      Goal 2: co-write proof | Closeout hardening/final rule set |
+| ------------- | -------------------------------: | --------------------------: | --------------------------------: |
+| Tree Map      |                                0 |                           0 |              -2 automatic actions |
+| Tree Wallet   |                                0 |                           0 |                                 0 |
+| Memoria src   |                                0 |                           0 |                                 0 |
+| Memoria app   |                                0 |                           0 |                                 0 |
+| Legend Music  |                                0 |                           0 |                                 0 |
+| Excalidraw    |                                0 |                           0 |                                 0 |
+| Expensify     |                                0 |         +1 `use-observable` |              -9 automatic actions |
+| Formbricks    |                                0 | +2 grouped `use-observable` |              -4 automatic actions |
+| Outline       |                                0 |                           0 |               -1 automatic action |
+| Genie Courses |                                0 |                           0 |                                 0 |
+| Open WebUI RN |                                0 |                           0 |                                 0 |
 
 Cold full-app timing showed no measurable regression: Tree Map 2.08s current vs 2.06s `main`; Formbricks 4.38s vs 4.38s; Expensify 9.84s vs 9.75s (single-process noise, not a benchmark claim).
 
@@ -122,15 +122,15 @@ The final product pass started from all 2,768 full-app `review-state` findings. 
 
 The most common exact signature was zero local render reads, zero effect reads, zero deferred reads, one value transport, one or two setter calls, and zero effect writes. It produced 136 cases across seven app roots:
 
-| App root | Cases |
-| --- | ---: |
-| Expensify | 82 |
-| Formbricks | 20 |
-| Tree Map | 13 |
-| Outline | 9 |
-| Memoria src | 7 |
-| Excalidraw | 4 |
-| Tree Wallet | 1 |
+| App root    | Cases |
+| ----------- | ----: |
+| Expensify   |    82 |
+| Formbricks  |    20 |
+| Tree Map    |    13 |
+| Outline     |     9 |
+| Memoria src |     7 |
+| Excalidraw  |     4 |
+| Tree Wallet |     1 |
 
 Evidence counts were only a candidate generator. A manual audit covered 25 representative cases across five apps and found 10 positive state rows, representing nine migration units. They separated into three different proofs:
 
@@ -158,19 +158,19 @@ No new opportunity detector shipped. The only new detector is a conservative Rea
 
 Exact app impact from the opportunity-only re-audit:
 
-| App root | Hook action delta | Practice delta |
-| --- | ---: | ---: |
-| Tree Map | 0 | 0 |
-| Tree Wallet | 0 | 0 |
-| Memoria src | 0 | 0 |
-| Memoria app | 0 | 0 |
-| Legend Music | 0 | 0 |
-| Excalidraw | 0 | 0 |
-| Expensify | 0 | 0 |
-| Formbricks | 0 | 0 |
-| Outline | 0 | 0 |
-| Genie Courses | 0 | 0 |
-| Open WebUI RN | 0 | 0 |
+| App root      | Hook action delta | Practice delta |
+| ------------- | ----------------: | -------------: |
+| Tree Map      |                 0 |              0 |
+| Tree Wallet   |                 0 |              0 |
+| Memoria src   |                 0 |              0 |
+| Memoria app   |                 0 |              0 |
+| Legend Music  |                 0 |              0 |
+| Excalidraw    |                 0 |              0 |
+| Expensify     |                 0 |              0 |
+| Formbricks    |                 0 |              0 |
+| Outline       |                 0 |              0 |
+| Genie Courses |                 0 |              0 |
+| Open WebUI RN |                 0 |              0 |
 
 The correct product conclusion is narrow: no examined **high-value actionable** hook family clears the five-case, three-app, structural-proof gate. Hook detection is therefore at its practical optimum under the current proof model. The next higher-value research lane is Legend-native code quality—narrow `useValue` subscriptions, correct `get()` versus `peek()`, direct child writes, and safe batching—while retaining the same cross-app evidence and precision requirements.
 
