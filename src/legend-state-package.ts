@@ -23,8 +23,8 @@ export async function resolveInstalledLegendState(
     current !== previous;
     previous = current, current = path.dirname(current)
   ) {
-    const packageDirectory = path.join(current, "node_modules", "@legendapp", "state"),
-      manifest = await readJson(path.join(packageDirectory, "package.json"));
+    const packageDirectory = path.join(current, "node_modules", "@legendapp", "state");
+    const manifest = await readJson(path.join(packageDirectory, "package.json"));
     if (!manifest) {
       continue;
     }
@@ -63,22 +63,22 @@ function reactTypesFromExports(manifest: Record<string, unknown>): string[] {
   if (typeof exportsField !== "object" || exportsField === null) {
     return [];
   }
-  const reactEntry = (exportsField as Record<string, unknown>)["./react"],
-    candidates: string[] = [],
-    collect = (entry: unknown): void => {
-      if (typeof entry === "string") {
-        if (/\.d\.[cm]?ts$/.test(entry)) {
-          candidates.push(entry);
-        }
-        return;
+  const reactEntry = (exportsField as Record<string, unknown>)["./react"];
+  const candidates: string[] = [];
+  const collect = (entry: unknown): void => {
+    if (typeof entry === "string") {
+      if (/\.d\.[cm]?ts$/.test(entry)) {
+        candidates.push(entry);
       }
-      if (typeof entry !== "object" || entry === null) {
-        return;
-      }
-      for (const value of Object.values(entry)) {
-        collect(value);
-      }
-    };
+      return;
+    }
+    if (typeof entry !== "object" || entry === null) {
+      return;
+    }
+    for (const value of Object.values(entry)) {
+      collect(value);
+    }
+  };
   collect(reactEntry);
   return candidates;
 }

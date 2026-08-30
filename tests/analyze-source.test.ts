@@ -1004,9 +1004,9 @@ test("does not isolate controlled state read by an effect-like lifecycle hook", 
 
 test("tracks state reads and writes through React lifecycle callback bindings", () => {
   const siblings =
-      "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />",
-    findings = analyzeSource(
-      `
+    "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />";
+  const findings = analyzeSource(
+    `
     import React, {
       useCallback,
       useEffect,
@@ -1044,14 +1044,14 @@ test("tracks state reads and writes through React lifecycle callback bindings", 
       return <main>${siblings}{visible && <Leaf />}</main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    stateFor = (owner: string) =>
-      findings.find(
-        (finding) =>
-          finding.hook === "useState" &&
-          requireValue(finding.evidence[0]).startsWith(`owner: ${owner},`),
-      );
+    "fixture.tsx",
+  );
+  const stateFor = (owner: string) =>
+    findings.find(
+      (finding) =>
+        finding.hook === "useState" &&
+        requireValue(finding.evidence[0]).startsWith(`owner: ${owner},`),
+    );
 
   assert.equal(requireValue(stateFor("InlineLayout")).action, "review-state");
   assert.match(requireValue(stateFor("InlineLayout")).evidence[1] ?? "", /effects 1/u);
@@ -1067,7 +1067,7 @@ test("tracks state reads and writes through React lifecycle callback bindings", 
 
 test("does not isolate state whose update is scheduled by a React transition", () => {
   const findings = analyzeSource(
-      `
+    `
     import { startTransition as schedule, useState, useTransition } from "react";
     function Leaf(_props: unknown) { return null; }
     function Shell(_props: unknown) { return null; }
@@ -1155,9 +1155,9 @@ test("does not isolate state whose update is scheduled by a React transition", (
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    visible = findings.filter((finding) => finding.name === "visible");
+    "fixture.tsx",
+  );
+  const visible = findings.filter((finding) => finding.name === "visible");
   assert.deepEqual(
     visible.map((finding) => finding.action),
     [
@@ -1296,9 +1296,9 @@ test("preserves mutable React state when its owner uses an inline callback ref",
 
 test("uses an owner-level boundary for fresh refs while allowing stable memoized refs", () => {
   const siblings =
-      "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />",
-    findings = analyzeSource(
-      `
+    "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Preview />";
+  const findings = analyzeSource(
+    `
     import { useCallback, useState } from "react";
     function Leaf() { return null; }
     export function NamedRef() {
@@ -1368,9 +1368,9 @@ test("uses an owner-level boundary for fresh refs while allowing stable memoized
       return <main ref={setNode}>${siblings}<button onClick={() => setVisible(true)}>Open</button>{visible && <Leaf />}</main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    visible = findings.filter((finding) => finding.name === "visible");
+    "fixture.tsx",
+  );
+  const visible = findings.filter((finding) => finding.name === "visible");
   assert.deepEqual(
     visible.map((finding) => finding.action),
     [
@@ -1522,7 +1522,7 @@ test("migrates a complete effect-synchronized draft while preserving the effect"
 
 test("preserves lazy draft initialization as a once-only snapshot", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useEffect, useState } from "react";
     export function Permissions({ saved }: { saved: string[] }) {
       const [draft, setDraft] = useState(() => new Set(saved));
@@ -1533,9 +1533,9 @@ test("preserves lazy draft initialization as a once-only snapshot", () => {
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    state = findings.find((finding) => finding.hook === "useState");
+    "fixture.tsx",
+  );
+  const state = findings.find((finding) => finding.hook === "useState");
   assert.equal(requireValue(state).action, "use-observable");
   assert.match(requireValue(state).message ?? "", /once-only owner snapshot/u);
   assert.match(requireValue(state).message ?? "", /not pass it to Legend as a computed/u);
@@ -1606,7 +1606,7 @@ test("does not call unrelated or stateful work a synchronized draft forwarding c
 
 test("groups every state written by one synchronization effect", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useEffect, useState } from "react";
     export function Address({ city: initialCity, zip: initialZip }: { city: string; zip: string }) {
       const [city, setCity] = useState(initialCity);
@@ -1624,9 +1624,9 @@ test("groups every state written by one synchronization effect", () => {
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    states = findings.filter((finding) => finding.hook === "useState");
+    "fixture.tsx",
+  );
+  const states = findings.filter((finding) => finding.hook === "useState");
   assert.deepEqual(
     states.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -1638,7 +1638,7 @@ test("groups every state written by one synchronization effect", () => {
 
 test("groups branch-complete drafts edited through a direct host callback", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useEffect, useState } from "react";
     export function Editor({ open, saved }: { open: boolean; saved: { name: string; color: string } | null }) {
       const [name, setName] = useState("");
@@ -1660,9 +1660,9 @@ test("groups branch-complete drafts edited through a direct host callback", () =
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    states = findings.filter((finding) => finding.hook === "useState");
+    "fixture.tsx",
+  );
+  const states = findings.filter((finding) => finding.hook === "useState");
   assert.deepEqual(
     states.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -1672,7 +1672,7 @@ test("groups branch-complete drafts edited through a direct host callback", () =
 
 test("treats TypeScript-only JSX wrappers as direct draft transport", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useEffect, useState } from "react";
     type Country = string & { readonly country: unique symbol };
     export function Address({ saved }: { saved: { country: string; city: string; state: string; zip: string } }) {
@@ -1704,9 +1704,9 @@ test("treats TypeScript-only JSX wrappers as direct draft transport", () => {
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    states = findings.filter((finding) => finding.hook === "useState");
+    "fixture.tsx",
+  );
+  const states = findings.filter((finding) => finding.hook === "useState");
   assert.deepEqual(
     states.map((finding) => finding.action),
     ["use-observable", "use-observable", "use-observable", "use-observable"],
@@ -1753,7 +1753,7 @@ test("isolates an effect-synchronized preview from its sibling producer", () => 
 
 test("keeps opaque fallback work in the owner as a sibling preview snapshot", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useCallback, useEffect, useState } from "react";
     export function Picker({ items }: { items: string[] }) {
       const [active, setActive] = useState<string | null>(null);
@@ -1766,9 +1766,9 @@ test("keeps opaque fallback work in the owner as a sibling preview snapshot", ()
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    state = findings.find((finding) => finding.name === "active");
+    "fixture.tsx",
+  );
+  const state = findings.find((finding) => finding.name === "active");
   assert.equal(requireValue(state).action, "use-observable");
   assert.match(
     requireValue(state).message ?? "",
@@ -1896,7 +1896,7 @@ test("does not call a producer command-only when it also invokes owner work", ()
 
 test("uses a strict local JSX cut for a compact synchronized draft", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useEffect, useState } from "react";
     export function Editor({ open, saved }: { open: boolean; saved: string }) {
       const [value, setValue] = useState(saved);
@@ -1912,9 +1912,9 @@ test("uses a strict local JSX cut for a compact synchronized draft", () => {
       </Dialog>;
     }
   `,
-      "fixture.tsx",
-    ),
-    states = findings.filter((finding) => finding.hook === "useState");
+    "fixture.tsx",
+  );
+  const states = findings.filter((finding) => finding.hook === "useState");
   assert.deepEqual(
     states.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -2076,7 +2076,7 @@ test("keeps a keyed one-hop render alias inside a synchronized draft", () => {
 
 test("preserves one command snapshot for a synchronized draft read by deferred work", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useEffect, useState } from "react";
     export function DeletePanel({ initial, rows }: { initial: boolean; rows: string[] }) {
       const [decrement, setDecrement] = useState(initial);
@@ -2089,9 +2089,9 @@ test("preserves one command snapshot for a synchronized draft read by deferred w
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    state = findings.find((finding) => finding.name === "decrement");
+    "fixture.tsx",
+  );
+  const state = findings.find((finding) => finding.name === "decrement");
   assert.equal(requireValue(state).action, "use-observable");
   assert.match(requireValue(state).message ?? "", /snapshot once at command entry/u);
 });
@@ -2188,9 +2188,9 @@ test("rejects partial, asynchronous, cleanup, and derived effect sinks", () => {
     `useEffect(() => { setValue(source); }, [source]);`,
   ];
   for (const [index, effect] of snippets.entries()) {
-    const editable = index === 3 ? "" : `<button onClick={() => setValue("edit")} />`,
-      findings = analyzeSource(
-        `
+    const editable = index === 3 ? "" : `<button onClick={() => setValue("edit")} />`;
+    const findings = analyzeSource(
+      `
       import { useEffect, useState } from "react";
       export function Form({ source }: { source: string }) {
         const [value, setValue] = useState(source);
@@ -2199,8 +2199,8 @@ test("rejects partial, asynchronous, cleanup, and derived effect sinks", () => {
         return <main><Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><p>{value}</p>${editable}</main>;
       }
     `,
-        "fixture.tsx",
-      );
+      "fixture.tsx",
+    );
     assert.notEqual(
       requireValue(findings.find((finding) => finding.name === "value")).action,
       "use-observable",
@@ -2373,8 +2373,10 @@ test("isolates a presentation gate rendered by one local JSX factory", () => {
         {open && renderDialog()}
       </main>;
     }
-  `,
-    finding = analyzeSource(source, "fixture.tsx").find((candidate) => candidate.name === "open");
+  `;
+  const finding = analyzeSource(source, "fixture.tsx").find(
+    (candidate) => candidate.name === "open",
+  );
   assert.equal(requireValue(finding).action, "use-observable");
   assert.match(requireValue(finding).message ?? "", /full state-controlled render expression/u);
 
@@ -2487,46 +2489,46 @@ test("requires every proof for a uniquely selected repeated projection", () => {
         })}
       </main>;
     }
-  `,
-    unsafe = [
-      source.replace(
-        "const controls = configured.filter((control, index, array) => array.indexOf(control) === index);",
-        "const controls = configured;",
-      ),
-      source.replace(
-        "export function Controls({ configured, windowWidth }:",
-        "export function Controls({ configured, windowWidth, Math }:",
-      ),
-      source.replace('key="search"', 'key="wrong"'),
-      source.replace("const baseWidth", "let baseWidth"),
-      source.replace("Math.max(baseWidth - 16, 320)", "clamp(baseWidth - 16, 320)"),
-      source.replace("Math.max(baseWidth - 16, 320)", "Math.geometry.max(baseWidth - 16, 320)"),
-      source.replace(
-        "configured.filter((control, index, array) => array.indexOf(control) === index)",
-        "configured.filter((control, index, array) => array.indexOf(control) === index).filter((control, index, array) => { array.push(control); return true; })",
-      ),
-      source.replace(
-        "configured.filter((control, index, array) => array.indexOf(control) === index)",
-        "configured.filter((control, index, array) => array.indexOf(control) === index).filter(control => inspect(control))",
-      ),
-      source.replace("switch (control) {", "controls.push(control); switch (control) {"),
-      source
-        .replace(
-          "const controls = configured.filter",
-          "const finalWidth = dropdownWidth; const renderedWidth = finalWidth; const controls = configured.filter",
-        )
-        .replace("width={dropdownWidth}", "width={renderedWidth}"),
-      source.replace(
-        `{controls.map(control => {
+  `;
+  const unsafe = [
+    source.replace(
+      "const controls = configured.filter((control, index, array) => array.indexOf(control) === index);",
+      "const controls = configured;",
+    ),
+    source.replace(
+      "export function Controls({ configured, windowWidth }:",
+      "export function Controls({ configured, windowWidth, Math }:",
+    ),
+    source.replace('key="search"', 'key="wrong"'),
+    source.replace("const baseWidth", "let baseWidth"),
+    source.replace("Math.max(baseWidth - 16, 320)", "clamp(baseWidth - 16, 320)"),
+    source.replace("Math.max(baseWidth - 16, 320)", "Math.geometry.max(baseWidth - 16, 320)"),
+    source.replace(
+      "configured.filter((control, index, array) => array.indexOf(control) === index)",
+      "configured.filter((control, index, array) => array.indexOf(control) === index).filter((control, index, array) => { array.push(control); return true; })",
+    ),
+    source.replace(
+      "configured.filter((control, index, array) => array.indexOf(control) === index)",
+      "configured.filter((control, index, array) => array.indexOf(control) === index).filter(control => inspect(control))",
+    ),
+    source.replace("switch (control) {", "controls.push(control); switch (control) {"),
+    source
+      .replace(
+        "const controls = configured.filter",
+        "const finalWidth = dropdownWidth; const renderedWidth = finalWidth; const controls = configured.filter",
+      )
+      .replace("width={dropdownWidth}", "width={renderedWidth}"),
+    source.replace(
+      `{controls.map(control => {
           switch (control) {
             case "search": return <Search key="search" width={dropdownWidth} />;
             case "save": return <Save key="save" />;
             default: return null;
           }
         })}`,
-        `{controls.map(control => <Search key={control} width={dropdownWidth} />)}`,
-      ),
-    ];
+      `{controls.map(control => <Search key={control} width={dropdownWidth} />)}`,
+    ),
+  ];
   for (const candidate of unsafe) {
     const finding = analyzeSource(candidate, "fixture.tsx").find(
       (result) => result.name === "layoutWidth",
@@ -2714,7 +2716,7 @@ test("does not isolate direct state whose reads span the owner", () => {
 
 test("groups multiple direct states confined to the same JSX subtree", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     export function Screen() {
       const [query, setQuery] = useState("");
@@ -2730,9 +2732,9 @@ test("groups multiple direct states confined to the same JSX subtree", () => {
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    grouped = findings.filter((finding) => finding.group);
+    "fixture.tsx",
+  );
+  const grouped = findings.filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["move-state-down", "move-state-down"],
@@ -2743,7 +2745,7 @@ test("groups multiple direct states confined to the same JSX subtree", () => {
 
 test("keeps observable ownership when a subtree cluster mixes direct and projected state", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     export function Screen() {
       const [query, setQuery] = useState("");
@@ -2759,9 +2761,9 @@ test("keeps observable ownership when a subtree cluster mixes direct and project
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    grouped = findings.filter((finding) => finding.group);
+    "fixture.tsx",
+  );
+  const grouped = findings.filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -2771,7 +2773,7 @@ test("keeps observable ownership when a subtree cluster mixes direct and project
 
 test("does not let a direct state pull an escaped projection into its subtree cluster", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useCallback, useState } from "react";
     export function Screen() {
       const [query, setQuery] = useState("");
@@ -2788,16 +2790,16 @@ test("does not let a direct state pull an escaped projection into its subtree cl
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    selected = findings.find((finding) => finding.name === "selected");
+    "fixture.tsx",
+  );
+  const selected = findings.find((finding) => finding.name === "selected");
   assert.equal(requireValue(selected).action, "review-state");
   assert.equal(requireValue(selected).group, undefined);
 });
 
 test("does not let a direct state pull a reactive-mutation projection into its subtree cluster", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     export function Screen() {
       const { mutateAsync: submitSelection } = useSubmitSelection();
@@ -2819,9 +2821,9 @@ test("does not let a direct state pull a reactive-mutation projection into its s
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    selected = findings.find((finding) => finding.name === "selected");
+    "fixture.tsx",
+  );
+  const selected = findings.find((finding) => finding.name === "selected");
   assert.equal(requireValue(selected).action, "review-state");
   assert.equal(requireValue(selected).group, undefined);
 });
@@ -2905,10 +2907,10 @@ test("does not put callable React state into a mixed observable transport", () =
     "type Callback = () => void; const [callback, setCallback] = useState<Callback>(() => noop);",
     "const [callback, setCallback] = useState(() => noop);",
   ]) {
-    const name = state.includes("Component") ? "Component" : "callback",
-      setter = name === "Component" ? "setComponent" : "setCallback",
-      [finding] = analyzeSource(
-        `
+    const name = state.includes("Component") ? "Component" : "callback";
+    const setter = name === "Component" ? "setComponent" : "setCallback";
+    const [finding] = analyzeSource(
+      `
       import React, { useState } from "react";
       export function Screen() {
         ${state}
@@ -2917,8 +2919,8 @@ test("does not put callable React state into a mixed observable transport", () =
         </main>;
       }
     `,
-        "fixture.tsx",
-      );
+      "fixture.tsx",
+    );
     assert.notEqual(requireValue(finding).action, "use-observable");
   }
 });
@@ -2992,7 +2994,7 @@ test("does not mistake ordinary local state aliases for callable state", () => {
 
 test("resolves callable aliases in the nearest lexical scope", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     function OtherScreen() {
       type Handler = string;
@@ -3009,11 +3011,11 @@ test("resolves callable aliases in the nearest lexical scope", () => {
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    finding = findings.find(
-      (candidate) => candidate.name === "value" && candidate.location.line > 8,
-    );
+    "fixture.tsx",
+  );
+  const finding = findings.find(
+    (candidate) => candidate.name === "value" && candidate.location.line > 8,
+  );
   assert.notEqual(requireValue(finding).action, "use-observable");
   assert.notEqual(requireValue(finding).action, "move-state-down");
 });
@@ -3198,7 +3200,7 @@ test("does not treat event options wrapped by a JSX-time registrar as direct eve
 
 test("requires literal leaf setters to be event-rooted and independently useful", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useMemo, useState } from "react";
     function DecisionModal(props: { isVisible: boolean; onClose: () => void }) { return null; }
     export function RenderWrite() {
@@ -3238,9 +3240,9 @@ test("requires literal leaf setters to be event-rooted and independently useful"
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    candidates = findings.filter((candidate) => candidate.name === "visible");
+    "fixture.tsx",
+  );
+  const candidates = findings.filter((candidate) => candidate.name === "visible");
   assert.equal(candidates.length, 4);
   for (const finding of candidates) {
     assert.equal(finding.action, "review-state");
@@ -4027,7 +4029,7 @@ test("does not isolate async status from a scheduled callback or nonliteral writ
 
 test("isolates broad async status fanout but keeps a cohesive form in React", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     function LoadingButton(props: { loading: boolean }) { return <button>{String(props.loading)}</button>; }
     export function Small() {
@@ -4043,9 +4045,9 @@ test("isolates broad async status fanout but keeps a cohesive form in React", ()
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    saving = findings.filter((candidate) => candidate.name === "saving");
+    "fixture.tsx",
+  );
+  const saving = findings.filter((candidate) => candidate.name === "saving");
   assert.notEqual(requireValue(saving[0]).action, "use-observable");
   assert.equal(requireValue(saving[1]).action, "use-observable");
   assert.match(requireValue(saving[1]).message ?? "", /two stable status call sites/u);
@@ -4490,7 +4492,7 @@ test("moves controlled state when an inline setter callback belongs to the same 
 
 test("moves branch-local state down when every outside reset provably unmounts the branch", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     type Phase = { kind: "idle" } | { kind: "loading" } | { kind: "done" };
     function Result(_props: unknown) { return null; }
@@ -4513,9 +4515,9 @@ test("moves branch-local state down when every outside reset provably unmounts t
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    finding = findings.find((candidate) => candidate.name === "showDetails");
+    "fixture.tsx",
+  );
+  const finding = findings.find((candidate) => candidate.name === "showDetails");
   assert.equal(requireValue(finding).action, "move-state-down");
   assert.match(requireValue(finding).message ?? "", /resets it only when that branch unmounts/u);
 });
@@ -4531,7 +4533,7 @@ test("does not move branch-local state when an outside reset can leave the branc
     `if (shouldClose) { setShowDetails(false); } setPhase({ kind: "loading" });`,
   ]) {
     const findings = analyzeSource(
-        `
+      `
       import { useState } from "react";
       type Phase = { kind: "idle" } | { kind: "loading" } | { kind: "done" };
       function Result(_props: unknown) { return null; }
@@ -4547,9 +4549,9 @@ test("does not move branch-local state when an outside reset can leave the branc
         </main>;
       }
     `,
-        "fixture.tsx",
-      ),
-      finding = findings.find((candidate) => candidate.name === "showDetails");
+      "fixture.tsx",
+    );
+    const finding = findings.find((candidate) => candidate.name === "showDetails");
     assert.notEqual(requireValue(finding).action, "move-state-down", reset);
   }
 });
@@ -4714,7 +4716,7 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
 
 test("does not put a subscriber inside its own false visibility gate", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     interface Item { id: string }
     function Dialog(_props: unknown) { return null; }
@@ -4728,9 +4730,9 @@ test("does not put a subscriber inside its own false visibility gate", () => {
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    open = findings.find((finding) => finding.name === "open");
+    "fixture.tsx",
+  );
+  const open = findings.find((finding) => finding.name === "open");
   assert.equal(requireValue(open).action, "review-state");
 });
 
@@ -4801,7 +4803,7 @@ test("does not infer an independent write through a helper-hidden companion upda
 
 test("isolates an independently opened leaf while preserving coupled workflow transitions", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     function Dialog(_props: unknown) { return null; }
     export function Screen() {
@@ -4815,10 +4817,10 @@ test("isolates an independently opened leaf while preserving coupled workflow tr
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    open = findings.find((finding) => finding.name === "open"),
-    selection = findings.find((finding) => finding.name === "selection");
+    "fixture.tsx",
+  );
+  const open = findings.find((finding) => finding.name === "open");
+  const selection = findings.find((finding) => finding.name === "selection");
   assert.equal(requireValue(open).action, "use-observable");
   assert.equal(requireValue(selection).action, "review-state");
 });
@@ -4948,7 +4950,7 @@ test("does not put a lazy callable value into a nested observable leaf", () => {
 
 test("keeps a lazy callback leaf when its write command also invalidates the owner", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     function ImageField(_props: unknown) { return null; }
     function FormField(_props: unknown) { return null; }
@@ -4968,16 +4970,16 @@ test("keeps a lazy callback leaf when its write command also invalidates the own
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    preview = findings.find((finding) => finding.name === "preview");
+    "fixture.tsx",
+  );
+  const preview = findings.find((finding) => finding.name === "preview");
   assert.notEqual(requireValue(preview).action, "use-observable");
 });
 
 test("does not promote broad transported state when every write also invalidates the owner", () => {
-  const padding = "\n".repeat(150),
-    findings = analyzeSource(
-      `
+  const padding = "\n".repeat(150);
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function Field(_props: unknown) { return null; }
     export function Screen() {
@@ -4993,8 +4995,8 @@ test("does not promote broad transported state when every write also invalidates
       </main>;
     }
   `,
-      "fixture.tsx",
-    );
+    "fixture.tsx",
+  );
   assert.equal(
     requireValue(findings.find((finding) => finding.name === "value")).action,
     "review-state",
@@ -5002,9 +5004,9 @@ test("does not promote broad transported state when every write also invalidates
 });
 
 test("does not split a broad transported preview from a companion React transition", () => {
-  const padding = "\n".repeat(150),
-    findings = analyzeSource(
-      `
+  const padding = "\n".repeat(150);
+  const findings = analyzeSource(
+    `
     import { useState } from "react";
     function ImageField(_props: unknown) { return null; }
     export function Screen() {
@@ -5024,8 +5026,8 @@ test("does not split a broad transported preview from a companion React transiti
       </main>;
     }
   `,
-      "fixture.tsx",
-    );
+    "fixture.tsx",
+  );
   assert.equal(
     requireValue(findings.find((finding) => finding.name === "preview")).action,
     "review-state",
@@ -5238,7 +5240,7 @@ test("keeps conditional child state at the owner and rejects multiple instances"
 
 test("groups a co-written dialog payload and visibility flag into one observable model", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDialog(_props: unknown) { return null; }
@@ -5254,9 +5256,9 @@ test("groups a co-written dialog payload and visibility flag into one observable
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    grouped = findings.filter((finding) => finding.group);
+    "fixture.tsx",
+  );
+  const grouped = findings.filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -5333,8 +5335,8 @@ test("groups a persistent dialog payload, visibility, and monotonic mount latch"
         {ready ? <ItemDialog target={target} open={open} onClose={close} /> : null}
       </main>;
     }
-  `,
-    grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
+  `;
+  const grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable", "use-observable"],
@@ -5367,8 +5369,8 @@ test("groups one bounded logical-and dialog gate without merging payload fanout"
         ${extra}
       </main>;
     }
-  `,
-    grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
+  `;
+  const grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -5397,11 +5399,11 @@ test("groups a bounded multi-element dialog gate without wrapping a broad branch
         </ItemDialog>}
       </main>;
     }
-  `,
-    bounded = analyzeSource(
-      source("<One /><Two /><Three /><Four /><Five /><Six /><Seven />"),
-      "fixture.tsx",
-    );
+  `;
+  const bounded = analyzeSource(
+    source("<One /><Two /><Three /><Four /><Five /><Six /><Seven />"),
+    "fixture.tsx",
+  );
   assert.deepEqual(
     bounded.filter((finding) => finding.group).map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -5432,8 +5434,8 @@ test("groups an undefined-initialized dialog payload without accepting opaque in
         <ItemDrawer target={target} open={open} onOpenChange={setOpen} onShow={show} />
       </main>;
     }
-  `,
-    grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
+  `;
+  const grouped = analyzeSource(source(""), "fixture.tsx").filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -5613,7 +5615,7 @@ test("isolates call-free payload projections inside one bounded conditional dial
 
 test("groups a payload-gated timed feedback flag without widening its subscriber", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     function Dialog(_props: unknown) { return null; }
     function Button(_props: unknown) { return null; }
@@ -5642,9 +5644,9 @@ test("groups a payload-gated timed feedback flag without widening its subscriber
       </Dialog>;
     }
   `,
-      "fixture.tsx",
-    ),
-    grouped = findings.filter((finding) => finding.group);
+    "fixture.tsx",
+  );
+  const grouped = findings.filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -5781,9 +5783,9 @@ test("groups a co-written cursor and editable name into one observable draft", (
           : <Row key={item.id} item={item} onRename={() => begin(item)} />)}
       </main>;
     }
-  `,
-    findings = analyzeSource(source(""), "fixture.tsx"),
-    grouped = findings.filter((finding) => finding.group);
+  `;
+  const findings = analyzeSource(source(""), "fixture.tsx");
+  const grouped = findings.filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -5793,20 +5795,20 @@ test("groups a co-written cursor and editable name into one observable draft", (
   assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 
   const closeOnly = analyzeSource(
-      source("const close = () => setDraftId(null);", "<button onClick={close}>Close</button>"),
-      "fixture.tsx",
-    ),
-    closeOnlyFinding = requireValue(closeOnly.find((finding) => finding.name === "draftId"));
+    source("const close = () => setDraftId(null);", "<button onClick={close}>Close</button>"),
+    "fixture.tsx",
+  );
+  const closeOnlyFinding = requireValue(closeOnly.find((finding) => finding.name === "draftId"));
   assert.deepEqual(requireValue(closeOnlyFinding.group).members, ["draftId", "draftName"]);
 
   const staleDraft = analyzeSource(
-      source(
-        "const switchWithoutDraft = () => setDraftId(items[0]!.id);",
-        "<button onClick={switchWithoutDraft}>Switch</button>",
-      ),
-      "fixture.tsx",
+    source(
+      "const switchWithoutDraft = () => setDraftId(items[0]!.id);",
+      "<button onClick={switchWithoutDraft}>Switch</button>",
     ),
-    staleDraftFinding = requireValue(staleDraft.find((finding) => finding.name === "draftId"));
+    "fixture.tsx",
+  );
+  const staleDraftFinding = requireValue(staleDraft.find((finding) => finding.name === "draftId"));
   assert.notEqual(
     staleDraftFinding.group && staleDraftFinding.group.members.join(","),
     "draftId,draftName",
@@ -5839,9 +5841,9 @@ test("groups selection mode with its independently editable ID collection", () =
         {rows.map(row => <Row key={row.id} selected={selectedIds.includes(row.id)} onToggle={() => toggle(row.id)} />)}
       </main>;
     }
-  `,
-    findings = analyzeSource(source(""), "fixture.tsx"),
-    grouped = findings.filter((finding) => finding.group);
+  `;
+  const findings = analyzeSource(source(""), "fixture.tsx");
+  const grouped = findings.filter((finding) => finding.group);
   assert.deepEqual(
     grouped.map((finding) => finding.action),
     ["use-observable", "use-observable"],
@@ -5854,10 +5856,10 @@ test("groups selection mode with its independently editable ID collection", () =
   assert.equal(agentFindings(findings).filter((finding) => finding.group).length, 1);
 
   const unsafe = analyzeSource(
-      source("const suspend = () => setSelectionMode(false);"),
-      "fixture.tsx",
-    ),
-    unsafeFinding = requireValue(unsafe.find((finding) => finding.name === "selectionMode"));
+    source("const suspend = () => setSelectionMode(false);"),
+    "fixture.tsx",
+  );
+  const unsafeFinding = requireValue(unsafe.find((finding) => finding.name === "selectionMode"));
   assert.notEqual(
     unsafeFinding.group && unsafeFinding.group.members.join(","),
     "selectionMode,selectedIds",
@@ -5866,7 +5868,7 @@ test("groups selection mode with its independently editable ID collection", () =
 
 test("does not merge mutually exclusive switch branches into one state cluster", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useState } from "react";
     interface Item { id: string }
     function ItemDialog(_props: unknown) { return null; }
@@ -5890,9 +5892,9 @@ test("does not merge mutually exclusive switch branches into one state cluster",
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    primary = findings.find((finding) => finding.group && finding.group.primary);
+    "fixture.tsx",
+  );
+  const primary = findings.find((finding) => finding.group && finding.group.primary);
   assert.deepEqual(requireValue(requireValue(primary).group).members, ["linkTarget", "linkOpen"]);
   assert.equal(
     requireValue(findings.find((finding) => finding.name === "editTarget")).group,
@@ -6317,7 +6319,7 @@ test("keeps a returned command reentrancy guard on its React render snapshot", (
 
 test("preserves React lifecycle timing when command-only state becomes a ref", () => {
   const findings = analyzeSource(
-      `
+    `
     import { useLayoutEffect, useState } from "react";
     export function ChartPreview({ source }: { source: number[] }) {
       const [elements, setElements] = useState<number[]>([]);
@@ -6329,9 +6331,9 @@ test("preserves React lifecycle timing when command-only state becomes a ref", (
       return <Button onPress={insert} />;
     }
   `,
-      "fixture.tsx",
-    ),
-    state = findings.find((finding) => finding.hook === "useState");
+    "fixture.tsx",
+  );
+  const state = findings.find((finding) => finding.hook === "useState");
   assert.equal(requireValue(state).action, "use-ref");
   assert.match(requireValue(state).message ?? "", /preserve any existing React lifecycle hook/iu);
   assert.match(requireValue(state).evidence[2] ?? "", /effect writes 2/u);
@@ -6410,8 +6412,8 @@ test("isolates presentation state written by an effect-owned memoized command", 
           <Row>{dimensions.width}</Row><Row>{dimensions.height}</Row>
         </Stats></Page>;
     }
-  `,
-    [finding] = analyzeSource(source(""), "fixture.tsx");
+  `;
+  const [finding] = analyzeSource(source(""), "fixture.tsx");
   assert.equal(requireValue(finding).action, "use-observable");
   assert.match(requireValue(finding).message ?? "", /memoized command/iu);
   assert.match(requireValue(finding).message ?? "", /effect and cleanup/iu);
@@ -6537,7 +6539,7 @@ test("keeps unsafe effect-written presentation state under review", () => {
     `setElapsed(previous => { audit(previous); return previous + 1; });`,
   ]) {
     const findings = analyzeSource(
-        `
+      `
       import { useEffect, useState } from "react";
       export function Dashboard({ next }: { next: number }) {
         const [elapsed, setElapsed] = useState(0);
@@ -6548,9 +6550,9 @@ test("keeps unsafe effect-written presentation state under review", () => {
           <Ready value={ready} /></Page>;
       }
     `,
-        "fixture.tsx",
-      ),
-      elapsed = findings.find((finding) => finding.name === "elapsed");
+      "fixture.tsx",
+    );
+    const elapsed = findings.find((finding) => finding.name === "elapsed");
     assert.notEqual(requireValue(elapsed).action, "use-observable", body);
   }
 
@@ -6653,8 +6655,8 @@ test("replaces a self-refreshing effect-owned command snapshot with a ref", () =
       }, [update]);
       return <Status ${escape}/>;
     }
-  `,
-    [finding] = analyzeSource(source("", ""), "fixture.tsx");
+  `;
+  const [finding] = analyzeSource(source("", ""), "fixture.tsx");
   assert.equal(requireValue(finding).action, "use-ref");
   assert.match(requireValue(finding).message ?? "", /listener/iu);
   assert.match(requireValue(finding).message ?? "", /dependency/iu);
@@ -7822,10 +7824,10 @@ test("requires an immutable non-escaping Set normalization for array selection",
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={selectedIdSet.has(row.id)} />)}</main>;
     }
-  `,
-    escaped = mutable
-      .replace("let selectedIdSet", "const selectedIdSet")
-      .replace("return <main>", "inspect(selectedIdSet); return <main>");
+  `;
+  const escaped = mutable
+    .replace("let selectedIdSet", "const selectedIdSet")
+    .replace("return <main>", "inspect(selectedIdSet); return <main>");
   for (const source of [mutable, escaped]) {
     const finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selectedIds",
@@ -7845,10 +7847,10 @@ test("does not move array selection when a summary alias controls repeated mount
         <Actions /><Preview />{rows.map(row => hasSelection &&
           <Row key={row.id} selected={selectedIdSet.has(row.id)} />)}</main>;
     }
-  `,
-    finding = analyzeSource(source, "screen.tsx").find(
-      (candidate) => candidate.name === "selectedIds",
-    );
+  `;
+  const finding = analyzeSource(source, "screen.tsx").find(
+    (candidate) => candidate.name === "selectedIds",
+  );
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -8030,10 +8032,10 @@ test("isolates filtered keyed selection with one controlled summary leaf", () =>
         {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => toggle(row.id)} />)}
       </Screen>;
     }
-  `,
-    finding = analyzeSource(source, "fixture.tsx").find(
-      (candidate) => candidate.name === "selectedIds",
-    );
+  `;
+  const finding = analyzeSource(source, "fixture.tsx").find(
+    (candidate) => candidate.name === "selectedIds",
+  );
   assert.equal(requireValue(finding).action, "use-observable");
 });
 
@@ -8062,10 +8064,10 @@ test("requires a filtered keyed selection to have one exact controlled summary l
           {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
         </Screen>;
       }
-    `,
-      finding = analyzeSource(source, "fixture.tsx").find(
-        (candidate) => candidate.name === "selectedIds",
-      );
+    `;
+    const finding = analyzeSource(source, "fixture.tsx").find(
+      (candidate) => candidate.name === "selectedIds",
+    );
     assert.notEqual(requireValue(finding).action, "use-observable", use);
   }
 });
@@ -8092,10 +8094,10 @@ test("requires the filtered selection membership source to remain read-only", ()
           {rows.map(row => <Row key={row.id} selected={activeSelectionSet.has(row.id)} onPress={() => setSelectedIds([row.id])} />)}
         </Screen>;
       }
-    `,
-      finding = analyzeSource(source, "fixture.tsx").find(
-        (candidate) => candidate.name === "selectedIds",
-      );
+    `;
+    const finding = analyzeSource(source, "fixture.tsx").find(
+      (candidate) => candidate.name === "selectedIds",
+    );
     assert.notEqual(requireValue(finding).action, "use-observable", mutation);
   }
 });
@@ -8204,10 +8206,10 @@ test("does not trace an arbitrary filtered array into keyed membership", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={activeSet.has(row.id)} />)}</main>;
     }
-  `,
-    finding = analyzeSource(source, "screen.tsx").find(
-      (candidate) => candidate.name === "selectedIds",
-    );
+  `;
+  const finding = analyzeSource(source, "screen.tsx").find(
+    (candidate) => candidate.name === "selectedIds",
+  );
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -8220,10 +8222,10 @@ test("does not move a derived keyed alias read by an effect", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={selected.has(row.id)} />)}</main>;
     }
-  `,
-    finding = analyzeSource(source, "screen.tsx").find(
-      (candidate) => candidate.name === "selected",
-    );
+  `;
+  const finding = analyzeSource(source, "screen.tsx").find(
+    (candidate) => candidate.name === "selected",
+  );
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -8235,10 +8237,10 @@ test("requires derived membership to use the repeated row key", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={selected.has(activeId)} />)}</main>;
     }
-  `,
-    finding = analyzeSource(source, "screen.tsx").find(
-      (candidate) => candidate.name === "selected",
-    );
+  `;
+  const finding = analyzeSource(source, "screen.tsx").find(
+    (candidate) => candidate.name === "selected",
+  );
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -8250,10 +8252,10 @@ test("requires a stable item-derived key for mapped membership", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map((row, index) => <Row key={index} selected={selected.has(row.id)} />)}</main>;
     }
-  `,
-    finding = analyzeSource(source, "screen.tsx").find(
-      (candidate) => candidate.name === "selected",
-    );
+  `;
+  const finding = analyzeSource(source, "screen.tsx").find(
+    (candidate) => candidate.name === "selected",
+  );
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -8266,10 +8268,10 @@ test("does not treat render-prop reads as selection commands", () => {
         <Actions /><Preview /><Panel renderLabel={() => Array.from(selected).join(",")} />
         {rows.map(row => <Row key={row.id} selected={selected.has(row.id)} />)}</main>;
     }
-  `,
-    finding = analyzeSource(source, "screen.tsx").find(
-      (candidate) => candidate.name === "selected",
-    );
+  `;
+  const finding = analyzeSource(source, "screen.tsx").find(
+    (candidate) => candidate.name === "selected",
+  );
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -8283,11 +8285,11 @@ test("requires immutable aliases and a stable filter membership source", () => {
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
         <Actions /><Preview />{rows.map(row => <Row key={row.id} selected={selected.has(row.id)} />)}</main>;
     }
-  `,
-    opaque = mutable
-      .replace("let active", "const active")
-      .replace("let selected", "const selected")
-      .replace("visible.has(id)", "registry().has(id)");
+  `;
+  const opaque = mutable
+    .replace("let active", "const active")
+    .replace("let selected", "const selected")
+    .replace("visible.has(id)", "registry().has(id)");
   for (const source of [mutable, opaque]) {
     const finding = analyzeSource(source, "screen.tsx").find(
       (candidate) => candidate.name === "selectedIds",
@@ -8306,10 +8308,10 @@ test("does not place a collection summary subscription inside every row", () => 
           <Row selected={selected.has(row.id)} /><span>{selected.size}</span>
         </section>)}</main>;
     }
-  `,
-    finding = analyzeSource(source, "screen.tsx").find(
-      (candidate) => candidate.name === "selected",
-    );
+  `;
+  const finding = analyzeSource(source, "screen.tsx").find(
+    (candidate) => candidate.name === "selected",
+  );
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 

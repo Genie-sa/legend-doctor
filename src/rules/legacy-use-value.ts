@@ -22,24 +22,24 @@ export function findLegacyUseValuePractices(
   if (installedLegendState?.useValueExport === "missing") {
     return [];
   }
-  const shadowed = localBindingNames(sourceFile),
-    findings: LegendPracticeFinding[] = [];
+  const shadowed = localBindingNames(sourceFile);
+  const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, (node) => {
     if (!ts.isCallExpression(node) || !isLegacyHookCall(node, imports, shadowed)) {
       return;
     }
-    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)),
-      current = node.expression.getText(sourceFile),
-      directObservable =
-        node.arguments.length === 1
-          ? directObservableSelectorPath(node.arguments[0]!, observableBindings)
-          : null,
-      preservedArguments = node.arguments
-        .map((argument) => argument.getText(sourceFile))
-        .join(", "),
-      replacement = directObservable
-        ? `useValue(${directObservable.getText(sourceFile)})`
-        : `useValue(${preservedArguments})`;
+    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+    const current = node.expression.getText(sourceFile);
+    const directObservable =
+      node.arguments.length === 1
+        ? directObservableSelectorPath(node.arguments[0]!, observableBindings)
+        : null;
+    const preservedArguments = node.arguments
+      .map((argument) => argument.getText(sourceFile))
+      .join(", ");
+    const replacement = directObservable
+      ? `useValue(${directObservable.getText(sourceFile)})`
+      : `useValue(${preservedArguments})`;
     findings.push({
       action: "replace-legacy-use-value",
       confidence: "certain",

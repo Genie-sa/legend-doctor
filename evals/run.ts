@@ -20,8 +20,8 @@ async function main(): Promise<void> {
     );
   }
 
-  const targets = new Map<string, TargetResult>(),
-    failures: string[] = [];
+  const targets = new Map<string, TargetResult>();
+  const failures: string[] = [];
   let inventoriedHooks = 0;
 
   for (const repository of repositories) {
@@ -38,13 +38,13 @@ async function main(): Promise<void> {
       );
       continue;
     }
-    const contextRoot = "contextRoot" in repository ? repository.contextRoot : undefined,
-      context = contextRoot
-        ? await createAnalysisContext(path.join(repositoryRoot, contextRoot))
-        : undefined;
+    const contextRoot = "contextRoot" in repository ? repository.contextRoot : undefined;
+    const context = contextRoot
+      ? await createAnalysisContext(path.join(repositoryRoot, contextRoot))
+      : undefined;
     for (const target of repository.targets) {
-      const root = path.join(repositoryRoot, target.root),
-        report = await analyzePath(root, context);
+      const root = path.join(repositoryRoot, target.root);
+      const report = await analyzePath(root, context);
       targets.set(target.id, { report, root });
       inventoriedHooks += report.hooks.total;
       if (report.hooks.states !== target.states || report.hooks.effects !== target.effects) {
@@ -55,12 +55,12 @@ async function main(): Promise<void> {
     }
   }
 
-  let actualActionable = 0,
-    correctActionable = 0,
-    expectedActionable = 0,
-    knownMisses = 0,
-    labeled = 0,
-    matched = 0;
+  let actualActionable = 0;
+  let correctActionable = 0;
+  let expectedActionable = 0;
+  let knownMisses = 0;
+  let labeled = 0;
+  let matched = 0;
   const byAction = new Map<string, { correct: number; expected: number; predicted: number }>();
   for (const gold of goldCases) {
     const target = targets.get(gold.target);
@@ -111,8 +111,8 @@ async function main(): Promise<void> {
     }
   }
 
-  let groupLabels = 0,
-    groupMatches = 0;
+  let groupLabels = 0;
+  let groupMatches = 0;
   for (const gold of goldStateGroups) {
     const target = targets.get(gold.target);
     if (!target) {
@@ -120,12 +120,12 @@ async function main(): Promise<void> {
     }
     groupLabels += 1;
     const finding = target.report.findings.find(
-        (candidate) =>
-          candidate.location.file === path.normalize(gold.file) &&
-          candidate.location.line === gold.line &&
-          candidate.hook === "useState",
-      ),
-      actualMembers = finding?.group?.primary ? finding.group.members : null;
+      (candidate) =>
+        candidate.location.file === path.normalize(gold.file) &&
+        candidate.location.line === gold.line &&
+        candidate.hook === "useState",
+    );
+    const actualMembers = finding?.group?.primary ? finding.group.members : null;
     if (sameMembers(actualMembers, gold.members)) {
       groupMatches += 1;
     } else {
@@ -135,8 +135,8 @@ async function main(): Promise<void> {
     }
   }
 
-  let practiceLabels = 0,
-    practiceMatches = 0;
+  let practiceLabels = 0;
+  let practiceMatches = 0;
   const labeledPractices = new Set(
     goldPracticeCases.map((gold) => practiceKey(gold.target, gold.file, gold.line, gold.action)),
   );
@@ -176,15 +176,15 @@ async function main(): Promise<void> {
     }
   }
 
-  const precision = actualActionable === 0 ? 1 : correctActionable / actualActionable,
-    recall = expectedActionable === 0 ? 1 : correctActionable / expectedActionable,
-    actionLines = [...byAction.entries()]
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([action, score]) => {
-        const actionPrecision = score.predicted === 0 ? 1 : score.correct / score.predicted,
-          actionRecall = score.expected === 0 ? 1 : score.correct / score.expected;
-        return `${action}: precision ${(actionPrecision * 100).toFixed(1)}% (${score.correct}/${score.predicted}), recall ${(actionRecall * 100).toFixed(1)}% (${score.correct}/${score.expected})`;
-      });
+  const precision = actualActionable === 0 ? 1 : correctActionable / actualActionable;
+  const recall = expectedActionable === 0 ? 1 : correctActionable / expectedActionable;
+  const actionLines = [...byAction.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([action, score]) => {
+      const actionPrecision = score.predicted === 0 ? 1 : score.correct / score.predicted;
+      const actionRecall = score.expected === 0 ? 1 : score.correct / score.expected;
+      return `${action}: precision ${(actionPrecision * 100).toFixed(1)}% (${score.correct}/${score.predicted}), recall ${(actionRecall * 100).toFixed(1)}% (${score.correct}/${score.expected})`;
+    });
   process.stdout.write(
     `${[
       `Inventoried ${inventoriedHooks} hooks across ${targets.size} targets.`,

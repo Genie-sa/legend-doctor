@@ -145,8 +145,8 @@ function narrowObservableArrayAppend(
   ) {
     return null;
   }
-  const target = unwrapTransparentExpression(call.expression.expression),
-    root = rootIdentifier(target);
+  const target = unwrapTransparentExpression(call.expression.expression);
+  const root = rootIdentifier(target);
   if (
     !root ||
     !staticPathHasBinding(target, observableBindings) ||
@@ -155,16 +155,16 @@ function narrowObservableArrayAppend(
     return null;
   }
 
-  const argument = unwrapTransparentExpression(call.arguments[0]!),
-    appended = ts.isArrowFunction(argument)
-      ? updaterAppendValue(argument)
-      : snapshotAppendValue(argument, target, call, sourceFile);
+  const argument = unwrapTransparentExpression(call.arguments[0]!);
+  const appended = ts.isArrowFunction(argument)
+    ? updaterAppendValue(argument)
+    : snapshotAppendValue(argument, target, call, sourceFile);
   if (!appended || !isEvaluationInert(appended)) {
     return null;
   }
 
-  const targetText = target.getText(sourceFile),
-    appendedText = appended.getText(sourceFile);
+  const targetText = target.getText(sourceFile);
+  const appendedText = appended.getText(sourceFile);
   return {
     evidence: [
       `the clone appends exactly one inert value to the same proven observable array ${targetText}`,
@@ -187,8 +187,8 @@ function updaterAppendValue(updater: ts.ArrowFunction): ts.Expression | null {
   if (!ts.isArrayLiteralExpression(array) || array.elements.length !== 2) {
     return null;
   }
-  const [snapshot, appended] = array.elements,
-    parameter = updater.parameters[0]!.name;
+  const [snapshot, appended] = array.elements;
+  const parameter = updater.parameters[0]!.name;
   if (
     !snapshot ||
     !ts.isSpreadElement(snapshot) ||

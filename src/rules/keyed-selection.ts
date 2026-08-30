@@ -51,8 +51,8 @@ import {
 import type { RuntimeFunctionLike } from "../ast.js";
 import type { HookImports } from "../imports.js";
 
-const KEYED_COLLECTION_PROPERTIES = new Set(["entries", "has", "keys", "size", "values"]),
-  MEMO_CALLBACK_HOOKS = new Set(["useCallback", "useMemo"]);
+const KEYED_COLLECTION_PROPERTIES = new Set(["entries", "has", "keys", "size", "values"]);
+const MEMO_CALLBACK_HOOKS = new Set(["useCallback", "useMemo"]);
 
 export interface KeyedSelectionAnalysis {
   collectionStates: ReadonlySet<StateCandidate>;
@@ -79,48 +79,46 @@ export function analyzeKeyedSelections(
     settersByOwner.set(state.owner, setters);
   }
   const collectionStates = new Set(
-      states.filter(
-        (state) =>
-          safeCommandStates.has(state) &&
-          ((hasIndependentCollectionEventWrite(
-            state,
-            usageByState.get(state),
-            settersByOwner.get(state.owner) ?? new Set(),
-          ) &&
-            isKeyedLeafCollectionState(state, usageByState.get(state))) ||
-            (!statesWithCompanionWrites.has(state) &&
-              isImperativeRenderedCollectionState(state, usageByState.get(state), imports))),
-      ),
+    states.filter(
+      (state) =>
+        safeCommandStates.has(state) &&
+        ((hasIndependentCollectionEventWrite(
+          state,
+          usageByState.get(state),
+          settersByOwner.get(state.owner) ?? new Set(),
+        ) &&
+          isKeyedLeafCollectionState(state, usageByState.get(state))) ||
+          (!statesWithCompanionWrites.has(state) &&
+            isImperativeRenderedCollectionState(state, usageByState.get(state), imports))),
     ),
-    scalarStates = new Set(
-      states.filter((state) => {
-        const usage = usageByState.get(state);
-        return (
-          safeCommandStates.has(state) &&
-          (!statesWithCompanionWrites.has(state) ||
-            hasIndependentRepeatedEventWrite(state, usage)) &&
-          isKeyedLeafScalarState(state, usage)
-        );
-      }),
+  );
+  const scalarStates = new Set(
+    states.filter((state) => {
+      const usage = usageByState.get(state);
+      return (
+        safeCommandStates.has(state) &&
+        (!statesWithCompanionWrites.has(state) || hasIndependentRepeatedEventWrite(state, usage)) &&
+        isKeyedLeafScalarState(state, usage)
+      );
+    }),
+  );
+  const secondaryLeafStates = new Set(
+    states.filter((state) => {
+      const usage = usageByState.get(state);
+      return (
+        safeCommandStates.has(state) &&
+        (!statesWithCompanionWrites.has(state) || hasIndependentRepeatedEventWrite(state, usage)) &&
+        isKeyedScalarWithSecondaryLeaf(state, usage)
+      );
+    }),
+  );
+  const recordStates = new Set(
+    states.filter(
+      (state) =>
+        !statesWithCompanionWrites.has(state) &&
+        isKeyedLeafRecordState(state, usageByState.get(state), childContracts),
     ),
-    secondaryLeafStates = new Set(
-      states.filter((state) => {
-        const usage = usageByState.get(state);
-        return (
-          safeCommandStates.has(state) &&
-          (!statesWithCompanionWrites.has(state) ||
-            hasIndependentRepeatedEventWrite(state, usage)) &&
-          isKeyedScalarWithSecondaryLeaf(state, usage)
-        );
-      }),
-    ),
-    recordStates = new Set(
-      states.filter(
-        (state) =>
-          !statesWithCompanionWrites.has(state) &&
-          isKeyedLeafRecordState(state, usageByState.get(state), childContracts),
-      ),
-    );
+  );
   return { collectionStates, recordStates, scalarStates, secondaryLeafStates };
 }
 
@@ -272,8 +270,8 @@ function isImperativeRenderedCollectionState(
   }
 
   const commandCallbacks = new Set<ts.ArrowFunction | ts.FunctionExpression>();
-  let renderedMembership = false,
-    safe = true;
+  let renderedMembership = false;
+  let safe = true;
   visit(state.owner.body, (node) => {
     if (
       !safe ||
@@ -291,15 +289,15 @@ function isImperativeRenderedCollectionState(
       return;
     }
     const property =
-        ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node
-          ? node.parent
-          : null,
-      membership =
-        property?.name.text === "has" &&
-        ts.isCallExpression(property.parent) &&
-        property.parent.expression === property
-          ? property.parent
-          : null;
+      ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node
+        ? node.parent
+        : null;
+    const membership =
+      property?.name.text === "has" &&
+      ts.isCallExpression(property.parent) &&
+      property.parent.expression === property
+        ? property.parent
+        : null;
     if (membership) {
       if (!isStableRenderedMembership(membership, state.owner)) {
         safe = false;
@@ -337,8 +335,8 @@ function useCallbackDependencyOwner(
   owner: RuntimeFunctionLike,
   imports: HookImports,
 ): ts.ArrowFunction | ts.FunctionExpression | null {
-  const call = findAncestorUntil(node, ts.isCallExpression, owner),
-    callback = call?.arguments[0];
+  const call = findAncestorUntil(node, ts.isCallExpression, owner);
+  const callback = call?.arguments[0];
   return call &&
     call.arguments[1] &&
     nodeWithin(node, call.arguments[1]) &&
@@ -350,8 +348,8 @@ function useCallbackDependencyOwner(
 }
 
 function isNullableSetState(call: ts.CallExpression): boolean {
-  const initial = call.arguments[0],
-    type = call.typeArguments?.[0];
+  const initial = call.arguments[0];
+  const type = call.typeArguments?.[0];
   if (
     !initial ||
     initial.kind !== ts.SyntaxKind.NullKeyword ||
@@ -399,8 +397,8 @@ function callbackReadsStateWithDependency(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   state: StateCandidate,
 ): boolean {
-  const call = callback.parent,
-    dependencies = ts.isCallExpression(call) ? call.arguments[1] : undefined;
+  const call = callback.parent;
+  const dependencies = ts.isCallExpression(call) ? call.arguments[1] : undefined;
   if (!dependencies || !ts.isArrayLiteralExpression(dependencies)) {
     return false;
   }
@@ -428,11 +426,11 @@ function callbackIsExposedOnlyByImperativeHandle(
   owner: RuntimeFunctionLike,
   imports: HookImports,
 ): boolean {
-  const hookCall = callback.parent,
-    declaration =
-      ts.isCallExpression(hookCall) && ts.isVariableDeclaration(hookCall.parent)
-        ? hookCall.parent
-        : null;
+  const hookCall = callback.parent;
+  const declaration =
+    ts.isCallExpression(hookCall) && ts.isVariableDeclaration(hookCall.parent)
+      ? hookCall.parent
+      : null;
   if (!declaration || !ts.isIdentifier(declaration.name)) {
     return false;
   }
@@ -441,8 +439,8 @@ function callbackIsExposedOnlyByImperativeHandle(
     return false;
   }
 
-  let exposed = false,
-    safe = true;
+  let exposed = false;
+  let safe = true;
   visit(owner.body, (node) => {
     if (
       !safe ||
@@ -499,11 +497,11 @@ function imperativeFactoryReturnsBinding(
   factory: ts.Expression,
   reference: ts.Identifier,
 ): boolean {
-  const value = unwrapTransparentExpression(factory),
-    object =
-      (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) && !ts.isBlock(value.body)
-        ? unwrapTransparentExpression(value.body)
-        : null;
+  const value = unwrapTransparentExpression(factory);
+  const object =
+    (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) && !ts.isBlock(value.body)
+      ? unwrapTransparentExpression(value.body)
+      : null;
   return (
     object !== null &&
     ts.isObjectLiteralExpression(object) &&
@@ -528,15 +526,15 @@ function isStableRenderedMembership(
   ) {
     return false;
   }
-  const declaration = callback.parent,
-    callbackName =
-      ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)
-        ? declaration.name.text
-        : ts.isCallExpression(declaration) &&
-            ts.isVariableDeclaration(declaration.parent) &&
-            ts.isIdentifier(declaration.parent.name)
-          ? declaration.parent.name.text
-          : null;
+  const declaration = callback.parent;
+  const callbackName =
+    ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)
+      ? declaration.name.text
+      : ts.isCallExpression(declaration) &&
+          ts.isVariableDeclaration(declaration.parent) &&
+          ts.isIdentifier(declaration.parent.name)
+        ? declaration.parent.name.text
+        : null;
   if (!callbackName) {
     return false;
   }
@@ -553,8 +551,8 @@ function isStableRenderedMembership(
     ) {
       return;
     }
-    const expression = node.parent,
-      attribute = ts.isJsxExpression(expression) ? expression.parent : null;
+    const expression = node.parent;
+    const attribute = ts.isJsxExpression(expression) ? expression.parent : null;
     if (
       attribute &&
       ts.isJsxAttribute(attribute) &&
@@ -571,10 +569,10 @@ function isStableRenderedMembership(
   if (!callbackConfined || openings.size !== 1) {
     return false;
   }
-  const opening = [...openings][0]!,
-    keyExtractor = opening.attributes.properties.find(
-      (property) => ts.isJsxAttribute(property) && property.name.getText() === "keyExtractor",
-    );
+  const opening = [...openings][0]!;
+  const keyExtractor = opening.attributes.properties.find(
+    (property) => ts.isJsxAttribute(property) && property.name.getText() === "keyExtractor",
+  );
   if (!keyExtractor || !ts.isJsxAttribute(keyExtractor)) {
     return false;
   }
@@ -594,8 +592,8 @@ function isStableRenderedMembership(
   if (ts.isBlock(extractor.body)) {
     return false;
   }
-  let root = unwrapTransparentExpression(extractor.body),
-    propertyDepth = 0;
+  let root = unwrapTransparentExpression(extractor.body);
+  let propertyDepth = 0;
   while (ts.isPropertyAccessExpression(root)) {
     propertyDepth += 1;
     root = unwrapTransparentExpression(root.expression);
@@ -687,8 +685,8 @@ function filteredSelectionDeclaration(
   ) {
     return null;
   }
-  const stateSource = unwrapTransparentExpression(filter.expression.expression),
-    callback = filter.arguments[0];
+  const stateSource = unwrapTransparentExpression(filter.expression.expression);
+  const callback = filter.arguments[0];
   if (
     !callback ||
     !ts.isIdentifier(stateSource) ||
@@ -722,8 +720,9 @@ function isReadOnlyMembershipSource(owner: RuntimeFunctionLike, name: string): b
   if (!owner.body || bindingDeclarationCount(owner, name) !== 1) {
     return false;
   }
-  const declaration = uniqueVariableDeclaration(owner.body, name),
-    initializer = declaration?.initializer && unwrapTransparentExpression(declaration.initializer);
+  const declaration = uniqueVariableDeclaration(owner.body, name);
+  const initializer =
+    declaration?.initializer && unwrapTransparentExpression(declaration.initializer);
   if (
     !declaration ||
     !initializer ||
@@ -736,8 +735,8 @@ function isReadOnlyMembershipSource(owner: RuntimeFunctionLike, name: string): b
   ) {
     return false;
   }
-  let reads = 0,
-    safe = true;
+  let reads = 0;
+  let safe = true;
   visit(owner.body, (node) => {
     if (
       !safe ||
@@ -786,17 +785,16 @@ function filteredSelectionHasOneControlledLeaf(
     }
   });
   const setReference = references.find(
-      (reference) =>
-        setDeclaration.initializer !== undefined &&
-        nodeWithin(reference, setDeclaration.initializer),
-    ),
-    leafReferences = references.filter((reference) => reference !== setReference);
+    (reference) =>
+      setDeclaration.initializer !== undefined && nodeWithin(reference, setDeclaration.initializer),
+  );
+  const leafReferences = references.filter((reference) => reference !== setReference);
   if (!setReference || leafReferences.length !== 1) {
     return false;
   }
 
-  const leafReference = leafReferences[0]!,
-    attribute = findAncestorUntil(leafReference, ts.isJsxAttribute, state.owner);
+  const leafReference = leafReferences[0]!;
+  const attribute = findAncestorUntil(leafReference, ts.isJsxAttribute, state.owner);
   if (
     !attribute ||
     attribute.name.getText() === "key" ||
@@ -835,8 +833,8 @@ function hasIndependentRepeatedEventWrite(
     return false;
   }
   return usage.setterCallNodes.some((call) => {
-    const repeated = nearestRepeatedRenderCall(call, state.owner),
-      event = nearestNestedFunction(call, state.owner);
+    const repeated = nearestRepeatedRenderCall(call, state.owner);
+    const event = nearestNestedFunction(call, state.owner);
     if (
       !repeated ||
       !event ||
@@ -845,8 +843,8 @@ function hasIndependentRepeatedEventWrite(
     ) {
       return false;
     }
-    const expression = event.parent,
-      attribute = ts.isJsxExpression(expression) ? expression.parent : null;
+    const expression = event.parent;
+    const attribute = ts.isJsxExpression(expression) ? expression.parent : null;
     return (
       attribute !== null &&
       ts.isJsxAttribute(attribute) &&
@@ -891,8 +889,8 @@ function isKeyedLeafRecordState(
     return false;
   }
   return usage.setterCallNodes.every((call) => {
-    const key = exactRecordEntryUpdaterKey(call),
-      written = key && writtenRecordEntry(state, call, key, childContracts);
+    const key = exactRecordEntryUpdaterKey(call);
+    const written = key && writtenRecordEntry(state, call, key, childContracts);
     return (
       written !== null &&
       written.repeated === rendered.repeated &&
@@ -902,9 +900,9 @@ function isKeyedLeafRecordState(
 }
 
 function isEmptyPrimitiveRecordState(state: StateCandidate): boolean {
-  const initial = state.call.arguments[0],
-    initialValue = initial && unwrapTransparentExpression(initial),
-    type = state.call.typeArguments?.[0];
+  const initial = state.call.arguments[0];
+  const initialValue = initial && unwrapTransparentExpression(initial);
+  const type = state.call.typeArguments?.[0];
   if (
     !initialValue ||
     !ts.isObjectLiteralExpression(initialValue) ||
@@ -1009,8 +1007,8 @@ function renderedRecordEntry(
     ) {
       return null;
     }
-    const repeated = nearestRepeatedRenderCall(access, state.owner),
-      callback = repeated?.arguments[0];
+    const repeated = nearestRepeatedRenderCall(access, state.owner);
+    const callback = repeated?.arguments[0];
     if (
       !repeated ||
       !callback ||
@@ -1061,11 +1059,12 @@ function hasMatchingKeyedAncestor(
       continue;
     }
     const key = opening.attributes.properties.find(
-        (property) => ts.isJsxAttribute(property) && property.name.getText() === "key",
-      ),
-      initializer = key && ts.isJsxAttribute(key) ? key.initializer : null,
-      expression = initializer && ts.isJsxExpression(initializer) ? initializer.expression : null,
-      item = callback.parameters[0]?.name;
+      (property) => ts.isJsxAttribute(property) && property.name.getText() === "key",
+    );
+    const initializer = key && ts.isJsxAttribute(key) ? key.initializer : null;
+    const expression =
+      initializer && ts.isJsxExpression(initializer) ? initializer.expression : null;
+    const item = callback.parameters[0]?.name;
     if (
       expression &&
       item &&
@@ -1097,8 +1096,8 @@ function exactRecordEntryUpdaterKey(call: ts.CallExpression): ts.Expression | nu
     if (!ts.isObjectLiteralExpression(object) || object.properties.length !== 2) {
       return null;
     }
-    const spread = object.properties[0],
-      entry = object.properties[1];
+    const spread = object.properties[0];
+    const entry = object.properties[1];
     if (
       !spread ||
       !ts.isSpreadAssignment(spread) ||
@@ -1132,9 +1131,9 @@ function exactRecordEntryUpdaterKey(call: ts.CallExpression): ts.Expression | nu
   ) {
     return null;
   }
-  const clone = cloneStatement.declarationList.declarations[0]!,
-    cloneValue = clone.initializer && unwrapTransparentExpression(clone.initializer),
-    deleted = unwrapTransparentExpression(deleteStatement.expression.expression);
+  const clone = cloneStatement.declarationList.declarations[0]!;
+  const cloneValue = clone.initializer && unwrapTransparentExpression(clone.initializer);
+  const deleted = unwrapTransparentExpression(deleteStatement.expression.expression);
   if (
     !ts.isIdentifier(clone.name) ||
     !cloneValue ||
@@ -1162,8 +1161,8 @@ function writtenRecordEntry(
   key: ts.Expression,
   childContracts: ChildContractResolver | null,
 ): KeyedRecordEntry | null {
-  const directRepeated = nearestRepeatedRenderCall(call, state.owner),
-    directCallback = directRepeated?.arguments[0];
+  const directRepeated = nearestRepeatedRenderCall(call, state.owner);
+  const directCallback = directRepeated?.arguments[0];
   if (
     directRepeated &&
     directCallback &&
@@ -1210,8 +1209,8 @@ function recordCommandEntry(
   if (!name || bindingDeclarationCount(state.owner, name) !== 1) {
     return null;
   }
-  let result: KeyedRecordEntry | null = null,
-    references = 0,
+  let references = 0,
+    result: KeyedRecordEntry | null = null,
     safe = true;
   visit(state.owner.body, (node) => {
     if (
@@ -1229,9 +1228,9 @@ function recordCommandEntry(
       safe = false;
       return;
     }
-    const repeated = nearestRepeatedRenderCall(invocation, state.owner),
-      callback = repeated?.arguments[0],
-      argument = invocation.arguments[parameterIndex];
+    const repeated = nearestRepeatedRenderCall(invocation, state.owner);
+    const callback = repeated?.arguments[0];
+    const argument = invocation.arguments[parameterIndex];
     if (
       !repeated ||
       !callback ||
@@ -1320,8 +1319,8 @@ function accessPathFromBinding(
     return parent ? [...parent, `.${value.name.text}`] : null;
   }
   if (ts.isElementAccessExpression(value) && value.argumentExpression) {
-    const parent = accessPathFromBinding(value.expression, binding),
-      key = unwrapTransparentExpression(value.argumentExpression);
+    const parent = accessPathFromBinding(value.expression, binding);
+    const key = unwrapTransparentExpression(value.argumentExpression);
     if (!parent) {
       return null;
     }
@@ -1457,8 +1456,8 @@ function isKeyedScalarWithSecondaryLeaf(
       continue;
     }
     if (isHookDependencyReference(reference, new Set(["useCallback"]))) {
-      const call = findAncestorUntil(reference, ts.isCallExpression, state.owner),
-        candidate = call?.arguments[0];
+      const call = findAncestorUntil(reference, ts.isCallExpression, state.owner);
+      const candidate = call?.arguments[0];
       if (
         candidate &&
         (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
@@ -1470,11 +1469,11 @@ function isKeyedScalarWithSecondaryLeaf(
     return false;
   }
 
-  const consumer = lowestCommonJsxSubtree(renderReferences, state.owner),
-    producerReturn = findAncestorUntil(producer, ts.isReturnStatement, state.owner),
-    consumerReturn = consumer
-      ? findAncestorUntil(consumer, ts.isReturnStatement, state.owner)
-      : null;
+  const consumer = lowestCommonJsxSubtree(renderReferences, state.owner);
+  const producerReturn = findAncestorUntil(producer, ts.isReturnStatement, state.owner);
+  const consumerReturn = consumer
+    ? findAncestorUntil(consumer, ts.isReturnStatement, state.owner)
+    : null;
   return (
     consumer !== null &&
     jsxElementCountIn(consumer) / jsxElementCount(state.owner) <= 0.4 &&
@@ -1525,10 +1524,10 @@ function repeatedScalarSelectionProducer(
   }
   const producers = new Set<ts.CallExpression>();
   for (const call of usage.setterCallNodes) {
-    const repeated = nearestRepeatedRenderCall(call, state.owner),
-      callback = repeated?.arguments[0],
-      event = nearestNestedFunction(call, state.owner),
-      argument = call.arguments[0];
+    const repeated = nearestRepeatedRenderCall(call, state.owner);
+    const callback = repeated?.arguments[0];
+    const event = nearestNestedFunction(call, state.owner);
+    const argument = call.arguments[0];
     if (
       !repeated ||
       !callback ||
@@ -1584,9 +1583,9 @@ function isSelectedItemLookup(initializer: ts.Expression, stateReference: ts.Ide
   ) {
     return false;
   }
-  const left = unwrapTransparentExpression(comparison.left),
-    right = unwrapTransparentExpression(comparison.right),
-    other = left === stateReference ? right : right === stateReference ? left : null;
+  const left = unwrapTransparentExpression(comparison.left);
+  const right = unwrapTransparentExpression(comparison.right);
+  const other = left === stateReference ? right : right === stateReference ? left : null;
   if (!other || !expressionDependsOnBinding(other, callback.parameters[0]!.name, callback)) {
     return false;
   }
@@ -1603,8 +1602,8 @@ function isRepeatedScalarKeyProjection(node: ts.Node, state: StateCandidate): bo
   if (!ts.isIdentifier(node)) {
     return false;
   }
-  const repeated = nearestRepeatedRenderCall(node, state.owner),
-    callback = repeated?.arguments[0];
+  const repeated = nearestRepeatedRenderCall(node, state.owner);
+  const callback = repeated?.arguments[0];
   if (
     !repeated ||
     !callback ||
@@ -1699,15 +1698,15 @@ function isKeyedLeafCollectionState(state: StateCandidate, usage: StateUsage | u
     return false;
   }
 
-  const directCollection = isSetOrMapState(state.call),
-    arraySetAlias = directCollection ? null : localSetAliasForArrayState(state);
+  const directCollection = isSetOrMapState(state.call);
+  const arraySetAlias = directCollection ? null : localSetAliasForArrayState(state);
   if ((!directCollection && !arraySetAlias) || jsxElementCount(state.owner) < 12) {
     return false;
   }
   const aliasName = arraySetAlias?.declaration.name.getText() ?? null;
 
-  let repeatedMembership = false,
-    unsafe = false;
+  let repeatedMembership = false;
+  let unsafe = false;
   visit(state.owner.body, (node) => {
     if (
       unsafe ||
@@ -1763,8 +1762,8 @@ function isKeyedLeafCollectionState(state: StateCandidate, usage: StateUsage | u
         unsafe = true;
         return;
       }
-      const membershipCall = property.parent,
-        summaryCall = collectionMembershipSummaryCall(membershipCall, state.owner);
+      const membershipCall = property.parent;
+      const summaryCall = collectionMembershipSummaryCall(membershipCall, state.owner);
       if (summaryCall) {
         if (collectionSummaryControlsRepeatedRendering(summaryCall, state.owner)) {
           unsafe = true;
@@ -1836,8 +1835,8 @@ function isBoundedFilteredSelectionSummary(
     return false;
   }
 
-  const aliasName = declaration.name.text,
-    references: ts.Identifier[] = [];
+  const aliasName = declaration.name.text;
+  const references: ts.Identifier[] = [];
   visit(state.owner.body, (node) => {
     if (
       ts.isIdentifier(node) &&
@@ -1850,12 +1849,12 @@ function isBoundedFilteredSelectionSummary(
     }
   });
   const gates = new Set(
-      references.flatMap((reference) => {
-        const gate = commonRenderGateSubtree([reference], state.owner);
-        return gate ? [gate] : [];
-      }),
-    ),
-    gate = gates.size === 1 ? [...gates][0]! : null;
+    references.flatMap((reference) => {
+      const gate = commonRenderGateSubtree([reference], state.owner);
+      return gate ? [gate] : [];
+    }),
+  );
+  const gate = gates.size === 1 ? [...gates][0]! : null;
   if (!gate || jsxElementCountIn(gate) / jsxElementCount(state.owner) > 0.4) {
     return false;
   }
@@ -2000,8 +1999,8 @@ function summaryFeedsStableRowProjection(
   ) {
     return false;
   }
-  const projectionName = declaration.name.text,
-    references: ts.Identifier[] = [];
+  const projectionName = declaration.name.text;
+  const references: ts.Identifier[] = [];
   visitSkippingNestedFunctions(callback.body, callback, (node) => {
     if (
       ts.isIdentifier(node) &&
@@ -2047,8 +2046,8 @@ function isDeferredCollectionRead(node: ts.Identifier, owner: RuntimeFunctionLik
 }
 
 function isRepeatedMembershipRender(call: ts.CallExpression, owner: RuntimeFunctionLike): boolean {
-  const repeated = nearestRepeatedRenderCall(call, owner),
-    callback = repeated?.arguments[0] ?? renderedListCallback(call, owner);
+  const repeated = nearestRepeatedRenderCall(call, owner);
+  const callback = repeated?.arguments[0] ?? renderedListCallback(call, owner);
   return (
     callback !== null &&
     (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
@@ -2061,8 +2060,8 @@ function membershipUsesCallbackKey(
   call: ts.CallExpression,
   callback: ts.ArrowFunction | ts.FunctionExpression,
 ): boolean {
-  const argument = call.arguments[0],
-    parameter = callback.parameters[0]?.name;
+  const argument = call.arguments[0];
+  const parameter = callback.parameters[0]?.name;
   if (!argument || !parameter) {
     return false;
   }
@@ -2077,13 +2076,13 @@ function renderedListCallback(
   if (!callback) {
     return null;
   }
-  const initializer = callback.parent,
-    declaration =
-      ts.isCallExpression(initializer) &&
-      ts.isIdentifier(initializer.expression) &&
-      initializer.expression.text === "useCallback"
-        ? initializer.parent
-        : callback.parent;
+  const initializer = callback.parent;
+  const declaration =
+    ts.isCallExpression(initializer) &&
+    ts.isIdentifier(initializer.expression) &&
+    initializer.expression.text === "useCallback"
+      ? initializer.parent
+      : callback.parent;
   if (!ts.isVariableDeclaration(declaration) || !ts.isIdentifier(declaration.name)) {
     return null;
   }
@@ -2153,8 +2152,8 @@ function membershipControlsRepeatedMount(
   call: ts.CallExpression,
   owner: RuntimeFunctionLike,
 ): boolean {
-  const repeated = nearestRepeatedRenderCall(call, owner),
-    callback = repeated?.arguments[0] ?? renderedListCallback(call, owner);
+  const repeated = nearestRepeatedRenderCall(call, owner);
+  const callback = repeated?.arguments[0] ?? renderedListCallback(call, owner);
   if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
     return true;
   }
@@ -2165,8 +2164,8 @@ function membershipControlsRepeatedMount(
     declaration.initializer &&
     nodeWithin(call, declaration.initializer)
   ) {
-    const aliasName = declaration.name.text,
-      references: ts.Identifier[] = [];
+    const aliasName = declaration.name.text;
+    const references: ts.Identifier[] = [];
     visitSkippingNestedFunctions(callback.body, callback, (node) => {
       if (
         ts.isIdentifier(node) &&

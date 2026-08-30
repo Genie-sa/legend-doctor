@@ -96,30 +96,30 @@ function analyzeParsedLegendPractices(
   if (isNonProductionHarness(fileName)) {
     return [];
   }
-  const imports = collectHookImports(sourceFile),
-    lacksObservableSources =
-      imports.observable.size === 0 &&
-      imports.useObservable.size === 0 &&
-      imports.observableTypes.size === 0 &&
-      importedObservables.size === 0 &&
-      importedObservableFactories.size === 0,
-    observableBindings = lacksObservableSources
-      ? new Set<string>()
-      : collectObservableBindings(
-          sourceFile,
-          imports,
-          importedObservables,
-          importedObservableFactories,
-        ),
-    findings = [
-      ...findLegacyUseValuePractices(
+  const imports = collectHookImports(sourceFile);
+  const lacksObservableSources =
+    imports.observable.size === 0 &&
+    imports.useObservable.size === 0 &&
+    imports.observableTypes.size === 0 &&
+    importedObservables.size === 0 &&
+    importedObservableFactories.size === 0;
+  const observableBindings = lacksObservableSources
+    ? new Set<string>()
+    : collectObservableBindings(
         sourceFile,
-        fileName,
         imports,
-        observableBindings,
-        installedLegendState,
-      ),
-    ];
+        importedObservables,
+        importedObservableFactories,
+      );
+  const findings = [
+    ...findLegacyUseValuePractices(
+      sourceFile,
+      fileName,
+      imports,
+      observableBindings,
+      installedLegendState,
+    ),
+  ];
   if (lacksObservableSources) {
     return findings;
   }
@@ -138,9 +138,9 @@ function analyzeParsedLegendPractices(
     if (!ts.isBlock(node) && !ts.isSourceFile(node)) {
       return;
     }
-    let run: ObservableWrite[] = [],
-      conditionalWrites: ObservableWrite[] = [],
-      runIsComplete = true;
+    let run: ObservableWrite[] = [];
+    let conditionalWrites: ObservableWrite[] = [];
+    let runIsComplete = true;
     const flush = (): void => {
       if (runIsComplete && run.length >= 2) {
         const finding = transactionFinding(run, conditionalWrites, sourceFile, fileName);
@@ -254,13 +254,13 @@ function collectObservableBindings(
   importedObservables: ReadonlySet<string>,
   importedObservableFactories: ReadonlySet<string>,
 ): ReadonlySet<string> {
-  const declarations = new Map<string, number>(),
-    directCandidates = new Set(importedObservables),
-    factoryBindings = new Set(importedObservableFactories),
-    aliases: { initializer: ts.Expression; name: string }[] = [],
-    factoryCalls: { initializer: ts.Expression; name: string }[] = [],
-    useValueInputs = new Set<string>(),
-    typeQueries: { name: string; type: ts.TypeNode }[] = [];
+  const declarations = new Map<string, number>();
+  const directCandidates = new Set(importedObservables);
+  const factoryBindings = new Set(importedObservableFactories);
+  const aliases: { initializer: ts.Expression; name: string }[] = [];
+  const factoryCalls: { initializer: ts.Expression; name: string }[] = [];
+  const useValueInputs = new Set<string>();
+  const typeQueries: { name: string; type: ts.TypeNode }[] = [];
 
   visit(sourceFile, (node) => {
     if (
@@ -319,11 +319,11 @@ function collectObservableBindings(
   });
 
   const uniqueFactories = new Set(
-      [...factoryBindings].filter((name) => declarations.get(name) === 1),
-    ),
-    candidates = new Set(
-      [...directCandidates].filter((name) => declarations.get(name.split(".")[0]!) === 1),
-    );
+    [...factoryBindings].filter((name) => declarations.get(name) === 1),
+  );
+  const candidates = new Set(
+    [...directCandidates].filter((name) => declarations.get(name.split(".")[0]!) === 1),
+  );
   for (const candidate of factoryCalls) {
     if (
       declarations.get(candidate.name) === 1 &&
@@ -374,8 +374,8 @@ function observablePathWithElementAccess(
   expression: ts.Expression,
   observableBindings: ReadonlySet<string>,
 ): boolean {
-  let current = unwrapTransparentExpression(expression),
-    hasDynamicKey = false;
+  let current = unwrapTransparentExpression(expression);
+  let hasDynamicKey = false;
   while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
     if (current.questionDotToken) {
       return false;
@@ -582,10 +582,10 @@ function conditionalObservableWrites(
     return null;
   }
   const branches = [
-      statement.thenStatement,
-      ...(statement.elseStatement ? [statement.elseStatement] : []),
-    ],
-    writes: ObservableWrite[] = [];
+    statement.thenStatement,
+    ...(statement.elseStatement ? [statement.elseStatement] : []),
+  ];
+  const writes: ObservableWrite[] = [];
   for (const branch of branches) {
     const statements = ts.isBlock(branch) ? branch.statements : [branch];
     for (const branchStatement of statements) {
@@ -613,9 +613,11 @@ function transactionFinding(
   if (!hasDistinctNonOverlappingPaths(writes)) {
     return null;
   }
-  const first = writes[0]!,
-    { line, character } = sourceFile.getLineAndCharacterOfPosition(first.call.getStart(sourceFile)),
-    assignTarget = commonAssignTarget(writes);
+  const first = writes[0]!;
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(
+    first.call.getStart(sourceFile),
+  );
+  const assignTarget = commonAssignTarget(writes);
   if (assignTarget) {
     const fields = writes.map((write) => `\`${write.property}\``).join(", ");
     return {
@@ -651,13 +653,15 @@ function conditionalBatchFinding(
   sourceFile: ts.SourceFile,
   fileName: string,
 ): LegendPracticeFinding {
-  const first = writes[0]!,
-    { line, character } = sourceFile.getLineAndCharacterOfPosition(first.call.getStart(sourceFile)),
-    assignTarget = commonAssignTarget(writes),
-    conditionalPaths = conditionalWrites.map((write) => `\`${write.path}\``).join(", "),
-    assignHint = assignTarget
-      ? ` inside the batch, one \`${assignTarget}.assign(...)\` can replace the unconditional field writes;`
-      : "";
+  const first = writes[0]!;
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(
+    first.call.getStart(sourceFile),
+  );
+  const assignTarget = commonAssignTarget(writes);
+  const conditionalPaths = conditionalWrites.map((write) => `\`${write.path}\``).join(", ");
+  const assignHint = assignTarget
+    ? ` inside the batch, one \`${assignTarget}.assign(...)\` can replace the unconditional field writes;`
+    : "";
   return {
     action: "batch-observable-writes",
     confidence: "probable",

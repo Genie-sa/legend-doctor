@@ -59,8 +59,8 @@ test("resolves declarations through the exports map and walks up from nested roo
 });
 
 test("reports missing useValue and unresolvable declarations distinctly", async (testContext) => {
-  const missingRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-missing-")),
-    unknownRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-unknown-"));
+  const missingRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-missing-"));
+  const unknownRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-package-unknown-"));
   testContext.after(() => rm(missingRoot, { force: true, recursive: true }));
   testContext.after(() => rm(unknownRoot, { force: true, recursive: true }));
   await writeInstalledPackage(

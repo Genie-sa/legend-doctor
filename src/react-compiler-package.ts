@@ -1,41 +1,41 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const COMPILER_PACKAGES = ["babel-plugin-react-compiler", "react-compiler-runtime"],
-  DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"],
-  CONFIG_FILES = [
-    "app.json",
-    "app.config.js",
-    "app.config.ts",
-    "app.config.cjs",
-    "app.config.mjs",
-    "app.config.json",
-    "babel.config.js",
-    "babel.config.cjs",
-    "babel.config.mjs",
-    "babel.config.ts",
-    "babel.config.json",
-    ".babelrc",
-    ".babelrc.js",
-    ".babelrc.cjs",
-    ".babelrc.json",
-    "vite.config.js",
-    "vite.config.ts",
-    "vite.config.mjs",
-    "vite.config.mts",
-    "vite.config.cjs",
-    "next.config.js",
-    "next.config.ts",
-    "next.config.mjs",
-    "next.config.cjs",
-    "next.config.mts",
-  ],
-  // Matches every known enablement spelling: the Babel plugin name (Babel, Vite,
-  // Metro configs), the pre-19 runtime package, @vitejs/plugin-react's
-  // ReactCompilerPreset, and the `reactCompiler: true | {...}` config key used by
-  // Next.js and Expo `experiments`. `reactCompiler: false` stays unmatched.
-  CONFIG_MARKER =
-    /babel-plugin-react-compiler|react-compiler-runtime|reactCompilerPreset|\breactCompiler\b['"]?\s*:\s*(?:true|\{)/;
+const COMPILER_PACKAGES = ["babel-plugin-react-compiler", "react-compiler-runtime"];
+const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
+const CONFIG_FILES = [
+  "app.json",
+  "app.config.js",
+  "app.config.ts",
+  "app.config.cjs",
+  "app.config.mjs",
+  "app.config.json",
+  "babel.config.js",
+  "babel.config.cjs",
+  "babel.config.mjs",
+  "babel.config.ts",
+  "babel.config.json",
+  ".babelrc",
+  ".babelrc.js",
+  ".babelrc.cjs",
+  ".babelrc.json",
+  "vite.config.js",
+  "vite.config.ts",
+  "vite.config.mjs",
+  "vite.config.mts",
+  "vite.config.cjs",
+  "next.config.js",
+  "next.config.ts",
+  "next.config.mjs",
+  "next.config.cjs",
+  "next.config.mts",
+];
+// Matches every known enablement spelling: the Babel plugin name (Babel, Vite,
+// Metro configs), the pre-19 runtime package, @vitejs/plugin-react's
+// ReactCompilerPreset, and the `reactCompiler: true | {...}` config key used by
+// Next.js and Expo `experiments`. `reactCompiler: false` stays unmatched.
+const CONFIG_MARKER =
+  /babel-plugin-react-compiler|react-compiler-runtime|reactCompilerPreset|\breactCompiler\b['"]?\s*:\s*(?:true|\{)/;
 
 export class ReactCompilerResolver {
   private readonly directories = new Map<string, Promise<boolean>>();

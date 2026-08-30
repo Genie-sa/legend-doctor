@@ -33,18 +33,18 @@ export function collectReactCommitContext(
   sourceFile: ts.SourceFile,
   imports: HookImports,
 ): ReactCommitContext {
-  const effectCalls: ts.CallExpression[] = [],
-    lifecycleRegions = new Set<ts.Node>(),
-    nonTransitionSensitiveOwners = new Set<RuntimeFunctionLike>(),
-    sensitiveOwners = new Set<RuntimeFunctionLike>(),
-    transitionOwners = new Set<RuntimeFunctionLike>();
+  const effectCalls: ts.CallExpression[] = [];
+  const lifecycleRegions = new Set<ts.Node>();
+  const nonTransitionSensitiveOwners = new Set<RuntimeFunctionLike>();
+  const sensitiveOwners = new Set<RuntimeFunctionLike>();
+  const transitionOwners = new Set<RuntimeFunctionLike>();
   visit(sourceFile, (node) => {
     if (ts.isJsxAttribute(node) && node.name.getText() === "ref") {
       const expression =
-          node.initializer && ts.isJsxExpression(node.initializer)
-            ? node.initializer.expression
-            : null,
-        owner = expression ? findAncestor(node, isRuntimeFunctionLike) : null;
+        node.initializer && ts.isJsxExpression(node.initializer)
+          ? node.initializer.expression
+          : null;
+      const owner = expression ? findAncestor(node, isRuntimeFunctionLike) : null;
       if (expression && owner && refIdentityMayChange(expression, owner, imports)) {
         markRuntimeAncestors(node, sensitiveOwners);
         markRuntimeAncestors(node, nonTransitionSensitiveOwners);
@@ -53,11 +53,11 @@ export function collectReactCommitContext(
     }
     if (ts.isCallExpression(node) && isReactEffectCall(node, imports)) {
       lifecycleRegions.add(node);
-      const owner = findAncestor(node, isRuntimeFunctionLike),
-        callback =
-          owner && node.arguments[0]
-            ? resolveLifecycleCallback(node.arguments[0], owner, imports, new Set())
-            : null;
+      const owner = findAncestor(node, isRuntimeFunctionLike);
+      const callback =
+        owner && node.arguments[0]
+          ? resolveLifecycleCallback(node.arguments[0], owner, imports, new Set())
+          : null;
       if (callback) {
         lifecycleRegions.add(callback);
       }
@@ -75,8 +75,8 @@ export function collectReactCommitContext(
       markRuntimeAncestors(node, transitionOwners);
     }
   });
-  const directTransitionCallbacks = new Map<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>(),
-    eventTransitionCallbacks = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
+  const directTransitionCallbacks = new Map<RuntimeFunctionLike, readonly RuntimeFunctionLike[]>();
+  const eventTransitionCallbacks = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
   for (const owner of transitionOwners) {
     if (nonTransitionSensitiveOwners.has(owner)) {
       continue;
@@ -130,21 +130,21 @@ function directTransitionContext(
     }
   });
 
-  const callbacks: RuntimeFunctionLike[] = [],
-    eventCallbacks = new Set<RuntimeFunctionLike>();
+  const callbacks: RuntimeFunctionLike[] = [];
+  const eventCallbacks = new Set<RuntimeFunctionLike>();
   let safe = true;
   visit(owner.body, (node) => {
     if (!safe || !ts.isCallExpression(node)) {
       return;
     }
     const directHookTransition =
-        ts.isIdentifier(node.expression) && bindings.has(node.expression.text),
-      directStaticTransition = isImportedReactCall(
-        node,
-        imports.startTransition,
-        imports.reactNamespaces,
-        "startTransition",
-      );
+      ts.isIdentifier(node.expression) && bindings.has(node.expression.text);
+    const directStaticTransition = isImportedReactCall(
+      node,
+      imports.startTransition,
+      imports.reactNamespaces,
+      "startTransition",
+    );
     if (!directHookTransition && !directStaticTransition) {
       return;
     }
@@ -246,8 +246,8 @@ function directTransitionCallback(
     return null;
   }
 
-  let safe = true,
-    references = 0;
+  let references = 0,
+    safe = true;
   visit(owner.body, (node) => {
     if (
       !safe ||
@@ -292,8 +292,8 @@ function resolveLifecycleCallback(
   ) {
     return null;
   }
-  const initializer = unwrapTransparentExpression(declaration.initializer),
-    nextSeen = new Set(seen).add(value.text);
+  const initializer = unwrapTransparentExpression(declaration.initializer);
+  const nextSeen = new Set(seen).add(value.text);
   if (ts.isIdentifier(initializer)) {
     return resolveLifecycleCallback(initializer, owner, imports, nextSeen);
   }

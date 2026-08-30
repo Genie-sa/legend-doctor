@@ -9,8 +9,8 @@ import { promisify } from "node:util";
 
 import type { AnalysisReport } from "../src/types.js";
 
-const run = promisify(execFile),
-  CLI_PATH = path.join(import.meta.dirname, "..", "src", "cli.js");
+const run = promisify(execFile);
+const CLI_PATH = path.join(import.meta.dirname, "..", "src", "cli.js");
 
 async function writeFixtureRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cli-"));
@@ -45,13 +45,13 @@ test("--disposition change keeps only change findings and practices", async (tes
   testContext.after(() => rm(root, { force: true, recursive: true }));
 
   const { stdout } = await run(process.execPath, [
-      CLI_PATH,
-      root,
-      "--json",
-      "--disposition",
-      "change",
-    ]),
-    report = JSON.parse(stdout) as AnalysisReport;
+    CLI_PATH,
+    root,
+    "--json",
+    "--disposition",
+    "change",
+  ]);
+  const report = JSON.parse(stdout) as AnalysisReport;
 
   assert.equal(report.schemaVersion, 1);
   assert.equal(report.findings.length, 0);
@@ -65,8 +65,8 @@ test("--disposition keep composes with the equals form and drops practices", asy
   const root = await writeFixtureRoot();
   testContext.after(() => rm(root, { force: true, recursive: true }));
 
-  const { stdout } = await run(process.execPath, [CLI_PATH, root, "--json", "--disposition=keep"]),
-    report = JSON.parse(stdout) as AnalysisReport;
+  const { stdout } = await run(process.execPath, [CLI_PATH, root, "--json", "--disposition=keep"]);
+  const report = JSON.parse(stdout) as AnalysisReport;
 
   assert.deepEqual(
     report.findings.map((finding) => finding.disposition),
@@ -147,8 +147,8 @@ test("rejects --coverage without --json and names the fix", async (testContext) 
 });
 
 test("reports a missing target with the resolved path and exit code 1", async () => {
-  const missing = path.join(os.tmpdir(), "legend-doctor-missing", "nope"),
-    failure = await runExpectingFailure([missing, "--json"]);
+  const missing = path.join(os.tmpdir(), "legend-doctor-missing", "nope");
+  const failure = await runExpectingFailure([missing, "--json"]);
 
   assert.equal(failure.code, 1);
   assert.equal(failure.stdout, "");

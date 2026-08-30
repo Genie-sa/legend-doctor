@@ -74,8 +74,8 @@ export function isReactiveHostPropScalarState(
     return false;
   }
 
-  let surfaceStart: number | null = null,
-    attributeStart: number | null = null;
+  let attributeStart: number | null = null,
+    surfaceStart: number | null = null;
   for (const projection of projections) {
     if (
       nearestNestedFunction(projection, state.owner) ||
@@ -84,8 +84,8 @@ export function isReactiveHostPropScalarState(
     ) {
       return false;
     }
-    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner),
-      opening = attribute?.parent.parent;
+    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
+    const opening = attribute?.parent.parent;
     if (
       !attribute ||
       !opening ||
@@ -121,14 +121,14 @@ export function isSourceEventScalarLeafState(
   }
 
   const mathCalls = sourceHasRuntimeBinding(state.owner.getSourceFile(), "Math")
-      ? new Set<string>()
-      : new Set(["Math.max", "Math.min"]),
-    projections = oneHopRenderProjectionReferences(
-      state.owner,
-      usage.directRenderNodes,
-      (expression, reference) =>
-        isSafeProjectionExpression(expression, reference, options.pureProjectionImports, mathCalls),
-    );
+    ? new Set<string>()
+    : new Set(["Math.max", "Math.min"]);
+  const projections = oneHopRenderProjectionReferences(
+    state.owner,
+    usage.directRenderNodes,
+    (expression, reference) =>
+      isSafeProjectionExpression(expression, reference, options.pureProjectionImports, mathCalls),
+  );
   if (!projections || projections.length < 2) {
     return false;
   }
@@ -143,8 +143,8 @@ export function isSourceEventScalarLeafState(
     ) {
       return false;
     }
-    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner),
-      opening = attribute?.parent.parent;
+    const attribute = findAncestorUntil(projection, ts.isJsxAttribute, state.owner);
+    const opening = attribute?.parent.parent;
     if (
       !attribute ||
       !opening ||
@@ -166,8 +166,8 @@ export function isSourceEventScalarLeafState(
     returned = returnExpression;
   }
 
-  const leaves = [...surfaces.values()],
-    leafElements = leaves.reduce((sum, surface) => sum + jsxElementCountIn(surface), 0);
+  const leaves = [...surfaces.values()];
+  const leafElements = leaves.reduce((sum, surface) => sum + jsxElementCountIn(surface), 0);
   return (
     leaves.length >= 2 &&
     leaves.length <= 6 &&
@@ -196,10 +196,10 @@ function isEventOwnedNumericState(
     return false;
   }
 
-  const setterCall = usage.setterCallNodes[0]!,
-    argument = setterCall.arguments[0],
-    callback = nearestNestedFunction(setterCall, state.owner),
-    setterName = state.setterName!;
+  const setterCall = usage.setterCallNodes[0]!;
+  const argument = setterCall.arguments[0];
+  const callback = nearestNestedFunction(setterCall, state.owner);
+  const setterName = state.setterName!;
   return (
     setterCall.arguments.length === 1 &&
     argument !== undefined &&
@@ -221,8 +221,8 @@ function isEventOwnedLiteralBooleanState(
     usage.setterCalls === usage.setterCallNodes.length &&
     isEventOwnedScalarBase(state, usage, options) &&
     usage.setterCallNodes.every((call) => {
-      const argument = call.arguments[0],
-        callback = nearestNestedFunction(call, state.owner);
+      const argument = call.arguments[0];
+      const callback = nearestNestedFunction(call, state.owner);
       return (
         call.arguments.length === 1 &&
         argument !== undefined &&

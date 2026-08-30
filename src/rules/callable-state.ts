@@ -17,27 +17,27 @@ interface LocalDeclarations {
   readonly values: ReadonlyMap<string, readonly ts.Declaration[]>;
 }
 
-const callableStateCache = new WeakMap<StateCandidate, boolean>(),
-  localDeclarationsCache = new WeakMap<ts.SourceFile, LocalDeclarations>(),
-  REACT_CALLABLE_TYPE_EXPORTS = new Set([
-    "ComponentClass",
-    "ComponentType",
-    "FC",
-    "JSXElementConstructor",
-  ]);
+const callableStateCache = new WeakMap<StateCandidate, boolean>();
+const localDeclarationsCache = new WeakMap<ts.SourceFile, LocalDeclarations>();
+const REACT_CALLABLE_TYPE_EXPORTS = new Set([
+  "ComponentClass",
+  "ComponentType",
+  "FC",
+  "JSXElementConstructor",
+]);
 
 export function stateMayHoldCallable(state: StateCandidate): boolean {
   const cached = callableStateCache.get(state);
   if (cached !== undefined) {
     return cached;
   }
-  const sourceFile = state.call.getSourceFile(),
-    type = state.call.typeArguments?.[0],
-    callable =
-      (type !== undefined && stateTypeMayBeCallable(type, sourceFile)) ||
-      lazyInitializerMayReturnCallable(state.call.arguments[0]) ||
-      setterMayStoreCallable(state) ||
-      stateValueIsUsedAsCallable(state);
+  const sourceFile = state.call.getSourceFile();
+  const type = state.call.typeArguments?.[0];
+  const callable =
+    (type !== undefined && stateTypeMayBeCallable(type, sourceFile)) ||
+    lazyInitializerMayReturnCallable(state.call.arguments[0]) ||
+    setterMayStoreCallable(state) ||
+    stateValueIsUsedAsCallable(state);
   callableStateCache.set(state, callable);
   return callable;
 }
@@ -96,9 +96,9 @@ function localDeclarations(sourceFile: ts.SourceFile): LocalDeclarations {
   if (cached) {
     return cached;
   }
-  const callableReactTypes = new Set<string>(),
-    types = new Map<string, (ts.TypeAliasDeclaration | ts.InterfaceDeclaration)[]>(),
-    values = new Map<string, ts.Declaration[]>();
+  const callableReactTypes = new Set<string>();
+  const types = new Map<string, (ts.TypeAliasDeclaration | ts.InterfaceDeclaration)[]>();
+  const values = new Map<string, ts.Declaration[]>();
   visit(sourceFile, (node) => {
     if (
       ts.isImportDeclaration(node) &&

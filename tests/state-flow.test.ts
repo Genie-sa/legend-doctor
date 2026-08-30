@@ -7,18 +7,20 @@ import { isRuntimeFunctionLike, visit } from "../src/ast.js";
 import { StateFlowIndex } from "../src/state-flow.js";
 
 const requireValue = <Value>(value: Value | undefined): Value => {
-    assert.ok(value);
-    return value;
-  },
-  requireCall = (calls: ReadonlyMap<string, ts.CallExpression>, name: string): ts.CallExpression =>
-    requireValue(calls.get(name));
+  assert.ok(value);
+  return value;
+};
+const requireCall = (
+  calls: ReadonlyMap<string, ts.CallExpression>,
+  name: string,
+): ts.CallExpression => requireValue(calls.get(name));
 
 function functionAndCalls(source: string): {
   calls: Map<string, ts.CallExpression>;
   fn: ts.FunctionDeclaration;
 } {
-  const file = ts.createSourceFile("fixture.ts", source, ts.ScriptTarget.Latest, true),
-    fn = file.statements.find(ts.isFunctionDeclaration);
+  const file = ts.createSourceFile("fixture.ts", source, ts.ScriptTarget.Latest, true);
+  const fn = file.statements.find(ts.isFunctionDeclaration);
   assert.ok(fn && isRuntimeFunctionLike(fn));
   const calls = new Map<string, ts.CallExpression>();
   visit(fn.body, (node) => {

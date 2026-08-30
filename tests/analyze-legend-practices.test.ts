@@ -63,7 +63,7 @@ test("recognizes useObservable bindings", () => {
 
 test("replaces exact observable boolean flips with toggle", () => {
   const findings = analyzeLegendPractices(
-      `
+    `
     import { observable } from "@legendapp/state";
     import { useObservable } from "@legendapp/state/react";
     const shell$ = observable({ palette: { open: false } });
@@ -74,9 +74,9 @@ test("replaces exact observable boolean flips with toggle", () => {
       return { toggleExpanded, togglePalette };
     }
   `,
-      "fixture.ts",
-    ),
-    toggles = findings.filter((finding) => finding.action === "toggle-observable");
+    "fixture.ts",
+  );
+  const toggles = findings.filter((finding) => finding.action === "toggle-observable");
   assert.equal(toggles.length, 2);
   assert.ok(toggles.every((finding) => finding.confidence === "certain"));
   assert.match(requireValue(toggles[0]).message ?? "", /shell\$\.palette\.open\.toggle\(\)/u);
@@ -468,7 +468,7 @@ test("writes one dynamic record entry without cloning its parent object", () => 
 
 test("appends one inert value directly to a proven observable array", () => {
   const findings = analyzeLegendPractices(
-      `
+    `
     import { observable } from "@legendapp/state";
     import { useObservable } from "@legendapp/state/react";
     const pages$ = observable<string[]>([]);
@@ -486,9 +486,9 @@ test("appends one inert value directly to a proven observable array", () => {
       return files$;
     }
   `,
-      "fixture.ts",
-    ),
-    appendFindings = findings.filter((finding) => finding.action === "narrow-observable-write");
+    "fixture.ts",
+  );
+  const appendFindings = findings.filter((finding) => finding.action === "narrow-observable-write");
   assert.equal(appendFindings.length, 3);
   assert.match(requireValue(appendFindings[0]).message ?? "", /pages\$\.push\(page\)/u);
   assert.match(requireValue(appendFindings[1]).message ?? "", /store\$\.rows\.push\(row\)/u);
@@ -625,7 +625,7 @@ test("uses cross-file observable provenance for direct useValue", () => {
 
 test("uses peek for proven non-tracking React snapshots and event commands", () => {
   const findings = analyzeLegendPractices(
-      `
+    `
     import { observable } from "@legendapp/state";
     import { useEffect, useState } from "react";
     import { useObservable } from "@legendapp/state/react";
@@ -642,9 +642,9 @@ test("uses peek for proven non-tracking React snapshots and event commands", () 
       return <button onClick={handleSave}>{initial}</button>;
     }
   `,
-      "fixture.tsx",
-    ),
-    peekFindings = findings.filter((finding) => finding.action === "use-peek-for-snapshot");
+    "fixture.tsx",
+  );
+  const peekFindings = findings.filter((finding) => finding.action === "use-peek-for-snapshot");
   assert.equal(peekFindings.length, 4);
   assert.ok(peekFindings.every((finding) => finding.confidence === "probable"));
   assert.match(requireValue(peekFindings[0]).message ?? "", /\.peek\(\)/u);
@@ -1044,7 +1044,7 @@ test("moves a subscription only into one stable isolated JSX leaf", () => {
 
 test("moves a subscription behind a complete conditional JSX slot without changing its lifetime", () => {
   const positive = analyzeLegendPractices(
-      `
+    `
     import { useObservable, useValue } from "@legendapp/state/react";
     export function Screen({ view }) {
       const kind$ = useObservable("all");
@@ -1056,9 +1056,9 @@ test("moves a subscription behind a complete conditional JSX slot without changi
       </main>;
     }
   `,
-      "fixture.tsx",
-    ),
-    finding = positive.find((candidate) => candidate.location.line === 5);
+    "fixture.tsx",
+  );
+  const finding = positive.find((candidate) => candidate.location.line === 5);
   assert.equal(requireValue(finding).action, "move-use-value-down");
   assert.match(requireValue(finding).message ?? "", /always-mounted wrapper/u);
   assert.match(requireValue(finding).message ?? "", /complete conditional JSX slot/u);

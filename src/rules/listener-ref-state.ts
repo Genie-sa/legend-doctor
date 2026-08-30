@@ -42,8 +42,8 @@ export function findListenerRefStateClusters(
   effects: readonly EffectCandidate[],
   imports: HookImports,
 ): ReadonlyMap<StateCandidate, ListenerRefStateCluster> {
-  const result = new Map<StateCandidate, ListenerRefStateCluster>(),
-    statesByOwner = groupByOwner(states);
+  const result = new Map<StateCandidate, ListenerRefStateCluster>();
+  const statesByOwner = groupByOwner(states);
 
   for (const [owner, ownerStates] of statesByOwner) {
     const callbacks = listenerCallbacks(owner, effects, imports);
@@ -60,11 +60,11 @@ export function findListenerRefStateClusters(
     }
 
     const stateBySetter = new Map(
-        ownerStates.flatMap((state) =>
-          state.setterName ? [[state.setterName, state] as const] : [],
-        ),
+      ownerStates.flatMap((state) =>
+        state.setterName ? [[state.setterName, state] as const] : [],
       ),
-      candidateRegions = new Map<RuntimeFunctionLike, Set<StateCandidate>>();
+    );
+    const candidateRegions = new Map<RuntimeFunctionLike, Set<StateCandidate>>();
     for (const state of candidates) {
       const usage = usageByState.get(state);
       if (!usage) {
@@ -81,10 +81,10 @@ export function findListenerRefStateClusters(
       }
     }
 
-    const claimed = new Set<StateCandidate>(),
-      regions = [...candidateRegions].toSorted(
-        ([left], [right]) => left.getStart() - right.getStart(),
-      );
+    const claimed = new Set<StateCandidate>();
+    const regions = [...candidateRegions].toSorted(
+      ([left], [right]) => left.getStart() - right.getStart(),
+    );
     for (const [region, regionMembers] of regions) {
       if (
         regionMembers.size < 2 ||
@@ -95,20 +95,20 @@ export function findListenerRefStateClusters(
         continue;
       }
       const members = [...regionMembers].toSorted(
-          (left, right) => left.call.getStart() - right.call.getStart(),
-        ),
-        primary = members[0];
+        (left, right) => left.call.getStart() - right.call.getStart(),
+      );
+      const primary = members[0];
       if (!primary) {
         continue;
       }
-      const names = members.map((state) => state.valueName),
-        cluster: ListenerRefStateCluster = {
-          action: "use-ref",
-          id: `state-cluster:listener-ref:${owner.getStart()}:${names.join(",")}`,
-          members,
-          message: `Replace the listener-only state cluster (${names.map((name) => `\`${name}\``).join(", ")}) with refs as one migration; rewrite every read and write through \`.current\`, remove those values from memoized callback dependencies, and preserve each existing listener effect, registration target, event, guard, and cleanup.`,
-          primary,
-        };
+      const names = members.map((state) => state.valueName);
+      const cluster: ListenerRefStateCluster = {
+        action: "use-ref",
+        id: `state-cluster:listener-ref:${owner.getStart()}:${names.join(",")}`,
+        members,
+        message: `Replace the listener-only state cluster (${names.map((name) => `\`${name}\``).join(", ")}) with refs as one migration; rewrite every read and write through \`.current\`, remove those values from memoized callback dependencies, and preserve each existing listener effect, registration target, event, guard, and cleanup.`,
+        primary,
+      };
       for (const member of members) {
         claimed.add(member);
         result.set(member, cluster);
@@ -136,8 +136,8 @@ function listenerCallbacks(
   effects: readonly EffectCandidate[],
   imports: HookImports,
 ): ReadonlyMap<string, CallbackBinding> {
-  const callbacks = callbackBindings(owner, imports),
-    allowedByName = new Map<string, Set<ts.Identifier>>();
+  const callbacks = callbackBindings(owner, imports);
+  const allowedByName = new Map<string, Set<ts.Identifier>>();
 
   for (const effect of effects) {
     if (effect.owner !== owner || !effect.callback || isAsync(effect.callback)) {
@@ -148,11 +148,11 @@ function listenerCallbacks(
       continue;
     }
     const additions = collectListenerCalls(
-        effect.callback.body,
-        "addEventListener",
-        effect.callback,
-      ),
-      removals = collectListenerCalls(cleanup.body, "removeEventListener", cleanup);
+      effect.callback.body,
+      "addEventListener",
+      effect.callback,
+    );
+    const removals = collectListenerCalls(cleanup.body, "removeEventListener", cleanup);
     for (const addition of additions) {
       const binding = callbacks.get(addition.callback.text);
       if (!binding) {
@@ -214,8 +214,8 @@ function callbackBindings(
     ) {
       return;
     }
-    const callback = node.initializer.arguments[0],
-      dependencies = node.initializer.arguments[1];
+    const callback = node.initializer.arguments[0];
+    const dependencies = node.initializer.arguments[1];
     if (
       !callback ||
       (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -242,9 +242,9 @@ function effectCleanup(
   if (!ts.isBlock(callback.body)) {
     return null;
   }
-  const returns = callback.body.statements.filter(ts.isReturnStatement),
-    expression = returns.length === 1 ? returns[0]!.expression : undefined,
-    cleanup = expression ? unwrapTransparentExpression(expression) : null;
+  const returns = callback.body.statements.filter(ts.isReturnStatement);
+  const expression = returns.length === 1 ? returns[0]!.expression : undefined;
+  const cleanup = expression ? unwrapTransparentExpression(expression) : null;
   return cleanup &&
     (ts.isArrowFunction(cleanup) || ts.isFunctionExpression(cleanup)) &&
     !isAsync(cleanup)
@@ -296,8 +296,8 @@ function callbackReferencesAreConfined(
   binding: CallbackBinding,
   allowedReferences: ReadonlySet<ts.Identifier>,
 ): boolean {
-  let safe = true,
-    references = 0;
+  let references = 0,
+    safe = true;
   visit(owner.body, (node) => {
     if (
       !safe ||
@@ -339,8 +339,8 @@ function isListenerRefCandidate(
     return false;
   }
 
-  let listenerRead = false,
-    safe = true;
+  let listenerRead = false;
+  let safe = true;
   visit(state.owner.body, (node) => {
     if (
       !safe ||

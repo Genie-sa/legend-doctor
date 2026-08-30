@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test, { type TestContext } from "node:test";
+import test from "node:test";
+import type { TestContext } from "node:test";
 
 import ts from "typescript";
 
@@ -16,13 +17,13 @@ function temporaryDirectory(testContext: TestContext): string {
 }
 
 function identifiersNamed(sourceFile: ts.SourceFile, name: string): ts.Identifier[] {
-  const identifiers: ts.Identifier[] = [],
-    visit = (node: ts.Node): void => {
-      if (ts.isIdentifier(node) && node.text === name) {
-        identifiers.push(node);
-      }
-      ts.forEachChild(node, visit);
-    };
+  const identifiers: ts.Identifier[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && node.text === name) {
+      identifiers.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
   visit(sourceFile);
   return identifiers;
 }
@@ -33,13 +34,13 @@ const requireValue = <Value>(value: Value | undefined): Value => {
 };
 
 test("reports unreadable and invalid tsconfig files without guessing compiler options", (testContext) => {
-  const directory = temporaryDirectory(testContext),
-    sourcePath = path.join(directory, "screen.ts");
+  const directory = temporaryDirectory(testContext);
+  const sourcePath = path.join(directory, "screen.ts");
   writeFileSync(sourcePath, "export const value = 1;", "utf8");
-  const project = new AnalysisProject(new Map([[sourcePath, "export const value = 1;"]])),
-    missing = createSemanticContext(project, {
-      configFilePath: path.join(directory, "missing.json"),
-    });
+  const project = new AnalysisProject(new Map([[sourcePath, "export const value = 1;"]]));
+  const missing = createSemanticContext(project, {
+    configFilePath: path.join(directory, "missing.json"),
+  });
   assert.equal(missing.context, null);
   assert.equal(requireValue(missing.diagnostics[0]).code, "config-read-failed");
   assert.equal(requireValue(missing.diagnostics[0]).typescriptCode, 5083);
@@ -57,20 +58,20 @@ test("reports unreadable and invalid tsconfig files without guessing compiler op
 });
 
 test("rejects analysis files that are not owned by the selected tsconfig shard", (testContext) => {
-  const directory = temporaryDirectory(testContext),
-    ownedPath = path.join(directory, "owned.ts"),
-    foreignPath = path.join(directory, "foreign.ts");
+  const directory = temporaryDirectory(testContext);
+  const ownedPath = path.join(directory, "owned.ts");
+  const foreignPath = path.join(directory, "foreign.ts");
   writeFileSync(ownedPath, "export const owned = true;", "utf8");
   writeFileSync(foreignPath, "export const foreign = true;", "utf8");
   const configFilePath = path.join(directory, "tsconfig.json");
   writeFileSync(configFilePath, JSON.stringify({ files: ["owned.ts"] }), "utf8");
   const project = new AnalysisProject(
-      new Map([
-        [ownedPath, "export const owned = true;"],
-        [foreignPath, "export const foreign = true;"],
-      ]),
-    ),
-    result = createSemanticContext(project, { configFilePath });
+    new Map([
+      [ownedPath, "export const owned = true;"],
+      [foreignPath, "export const foreign = true;"],
+    ]),
+  );
+  const result = createSemanticContext(project, { configFilePath });
 
   assert.equal(result.context, null);
   assert.deepEqual(
@@ -81,11 +82,11 @@ test("rejects analysis files that are not owned by the selected tsconfig shard",
 });
 
 test("treats transitive imports as members of the selected tsconfig shard", (testContext) => {
-  const directory = temporaryDirectory(testContext),
-    entryPath = path.join(directory, "entry.ts"),
-    dependencyPath = path.join(directory, "dependency.ts"),
-    dependencySource = "export const value = 1;",
-    entrySource = 'import { value } from "./dependency.js"; export const copy = value;';
+  const directory = temporaryDirectory(testContext);
+  const entryPath = path.join(directory, "entry.ts");
+  const dependencyPath = path.join(directory, "dependency.ts");
+  const dependencySource = "export const value = 1;";
+  const entrySource = 'import { value } from "./dependency.js"; export const copy = value;';
   writeFileSync(entryPath, entrySource, "utf8");
   writeFileSync(dependencyPath, dependencySource, "utf8");
   const configFilePath = path.join(directory, "tsconfig.json");
@@ -98,12 +99,12 @@ test("treats transitive imports as members of the selected tsconfig shard", (tes
     "utf8",
   );
   const project = new AnalysisProject(
-      new Map([
-        [entryPath, entrySource],
-        [dependencyPath, dependencySource],
-      ]),
-    ),
-    result = createSemanticContext(project, { configFilePath });
+    new Map([
+      [entryPath, entrySource],
+      [dependencyPath, dependencySource],
+    ]),
+  );
+  const result = createSemanticContext(project, { configFilePath });
 
   assert.deepEqual(result.diagnostics, []);
   assert.ok(result.context);
@@ -113,17 +114,17 @@ test("treats transitive imports as members of the selected tsconfig shard", (tes
 });
 
 test("owns one Program, reuses cached ASTs, and exposes symbol, declaration, import, and type facts", (testContext) => {
-  const directory = temporaryDirectory(testContext),
-    sourceDirectory = path.join(directory, "src");
+  const directory = temporaryDirectory(testContext);
+  const sourceDirectory = path.join(directory, "src");
   mkdirSync(sourceDirectory);
 
-  const modelPath = path.join(sourceDirectory, "model.ts"),
-    screenPath = path.join(sourceDirectory, "screen.ts"),
-    modelSource = "export const values: string[] = [];",
-    screenSource = [
-      'import { values as sourceValues } from "./model.js";',
-      "export const selected = sourceValues[0];",
-    ].join("\n");
+  const modelPath = path.join(sourceDirectory, "model.ts");
+  const screenPath = path.join(sourceDirectory, "screen.ts");
+  const modelSource = "export const values: string[] = [];";
+  const screenSource = [
+    'import { values as sourceValues } from "./model.js";',
+    "export const selected = sourceValues[0];",
+  ].join("\n");
   writeFileSync(modelPath, modelSource, "utf8");
   writeFileSync(screenPath, screenSource, "utf8");
 
@@ -144,34 +145,34 @@ test("owns one Program, reuses cached ASTs, and exposes symbol, declaration, imp
   );
 
   const project = new AnalysisProject(
-      new Map([
-        [modelPath, modelSource],
-        [screenPath, screenSource],
-      ]),
-    ),
-    result = createSemanticContext(project, { configFilePath });
+    new Map([
+      [modelPath, modelSource],
+      [screenPath, screenSource],
+    ]),
+  );
+  const result = createSemanticContext(project, { configFilePath });
   assert.deepEqual(result.diagnostics, []);
   assert.ok(result.context);
 
-  const modelFile = project.getFile(modelPath),
-    screenFile = project.getFile(screenPath);
+  const modelFile = project.getFile(modelPath);
+  const screenFile = project.getFile(screenPath);
   assert.ok(modelFile);
   assert.ok(screenFile);
   assert.strictEqual(result.context.getSourceFile(modelFile), modelFile.sourceFile);
   assert.strictEqual(result.context.getSourceFile(screenFile), screenFile.sourceFile);
 
-  const sourceIdentifiers = identifiersNamed(screenFile.sourceFile, "sourceValues"),
-    modelIdentifiers = identifiersNamed(modelFile.sourceFile, "values"),
-    selectedIdentifiers = identifiersNamed(screenFile.sourceFile, "selected"),
-    [, importedUse] = sourceIdentifiers,
-    [exportedDeclaration] = modelIdentifiers,
-    [selected] = selectedIdentifiers;
+  const sourceIdentifiers = identifiersNamed(screenFile.sourceFile, "sourceValues");
+  const modelIdentifiers = identifiersNamed(modelFile.sourceFile, "values");
+  const selectedIdentifiers = identifiersNamed(screenFile.sourceFile, "selected");
+  const [, importedUse] = sourceIdentifiers;
+  const [exportedDeclaration] = modelIdentifiers;
+  const [selected] = selectedIdentifiers;
   assert.ok(importedUse);
   assert.ok(exportedDeclaration);
   assert.ok(selected);
 
-  const importSymbol = result.context.getSymbol(importedUse),
-    canonicalImportSymbol = result.context.getCanonicalSymbol(importedUse);
+  const importSymbol = result.context.getSymbol(importedUse);
+  const canonicalImportSymbol = result.context.getCanonicalSymbol(importedUse);
   assert.ok(importSymbol);
   assert.ok(canonicalImportSymbol);
   assert.notStrictEqual(importSymbol, canonicalImportSymbol);
@@ -192,14 +193,14 @@ test("owns one Program, reuses cached ASTs, and exposes symbol, declaration, imp
 });
 
 test("reports namespace access provenance and rejects nodes from a foreign AST", (testContext) => {
-  const directory = temporaryDirectory(testContext),
-    modelPath = path.join(directory, "model.ts"),
-    screenPath = path.join(directory, "screen.ts"),
-    modelSource = "export const value = 1;",
-    screenSource = [
-      'import * as model from "./model.js";',
-      "export const copy = model.value;",
-    ].join("\n");
+  const directory = temporaryDirectory(testContext);
+  const modelPath = path.join(directory, "model.ts");
+  const screenPath = path.join(directory, "screen.ts");
+  const modelSource = "export const value = 1;";
+  const screenSource = [
+    'import * as model from "./model.js";',
+    "export const copy = model.value;",
+  ].join("\n");
   writeFileSync(modelPath, modelSource, "utf8");
   writeFileSync(screenPath, screenSource, "utf8");
   const configFilePath = path.join(directory, "tsconfig.json");
@@ -213,12 +214,12 @@ test("reports namespace access provenance and rejects nodes from a foreign AST",
   );
 
   const project = new AnalysisProject(
-      new Map([
-        [modelPath, modelSource],
-        [screenPath, screenSource],
-      ]),
-    ),
-    result = createSemanticContext(project, { configFilePath });
+    new Map([
+      [modelPath, modelSource],
+      [screenPath, screenSource],
+    ]),
+  );
+  const result = createSemanticContext(project, { configFilePath });
   assert.ok(result.context);
   const screenFile = project.getFile(screenPath);
   assert.ok(screenFile);
@@ -230,14 +231,14 @@ test("reports namespace access provenance and rejects nodes from a foreign AST",
   assert.deepEqual(requireValue(provenance).accessPath, ["value"]);
 
   const foreignFile = ts.createSourceFile(
-      screenPath,
-      screenSource,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    ),
-    foreignIdentifiers = identifiersNamed(foreignFile, "value"),
-    [foreignValue] = foreignIdentifiers;
+    screenPath,
+    screenSource,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const foreignIdentifiers = identifiersNamed(foreignFile, "value");
+  const [foreignValue] = foreignIdentifiers;
   assert.ok(foreignValue);
   assert.equal(result.context.getSymbol(foreignValue), undefined);
   assert.equal(result.context.getCanonicalSymbol(foreignValue), undefined);

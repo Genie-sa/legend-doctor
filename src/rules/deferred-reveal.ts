@@ -37,11 +37,11 @@ export function findDeferredRevealStates(
       continue;
     }
     const stateBySetter = new Map(
-        (statesByOwner.get(effect.owner) ?? []).flatMap((state) =>
-          state.setterName ? [[state.setterName, state] as const] : [],
-        ),
+      (statesByOwner.get(effect.owner) ?? []).flatMap((state) =>
+        state.setterName ? [[state.setterName, state] as const] : [],
       ),
-      state = deferredRevealState(effect, stateBySetter);
+    );
+    const state = deferredRevealState(effect, stateBySetter);
     if (
       !state ||
       state.owner !== effect.owner ||
@@ -84,10 +84,10 @@ function deferredRevealState(
     return null;
   }
   const schedulerDeclarations: {
-      handle: string;
-      setter: StateCandidate;
-    }[] = [],
-    knownSetterCalls: ts.CallExpression[] = [];
+    handle: string;
+    setter: StateCandidate;
+  }[] = [];
+  const knownSetterCalls: ts.CallExpression[] = [];
   visit(effect.callback.body, (node) => {
     if (
       ts.isCallExpression(node) &&
@@ -108,8 +108,8 @@ function deferredRevealState(
     if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) {
       return;
     }
-    const setterCall = soleLiteralTrueSetterCall(callback, stateBySetter),
-      setter = setterCall ? stateBySetter.get(setterCall.expression.text) : undefined;
+    const setterCall = soleLiteralTrueSetterCall(callback, stateBySetter);
+    const setter = setterCall ? stateBySetter.get(setterCall.expression.text) : undefined;
     if (setter) {
       schedulerDeclarations.push({ handle: node.name.text, setter });
     }
@@ -232,8 +232,8 @@ export function commonRenderGateSubtree(
   nodes: readonly ts.Node[],
   boundary: ts.Node,
 ): JsxSubtreeNode | null {
-  const subtrees = nodes.map((node) => renderGateSubtree(node, boundary)),
-    first = subtrees[0];
+  const subtrees = nodes.map((node) => renderGateSubtree(node, boundary));
+  const first = subtrees[0];
   return first && subtrees.every((subtree) => subtree === first) ? first : null;
 }
 
@@ -293,8 +293,8 @@ function localJsxFactoryReturn(
   ) {
     return null;
   }
-  const factoryName = call.expression.text,
-    declarations: ts.VariableDeclaration[] = [];
+  const factoryName = call.expression.text;
+  const declarations: ts.VariableDeclaration[] = [];
   visitSkippingNestedRuntimeFunctions(boundary, (node) => {
     if (
       ts.isVariableDeclaration(node) &&

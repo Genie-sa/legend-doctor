@@ -165,8 +165,8 @@ export function isEvaluationInert(expression: ts.Expression): boolean {
     return true;
   }
   if (ts.isPrefixUnaryExpression(value)) {
-    const numericLiteral = ts.isNumericLiteral(value.operand),
-      bigintLiteral = ts.isBigIntLiteral(value.operand);
+    const numericLiteral = ts.isNumericLiteral(value.operand);
+    const bigintLiteral = ts.isBigIntLiteral(value.operand);
     return (
       (numericLiteral && value.operator === ts.SyntaxKind.PlusToken) ||
       ((numericLiteral || bigintLiteral) &&

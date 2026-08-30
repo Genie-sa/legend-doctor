@@ -19,6 +19,30 @@
     "nursery": "error"
   },
   "rules": {
+    // --- Contradictory pairs: the lower-value rule yields to the higher-value one ---
+    // func-style demands function expressions, which do not hoist. This codebase has ~131
+    // mutually-recursive helper pairs, so const arrows would make no-use-before-define
+    // violations into real TDZ errors. Style yields to the rule that prevents runtime faults.
+    "eslint/func-style": "off",
+    // Hoisted function declarations are safe to call before their definition; variables and
+    // classes are not, and those are still enforced.
+    "eslint/no-use-before-define": ["error", { "functions": false }],
+    // Key order is observable: AnalysisCoverageLedger derives stage order from Object.keys,
+    // and alphabetizing it silently reordered the serialized report contract.
+    "eslint/sort-keys": "off",
+    // continue is a guard clause that removes nesting; banning it deepens blocks and fights
+    // max-depth and complexity, which measure the thing that actually matters.
+    "eslint/no-continue": "off",
+    // no-ternary subsumes and moots the precise readability guards; keep those instead.
+    "eslint/no-ternary": "off",
+    // One declarator per statement is the modern form, and it also makes sort-vars vacuous
+    // rather than leaving it in conflict with combined declarations.
+    "eslint/one-var": ["error", "never"],
+    // 0, 1 and -1 are the vocabulary of index and length arithmetic, not magic values.
+    "eslint/no-magic-numbers": [
+      "error",
+      { "ignore": [0, 1, -1], "ignoreArrayIndexes": true, "ignoreDefaultValues": true }
+    ],
     // Keep async/await. The promise rules otherwise demand syntax this rule rejects.
     "oxc/no-async-await": "off",
     // Named exports are the package API; default exports remain forbidden.

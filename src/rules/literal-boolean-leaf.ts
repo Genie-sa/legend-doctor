@@ -160,8 +160,8 @@ function isAdjacentBooleanLeafState(
     return false;
   }
 
-  const expressions = [...surfaces.values()].map((surface) => surface.expression),
-    parent = expressions[0]?.parent;
+  const expressions = [...surfaces.values()].map((surface) => surface.expression);
+  const parent = expressions[0]?.parent;
   if (
     !parent ||
     (!ts.isJsxElement(parent) && !ts.isJsxFragment(parent)) ||
@@ -170,11 +170,11 @@ function isAdjacentBooleanLeafState(
     return false;
   }
   const children = parent.children.filter(
-      (child) => !ts.isJsxText(child) || child.text.trim().length > 0,
-    ),
-    indexes = expressions
-      .map((expression) => children.indexOf(expression))
-      .toSorted((left, right) => left - right);
+    (child) => !ts.isJsxText(child) || child.text.trim().length > 0,
+  );
+  const indexes = expressions
+    .map((expression) => children.indexOf(expression))
+    .toSorted((left, right) => left - right);
   return (
     children.length > expressions.length &&
     indexes[0] !== -1 &&
@@ -212,8 +212,8 @@ export function isMultiSurfaceLiteralBooleanState(
     return false;
   }
 
-  const projections = presentationProjections(state, usage, options.pureProjectionImports),
-    surfaces = new Map<number, number>();
+  const projections = presentationProjections(state, usage, options.pureProjectionImports);
+  const surfaces = new Map<number, number>();
   let conditionalSurfaces = 0;
   for (const projection of projections.values()) {
     if (
@@ -267,8 +267,8 @@ function conditionalPresentationSurfaces(
   usage: StateUsage,
   pureProjectionImports: ReadonlySet<string>,
 ): ReadonlyMap<number, ConditionalPresentationSurface> | null {
-  const projections = presentationProjections(state, usage, pureProjectionImports),
-    surfaces = new Map<number, ConditionalPresentationSurface>();
+  const projections = presentationProjections(state, usage, pureProjectionImports);
+  const surfaces = new Map<number, ConditionalPresentationSurface>();
   for (const projection of projections.values()) {
     const condition = renderGateCondition(projection, state.owner);
     if (
@@ -305,13 +305,13 @@ function presentationProjections(
 ): ReadonlyMap<number, ts.Node> {
   const projections = new Map<number, ts.Node>();
   for (const renderNode of usage.directRenderNodes) {
-    const declaration = findAncestorUntil(renderNode, ts.isVariableDeclaration, state.owner),
-      aliases =
-        declaration?.initializer && containsJsx(declaration.initializer)
-          ? null
-          : oneHopRenderProjectionReferences(state.owner, [renderNode], (expression, reference) =>
-              isSafeProjectionExpression(expression, reference, pureProjectionImports),
-            );
+    const declaration = findAncestorUntil(renderNode, ts.isVariableDeclaration, state.owner);
+    const aliases =
+      declaration?.initializer && containsJsx(declaration.initializer)
+        ? null
+        : oneHopRenderProjectionReferences(state.owner, [renderNode], (expression, reference) =>
+            isSafeProjectionExpression(expression, reference, pureProjectionImports),
+          );
     for (const projection of aliases ?? [renderNode]) {
       projections.set(projection.getStart(), projection);
     }
@@ -386,8 +386,8 @@ function callbackIsIntrinsicEventRooted(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   owner: RuntimeFunctionLike,
 ): boolean {
-  const inlineAttribute = findAncestorUntil(callback, ts.isJsxAttribute, owner),
-    inlineInitializer = inlineAttribute?.initializer;
+  const inlineAttribute = findAncestorUntil(callback, ts.isJsxAttribute, owner);
+  const inlineInitializer = inlineAttribute?.initializer;
   if (
     inlineAttribute &&
     inlineInitializer &&
@@ -407,8 +407,8 @@ function callbackIsIntrinsicEventRooted(
     return false;
   }
 
-  let referenced = false,
-    safe = true;
+  let referenced = false;
+  let safe = true;
   visit(owner.body, (node) => {
     if (
       !safe ||
@@ -436,11 +436,9 @@ function attributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
   if (!/^on[A-Z]/u.test(attribute.name.getText())) {
     return false;
   }
-  const opening = attribute.parent.parent,
-    tag =
-      ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
-        ? opening.tagName
-        : null;
+  const opening = attribute.parent.parent;
+  const tag =
+    ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening) ? opening.tagName : null;
   return tag !== null && ts.isIdentifier(tag) && /^[a-z]/u.test(tag.text);
 }
 

@@ -22,11 +22,11 @@ import { isSafeProjectionExpression, jsxSubtreeAncestors } from "./deferred-reve
 import type { RuntimeFunctionLike } from "../ast.js";
 import type { JsxSubtreeNode } from "./deferred-reveal.js";
 
-const EMPTY_BINDINGS: ReadonlySet<string> = new Set(),
-  EMPTY_NODES: ReadonlySet<ts.Node> = new Set(),
-  EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set(),
-  PURE_MATH_PROJECTION_CALLS: ReadonlySet<string> = new Set(["Math.max", "Math.min"]),
-  jsxElementCounts = new WeakMap<ts.Node, number>();
+const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
+const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
+const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
+const PURE_MATH_PROJECTION_CALLS: ReadonlySet<string> = new Set(["Math.max", "Math.min"]);
+const jsxElementCounts = new WeakMap<ts.Node, number>();
 
 export { stateMayHoldCallable, stateTypeMayBeCallable } from "./callable-state.js";
 
@@ -36,19 +36,19 @@ export function hasIndependentRenderCutWitness(
   localComponents: ReadonlySet<string>,
   sourceComponents: ReadonlySet<string>,
 ): boolean {
-  let hasIndependentComponent = false,
-    independentElements = 0;
+  let hasIndependentComponent = false;
+  let independentElements = 0;
   visitSkippingNestedRuntimeFunctions(returned, (node) => {
     if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) {
       return;
     }
-    const candidateSubtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node,
-      independent = excluded.every(
-        (subtree) =>
-          candidateSubtree !== subtree &&
-          !nodeWithin(candidateSubtree, subtree) &&
-          !nodeWithin(subtree, candidateSubtree),
-      );
+    const candidateSubtree: ts.Node = ts.isJsxOpeningElement(node) ? node.parent : node;
+    const independent = excluded.every(
+      (subtree) =>
+        candidateSubtree !== subtree &&
+        !nodeWithin(candidateSubtree, subtree) &&
+        !nodeWithin(subtree, candidateSubtree),
+    );
     if (!independent) {
       return;
     }
@@ -105,9 +105,9 @@ export function oneHopRenderProjectionReferences(
     return null;
   }
   const declarations = new Set(
-      renderNodes.map((node) => findAncestorUntil(node, ts.isVariableDeclaration, owner)),
-    ),
-    declaration = declarations.size === 1 ? [...declarations][0] : null;
+    renderNodes.map((node) => findAncestorUntil(node, ts.isVariableDeclaration, owner)),
+  );
+  const declaration = declarations.size === 1 ? [...declarations][0] : null;
   if (!declaration) {
     // SAFETY: The entry guard proves every render node is an Identifier.
     return renderNodes as readonly ts.Identifier[];
@@ -123,8 +123,8 @@ export function oneHopRenderProjectionReferences(
   ) {
     return null;
   }
-  const declarationName = declaration.name,
-    references: ts.Identifier[] = [];
+  const declarationName = declaration.name;
+  const references: ts.Identifier[] = [];
   visit(owner.body, (node) => {
     if (
       ts.isIdentifier(node) &&
@@ -149,13 +149,13 @@ export function boundedRenderProjectionReferences(
   }
 
   // SAFETY: The entry guard proves every render node is an Identifier.
-  let references = renderNodes as readonly ts.Identifier[],
-    hops = 0;
+  let references = renderNodes as readonly ts.Identifier[];
+  let hops = 0;
   while (hops < maxHops) {
     const declarations = new Set(
-        references.map((node) => findAncestorUntil(node, ts.isVariableDeclaration, owner)),
-      ),
-      declaration = declarations.size === 1 ? [...declarations][0] : null;
+      references.map((node) => findAncestorUntil(node, ts.isVariableDeclaration, owner)),
+    );
+    const declaration = declarations.size === 1 ? [...declarations][0] : null;
     if (!declaration) {
       return hops >= 2 ? references : null;
     }
@@ -180,8 +180,8 @@ export function boundedRenderProjectionReferences(
       return null;
     }
 
-    const declarationName = declaration.name.text,
-      next: ts.Identifier[] = [];
+    const declarationName = declaration.name.text;
+    const next: ts.Identifier[] = [];
     visit(owner.body, (node) => {
       if (
         ts.isIdentifier(node) &&
@@ -328,8 +328,8 @@ export function hasOnlyEventCommandReads(
       return;
     }
     if (isHookDependencyReference(node, new Set(["useCallback"]))) {
-      const call = findAncestorUntil(node, ts.isCallExpression, state.owner),
-        candidate = call?.arguments[0];
+      const call = findAncestorUntil(node, ts.isCallExpression, state.owner);
+      const candidate = call?.arguments[0];
       safe =
         candidate !== undefined &&
         (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
@@ -416,8 +416,8 @@ export function callbackIsEventRooted(
   }
 
   const nextSeen = new Set(seen).add(name);
-  let referenced = false,
-    safe = true;
+  let referenced = false;
+  let safe = true;
   visit(owner.body, (node) => {
     if (
       !safe ||
@@ -530,8 +530,8 @@ export function lowestCommonJsxSubtree(
   nodes: readonly ts.Node[],
   boundary: ts.Node,
 ): JsxSubtreeNode | null {
-  const ancestorLists = nodes.map((node) => jsxSubtreeAncestors(node, boundary)),
-    first = ancestorLists[0];
+  const ancestorLists = nodes.map((node) => jsxSubtreeAncestors(node, boundary));
+  const first = ancestorLists[0];
   if (!first || ancestorLists.some((ancestors) => ancestors.length === 0)) {
     return null;
   }
@@ -792,8 +792,8 @@ export function isUniquelySelectedRepeatedProjection(
   nodes: readonly ts.Node[],
   boundary: RuntimeFunctionLike,
 ): boolean {
-  const repeatedCalls = nodes.map((node) => nearestRepeatedRenderCall(node, boundary)),
-    repeated = repeatedCalls[0];
+  const repeatedCalls = nodes.map((node) => nearestRepeatedRenderCall(node, boundary));
+  const repeated = repeatedCalls[0];
   if (
     !repeated ||
     repeatedCalls.some((call) => call !== repeated) ||
@@ -802,11 +802,11 @@ export function isUniquelySelectedRepeatedProjection(
   ) {
     return false;
   }
-  const callback = repeated.arguments[0],
-    item =
-      callback &&
-      (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
-      callback.parameters[0]?.name;
+  const callback = repeated.arguments[0];
+  const item =
+    callback &&
+    (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
+    callback.parameters[0]?.name;
   if (!callback || !item || !ts.isIdentifier(item)) {
     return false;
   }
@@ -818,14 +818,15 @@ export function isUniquelySelectedRepeatedProjection(
     return false;
   }
 
-  const clauses = new Set(nodes.map((node) => findAncestorUntil(node, ts.isCaseClause, callback))),
-    clause = clauses.size === 1 ? [...clauses][0] : null;
+  const clauses = new Set(nodes.map((node) => findAncestorUntil(node, ts.isCaseClause, callback)));
+  const clause = clauses.size === 1 ? [...clauses][0] : null;
   if (!clause || !isPrimitiveLiteral(clause.expression)) {
     return false;
   }
-  const switchStatement = findAncestorUntil(clause, ts.isSwitchStatement, callback),
-    switchExpression = switchStatement && unwrapTransparentExpression(switchStatement.expression),
-    returnStatement = clause.statements[0];
+  const switchStatement = findAncestorUntil(clause, ts.isSwitchStatement, callback);
+  const switchExpression =
+    switchStatement && unwrapTransparentExpression(switchStatement.expression);
+  const returnStatement = clause.statements[0];
   if (
     !switchExpression ||
     !ts.isIdentifier(switchExpression) ||
@@ -942,14 +943,12 @@ function isExactUniquenessFilter(call: ts.CallExpression, boundary: ts.Node): bo
   ) {
     return false;
   }
-  const onlyStatement = ts.isBlock(callback.body) ? callback.body.statements[0] : undefined,
-    body = ts.isBlock(callback.body)
-      ? callback.body.statements.length === 1 &&
-        onlyStatement &&
-        ts.isReturnStatement(onlyStatement)
-        ? onlyStatement.expression
-        : undefined
-      : callback.body;
+  const onlyStatement = ts.isBlock(callback.body) ? callback.body.statements[0] : undefined;
+  const body = ts.isBlock(callback.body)
+    ? callback.body.statements.length === 1 && onlyStatement && ts.isReturnStatement(onlyStatement)
+      ? onlyStatement.expression
+      : undefined
+    : callback.body;
   if (!body) {
     return false;
   }
@@ -981,8 +980,8 @@ function expressionHasArrayType(expression: ts.Expression, boundary: ts.Node): b
   if (!ts.isIdentifier(value)) {
     return false;
   }
-  const name = value.text,
-    types: ts.TypeNode[] = [];
+  const name = value.text;
+  const types: ts.TypeNode[] = [];
   visit(boundary.getSourceFile(), (node) => {
     if (ts.isBindingElement(node) && ts.isIdentifier(node.name) && node.name.text === name) {
       const type = destructuredBindingType(node);
@@ -1014,16 +1013,16 @@ function destructuredBindingType(binding: ts.BindingElement): ts.TypeNode | unde
   if (!declaration?.type || !ts.isTypeLiteralNode(declaration.type)) {
     return undefined;
   }
-  const sourceName = binding.propertyName?.getText() ?? binding.name.getText(),
-    property = declaration.type.members.find(
-      (member) => ts.isPropertySignature(member) && member.name?.getText() === sourceName,
-    );
+  const sourceName = binding.propertyName?.getText() ?? binding.name.getText();
+  const property = declaration.type.members.find(
+    (member) => ts.isPropertySignature(member) && member.name?.getText() === sourceName,
+  );
   return property && ts.isPropertySignature(property) ? property.type : undefined;
 }
 
 function isIndexOfItem(expression: ts.Expression, array: string, item: string): boolean {
-  const value = unwrapTransparentExpression(expression),
-    argument = ts.isCallExpression(value) ? value.arguments[0] : undefined;
+  const value = unwrapTransparentExpression(expression);
+  const argument = ts.isCallExpression(value) ? value.arguments[0] : undefined;
   return (
     ts.isCallExpression(value) &&
     value.arguments.length === 1 &&
@@ -1058,10 +1057,10 @@ function jsxKeyMatchesLiteral(
   element: ts.JsxElement | ts.JsxSelfClosingElement,
   literal: ts.Expression,
 ): boolean {
-  const opening = ts.isJsxElement(element) ? element.openingElement : element,
-    key = opening.attributes.properties.find(
-      (property) => ts.isJsxAttribute(property) && property.name.getText() === "key",
-    );
+  const opening = ts.isJsxElement(element) ? element.openingElement : element;
+  const key = opening.attributes.properties.find(
+    (property) => ts.isJsxAttribute(property) && property.name.getText() === "key",
+  );
   if (!key || !ts.isJsxAttribute(key) || !key.initializer) {
     return false;
   }

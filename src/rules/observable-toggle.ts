@@ -24,8 +24,8 @@ export function findObservableTogglePractices(
     if (!target) {
       return;
     }
-    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)),
-      path = target.getText(sourceFile);
+    const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+    const path = target.getText(sourceFile);
     findings.push({
       action: "toggle-observable",
       confidence: "certain",
@@ -86,8 +86,8 @@ function isSamePathPeekNegation(argument: ts.Expression, target: ts.Expression):
   ) {
     return false;
   }
-  const readPath = staticPropertyPath(read.expression.expression),
-    targetPath = staticPropertyPath(target);
+  const readPath = staticPropertyPath(read.expression.expression);
+  const targetPath = staticPropertyPath(target);
   return readPath !== null && targetPath !== null && samePath(readPath, targetPath);
 }
 

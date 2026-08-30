@@ -26,9 +26,9 @@ export function findLazyCallbackLeaf(
   sourceComponents: ReadonlySet<string>,
   proofs: LazyCallbackLeafProofs,
 ): LazyCallbackLeaf | null {
-  const initializer = state.call.arguments[0],
-    valueSite = [...usage.valueTransportSites][0],
-    target = [...usage.valueTargets][0];
+  const initializer = state.call.arguments[0];
+  const valueSite = [...usage.valueTransportSites][0];
+  const target = [...usage.valueTargets][0];
   if (
     !initializer ||
     (!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer)) ||
@@ -72,8 +72,8 @@ export function findLazyCallbackLeaf(
   ) {
     return null;
   }
-  const callbackOwner = callback.parent.parent,
-    returned = proofs.uniqueReturnedExpression(state.owner);
+  const callbackOwner = callback.parent.parent;
+  const returned = proofs.uniqueReturnedExpression(state.owner);
   if (
     !returned ||
     !nodeWithin(callbackOwner, returned) ||

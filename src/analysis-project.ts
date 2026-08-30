@@ -37,9 +37,9 @@ export class AnalysisProject {
   constructor(sources: ReadonlyMap<string, string>) {
     const filesByIdentity = new Map<string, AnalysisFile>();
     for (const [fileName, sourceText] of sources) {
-      const file = createAnalysisFile(fileName, sourceText),
-        key = pathIdentityKey(file.identityPath),
-        existing = filesByIdentity.get(key);
+      const file = createAnalysisFile(fileName, sourceText);
+      const key = pathIdentityKey(file.identityPath);
+      const existing = filesByIdentity.get(key);
       if (existing) {
         throw new Error(
           `duplicate analysis file identity: ${existing.originalPath} and ${file.originalPath}`,
@@ -62,15 +62,15 @@ export function createAnalysisFile(fileName: string, sourceText: string): Analys
   if (!isSupportedAnalysisFile(fileName)) {
     throw new Error(`unsupported analysis file extension: ${fileName}`);
   }
-  const identityPath = canonicalPath(fileName),
-    scriptKind = scriptKindForFile(identityPath),
-    sourceFile = ts.createSourceFile(
-      identityPath,
-      sourceText,
-      ts.ScriptTarget.Latest,
-      true,
-      scriptKind,
-    );
+  const identityPath = canonicalPath(fileName);
+  const scriptKind = scriptKindForFile(identityPath);
+  const sourceFile = ts.createSourceFile(
+    identityPath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind,
+  );
   return {
     dialect: dialectForScriptKind(scriptKind),
     identityPath,

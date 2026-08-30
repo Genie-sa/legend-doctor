@@ -29,9 +29,9 @@ interface StoredCallbackRef {
   readonly property: string;
 }
 
-const MAX_CALLBACK_DEPTH = 8,
-  REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "useLayoutEffect"]),
-  reactHookImportsCache = new WeakMap<ts.SourceFile, ReactHookImports>();
+const MAX_CALLBACK_DEPTH = 8;
+const REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "useLayoutEffect"]);
+const reactHookImportsCache = new WeakMap<ts.SourceFile, ReactHookImports>();
 
 /**
  * Proves that one callback input to a resolved project hook cannot execute
@@ -67,14 +67,14 @@ function hookDefersCallback(
   if (!binding || bindingDeclarationCount(source.owner, binding.name.text) !== 1) {
     return false;
   }
-  const nextVisited = new Set(visited).add(key),
-    hooks = reactHookImports(source.sourceFile),
-    storedRef = storedCallbackRef(source, binding.name, hooks);
+  const nextVisited = new Set(visited).add(key);
+  const hooks = reactHookImports(source.sourceFile);
+  const storedRef = storedCallbackRef(source, binding.name, hooks);
   if (storedRef && !refRefreshesCallback(source, binding.name, storedRef, hooks)) {
     return false;
   }
-  let references = 0,
-    safe = true;
+  let references = 0;
+  let safe = true;
   visit(source.owner.body, (node) => {
     if (
       !safe ||
@@ -144,8 +144,8 @@ function callbackExecutesDeferred(
         if (isImportedReactEffect(call, hooks)) {
           return true;
         }
-        const name = hookCallName(call),
-          target = name ? resolver.resolveHook(source.file, name) : null;
+        const name = hookCallName(call);
+        const target = name ? resolver.resolveHook(source.file, name) : null;
         if (target && hookDefersCallback(target, argumentIndex, null, resolver, visited, depth)) {
           return true;
         }
@@ -157,8 +157,8 @@ function callbackExecutesDeferred(
   if (!name || !source.owner.body) {
     return false;
   }
-  let references = 0,
-    safe = true;
+  let references = 0;
+  let safe = true;
   visit(source.owner.body, (node) => {
     if (
       !safe ||
@@ -209,8 +209,8 @@ function referenceIsDirectDeferredHookArgument(
   if (isImportedReactEffect(call, hooks)) {
     return true;
   }
-  const name = hookCallName(call),
-    target = name ? resolver.resolveHook(source.file, name) : null;
+  const name = hookCallName(call);
+  const target = name ? resolver.resolveHook(source.file, name) : null;
   return (
     target !== null && hookDefersCallback(target, argumentIndex, null, resolver, visited, depth)
   );
@@ -288,8 +288,8 @@ function callbackReferenceIsRefStorage(
     return false;
   }
   // SAFETY: The parent kind check above proves this node is an object literal.
-  const object = property.parent as ts.ObjectLiteralExpression,
-    propertyName = objectPropertyName(property);
+  const object = property.parent as ts.ObjectLiteralExpression;
+  const propertyName = objectPropertyName(property);
   if (propertyName !== storedRef.property) {
     return false;
   }
@@ -342,8 +342,8 @@ function refRefreshesCallback(
     ) {
       return;
     }
-    const assignment = property.parent.parent,
-      effect = nearestNestedFunction(assignment, source.owner);
+    const assignment = property.parent.parent;
+    const effect = nearestNestedFunction(assignment, source.owner);
     if (
       ts.isBinaryExpression(assignment) &&
       assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
@@ -379,8 +379,8 @@ function storedRefExecutesDeferred(
   if (bindingDeclarationCount(source.owner, storedRef.name) !== 1) {
     return false;
   }
-  let calls = 0,
-    safe = true;
+  let calls = 0;
+  let safe = true;
   visit(source.owner.body, (node) => {
     if (
       !safe ||
@@ -556,9 +556,9 @@ function reactHookImports(sourceFile: ts.SourceFile): ReactHookImports {
   if (cached) {
     return cached;
   }
-  const effectNames = new Set<string>(),
-    namespaces = new Set<string>(),
-    refNames = new Set<string>();
+  const effectNames = new Set<string>();
+  const namespaces = new Set<string>();
+  const refNames = new Set<string>();
   for (const statement of sourceFile.statements) {
     if (
       !ts.isImportDeclaration(statement) ||

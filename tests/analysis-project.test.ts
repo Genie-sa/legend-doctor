@@ -13,10 +13,10 @@ const requireValue = <Value>(value: Value | undefined): Value => {
 
 test("parses each project file once and caches its source file", () => {
   const project = new AnalysisProject(
-      new Map([["screen.tsx", "export const Screen = () => <main />;"]]),
-    ),
-    first = project.getFile("screen.tsx"),
-    second = project.getFile("screen.tsx");
+    new Map([["screen.tsx", "export const Screen = () => <main />;"]]),
+  );
+  const first = project.getFile("screen.tsx");
+  const second = project.getFile("screen.tsx");
 
   assert.ok(first);
   assert.strictEqual(second, first);
@@ -50,13 +50,13 @@ test("records the TypeScript dialect and script kind for supported source extens
 
 test("retains syntactic diagnostics on the cached source file", () => {
   const project = new AnalysisProject(
-      new Map([
-        ["broken.ts", "const value = ;"],
-        ["valid.ts", "const value = 1;"],
-      ]),
-    ),
-    broken = project.getFile("broken.ts"),
-    valid = project.getFile("valid.ts");
+    new Map([
+      ["broken.ts", "const value = ;"],
+      ["valid.ts", "const value = 1;"],
+    ]),
+  );
+  const broken = project.getFile("broken.ts");
+  const valid = project.getFile("valid.ts");
 
   assert.ok(broken);
   assert.equal(broken.parserDiagnostics.length, 1);
@@ -66,8 +66,8 @@ test("retains syntactic diagnostics on the cached source file", () => {
 });
 
 test("keeps source snapshots independent from later source-map mutations", () => {
-  const sources = new Map([["state.ts", "export const state = 1;"]]),
-    project = new AnalysisProject(sources);
+  const sources = new Map([["state.ts", "export const state = 1;"]]);
+  const project = new AnalysisProject(sources);
 
   sources.set("state.ts", "export const state = 2;");
 

@@ -126,16 +126,16 @@ export function buildSourceIndexFromFiles(
   root: string,
   files: readonly AnalysisFile[],
 ): SourceIndex {
-  const records = new Map<string, ModuleRecord>(),
-    sourceFiles = new Map<string, ts.SourceFile>();
+  const records = new Map<string, ModuleRecord>();
+  const sourceFiles = new Map<string, ts.SourceFile>();
   for (const file of files) {
     const normalized = normalizeFile(file.identityPath);
     records.set(normalized, moduleRecord(file.sourceFile));
     sourceFiles.set(normalized, file.sourceFile);
   }
-  const importsByName = new Map<string, IndexedImportBinding[]>(),
-    reexportsByName = new Map<string, IndexedReexportBinding[]>(),
-    starExporters: { file: string; moduleSpecifier: string }[] = [];
+  const importsByName = new Map<string, IndexedImportBinding[]>();
+  const reexportsByName = new Map<string, IndexedReexportBinding[]>();
+  const starExporters: { file: string; moduleSpecifier: string }[] = [];
   for (const [file, record] of records) {
     for (const [localName, binding] of record.imports) {
       const indexed = importsByName.get(binding.importedName) ?? [];
@@ -152,27 +152,27 @@ export function buildSourceIndexFromFiles(
     }
   }
 
-  const compilerContexts = new Map<string, CompilerContext>(),
-    compilerContextsByImporter = new Map<string, CompilerContext>(),
-    configFilesByDirectory = new Map<string, string | null>(),
-    componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    contextReaderHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    deferredCallbackOwnersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    deferredCallbackHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    frameworkEventComponentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    hooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    legendValueHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    legendValueWritersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    observableFactoriesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    observableContainersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    observablesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    pureProjectionsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>(),
-    contextReaders = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>(),
-    contextReadersBySymbol = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>(),
-    stableObservableContainers = new Map<string, boolean>(),
-    resolvedModules = new Map<string, string | null>(),
-    aliasesBySymbol = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>(),
-    moduleResolutionHost = cachedModuleResolutionHost(new Set(records.keys()));
+  const compilerContexts = new Map<string, CompilerContext>();
+  const compilerContextsByImporter = new Map<string, CompilerContext>();
+  const configFilesByDirectory = new Map<string, string | null>();
+  const componentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const contextReaderHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const deferredCallbackOwnersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const deferredCallbackHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const frameworkEventComponentsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const hooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const legendValueHooksByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const legendValueWritersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const observableFactoriesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const observableContainersByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const observablesByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const pureProjectionsByImporter = new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
+  const contextReaders = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
+  const contextReadersBySymbol = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
+  const stableObservableContainers = new Map<string, boolean>();
+  const resolvedModules = new Map<string, string | null>();
+  const aliasesBySymbol = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
+  const moduleResolutionHost = cachedModuleResolutionHost(new Set(records.keys()));
 
   function resolveModule(importer: string, specifier: string): string | null {
     const key = `${importer}\0${specifier}`;
@@ -180,27 +180,27 @@ export function buildSourceIndexFromFiles(
       return resolvedModules.get(key) ?? null;
     }
     const { cache, options } = compilerContextFor(
-        importer,
-        root,
-        compilerContexts,
-        compilerContextsByImporter,
-        configFilesByDirectory,
-      ),
-      resolution = ts.resolveModuleName(
-        specifier,
-        importer,
-        options,
-        moduleResolutionHost,
-        cache,
-      ).resolvedModule;
+      importer,
+      root,
+      compilerContexts,
+      compilerContextsByImporter,
+      configFilesByDirectory,
+    );
+    const resolution = ts.resolveModuleName(
+      specifier,
+      importer,
+      options,
+      moduleResolutionHost,
+      cache,
+    ).resolvedModule;
     if (!resolution || resolution.isExternalLibraryImport) {
       resolvedModules.set(key, null);
       return null;
     }
     const resolved = normalizeFile(
-        resolution.resolvedFileName.replace(/\.d\.(?:ts|mts|cts)$/, ".ts"),
-      ),
-      local = records.has(resolved) ? resolved : null;
+      resolution.resolvedFileName.replace(/\.d\.(?:ts|mts|cts)$/, ".ts"),
+    );
+    const local = records.has(resolved) ? resolved : null;
     resolvedModules.set(key, local);
     return local;
   }
@@ -223,8 +223,8 @@ export function buildSourceIndexFromFiles(
     if (!record) {
       return null;
     }
-    const nextVisited = new Set(visited).add(key),
-      localName = record.localExports.get(exportName);
+    const nextVisited = new Set(visited).add(key);
+    const localName = record.localExports.get(exportName);
     if (localName) {
       const declared =
         kind === "component"
@@ -256,8 +256,10 @@ export function buildSourceIndexFromFiles(
         return { file, localName };
       }
 
-      const importedLocal = record.imports.get(localName),
-        importedTarget = importedLocal ? resolveModule(file, importedLocal.moduleSpecifier) : null;
+      const importedLocal = record.imports.get(localName);
+      const importedTarget = importedLocal
+        ? resolveModule(file, importedLocal.moduleSpecifier)
+        : null;
       if (importedLocal && importedTarget) {
         const imported = exportedSymbol(
           importedTarget,
@@ -277,8 +279,8 @@ export function buildSourceIndexFromFiles(
         if (record.observableFactoryDeclarations.has(factoryName)) {
           return { file, localName };
         }
-        const factoryImport = record.imports.get(factoryName),
-          target = factoryImport ? resolveModule(file, factoryImport.moduleSpecifier) : null;
+        const factoryImport = record.imports.get(factoryName);
+        const target = factoryImport ? resolveModule(file, factoryImport.moduleSpecifier) : null;
         if (
           factoryImport &&
           target &&
@@ -304,13 +306,13 @@ export function buildSourceIndexFromFiles(
     }
 
     const matches = record.starExports.flatMap((specifier) => {
-        const target = resolveModule(file, specifier),
-          component = target
-            ? exportedSymbol(target, exportName, kind, nextVisited, depth + 1)
-            : null;
-        return component ? [component] : [];
-      }),
-      unique = new Map(matches.map((match) => [`${match.file}\0${match.localName}`, match]));
+      const target = resolveModule(file, specifier);
+      const component = target
+        ? exportedSymbol(target, exportName, kind, nextVisited, depth + 1)
+        : null;
+      return component ? [component] : [];
+    });
+    const unique = new Map(matches.map((match) => [`${match.file}\0${match.localName}`, match]));
     return unique.size === 1 ? (unique.values().next().value ?? null) : null;
   }
 
@@ -318,39 +320,39 @@ export function buildSourceIndexFromFiles(
     symbol: ResolvedSymbol,
     kind: "context-reader-hook" | "react-context",
   ): ReadonlyMap<string, ReadonlySet<string>> {
-    const symbolKey = `${kind}\0${symbol.file}\0${symbol.localName}`,
-      cached = aliasesBySymbol.get(symbolKey);
+    const symbolKey = `${kind}\0${symbol.file}\0${symbol.localName}`;
+    const cached = aliasesBySymbol.get(symbolKey);
     if (cached) {
       return cached;
     }
-    const aliases = new Map<string, Set<string>>(),
-      aliasQueue: ResolvedSymbol[] = [],
-      exportQueue: { file: string; name: string }[] = [],
-      seenAliases = new Set<string>(),
-      seenExports = new Set<string>(),
-      addExport = (file: string, name: string): void => {
-        const key = `${file}\0${name}`;
-        if (seenExports.has(key)) {
-          return;
-        }
-        seenExports.add(key);
-        exportQueue.push({ file, name });
-      },
-      addAlias = (file: string, localName: string): void => {
-        const key = `${file}\0${localName}`;
-        if (seenAliases.has(key)) {
-          return;
-        }
-        seenAliases.add(key);
-        const names = aliases.get(file) ?? new Set<string>();
-        names.add(localName);
-        aliases.set(file, names);
-        aliasQueue.push({ file, localName });
-      };
+    const aliases = new Map<string, Set<string>>();
+    const aliasQueue: ResolvedSymbol[] = [];
+    const exportQueue: { file: string; name: string }[] = [];
+    const seenAliases = new Set<string>();
+    const seenExports = new Set<string>();
+    const addExport = (file: string, name: string): void => {
+      const key = `${file}\0${name}`;
+      if (seenExports.has(key)) {
+        return;
+      }
+      seenExports.add(key);
+      exportQueue.push({ file, name });
+    };
+    const addAlias = (file: string, localName: string): void => {
+      const key = `${file}\0${localName}`;
+      if (seenAliases.has(key)) {
+        return;
+      }
+      seenAliases.add(key);
+      const names = aliases.get(file) ?? new Set<string>();
+      names.add(localName);
+      aliases.set(file, names);
+      aliasQueue.push({ file, localName });
+    };
     addAlias(symbol.file, symbol.localName);
 
-    let aliasIndex = 0,
-      exportIndex = 0;
+    let aliasIndex = 0;
+    let exportIndex = 0;
     while (aliasIndex < aliasQueue.length || exportIndex < exportQueue.length) {
       while (aliasIndex < aliasQueue.length) {
         const alias = aliasQueue[aliasIndex++]!;
@@ -389,44 +391,46 @@ export function buildSourceIndexFromFiles(
   }
 
   function resolvedFor(file: string, kind: SourceSymbolKind): ReadonlyMap<string, ResolvedSymbol> {
-    const importer = normalizeFile(file),
-      cache =
-        kind === "component"
-          ? componentsByImporter
-          : kind === "context-reader-hook"
-            ? contextReaderHooksByImporter
-            : kind === "deferred-callback-owner"
-              ? deferredCallbackOwnersByImporter
-              : kind === "deferred-callback-hook"
-                ? deferredCallbackHooksByImporter
-                : kind === "framework-event-component"
-                  ? frameworkEventComponentsByImporter
-                  : kind === "hook"
-                    ? hooksByImporter
-                    : kind === "legend-value-hook"
-                      ? legendValueHooksByImporter
-                      : kind === "legend-value-writer"
-                        ? legendValueWritersByImporter
-                        : kind === "observable-factory"
-                          ? observableFactoriesByImporter
-                          : kind === "observable-container"
-                            ? observableContainersByImporter
-                            : kind === "observable"
-                              ? observablesByImporter
-                              : pureProjectionsByImporter,
-      cached = cache.get(importer);
+    const importer = normalizeFile(file);
+    const cache =
+      kind === "component"
+        ? componentsByImporter
+        : kind === "context-reader-hook"
+          ? contextReaderHooksByImporter
+          : kind === "deferred-callback-owner"
+            ? deferredCallbackOwnersByImporter
+            : kind === "deferred-callback-hook"
+              ? deferredCallbackHooksByImporter
+              : kind === "framework-event-component"
+                ? frameworkEventComponentsByImporter
+                : kind === "hook"
+                  ? hooksByImporter
+                  : kind === "legend-value-hook"
+                    ? legendValueHooksByImporter
+                    : kind === "legend-value-writer"
+                      ? legendValueWritersByImporter
+                      : kind === "observable-factory"
+                        ? observableFactoriesByImporter
+                        : kind === "observable-container"
+                          ? observableContainersByImporter
+                          : kind === "observable"
+                            ? observablesByImporter
+                            : pureProjectionsByImporter;
+    const cached = cache.get(importer);
     if (cached) {
       return cached;
     }
-    const symbols = new Map<string, ResolvedSymbol>(),
-      record = records.get(importer);
+    const symbols = new Map<string, ResolvedSymbol>();
+    const record = records.get(importer);
     if (record) {
       for (const [localName, binding] of record.imports) {
         if (kind === "component" && !isSemanticComponentName(localName)) {
           continue;
         }
-        const target = resolveModule(importer, binding.moduleSpecifier),
-          symbol = target ? exportedSymbol(target, binding.importedName, kind, new Set(), 0) : null;
+        const target = resolveModule(importer, binding.moduleSpecifier);
+        const symbol = target
+          ? exportedSymbol(target, binding.importedName, kind, new Set(), 0)
+          : null;
         if (symbol) {
           symbols.set(localName, symbol);
         }
@@ -437,18 +441,18 @@ export function buildSourceIndexFromFiles(
   }
 
   function localSymbol(file: string, name: string, kind: SourceSymbolKind): ResolvedSymbol | null {
-    const record = records.get(file),
-      local =
-        kind === "react-context"
-          ? record?.reactContexts.has(name)
-          : kind === "context-reader-hook"
-            ? record?.contextReaderHooks.has(name)
-            : false;
+    const record = records.get(file);
+    const local =
+      kind === "react-context"
+        ? record?.reactContexts.has(name)
+        : kind === "context-reader-hook"
+          ? record?.contextReaderHooks.has(name)
+          : false;
     if (local) {
       return { file, localName: name };
     }
-    const binding = record?.imports.get(name),
-      target = binding ? resolveModule(file, binding.moduleSpecifier) : null;
+    const binding = record?.imports.get(name);
+    const target = binding ? resolveModule(file, binding.moduleSpecifier) : null;
     return binding && target
       ? exportedSymbol(target, binding.importedName, kind, new Set(), 0)
       : null;
@@ -458,9 +462,9 @@ export function buildSourceIndexFromFiles(
     file: string,
     contextName: string,
   ): ReadonlyMap<string, ReadonlySet<string>> {
-    const normalized = normalizeFile(file),
-      cacheKey = `${normalized}\0${contextName}`,
-      cached = contextReaders.get(cacheKey);
+    const normalized = normalizeFile(file);
+    const cacheKey = `${normalized}\0${contextName}`;
+    const cached = contextReaders.get(cacheKey);
     if (cached) {
       return cached;
     }
@@ -470,16 +474,16 @@ export function buildSourceIndexFromFiles(
       contextReaders.set(cacheKey, empty);
       return empty;
     }
-    const symbolKey = `${context.file}\0${context.localName}`,
-      symbolCached = contextReadersBySymbol.get(symbolKey);
+    const symbolKey = `${context.file}\0${context.localName}`;
+    const symbolCached = contextReadersBySymbol.get(symbolKey);
     if (symbolCached) {
       contextReaders.set(cacheKey, symbolCached);
       return symbolCached;
     }
     const contextAliases = aliasesForSymbol(context, "react-context");
     for (const [candidateFile, aliases] of contextAliases) {
-      const record = records.get(candidateFile),
-        sourceFile = sourceFiles.get(candidateFile);
+      const record = records.get(candidateFile);
+      const sourceFile = sourceFiles.get(candidateFile);
       if (
         !record ||
         !sourceFile ||
@@ -509,8 +513,8 @@ export function buildSourceIndexFromFiles(
       localNames.add(reader.localName);
       consumers.set(reader.file, localNames);
       for (const [consumerFile, aliases] of aliasesForSymbol(reader, "context-reader-hook")) {
-        const names = consumers.get(consumerFile) ?? new Set<string>(),
-          record = records.get(consumerFile);
+        const names = consumers.get(consumerFile) ?? new Set<string>();
+        const record = records.get(consumerFile);
         for (const localName of aliases) {
           const importedName = record?.imports.get(localName)?.importedName;
           if (
@@ -532,8 +536,8 @@ export function buildSourceIndexFromFiles(
   }
 
   function observableContainerIsStable(symbol: ResolvedSymbol): boolean {
-    const key = `${symbol.file}\0${symbol.localName}`,
-      cached = stableObservableContainers.get(key);
+    const key = `${symbol.file}\0${symbol.localName}`;
+    const cached = stableObservableContainers.get(key);
     if (cached !== undefined) {
       return cached;
     }
@@ -547,10 +551,10 @@ export function buildSourceIndexFromFiles(
         aliases.add(symbol.localName);
       }
       for (const [localName, binding] of record.imports) {
-        const target = resolveModule(candidateFile, binding.moduleSpecifier),
-          imported = target
-            ? exportedSymbol(target, binding.importedName, "observable-container", new Set(), 0)
-            : null;
+        const target = resolveModule(candidateFile, binding.moduleSpecifier);
+        const imported = target
+          ? exportedSymbol(target, binding.importedName, "observable-container", new Set(), 0)
+          : null;
         if (sameResolvedSymbol(imported, symbol)) {
           aliases.add(localName);
         }
@@ -599,11 +603,11 @@ export function buildSourceIndexFromFiles(
       ) {
         return;
       }
-      const owner = findAncestor(node, isRuntimeFunctionLike),
-        ownerName =
-          owner && (ts.isFunctionDeclaration(owner) || ts.isFunctionExpression(owner))
-            ? owner.name?.text
-            : null;
+      const owner = findAncestor(node, isRuntimeFunctionLike);
+      const ownerName =
+        owner && (ts.isFunctionDeclaration(owner) || ts.isFunctionExpression(owner))
+          ? owner.name?.text
+          : null;
       if (ownerName && record.contextReaderHooks.get(ownerName) === contextName) {
         return;
       }
@@ -623,8 +627,8 @@ export function buildSourceIndexFromFiles(
     componentsFor: (file) => new Set(resolvedFor(file, "component").keys()),
     contextReaderHooksFor,
     deferredCallbackHooksFor: (file) => {
-      const hooks = new Map<string, ReadonlySet<number>>(),
-        normalized = normalizeFile(file);
+      const hooks = new Map<string, ReadonlySet<number>>();
+      const normalized = normalizeFile(file);
       for (const [localName, parameters] of records.get(normalized)?.deferredCallbackHooks ?? []) {
         hooks.set(localName, parameters);
       }
@@ -647,8 +651,8 @@ export function buildSourceIndexFromFiles(
       return registrations;
     },
     frameworkEventComponentFor: (file, name) => {
-      const rootName = name.split(".", 1)[0] ?? name,
-        record = records.get(normalizeFile(file));
+      const rootName = name.split(".", 1)[0] ?? name;
+      const record = records.get(normalizeFile(file));
       if (record?.shadowedImports.has(rootName)) {
         return false;
       }
@@ -669,8 +673,8 @@ export function buildSourceIndexFromFiles(
       return resolvedFor(normalized, "hook").get(name) ?? null;
     },
     legendValueBridgesFor: (file) => {
-      const bridges = new Map<string, ReadonlySet<string>>(),
-        writers = resolvedFor(file, "legend-value-writer");
+      const bridges = new Map<string, ReadonlySet<string>>();
+      const writers = resolvedFor(file, "legend-value-writer");
       for (const [hookName, hook] of resolvedFor(file, "legend-value-hook")) {
         const observable = records.get(hook.file)?.legendValueHooks.get(hook.localName);
         if (!observable) {
@@ -703,8 +707,8 @@ export function buildSourceIndexFromFiles(
       return keys;
     },
     observablePathsFor: (file) => {
-      const paths = new Set<string>(),
-        normalized = normalizeFile(file);
+      const paths = new Set<string>();
+      const normalized = normalizeFile(file);
       for (const [localName, members] of records.get(normalized)?.observableMemberDeclarations ??
         []) {
         if (!observableContainerIsStable({ file: normalized, localName })) {
@@ -736,14 +740,14 @@ export function buildSourceIndexFromFiles(
 }
 
 function cachedModuleResolutionHost(sourceFiles: ReadonlySet<string>): ts.ModuleResolutionHost {
-  const directories = new Map<string, boolean>(),
-    files = new Map<string, boolean>(),
-    reads = new Map<string, string | undefined>(),
-    realPaths = new Map<string, string>();
+  const directories = new Map<string, boolean>();
+  const files = new Map<string, boolean>();
+  const reads = new Map<string, string | undefined>();
+  const realPaths = new Map<string, string>();
   return {
     directoryExists: (directory) => {
-      const key = normalizeFile(directory),
-        cached = directories.get(key);
+      const key = normalizeFile(directory);
+      const cached = directories.get(key);
       if (cached !== undefined) {
         return cached;
       }
@@ -776,8 +780,8 @@ function cachedModuleResolutionHost(sourceFiles: ReadonlySet<string>): ts.Module
       return value;
     },
     realpath: (file) => {
-      const key = normalizeFile(file),
-        cached = realPaths.get(key);
+      const key = normalizeFile(file);
+      const cached = realPaths.get(key);
       if (cached) {
         return cached;
       }
@@ -880,28 +884,28 @@ function compilerContextFor(
   contextsByImporter: Map<string, CompilerContext>,
   configFilesByDirectory: Map<string, string | null>,
 ): CompilerContext {
-  const importerKey = normalizeFile(importer),
-    importerContext = contextsByImporter.get(importerKey);
+  const importerKey = normalizeFile(importer);
+  const importerContext = contextsByImporter.get(importerKey);
   if (importerContext) {
     return importerContext;
   }
-  const configFile = nearestConfigFile(path.dirname(importer), configFilesByDirectory),
-    key = configFile ? normalizeFile(configFile) : normalizeFile(fallbackRoot),
-    cached = contexts.get(key);
+  const configFile = nearestConfigFile(path.dirname(importer), configFilesByDirectory);
+  const key = configFile ? normalizeFile(configFile) : normalizeFile(fallbackRoot);
+  const cached = contexts.get(key);
   if (cached) {
     contextsByImporter.set(importerKey, cached);
     return cached;
   }
-  const base = configFile ? path.dirname(configFile) : fallbackRoot,
-    options = compilerOptionsFor(base),
-    context = {
-      cache: ts.createModuleResolutionCache(
-        base,
-        (file) => (ts.sys.useCaseSensitiveFileNames ? file : file.toLowerCase()),
-        options,
-      ),
+  const base = configFile ? path.dirname(configFile) : fallbackRoot;
+  const options = compilerOptionsFor(base);
+  const context = {
+    cache: ts.createModuleResolutionCache(
+      base,
+      (file) => (ts.sys.useCaseSensitiveFileNames ? file : file.toLowerCase()),
       options,
-    };
+    ),
+    options,
+  };
   contexts.set(key, context);
   contextsByImporter.set(importerKey, context);
   return context;
@@ -915,13 +919,13 @@ function nearestConfigFile(
   if (cache.has(directory)) {
     return cache.get(directory) ?? null;
   }
-  const candidate = path.join(directory, "tsconfig.json"),
-    parent = path.dirname(directory),
-    configFile = ts.sys.fileExists(candidate)
-      ? candidate
-      : parent === directory
-        ? null
-        : nearestConfigFile(parent, cache);
+  const candidate = path.join(directory, "tsconfig.json");
+  const parent = path.dirname(directory);
+  const configFile = ts.sys.fileExists(candidate)
+    ? candidate
+    : parent === directory
+      ? null
+      : nearestConfigFile(parent, cache);
   cache.set(directory, configFile);
   return configFile;
 }
@@ -966,37 +970,37 @@ function styledComponentTarget(
 }
 
 function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
-  const componentDeclarations = new Map<string, ComponentFunction>(),
-    contextReaderHooks = new Map<string, string>(),
-    deferredCallbackOwners = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>(),
-    deferredCallbackHooks = new Map<string, ReadonlySet<number>>(),
-    frameworkEventComponents = new Set<string>(),
-    hookDeclarations = new Map<string, ComponentFunction>(),
-    imports = new Map<string, ImportBinding>(),
-    legendValueHooks = new Map<string, string>(),
-    legendValueWriters = new Map<string, string>(),
-    localExports = new Map<string, string>(),
-    observableDeclarations = new Set<string>(),
-    observableKeys = new Map<string, ReadonlySet<string>>(),
-    observableMemberDeclarations = new Map<string, ReadonlySet<string>>(),
-    observableFactoryCalls = new Map<string, string>(),
-    observableFactoryDeclarations = new Set<string>(),
-    pureProjectionDeclarations = new Set<string>(),
-    reexports = new Map<string, ReexportBinding>(),
-    starExports: string[] = [],
-    observableFactories = new Set<string>(),
-    observableTypes = new Set<string>(),
-    legendNamespaces = new Set<string>(),
-    reactEffectHooks = new Set<string>(),
-    reactContextFactories = new Set<string>(),
-    reactContextReaders = new Set<string>(),
-    reactContexts = new Set<string>(),
-    reactNamespaces = new Set<string>(),
-    nativeComponentFactories = new Set<string>(),
-    styledFactories = new Set<string>(),
-    styledComponentCandidates: StyledComponentCandidate[] = [],
-    useValueHooks = new Set<string>(),
-    deferredMethodsByClass = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
+  const componentDeclarations = new Map<string, ComponentFunction>();
+  const contextReaderHooks = new Map<string, string>();
+  const deferredCallbackOwners = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
+  const deferredCallbackHooks = new Map<string, ReadonlySet<number>>();
+  const frameworkEventComponents = new Set<string>();
+  const hookDeclarations = new Map<string, ComponentFunction>();
+  const imports = new Map<string, ImportBinding>();
+  const legendValueHooks = new Map<string, string>();
+  const legendValueWriters = new Map<string, string>();
+  const localExports = new Map<string, string>();
+  const observableDeclarations = new Set<string>();
+  const observableKeys = new Map<string, ReadonlySet<string>>();
+  const observableMemberDeclarations = new Map<string, ReadonlySet<string>>();
+  const observableFactoryCalls = new Map<string, string>();
+  const observableFactoryDeclarations = new Set<string>();
+  const pureProjectionDeclarations = new Set<string>();
+  const reexports = new Map<string, ReexportBinding>();
+  const starExports: string[] = [];
+  const observableFactories = new Set<string>();
+  const observableTypes = new Set<string>();
+  const legendNamespaces = new Set<string>();
+  const reactEffectHooks = new Set<string>();
+  const reactContextFactories = new Set<string>();
+  const reactContextReaders = new Set<string>();
+  const reactContexts = new Set<string>();
+  const reactNamespaces = new Set<string>();
+  const nativeComponentFactories = new Set<string>();
+  const styledFactories = new Set<string>();
+  const styledComponentCandidates: StyledComponentCandidate[] = [];
+  const useValueHooks = new Set<string>();
+  const deferredMethodsByClass = new Map<string, ReadonlyMap<string, ReadonlySet<number>>>();
 
   for (const statement of sourceFile.statements) {
     if (!ts.isClassDeclaration(statement) || !statement.name) {
@@ -1078,12 +1082,12 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     }
   }
 
-  const componentWrappers = collectReactComponentWrappers(sourceFile),
-    observableMemberFactories = localObservableMemberFactories(
-      sourceFile,
-      observableFactories,
-      legendNamespaces,
-    );
+  const componentWrappers = collectReactComponentWrappers(sourceFile);
+  const observableMemberFactories = localObservableMemberFactories(
+    sourceFile,
+    observableFactories,
+    legendNamespaces,
+  );
 
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement)) {
@@ -1098,13 +1102,17 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           }
         }
         const deferredParameters = deferredCallbackParameterIndices(
-            statement,
-            reactEffectHooks,
-            reactNamespaces,
-          ),
-          hookObservable = directLegendValueHookObservable(statement, useValueHooks),
-          writerObservable = directLegendValueWriterObservable(statement),
-          readContext = directReactContextReader(statement, reactContextReaders, reactNamespaces);
+          statement,
+          reactEffectHooks,
+          reactNamespaces,
+        );
+        const hookObservable = directLegendValueHookObservable(statement, useValueHooks);
+        const writerObservable = directLegendValueWriterObservable(statement);
+        const readContext = directReactContextReader(
+          statement,
+          reactContextReaders,
+          reactNamespaces,
+        );
         if (readContext) {
           contextReaderHooks.set(statement.name.text, readContext);
         }
@@ -1282,11 +1290,11 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
           isObservableInitializer(declaration.initializer, observableFactories, legendNamespaces)
         ) {
           observableDeclarations.add(declaration.name.text);
-          const initializer = unwrapTransparentExpression(declaration.initializer),
-            keys =
-              ts.isCallExpression(initializer) && initializer.arguments[0]
-                ? exactObjectLiteralKeys(initializer.arguments[0])
-                : null;
+          const initializer = unwrapTransparentExpression(declaration.initializer);
+          const keys =
+            ts.isCallExpression(initializer) && initializer.arguments[0]
+              ? exactObjectLiteralKeys(initializer.arguments[0])
+              : null;
           if (keys) {
             observableKeys.set(declaration.name.text, keys);
           }
@@ -1370,10 +1378,10 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
             expression.text,
         );
       } else if (ts.isCallExpression(expression)) {
-        const wrapped = reactWrappedComponentName(expression, componentWrappers),
-          component = wrapped
-            ? staticAssignedComponentName(sourceFile, wrapped, componentDeclarations)
-            : null;
+        const wrapped = reactWrappedComponentName(expression, componentWrappers);
+        const component = wrapped
+          ? staticAssignedComponentName(sourceFile, wrapped, componentDeclarations)
+          : null;
         if (component) {
           localExports.set("default", component);
         }
@@ -1412,10 +1420,10 @@ function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
     if (shadowedImports.has(candidate.targetRoot)) {
       continue;
     }
-    const binding = imports.get(candidate.targetRoot),
-      provenTarget = binding
-        ? isFrameworkEventModuleSpecifier(binding.moduleSpecifier)
-        : frameworkEventComponents.has(candidate.targetRoot);
+    const binding = imports.get(candidate.targetRoot);
+    const provenTarget = binding
+      ? isFrameworkEventModuleSpecifier(binding.moduleSpecifier)
+      : frameworkEventComponents.has(candidate.targetRoot);
     if (!provenTarget) {
       continue;
     }
@@ -1465,17 +1473,16 @@ function staticAssignedComponentName(
     }
     visited.add(current);
     const declarations = sourceFile.statements.flatMap((statement) =>
-        ts.isVariableStatement(statement)
-          ? statement.declarationList.declarations.filter(
-              (declaration) =>
-                ts.isIdentifier(declaration.name) && declaration.name.text === current,
-            )
-          : [],
-      ),
-      declaration = declarations.length === 1 ? declarations[0] : null,
-      initializer = declaration?.initializer
-        ? unwrapTransparentExpression(declaration.initializer)
-        : null;
+      ts.isVariableStatement(statement)
+        ? statement.declarationList.declarations.filter(
+            (declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === current,
+          )
+        : [],
+    );
+    const declaration = declarations.length === 1 ? declarations[0] : null;
+    const initializer = declaration?.initializer
+      ? unwrapTransparentExpression(declaration.initializer)
+      : null;
     if (
       !declaration ||
       !ts.isVariableDeclarationList(declaration.parent) ||
@@ -1585,22 +1592,24 @@ function directReactContextReader(
   if (!declaration.body || declaration.body.statements.length !== 1) {
     return null;
   }
-  const statement = declaration.body.statements[0],
-    expression =
-      statement && ts.isReturnStatement(statement) && statement.expression
-        ? unwrapTransparentExpression(statement.expression)
-        : null;
+  const statement = declaration.body.statements[0];
+  const expression =
+    statement && ts.isReturnStatement(statement) && statement.expression
+      ? unwrapTransparentExpression(statement.expression)
+      : null;
   if (!expression || !ts.isCallExpression(expression) || expression.arguments.length !== 1) {
     return null;
   }
-  const callee = expression.expression,
-    knownReader = ts.isIdentifier(callee)
-      ? readers.has(callee.text)
-      : ts.isPropertyAccessExpression(callee) &&
-        ts.isIdentifier(callee.expression) &&
-        namespaces.has(callee.expression.text) &&
-        (callee.name.text === "use" || callee.name.text === "useContext"),
-    context = expression.arguments[0] ? unwrapTransparentExpression(expression.arguments[0]) : null;
+  const callee = expression.expression;
+  const knownReader = ts.isIdentifier(callee)
+    ? readers.has(callee.text)
+    : ts.isPropertyAccessExpression(callee) &&
+      ts.isIdentifier(callee.expression) &&
+      namespaces.has(callee.expression.text) &&
+      (callee.name.text === "use" || callee.name.text === "useContext");
+  const context = expression.arguments[0]
+    ? unwrapTransparentExpression(expression.arguments[0])
+    : null;
   return knownReader && context && ts.isIdentifier(context) ? context.text : null;
 }
 
@@ -1628,9 +1637,9 @@ function deferredCallbackParameterIndices(
       return;
     }
     const parameterName = parameter.name.text;
-    let callbackReference = false,
-      references = 0,
-      safe = true;
+    let callbackReference = false;
+    let references = 0;
+    let safe = true;
     visit(declaration.body!, (node) => {
       if (
         !safe ||
@@ -1723,8 +1732,8 @@ function directLegendValueHookObservable(
 }
 
 function directLegendValueWriterObservable(declaration: ts.FunctionDeclaration): string | null {
-  const parameter = declaration.parameters[0],
-    statement = declaration.body?.statements[0];
+  const parameter = declaration.parameters[0];
+  const statement = declaration.body?.statements[0];
   if (
     declaration.parameters.length !== 1 ||
     !parameter ||
@@ -1735,11 +1744,11 @@ function directLegendValueWriterObservable(declaration: ts.FunctionDeclaration):
   ) {
     return null;
   }
-  const expression = unwrapTransparentExpression(statement.expression),
-    argument =
-      ts.isCallExpression(expression) && expression.arguments[0]
-        ? unwrapTransparentExpression(expression.arguments[0])
-        : null;
+  const expression = unwrapTransparentExpression(statement.expression);
+  const argument =
+    ts.isCallExpression(expression) && expression.arguments[0]
+      ? unwrapTransparentExpression(expression.arguments[0])
+      : null;
   if (
     !ts.isCallExpression(expression) ||
     expression.arguments.length !== 1 ||
@@ -1776,10 +1785,10 @@ function isPureProjectionDeclaration(
     return false;
   }
   const parameters = new Set(
-      declaration.parameters.map((parameter) => (parameter.name as ts.Identifier).text),
-    ),
-    referenced = new Set<string>(),
-    pure = isPureProjectionExpression(statement.expression, parameters, imports, referenced);
+    declaration.parameters.map((parameter) => (parameter.name as ts.Identifier).text),
+  );
+  const referenced = new Set<string>();
+  const pure = isPureProjectionExpression(statement.expression, parameters, imports, referenced);
   return pure && [...parameters].every((parameter) => referenced.has(parameter));
 }
 
@@ -1871,8 +1880,8 @@ function methodStoresCallbackUntilCleanup(
   if (!method.body) {
     return false;
   }
-  const returns: ts.ReturnStatement[] = [],
-    references: ts.Identifier[] = [];
+  const returns: ts.ReturnStatement[] = [];
+  const references: ts.Identifier[] = [];
   visit(method.body, (node) => {
     if (ts.isReturnStatement(node) && nearestNestedFunction(node, method) === null) {
       returns.push(node);
@@ -1980,18 +1989,18 @@ function storedCallbackProperty(
   ) {
     return null;
   }
-  const property = call.expression.expression.name.text,
-    field = declaration.members.find(
-      (member) =>
-        ts.isPropertyDeclaration(member) &&
-        ts.isIdentifier(member.name) &&
-        member.name.text === property,
-    );
+  const property = call.expression.expression.name.text;
+  const field = declaration.members.find(
+    (member) =>
+      ts.isPropertyDeclaration(member) &&
+      ts.isIdentifier(member.name) &&
+      member.name.text === property,
+  );
   if (!field || !ts.isPropertyDeclaration(field)) {
     return null;
   }
-  const initializer = field.initializer && unwrapTransparentExpression(field.initializer),
-    fieldType = field.type;
+  const initializer = field.initializer && unwrapTransparentExpression(field.initializer);
+  const fieldType = field.type;
   return (initializer && ts.isArrayLiteralExpression(initializer)) ||
     (fieldType !== undefined &&
       (ts.isArrayTypeNode(fieldType) ||
@@ -2047,10 +2056,10 @@ function localObservableMemberFactories(
   factories: ReadonlySet<string>,
   namespaces: ReadonlySet<string>,
 ): ReadonlyMap<string, ReadonlySet<string>> {
-  const declarations = new Map<string, ComponentFunction | null>(),
-    record = (name: string, declaration: ComponentFunction): void => {
-      declarations.set(name, declarations.has(name) ? null : declaration);
-    };
+  const declarations = new Map<string, ComponentFunction | null>();
+  const record = (name: string, declaration: ComponentFunction): void => {
+    declarations.set(name, declarations.has(name) ? null : declaration);
+  };
 
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement) && statement.name) {
@@ -2155,8 +2164,8 @@ function directObservableMembers(
   factories: ReadonlySet<string>,
   namespaces: ReadonlySet<string>,
 ): ReadonlySet<string> {
-  const names = new Set<string>(),
-    observableMembers = new Set<string>();
+  const names = new Set<string>();
+  const observableMembers = new Set<string>();
   for (const property of object.properties) {
     if (ts.isSpreadAssignment(property) || !property.name) {
       return new Set();
@@ -2205,9 +2214,9 @@ function compilerOptionsFor(root: string): ts.CompilerOptions {
   if (read.error) {
     return { jsx: ts.JsxEmit.Preserve, moduleResolution: ts.ModuleResolutionKind.Bundler };
   }
-  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(configFile)),
-    { options } = parsed,
-    missingBaseConfig = parsed.errors.some((diagnostic) => diagnostic.code === 6053);
+  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, path.dirname(configFile));
+  const { options } = parsed;
+  const missingBaseConfig = parsed.errors.some((diagnostic) => diagnostic.code === 6053);
   return options.moduleResolution === undefined && missingBaseConfig
     ? { ...options, moduleResolution: ts.ModuleResolutionKind.Bundler }
     : options;

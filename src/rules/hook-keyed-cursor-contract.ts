@@ -64,8 +64,8 @@ function callHasStableKeyedCursorConsumer(
   cursorProperty: string,
   setterProperty: string,
 ): boolean {
-  const declaration = findAncestor(call, ts.isVariableDeclaration),
-    owner = findAncestor(call, isRuntimeOwner);
+  const declaration = findAncestor(call, ts.isVariableDeclaration);
+  const owner = findAncestor(call, isRuntimeOwner);
   if (
     !declaration ||
     !owner ||
@@ -76,23 +76,23 @@ function callHasStableKeyedCursorConsumer(
     return false;
   }
   const element = declaration.name.elements.find((candidate) => {
-      const sourceName =
-        candidate.propertyName && ts.isIdentifier(candidate.propertyName)
-          ? candidate.propertyName.text
-          : ts.isIdentifier(candidate.name)
-            ? candidate.name.text
-            : null;
-      return sourceName === cursorProperty;
-    }),
-    setterEscapes = declaration.name.elements.some((candidate) => {
-      const sourceName =
-        candidate.propertyName && ts.isIdentifier(candidate.propertyName)
-          ? candidate.propertyName.text
-          : ts.isIdentifier(candidate.name)
-            ? candidate.name.text
-            : null;
-      return sourceName === setterProperty;
-    });
+    const sourceName =
+      candidate.propertyName && ts.isIdentifier(candidate.propertyName)
+        ? candidate.propertyName.text
+        : ts.isIdentifier(candidate.name)
+          ? candidate.name.text
+          : null;
+    return sourceName === cursorProperty;
+  });
+  const setterEscapes = declaration.name.elements.some((candidate) => {
+    const sourceName =
+      candidate.propertyName && ts.isIdentifier(candidate.propertyName)
+        ? candidate.propertyName.text
+        : ts.isIdentifier(candidate.name)
+          ? candidate.name.text
+          : null;
+    return sourceName === setterProperty;
+  });
   if (
     !element ||
     setterEscapes ||
@@ -110,14 +110,14 @@ function cursorReferencesFormOneStableList(
   owner: RuntimeFunctionLike,
   cursor: ts.Identifier,
 ): boolean {
-  const references = bindingReferences(owner, cursor),
-    equalityReferences = references.filter((reference) => cursorEquality(reference) !== null);
+  const references = bindingReferences(owner, cursor);
+  const equalityReferences = references.filter((reference) => cursorEquality(reference) !== null);
   if (equalityReferences.length !== 1) {
     return false;
   }
-  const equalityReference = equalityReferences[0]!,
-    equality = cursorEquality(equalityReference)!,
-    callback = nearestNestedFunction(equalityReference, owner);
+  const equalityReference = equalityReferences[0]!;
+  const equality = cursorEquality(equalityReference)!;
+  const callback = nearestNestedFunction(equalityReference, owner);
   if (
     !callback ||
     (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -175,11 +175,11 @@ function cursorReferencesFormOneStableList(
   }
 
   const renderAttribute = uniqueDirectJsxAttributeReference(
-      owner,
-      renderDeclaration.name,
-      "renderItem",
-    ),
-    extraAttribute = jsxAttributeContaining(extraDataReferences[0]!, "extraData");
+    owner,
+    renderDeclaration.name,
+    "renderItem",
+  );
+  const extraAttribute = jsxAttributeContaining(extraDataReferences[0]!, "extraData");
   if (!renderAttribute || !extraAttribute || renderAttribute.parent !== extraAttribute.parent) {
     return false;
   }
@@ -262,14 +262,14 @@ function keyExtractorIsStable(attribute: ts.JsxAttribute, owner: RuntimeFunction
   ) {
     return false;
   }
-  const item = callback.parameters[0]!.name,
-    index = callback.parameters[1]?.name,
-    returned = callbackReturnExpression(callback);
+  const item = callback.parameters[0]!.name;
+  const index = callback.parameters[1]?.name;
+  const returned = callbackReturnExpression(callback);
   if (!returned || !isPureExpression(returned)) {
     return false;
   }
-  let itemProperty = false,
-    usesIndex = false;
+  let itemProperty = false;
+  let usesIndex = false;
   visit(returned, (node) => {
     if (ts.isPropertyAccessExpression(node) && propertyAccessRoot(node)?.text === item.text) {
       itemProperty = true;
@@ -375,13 +375,12 @@ function propertyAccessRoot(expression: ts.PropertyAccessExpression): ts.Identif
 }
 
 function isImportedUseCallback(call: ts.CallExpression): boolean {
-  const imports = collectHookImports(call.getSourceFile()),
-    root = ts.isIdentifier(call.expression)
-      ? call.expression
-      : ts.isPropertyAccessExpression(call.expression) &&
-          ts.isIdentifier(call.expression.expression)
-        ? call.expression.expression
-        : null;
+  const imports = collectHookImports(call.getSourceFile());
+  const root = ts.isIdentifier(call.expression)
+    ? call.expression
+    : ts.isPropertyAccessExpression(call.expression) && ts.isIdentifier(call.expression.expression)
+      ? call.expression.expression
+      : null;
   return (
     root !== null &&
     !bindingIsShadowed(call, root.text) &&

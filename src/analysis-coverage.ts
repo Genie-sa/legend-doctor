@@ -166,8 +166,8 @@ export class AnalysisCoverageLedger {
   constructor(expectedTargets: readonly AnalysisCoverageTarget[] = []) {
     const expected = new Map<string, AnalysisCoverageTarget>();
     for (const candidate of expectedTargets) {
-      const target = normalizeTarget(candidate),
-        key = targetKey(target);
+      const target = normalizeTarget(candidate);
+      const key = targetKey(target);
       if (expected.has(key)) {
         throw new Error(`duplicate expected coverage target: ${key}`);
       }
@@ -178,10 +178,10 @@ export class AnalysisCoverageLedger {
 
   record(entry: AnalysisCoverageEntry): void {
     const normalized: AnalysisCoverageEntry = {
-        stages: normalizeStages(entry.stages),
-        target: normalizeTarget(entry.target),
-      },
-      key = targetKey(normalized.target);
+      stages: normalizeStages(entry.stages),
+      target: normalizeTarget(entry.target),
+    };
+    const key = targetKey(normalized.target);
     if (this.#expectedTargets.size > 0 && !this.#expectedTargets.has(key)) {
       throw new Error(`unexpected coverage target: ${key}`);
     }

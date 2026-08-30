@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  AnalysisCoverageLedger,
-  type AnalysisCoverageEntry,
-  type AnalysisCoverageOutcome,
-} from "../src/analysis-coverage.js";
+import { AnalysisCoverageLedger } from "../src/analysis-coverage.js";
+import type { AnalysisCoverageEntry, AnalysisCoverageOutcome } from "../src/analysis-coverage.js";
 
 const requireValue = <Value>(value: Value | undefined): Value => {
   assert.ok(value);
@@ -60,13 +57,13 @@ test("reports every analysis stage explicitly for file and function targets", ()
 
 test("sorts reports deterministically without depending on record order or locale", () => {
   const inputs = [
-      entry({ end: 30, file: "src/z.tsx", kind: "function", name: "later", start: 20 }),
-      entry({ end: 10, file: "src/a.tsx", kind: "function", name: "first", start: 5 }),
-      entry({ file: "src/z.tsx", kind: "file" }),
-      entry({ end: 15, file: "src/z.tsx", kind: "function", name: "earlier", start: 10 }),
-    ],
-    forward = new AnalysisCoverageLedger(),
-    reverse = new AnalysisCoverageLedger();
+    entry({ end: 30, file: "src/z.tsx", kind: "function", name: "later", start: 20 }),
+    entry({ end: 10, file: "src/a.tsx", kind: "function", name: "first", start: 5 }),
+    entry({ file: "src/z.tsx", kind: "file" }),
+    entry({ end: 15, file: "src/z.tsx", kind: "function", name: "earlier", start: 10 }),
+  ];
+  const forward = new AnalysisCoverageLedger();
+  const reverse = new AnalysisCoverageLedger();
   for (const input of inputs) {
     forward.record(input);
   }
@@ -95,9 +92,9 @@ test("rejects duplicate targets instead of silently replacing coverage", () => {
 });
 
 test("rejects omitted or unexpected targets against the project universe", () => {
-  const first = { file: "src/first.ts", kind: "file" as const },
-    second = { file: "src/second.ts", kind: "file" as const },
-    ledger = new AnalysisCoverageLedger([first, second]);
+  const first = { file: "src/first.ts", kind: "file" as const };
+  const second = { file: "src/second.ts", kind: "file" as const };
+  const ledger = new AnalysisCoverageLedger([first, second]);
   ledger.record(entry(first));
   assert.throws(() => ledger.report(), /coverage targets were not recorded/u);
   assert.throws(
@@ -107,9 +104,9 @@ test("rejects omitted or unexpected targets against the project universe", () =>
 });
 
 test("rejects impossible detector coverage and duplicate function ranges", () => {
-  const target = { file: "src/view.tsx", kind: "file" as const },
-    impossible = entry(target),
-    impossibleCoverage = globalThis.structuredClone(impossible);
+  const target = { file: "src/view.tsx", kind: "file" as const };
+  const impossible = entry(target);
+  const impossibleCoverage = globalThis.structuredClone(impossible);
   Object.assign(impossibleCoverage.stages, {
     parser: outcome("unknown", "parser-recovery"),
   });
@@ -142,8 +139,8 @@ test("rejects omitted stages and blank reasons instead of treating them as unkno
     /must explicitly report/u,
   );
 
-  const blankReason = entry({ file: "src/blank.tsx", kind: "file" }),
-    invalid = globalThis.structuredClone(blankReason);
+  const blankReason = entry({ file: "src/blank.tsx", kind: "file" });
+  const invalid = globalThis.structuredClone(blankReason);
   Object.assign(invalid.stages, {
     lowering: {
       reason: { code: " ", message: "not needed" },

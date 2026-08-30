@@ -19,31 +19,31 @@ interface SourceFileWithParseDiagnostics extends ts.SourceFile {
  * access isolated here so the cached AST remains the single parse authority.
  */
 const diagnosticCategory = (category: ts.DiagnosticCategory): AnalysisDiagnostic["category"] => {
-    if (category === ts.DiagnosticCategory.Error) {
-      return "error";
-    }
-    if (category === ts.DiagnosticCategory.Warning) {
-      return "warning";
-    }
-    if (category === ts.DiagnosticCategory.Suggestion) {
-      return "suggestion";
-    }
-    return "message";
-  },
-  parserDiagnosticsOf = (sourceFile: ts.SourceFile): readonly AnalysisDiagnostic[] => {
-    if (!Object.hasOwn(sourceFile, "parseDiagnostics")) {
-      throw new Error("The installed TypeScript parser does not expose parser diagnostics");
-    }
-    // SAFETY: Object.hasOwn above establishes the TypeScript 5.9 parser-diagnostics property.
-    const sourceWithDiagnostics = sourceFile as SourceFileWithParseDiagnostics;
-    return [...sourceWithDiagnostics.parseDiagnostics].map((diagnostic) => ({
-      category: diagnosticCategory(diagnostic.category),
-      code: diagnostic.code,
-      file: sourceFile.fileName,
-      length: diagnostic.length ?? null,
-      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
-      start: diagnostic.start ?? null,
-    }));
-  };
+  if (category === ts.DiagnosticCategory.Error) {
+    return "error";
+  }
+  if (category === ts.DiagnosticCategory.Warning) {
+    return "warning";
+  }
+  if (category === ts.DiagnosticCategory.Suggestion) {
+    return "suggestion";
+  }
+  return "message";
+};
+const parserDiagnosticsOf = (sourceFile: ts.SourceFile): readonly AnalysisDiagnostic[] => {
+  if (!Object.hasOwn(sourceFile, "parseDiagnostics")) {
+    throw new Error("The installed TypeScript parser does not expose parser diagnostics");
+  }
+  // SAFETY: Object.hasOwn above establishes the TypeScript 5.9 parser-diagnostics property.
+  const sourceWithDiagnostics = sourceFile as SourceFileWithParseDiagnostics;
+  return [...sourceWithDiagnostics.parseDiagnostics].map((diagnostic) => ({
+    category: diagnosticCategory(diagnostic.category),
+    code: diagnostic.code,
+    file: sourceFile.fileName,
+    length: diagnostic.length ?? null,
+    message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+    start: diagnostic.start ?? null,
+  }));
+};
 
 export { type AnalysisDiagnostic, parserDiagnosticsOf };

@@ -300,21 +300,21 @@ function analyzeParsedSource(
   imports: HookImports = collectHookImports(sourceFile),
 ): HookFinding[] {
   const pureProjectionImports = new Set([
-      ...collectPureProjectionImports(sourceFile),
-      ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
-    ]),
-    reactCommit = collectReactCommitContext(sourceFile, imports),
-    localComponents = collectLocalComponents(sourceFile, imports),
-    states: StateCandidate[] = [],
-    unmatchedStateCalls: ts.CallExpression[] = [],
-    effects = reactCommit.effectCalls.map((call) => effectCandidate(call, imports)),
-    useValueBindingsByOwner = collectUseValueBindings(sourceFile, imports),
-    observableSubscriptionsByOwner = collectObservableSubscriptionCounts(sourceFile, imports),
-    useObservableBindingsByOwner = collectStableUseObservableBindings(sourceFile, imports),
-    moduleScopeBindings = collectModuleScopeBindings(sourceFile),
-    reactiveMutationsByOwner = collectReactiveMutationBindings(sourceFile),
-    nonProductionHarness = isNonProductionHarness(fileName),
-    commitSensitiveOwners = reactCommit.sensitiveOwners;
+    ...collectPureProjectionImports(sourceFile),
+    ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
+  ]);
+  const reactCommit = collectReactCommitContext(sourceFile, imports);
+  const localComponents = collectLocalComponents(sourceFile, imports);
+  const states: StateCandidate[] = [];
+  const unmatchedStateCalls: ts.CallExpression[] = [];
+  const effects = reactCommit.effectCalls.map((call) => effectCandidate(call, imports));
+  const useValueBindingsByOwner = collectUseValueBindings(sourceFile, imports);
+  const observableSubscriptionsByOwner = collectObservableSubscriptionCounts(sourceFile, imports);
+  const useObservableBindingsByOwner = collectStableUseObservableBindings(sourceFile, imports);
+  const moduleScopeBindings = collectModuleScopeBindings(sourceFile);
+  const reactiveMutationsByOwner = collectReactiveMutationBindings(sourceFile);
+  const nonProductionHarness = isNonProductionHarness(fileName);
+  const commitSensitiveOwners = reactCommit.sensitiveOwners;
 
   visit(sourceFile, (node) => {
     if (!ts.isCallExpression(node)) {
@@ -331,18 +331,21 @@ function analyzeParsedSource(
     }
   });
 
-  const { lifecycleRegions } = reactCommit,
-    directEffectCalls = new Set(reactCommit.effectCalls),
-    directEffectCallbacks = new Set<RuntimeFunctionLike>(
-      effects.flatMap((effect) => (effect.callback ? [effect.callback] : [])),
-    ),
-    knownComponents = new Set([...localComponents, ...sourceComponents]),
-    usageByState = new Map(
-      states.map((state) => [state, collectStateUsage(state, lifecycleRegions, imports)]),
-    ),
-    eventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>(),
-    sourceEventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>(),
-    statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
+  const { lifecycleRegions } = reactCommit;
+  const directEffectCalls = new Set(reactCommit.effectCalls);
+  const directEffectCallbacks = new Set<RuntimeFunctionLike>(
+    effects.flatMap((effect) => (effect.callback ? [effect.callback] : [])),
+  );
+  const knownComponents = new Set([...localComponents, ...sourceComponents]);
+  const usageByState = new Map(
+    states.map((state) => [state, collectStateUsage(state, lifecycleRegions, imports)]),
+  );
+  const eventCallbacksByOwner = new Map<RuntimeFunctionLike, ReadonlySet<RuntimeFunctionLike>>();
+  const sourceEventCallbacksByOwner = new Map<
+    RuntimeFunctionLike,
+    ReadonlySet<RuntimeFunctionLike>
+  >();
+  const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
     const owned = statesByOwner.get(state.owner) ?? [];
     owned.push(state);
@@ -398,12 +401,12 @@ function analyzeParsedSource(
     }
     eventCallbacksByOwner.set(owner, callbacks);
   }
-  const subtreeByState = new Map<StateCandidate, StateSubtree>(),
-    safeCommandStates = new Set<StateCandidate>(),
-    selfRefreshingCommandStates = new Set<StateCandidate>(),
-    memoizedOptionCommandStates = new Set<StateCandidate>(),
-    returnedKeyedCursorStates = new Set<StateCandidate>(),
-    reactiveMutationAffectedStates = new Set<StateCandidate>();
+  const subtreeByState = new Map<StateCandidate, StateSubtree>();
+  const safeCommandStates = new Set<StateCandidate>();
+  const selfRefreshingCommandStates = new Set<StateCandidate>();
+  const memoizedOptionCommandStates = new Set<StateCandidate>();
+  const returnedKeyedCursorStates = new Set<StateCandidate>();
+  const reactiveMutationAffectedStates = new Set<StateCandidate>();
   for (const state of states) {
     const usage = usageByState.get(state);
     if (!usage) {
@@ -460,42 +463,42 @@ function analyzeParsedSource(
       returnedKeyedCursorStates.add(state);
     }
   }
-  const effectStateScopes = collectEffectStateScopes(states, usageByState),
-    observableSelectionOwners = new Set(
-      states
-        .filter((state) => {
-          const usage = usageByState.get(state);
-          return (
-            isSetOrMapState(state.call) &&
-            isCustomHookOwner(state.owner) &&
-            isSelectionStateName(state.valueName) &&
-            usage !== undefined &&
-            usage.effectWrites === 0
-          );
-        })
-        .map((state) => state.owner),
-    ),
-    deferredRevealStates = findDeferredRevealStates(effects, states, usageByState),
-    companionWrites = findStateCompanionWrites(states, stateFlow),
-    statesWithCompanionWrites = companionWrites.all,
-    propertyLocalObjectDrafts = new Set(
-      states.filter((state) => {
+  const effectStateScopes = collectEffectStateScopes(states, usageByState);
+  const observableSelectionOwners = new Set(
+    states
+      .filter((state) => {
         const usage = usageByState.get(state);
         return (
+          isSetOrMapState(state.call) &&
+          isCustomHookOwner(state.owner) &&
+          isSelectionStateName(state.valueName) &&
           usage !== undefined &&
-          isPropertyLocalObjectDraftState(state, usage, {
-            childContracts,
-            eventCallbacks: eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
-            hasCompanionWrites: statesWithCompanionWrites.has(state),
-            hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-            hasSafeCommands: safeCommandStates.has(state),
-            localComponents,
-            sourceComponents,
-          })
+          usage.effectWrites === 0
         );
-      }),
-    ),
-    dialogPayloadCuts = new Map<StateCandidate, DialogPayloadCut>();
+      })
+      .map((state) => state.owner),
+  );
+  const deferredRevealStates = findDeferredRevealStates(effects, states, usageByState);
+  const companionWrites = findStateCompanionWrites(states, stateFlow);
+  const statesWithCompanionWrites = companionWrites.all;
+  const propertyLocalObjectDrafts = new Set(
+    states.filter((state) => {
+      const usage = usageByState.get(state);
+      return (
+        usage !== undefined &&
+        isPropertyLocalObjectDraftState(state, usage, {
+          childContracts,
+          eventCallbacks: eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
+          hasCompanionWrites: statesWithCompanionWrites.has(state),
+          hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+          hasSafeCommands: safeCommandStates.has(state),
+          localComponents,
+          sourceComponents,
+        })
+      );
+    }),
+  );
+  const dialogPayloadCuts = new Map<StateCandidate, DialogPayloadCut>();
   for (const state of states) {
     const usage = usageByState.get(state);
     if (!usage || statesWithCompanionWrites.has(state) || !safeCommandStates.has(state)) {
@@ -507,112 +510,117 @@ function analyzeParsedSource(
     }
   }
   const multiSurfaceBooleanStates = new Set(
-      states.filter((state) => {
-        const usage = usageByState.get(state);
-        return (
-          usage !== undefined &&
-          isMultiSurfaceLiteralBooleanState(state, usage, {
-            hasCompanionWrites: statesWithCompanionWrites.has(state),
-            hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-            hasSafeCommands: safeCommandStates.has(state),
-            isCustomHookOwner: isCustomHookOwner(state.owner),
-            pureProjectionImports,
-          })
-        );
-      }),
-    ),
-    sourceEventScalarStates = new Set(
-      states.filter((state) => {
-        const usage = usageByState.get(state);
-        if (!usage || !childContracts || isCustomHookOwner(state.owner)) {
-          return false;
-        }
-        let callbacks = sourceEventCallbacksByOwner.get(state.owner);
-        if (!callbacks) {
-          callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
-          sourceEventCallbacksByOwner.set(state.owner, callbacks);
-        }
-        return isSourceEventScalarLeafState(state, usage, {
-          eventCallbacks: callbacks,
+    states.filter((state) => {
+      const usage = usageByState.get(state);
+      return (
+        usage !== undefined &&
+        isMultiSurfaceLiteralBooleanState(state, usage, {
           hasCompanionWrites: statesWithCompanionWrites.has(state),
           hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
           hasSafeCommands: safeCommandStates.has(state),
-          localComponents,
+          isCustomHookOwner: isCustomHookOwner(state.owner),
           pureProjectionImports,
-          sourceComponents,
-          useCallbackNames: imports.useCallback,
-        });
-      }),
-    ),
-    reactiveHostPropScalarStates = new Set(
-      states.filter((state) => {
-        const usage = usageByState.get(state);
-        if (!usage || !childContracts || isCustomHookOwner(state.owner)) {
-          return false;
-        }
-        let callbacks = sourceEventCallbacksByOwner.get(state.owner);
-        if (!callbacks) {
-          callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
-          sourceEventCallbacksByOwner.set(state.owner, callbacks);
-        }
-        return isReactiveHostPropScalarState(state, usage, {
-          eventCallbacks: callbacks,
+        })
+      );
+    }),
+  );
+  const sourceEventScalarStates = new Set(
+    states.filter((state) => {
+      const usage = usageByState.get(state);
+      if (!usage || !childContracts || isCustomHookOwner(state.owner)) {
+        return false;
+      }
+      let callbacks = sourceEventCallbacksByOwner.get(state.owner);
+      if (!callbacks) {
+        callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
+        sourceEventCallbacksByOwner.set(state.owner, callbacks);
+      }
+      return isSourceEventScalarLeafState(state, usage, {
+        eventCallbacks: callbacks,
+        hasCompanionWrites: statesWithCompanionWrites.has(state),
+        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+        hasSafeCommands: safeCommandStates.has(state),
+        localComponents,
+        pureProjectionImports,
+        sourceComponents,
+        useCallbackNames: imports.useCallback,
+      });
+    }),
+  );
+  const reactiveHostPropScalarStates = new Set(
+    states.filter((state) => {
+      const usage = usageByState.get(state);
+      if (!usage || !childContracts || isCustomHookOwner(state.owner)) {
+        return false;
+      }
+      let callbacks = sourceEventCallbacksByOwner.get(state.owner);
+      if (!callbacks) {
+        callbacks = sourceProvenDirectEventCallbacks(state.owner, imports, childContracts);
+        sourceEventCallbacksByOwner.set(state.owner, callbacks);
+      }
+      return isReactiveHostPropScalarState(state, usage, {
+        eventCallbacks: callbacks,
+        hasCompanionWrites: statesWithCompanionWrites.has(state),
+        hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+        hasSafeCommands: safeCommandStates.has(state),
+        hostComponents: imports.hostComponents,
+        pureProjectionImports,
+        useCallbackNames: imports.useCallback,
+      });
+    }),
+  );
+  const adjacentEventBooleanStates = new Set(
+    states.filter((state) => {
+      const usage = usageByState.get(state);
+      return (
+        usage !== undefined &&
+        isAdjacentEventBooleanLeafState(state, usage, {
           hasCompanionWrites: statesWithCompanionWrites.has(state),
           hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
           hasSafeCommands: safeCommandStates.has(state),
-          hostComponents: imports.hostComponents,
+          isCustomHookOwner: isCustomHookOwner(state.owner),
           pureProjectionImports,
-          useCallbackNames: imports.useCallback,
-        });
-      }),
-    ),
-    adjacentEventBooleanStates = new Set(
-      states.filter((state) => {
-        const usage = usageByState.get(state);
-        return (
-          usage !== undefined &&
-          isAdjacentEventBooleanLeafState(state, usage, {
-            hasCompanionWrites: statesWithCompanionWrites.has(state),
-            hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-            hasSafeCommands: safeCommandStates.has(state),
-            isCustomHookOwner: isCustomHookOwner(state.owner),
-            pureProjectionImports,
-          })
-        );
-      }),
-    ),
-    adjacentEffectBooleanStates = new Set(
-      states.filter((state) => {
-        const usage = usageByState.get(state);
-        return (
-          usage !== undefined &&
-          isAdjacentEffectBooleanLeafState(state, usage, {
-            effectWritesAreDirect: usage.setterCallNodes.every((call) => {
-              const callback = nearestNestedFunction(call, state.owner);
-              return callback !== null && directEffectCallbacks.has(callback);
-            }),
-            hasCompanionWrites: statesWithCompanionWrites.has(state),
-            hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
-            hasSafeCommands: safeCommandStates.has(state),
-            isCustomHookOwner: isCustomHookOwner(state.owner),
-            pureProjectionImports,
-          })
-        );
-      }),
-    ),
-    independentStateWrites = findIndependentStateWrites(states),
-    branchUnmountMoves = findBranchUnmountMoves(states, usageByState, safeCommandStates, stateFlow),
-    asyncLeafStatuses = findAsyncLeafStatuses(
-      states,
-      usageByState,
-      safeCommandStates,
-      reactiveMutationAffectedStates,
-      localComponents,
-      sourceComponents,
-      childContracts,
-      eventCallbacksByOwner,
-    ),
-    siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();
+        })
+      );
+    }),
+  );
+  const adjacentEffectBooleanStates = new Set(
+    states.filter((state) => {
+      const usage = usageByState.get(state);
+      return (
+        usage !== undefined &&
+        isAdjacentEffectBooleanLeafState(state, usage, {
+          effectWritesAreDirect: usage.setterCallNodes.every((call) => {
+            const callback = nearestNestedFunction(call, state.owner);
+            return callback !== null && directEffectCallbacks.has(callback);
+          }),
+          hasCompanionWrites: statesWithCompanionWrites.has(state),
+          hasReactiveMutationPath: reactiveMutationAffectedStates.has(state),
+          hasSafeCommands: safeCommandStates.has(state),
+          isCustomHookOwner: isCustomHookOwner(state.owner),
+          pureProjectionImports,
+        })
+      );
+    }),
+  );
+  const independentStateWrites = findIndependentStateWrites(states);
+  const branchUnmountMoves = findBranchUnmountMoves(
+    states,
+    usageByState,
+    safeCommandStates,
+    stateFlow,
+  );
+  const asyncLeafStatuses = findAsyncLeafStatuses(
+    states,
+    usageByState,
+    safeCommandStates,
+    reactiveMutationAffectedStates,
+    localComponents,
+    sourceComponents,
+    childContracts,
+    eventCallbacksByOwner,
+  );
+  const siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();
   for (const state of states) {
     const usage = usageByState.get(state);
     if (!usage || !safeCommandStates.has(state) || statesWithCompanionWrites.has(state)) {
@@ -624,168 +632,166 @@ function analyzeParsedSource(
     }
   }
   const effectDrafts = findEffectSynchronizedDrafts(
-      effects,
-      states,
-      effectStateScopes,
-      usageByState,
-      siblingRenderCuts,
-      localComponents,
-      sourceComponents,
-      effectDraftProofs(stateFlow),
-    ),
-    keyedSelections = analyzeKeyedSelections(
-      states,
-      usageByState,
-      safeCommandStates,
-      statesWithCompanionWrites,
-      imports,
-      childContracts,
-    ),
-    observableClusters = findObservableStateClusters(
-      states,
-      usageByState,
-      knownComponents,
-      sourceFile,
-      stateFlow,
-      childContracts,
-    ),
-    subtreeClusters = findStateSubtreeClusters(subtreeByState, statesWithCompanionWrites),
-    listenerRefClusters = findListenerRefStateClusters(states, usageByState, effects, imports),
-    effectClassifications = new Map<EffectCandidate, ClassifiedEffect>(),
-    derivedStates = new Set<StateCandidate>();
+    effects,
+    states,
+    effectStateScopes,
+    usageByState,
+    siblingRenderCuts,
+    localComponents,
+    sourceComponents,
+    effectDraftProofs(stateFlow),
+  );
+  const keyedSelections = analyzeKeyedSelections(
+    states,
+    usageByState,
+    safeCommandStates,
+    statesWithCompanionWrites,
+    imports,
+    childContracts,
+  );
+  const observableClusters = findObservableStateClusters(
+    states,
+    usageByState,
+    knownComponents,
+    sourceFile,
+    stateFlow,
+    childContracts,
+  );
+  const subtreeClusters = findStateSubtreeClusters(subtreeByState, statesWithCompanionWrites);
+  const listenerRefClusters = findListenerRefStateClusters(states, usageByState, effects, imports);
+  const effectClassifications = new Map<EffectCandidate, ClassifiedEffect>();
+  const derivedStates = new Set<StateCandidate>();
   for (const effect of effects) {
-    const scope = effect.owner ? effectStateScopes.get(effect.owner) : undefined,
-      classification = classifyEffect(
-        effect,
-        scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
-        scope?.byValue ?? EMPTY_STATE_CANDIDATES,
-        scope?.usageBySetter ?? EMPTY_STATE_USAGES,
-        effect.owner
-          ? (useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)
-          : EMPTY_BINDINGS,
-        effect.owner
-          ? (useObservableBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)
-          : EMPTY_BINDINGS,
-        imports.useRef,
-        imports.reactNamespaces,
-        moduleScopeBindings,
-        nonProductionHarness,
-        childContracts,
-      );
+    const scope = effect.owner ? effectStateScopes.get(effect.owner) : undefined;
+    const classification = classifyEffect(
+      effect,
+      scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
+      scope?.byValue ?? EMPTY_STATE_CANDIDATES,
+      scope?.usageBySetter ?? EMPTY_STATE_USAGES,
+      effect.owner ? (useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS) : EMPTY_BINDINGS,
+      effect.owner
+        ? (useObservableBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)
+        : EMPTY_BINDINGS,
+      imports.useRef,
+      imports.reactNamespaces,
+      moduleScopeBindings,
+      nonProductionHarness,
+      childContracts,
+    );
     effectClassifications.set(effect, classification);
     if (classification.derivedState) {
       derivedStates.add(classification.derivedState);
     }
   }
-  const legendValueMirrors = findLegendValueMirrors(states, usageByState, legendValueBridges),
-    findings: HookFinding[] = [];
+  const legendValueMirrors = findLegendValueMirrors(states, usageByState, legendValueBridges);
+  const findings: HookFinding[] = [];
   for (const state of states) {
     const usage = usageByState.get(state);
     if (!usage) {
       continue;
     }
     const cluster =
-        effectDrafts.clusters.get(state) ??
-        listenerRefClusters.get(state) ??
-        observableClusters.get(state) ??
-        subtreeClusters.get(state),
-      siblingCut = siblingRenderCuts.get(state),
-      directTransitionCallbacks = reactCommit.directTransitionCallbacks.get(state.owner),
-      transitionTouchesState =
-        directTransitionCallbacks?.some((callback) =>
-          usage.setterCallNodes.some((call) => nodeWithin(call, callback)),
-        ) ?? true,
-      commitSensitive =
-        commitSensitiveOwners.has(state.owner) &&
-        transitionTouchesState &&
-        state.setterName !== null &&
-        !nonProductionHarness,
-      baseClassification = nonProductionHarness
+      effectDrafts.clusters.get(state) ??
+      listenerRefClusters.get(state) ??
+      observableClusters.get(state) ??
+      subtreeClusters.get(state);
+    const siblingCut = siblingRenderCuts.get(state);
+    const directTransitionCallbacks = reactCommit.directTransitionCallbacks.get(state.owner);
+    const transitionTouchesState =
+      directTransitionCallbacks?.some((callback) =>
+        usage.setterCallNodes.some((call) => nodeWithin(call, callback)),
+      ) ?? true;
+    const commitSensitive =
+      commitSensitiveOwners.has(state.owner) &&
+      transitionTouchesState &&
+      state.setterName !== null &&
+      !nonProductionHarness;
+    const baseClassification = nonProductionHarness
+      ? {
+          action: "keep-state" as const,
+          confidence: "certain" as const,
+          message: `Keep \`${state.valueName}\` in this test, story, or demo harness; production render-boundary migrations do not apply here.`,
+        }
+      : cluster
         ? {
-            action: "keep-state" as const,
-            confidence: "certain" as const,
-            message: `Keep \`${state.valueName}\` in this test, story, or demo harness; production render-boundary migrations do not apply here.`,
+            action: cluster.action,
+            confidence: "probable" as const,
+            message: cluster.message,
           }
-        : cluster
+        : effectDrafts.singletons.has(state)
           ? {
-              action: cluster.action,
+              action: "use-observable" as const,
               confidence: "probable" as const,
-              message: cluster.message,
+              message:
+                (siblingCut
+                  ? `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, keep producer commands non-tracking, subscribe only in the sibling ${siblingCut.consumerLabel} boundary at line ${siblingCut.consumerLine}, and pass state-independent fallback inputs as ordinary snapshots.`
+                  : `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.`) +
+                (hasLazyStateInitializer(state)
+                  ? " Preserve its lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
+                  : ""),
             }
-          : effectDrafts.singletons.has(state)
+          : derivedStates.has(state)
             ? {
-                action: "use-observable" as const,
-                confidence: "probable" as const,
-                message:
-                  (siblingCut
-                    ? `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, keep producer commands non-tracking, subscribe only in the sibling ${siblingCut.consumerLabel} boundary at line ${siblingCut.consumerLine}, and pass state-independent fallback inputs as ordinary snapshots.`
-                    : `Replace effect-synchronized React draft \`${state.valueName}\` with one component-lifetime observable; preserve the React synchronization effect and its dependencies, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.`) +
-                  (hasLazyStateInitializer(state)
-                    ? " Preserve its lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
-                    : ""),
+                action: "delete-derived-state" as const,
+                confidence: "certain" as const,
+                message: `Delete React state \`${state.valueName}\`; it is assigned only by a derivation effect and should be calculated directly.`,
               }
-            : derivedStates.has(state)
-              ? {
-                  action: "delete-derived-state" as const,
-                  confidence: "certain" as const,
-                  message: `Delete React state \`${state.valueName}\`; it is assigned only by a derivation effect and should be calculated directly.`,
-                }
-              : (legendValueMirrors.get(state) ??
-                classifyState(
-                  state,
-                  usage,
-                  localComponents,
-                  sourceComponents,
-                  sourceFile,
-                  propertyLocalObjectDrafts.has(state),
-                  subtreeByState.get(state) ?? null,
-                  dialogPayloadCuts.get(state) ?? null,
-                  safeCommandStates.has(state),
-                  selfRefreshingCommandStates.has(state),
-                  observableSelectionOwners.has(state.owner),
-                  statesWithCompanionWrites.has(state),
-                  companionWrites.nonClosing.has(state),
-                  independentStateWrites.directEventWrites.has(state),
-                  independentStateWrites.visibilitySetterTransports.has(state),
-                  reactiveMutationAffectedStates.has(state),
-                  asyncLeafStatuses.isolated.has(state),
-                  asyncLeafStatuses.cohesive.has(state),
-                  asyncLeafStatuses.unproven.has(state),
-                  deferredRevealStates.has(state),
-                  keyedSelections.collectionStates.has(state),
-                  keyedSelections.recordStates.has(state),
-                  keyedSelections.scalarStates.has(state),
-                  keyedSelections.secondaryLeafStates.has(state),
-                  observableSubscriptionsByOwner.get(state.owner) ?? 0,
-                  siblingCut ?? null,
-                  branchUnmountMoves.get(state) ?? null,
-                  childContracts,
-                  deferredCallbackHooks,
-                  eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
-                  memoizedOptionCommandStates.has(state),
-                  returnedKeyedCursorStates.has(state),
-                  adjacentEventBooleanStates.has(state),
-                  adjacentEffectBooleanStates.has(state),
-                  multiSurfaceBooleanStates.has(state),
-                  sourceEventScalarStates.has(state),
-                  reactiveHostPropScalarStates.has(state),
-                )),
-      commitSensitiveOverride =
-        commitSensitive &&
-        baseClassification.action !== "review-state" &&
-        baseClassification.action !== "keep-state",
-      classification = commitSensitiveOverride
-        ? commitSensitiveStateClassification(state)
-        : baseClassification,
-      finding = findingFor(
-        state.call,
-        sourceFile,
-        fileName,
-        "useState",
-        state.valueName,
-        classification,
-        stateEvidence(state, usage, sourceFile),
-      );
+            : (legendValueMirrors.get(state) ??
+              classifyState(
+                state,
+                usage,
+                localComponents,
+                sourceComponents,
+                sourceFile,
+                propertyLocalObjectDrafts.has(state),
+                subtreeByState.get(state) ?? null,
+                dialogPayloadCuts.get(state) ?? null,
+                safeCommandStates.has(state),
+                selfRefreshingCommandStates.has(state),
+                observableSelectionOwners.has(state.owner),
+                statesWithCompanionWrites.has(state),
+                companionWrites.nonClosing.has(state),
+                independentStateWrites.directEventWrites.has(state),
+                independentStateWrites.visibilitySetterTransports.has(state),
+                reactiveMutationAffectedStates.has(state),
+                asyncLeafStatuses.isolated.has(state),
+                asyncLeafStatuses.cohesive.has(state),
+                asyncLeafStatuses.unproven.has(state),
+                deferredRevealStates.has(state),
+                keyedSelections.collectionStates.has(state),
+                keyedSelections.recordStates.has(state),
+                keyedSelections.scalarStates.has(state),
+                keyedSelections.secondaryLeafStates.has(state),
+                observableSubscriptionsByOwner.get(state.owner) ?? 0,
+                siblingCut ?? null,
+                branchUnmountMoves.get(state) ?? null,
+                childContracts,
+                deferredCallbackHooks,
+                eventCallbacksByOwner.get(state.owner) ?? EMPTY_RUNTIME_FUNCTIONS,
+                memoizedOptionCommandStates.has(state),
+                returnedKeyedCursorStates.has(state),
+                adjacentEventBooleanStates.has(state),
+                adjacentEffectBooleanStates.has(state),
+                multiSurfaceBooleanStates.has(state),
+                sourceEventScalarStates.has(state),
+                reactiveHostPropScalarStates.has(state),
+              ));
+    const commitSensitiveOverride =
+      commitSensitive &&
+      baseClassification.action !== "review-state" &&
+      baseClassification.action !== "keep-state";
+    const classification = commitSensitiveOverride
+      ? commitSensitiveStateClassification(state)
+      : baseClassification;
+    const finding = findingFor(
+      state.call,
+      sourceFile,
+      fileName,
+      "useState",
+      state.valueName,
+      classification,
+      stateEvidence(state, usage, sourceFile),
+    );
     if (cluster && !commitSensitiveOverride) {
       finding.group = {
         id: cluster.id,
@@ -860,8 +866,8 @@ function stateCandidate(call: ts.CallExpression): StateCandidate | null {
   if (!ts.isArrayBindingPattern(declaration.name)) {
     return null;
   }
-  const value = declaration.name.elements[0],
-    setter = declaration.name.elements[1];
+  const value = declaration.name.elements[0];
+  const setter = declaration.name.elements[1];
   if (!value || ts.isOmittedExpression(value) || !ts.isIdentifier(value.name)) {
     return null;
   }
@@ -885,9 +891,9 @@ function stateCandidate(call: ts.CallExpression): StateCandidate | null {
 }
 
 function effectCandidate(call: ts.CallExpression, imports: HookImports): EffectCandidate {
-  const callbackArg = call.arguments[0],
-    dependenciesArg = call.arguments[1],
-    owner = findAncestor(call, isRuntimeFunctionLike);
+  const callbackArg = call.arguments[0];
+  const dependenciesArg = call.arguments[1];
+  const owner = findAncestor(call, isRuntimeFunctionLike);
   return {
     call,
     callback: callbackArg ? resolveEffectCallback(callbackArg, owner, imports) : null,
@@ -943,12 +949,12 @@ function resolveEffectCallback(
   return inner && (ts.isArrowFunction(inner) || ts.isFunctionExpression(inner)) ? inner : null;
 }
 
-const EMPTY_BINDINGS: ReadonlySet<string> = new Set(),
-  PURE_MATH_METHODS: ReadonlySet<string> = new Set(["abs", "max", "min"]),
-  EMPTY_NODES: ReadonlySet<ts.Node> = new Set(),
-  EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set(),
-  EMPTY_STATE_CANDIDATES: ReadonlyMap<string, StateCandidate> = new Map(),
-  EMPTY_STATE_USAGES: ReadonlyMap<string, StateUsage> = new Map();
+const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
+const PURE_MATH_METHODS: ReadonlySet<string> = new Set(["abs", "max", "min"]);
+const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
+const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
+const EMPTY_STATE_CANDIDATES: ReadonlyMap<string, StateCandidate> = new Map();
+const EMPTY_STATE_USAGES: ReadonlyMap<string, StateUsage> = new Map();
 
 function collectEffectStateScopes(
   states: readonly StateCandidate[],
@@ -1195,8 +1201,8 @@ function collectStateUsage(
     }
   }
 
-  const callableReads = collectCommandOnlyCallableReads(state, effectNodes),
-    renderCallableSites = callableReads.renderSites;
+  const callableReads = collectCommandOnlyCallableReads(state, effectNodes);
+  const renderCallableSites = callableReads.renderSites;
   if (renderCallableSites.length > 0) {
     usage.localRenderReads += renderCallableSites.length;
     usage.directRenderNodes.push(...renderCallableSites);
@@ -1222,11 +1228,11 @@ function stateBindingIdentifiers(state: StateCandidate): readonly ts.Identifier[
   }
 
   const ordered: ts.Identifier[] = [];
-  let setterIndex = 0,
-    valueIndex = 0;
+  let setterIndex = 0;
+  let valueIndex = 0;
   while (valueIndex < values.length && setterIndex < setters.length) {
-    const value = values[valueIndex]!,
-      setter = setters[setterIndex]!;
+    const value = values[valueIndex]!;
+    const setter = setters[setterIndex]!;
     if (value.pos < setter.pos) {
       ordered.push(value);
       valueIndex += 1;
@@ -1251,20 +1257,20 @@ function siblingProducerConsumerCut(
   effectNodes: ReadonlySet<ts.Node>,
 ): SiblingRenderCut | null {
   const localConsumer =
-      usage.transportedOccurrences === 0 &&
-      usage.localRenderReads > 0 &&
-      usage.localRenderReads === usage.directRenderNodes.length,
-    transportedConsumer =
-      usage.localRenderReads === 0 &&
-      usage.valueTransportSites.size === 1 &&
-      usage.valueTargets.size === 1 &&
-      usage.setterTransportSites.size === 1 &&
-      usage.setterTargets.size === 1 &&
-      usage.setterCalls === 0 &&
-      usage.setterReferences === 1 &&
-      usage.transportedOccurrences === 2 &&
-      !usage.repeatedTransport &&
-      !usage.unstableTransport;
+    usage.transportedOccurrences === 0 &&
+    usage.localRenderReads > 0 &&
+    usage.localRenderReads === usage.directRenderNodes.length;
+  const transportedConsumer =
+    usage.localRenderReads === 0 &&
+    usage.valueTransportSites.size === 1 &&
+    usage.valueTargets.size === 1 &&
+    usage.setterTransportSites.size === 1 &&
+    usage.setterTargets.size === 1 &&
+    usage.setterCalls === 0 &&
+    usage.setterReferences === 1 &&
+    usage.transportedOccurrences === 2 &&
+    !usage.repeatedTransport &&
+    !usage.unstableTransport;
   if (
     !state.setterName ||
     isCustomHookOwner(state.owner) ||
@@ -1284,10 +1290,10 @@ function siblingProducerConsumerCut(
   if (!consumer) {
     return null;
   }
-  const commandCalls = usage.setterCallNodes.filter((call) => !hasAncestorInSet(call, effectNodes)),
-    commandProducers = commandCalls.map((call) => jsxProducerForSetterCall(call, state.owner)),
-    producer =
-      commandCalls.length > 0 ? commandProducers[0] : directTransportProducer(usage, state.owner);
+  const commandCalls = usage.setterCallNodes.filter((call) => !hasAncestorInSet(call, effectNodes));
+  const commandProducers = commandCalls.map((call) => jsxProducerForSetterCall(call, state.owner));
+  const producer =
+    commandCalls.length > 0 ? commandProducers[0] : directTransportProducer(usage, state.owner);
   if (
     !producer ||
     commandProducers.some((candidate) => candidate !== producer) ||
@@ -1329,8 +1335,8 @@ function siblingProjectionConsumer(
   usage: StateUsage,
 ): JsxSubtreeNode | null {
   if (usage.localRenderReads === 0) {
-    const callSite = directUniqueReturnCallSite(usage, state.owner),
-      opening = callSite?.opening;
+    const callSite = directUniqueReturnCallSite(usage, state.owner);
+    const opening = callSite?.opening;
     if (!opening) {
       return null;
     }
@@ -1352,8 +1358,8 @@ function siblingProjectionConsumer(
     return null;
   }
 
-  const repeated = references.map((reference) => nearestRepeatedRenderCall(reference, state.owner)),
-    repeatedCall = repeated[0];
+  const repeated = references.map((reference) => nearestRepeatedRenderCall(reference, state.owner));
+  const repeatedCall = repeated[0];
   if (repeated.some((call) => call !== repeatedCall)) {
     return null;
   }
@@ -1366,8 +1372,8 @@ function siblingProjectionConsumer(
 }
 
 function isSnapshotFallbackReference(reference: ts.Identifier, boundary: ts.Node): boolean {
-  const attribute = findAncestorUntil(reference, ts.isJsxAttribute, boundary),
-    initializer = attribute?.initializer;
+  const attribute = findAncestorUntil(reference, ts.isJsxAttribute, boundary);
+  const initializer = attribute?.initializer;
   if (!initializer || !ts.isJsxExpression(initializer) || !initializer.expression) {
     return false;
   }
@@ -1392,8 +1398,8 @@ function directTransportProducer(
   usage: StateUsage,
   owner: RuntimeFunctionLike,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  const site = [...usage.setterTransportSites][0],
-    valueCallSite = directUniqueReturnCallSite(usage, owner);
+  const site = [...usage.setterTransportSites][0];
+  const valueCallSite = directUniqueReturnCallSite(usage, owner);
   if (site === undefined || !valueCallSite) {
     return null;
   }
@@ -1443,13 +1449,13 @@ function jsxProducerForSetterCall(
     ) {
       return;
     }
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner),
-      opening =
-        attribute &&
-        /^on[A-Z]/.test(attribute.name.getText()) &&
-        isDirectJsxAttributeExpression(attribute, node)
-          ? jsxOpeningForAttribute(attribute)
-          : null;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
+    const opening =
+      attribute &&
+      /^on[A-Z]/.test(attribute.name.getText()) &&
+      isDirectJsxAttributeExpression(attribute, node)
+        ? jsxOpeningForAttribute(attribute)
+        : null;
     if (opening) {
       openings.push(opening);
     } else {
@@ -1567,10 +1573,10 @@ function sourceProvenOptionEventCallbacks(
       if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) {
         continue;
       }
-      const propertyName = staticPropertyName(property.name),
-        callbackName = ts.isShorthandPropertyAssignment(property)
-          ? property.name
-          : unwrapTransparentExpression(property.initializer);
+      const propertyName = staticPropertyName(property.name);
+      const callbackName = ts.isShorthandPropertyAssignment(property)
+        ? property.name
+        : unwrapTransparentExpression(property.initializer);
       if (!propertyName || !ts.isIdentifier(callbackName)) {
         continue;
       }
@@ -1615,8 +1621,8 @@ function memoizedObjectLiteral(
   ) {
     return null;
   }
-  const factory = call.arguments[0],
-    dependencies = call.arguments[1];
+  const factory = call.arguments[0];
+  const dependencies = call.arguments[1];
   if (
     !factory ||
     (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
@@ -1660,8 +1666,8 @@ function jsxComponentPublications(
     if (isDeclarationName(node) || isNonValueIdentifier(node)) {
       continue;
     }
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner),
-      component = attribute ? jsxTargetName(attribute) : null;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
+    const component = attribute ? jsxTargetName(attribute) : null;
     if (!attribute || !component || !isJsxEventHandlerReference(attribute, node)) {
       safe = false;
       continue;
@@ -1681,8 +1687,8 @@ function callbackPublishedOnlyThroughMemo(
   property: ts.PropertyAssignment | ts.ShorthandPropertyAssignment,
   memoCall: ts.CallExpression,
 ): boolean {
-  let propertyReferences = 0,
-    safe = true;
+  let propertyReferences = 0;
+  let safe = true;
   for (const node of identifiersNamed(owner.body, binding)) {
     if (!safe) {
       break;
@@ -1782,8 +1788,8 @@ function findObservableStateClusters(
   stateFlow: StateFlowIndex,
   childContracts: ChildContractResolver | null,
 ): ReadonlyMap<StateCandidate, StateCluster> {
-  const result = new Map<StateCandidate, StateCluster>(),
-    statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
+  const result = new Map<StateCandidate, StateCluster>();
+  const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
     const ownerStates = statesByOwner.get(state.owner) ?? [];
     ownerStates.push(state);
@@ -1795,15 +1801,17 @@ function findObservableStateClusters(
     if (ownerElements < 8) {
       continue;
     }
-    const hasLargeSourceOwner = ownerLineSpan(owner, sourceFile) >= 100,
-      broadOwner = ownerElements >= 12,
-      mutableStates: StateCandidate[] = ownerStates.filter((state) => state.setterName !== null),
-      stateBySetter = new Map(
-        mutableStates.flatMap((state) =>
-          state.setterName ? [[state.setterName, state] as const] : [],
-        ),
+    const hasLargeSourceOwner = ownerLineSpan(owner, sourceFile) >= 100;
+    const broadOwner = ownerElements >= 12;
+    const mutableStates: StateCandidate[] = ownerStates.filter(
+      (state) => state.setterName !== null,
+    );
+    const stateBySetter = new Map(
+      mutableStates.flatMap((state) =>
+        state.setterName ? [[state.setterName, state] as const] : [],
       ),
-      calls: SetterMutation[] = [];
+    );
+    const calls: SetterMutation[] = [];
     visit(owner.body, (node) => {
       if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
         return;
@@ -1836,8 +1844,8 @@ function findObservableStateClusters(
         ) {
           continue;
         }
-        const leftStateIndex = mutableStates.indexOf(left.state),
-          rightStateIndex = mutableStates.indexOf(right.state);
+        const leftStateIndex = mutableStates.indexOf(left.state);
+        const rightStateIndex = mutableStates.indexOf(right.state);
         if (leftStateIndex !== -1 && rightStateIndex !== -1) {
           union.join(leftStateIndex, rightStateIndex);
         }
@@ -1850,45 +1858,45 @@ function findObservableStateClusters(
       if (!state) {
         continue;
       }
-      const root = union.find(index),
-        members = components.get(root) ?? [];
+      const root = union.find(index);
+      const members = components.get(root) ?? [];
       members.push(state);
       components.set(root, members);
     }
 
     for (const members of components.values()) {
       const dialogMembers =
-          broadOwner && hasLargeSourceOwner
-            ? (normalizeObservableDialogClusterMembers(
-                members,
-                usageByState,
-                knownComponents,
-                calls,
-                stateFlow,
-              ) ??
-              normalizePersistentScalarDialogClusterMembers(
-                members,
-                usageByState,
-                knownComponents,
-                calls,
-                stateFlow,
-                childContracts,
-              ))
-            : null,
-        gatedFeedbackMembers =
-          broadOwner && !dialogMembers
-            ? normalizeGatedFeedbackClusterMembers(members, usageByState, calls, stateFlow)
-            : null,
-        textDraftMembers =
-          broadOwner && hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers
-            ? normalizeObservableTextDraftClusterMembers(members, usageByState, calls, stateFlow)
-            : null,
-        selectionMembers =
-          hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers && !textDraftMembers
-            ? normalizeObservableSelectionClusterMembers(members, usageByState, calls, stateFlow)
-            : null,
-        clusterMembers =
-          dialogMembers ?? gatedFeedbackMembers ?? textDraftMembers ?? selectionMembers;
+        broadOwner && hasLargeSourceOwner
+          ? (normalizeObservableDialogClusterMembers(
+              members,
+              usageByState,
+              knownComponents,
+              calls,
+              stateFlow,
+            ) ??
+            normalizePersistentScalarDialogClusterMembers(
+              members,
+              usageByState,
+              knownComponents,
+              calls,
+              stateFlow,
+              childContracts,
+            ))
+          : null;
+      const gatedFeedbackMembers =
+        broadOwner && !dialogMembers
+          ? normalizeGatedFeedbackClusterMembers(members, usageByState, calls, stateFlow)
+          : null;
+      const textDraftMembers =
+        broadOwner && hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers
+          ? normalizeObservableTextDraftClusterMembers(members, usageByState, calls, stateFlow)
+          : null;
+      const selectionMembers =
+        hasLargeSourceOwner && !dialogMembers && !gatedFeedbackMembers && !textDraftMembers
+          ? normalizeObservableSelectionClusterMembers(members, usageByState, calls, stateFlow)
+          : null;
+      const clusterMembers =
+        dialogMembers ?? gatedFeedbackMembers ?? textDraftMembers ?? selectionMembers;
       if (!clusterMembers) {
         continue;
       }
@@ -1907,31 +1915,31 @@ function findObservableStateClusters(
         continue;
       }
       const sortedMembers = [...clusterMembers].sort(
-          (left, right) => left.call.getStart() - right.call.getStart(),
-        ),
-        primary = sortedMembers[0];
+        (left, right) => left.call.getStart() - right.call.getStart(),
+      );
+      const primary = sortedMembers[0];
       if (!primary) {
         continue;
       }
-      const names = sortedMembers.map((state) => state.valueName),
-        targets = new Set(
-          sortedMembers.flatMap((state) => [...(usageByState.get(state)?.jsxTargets ?? [])]),
-        ),
-        cluster: StateCluster = {
-          action: "use-observable",
-          id: `state-cluster:${owner.getStart(sourceFile)}:${names.join(",")}`,
-          members: sortedMembers,
-          message: selectionMembers
-            ? `Replace the co-written selection mode (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve mode-and-clear transitions with atomic \`assign\` calls, keep independent collection edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at header, control, and keyed-row leaves.`
-            : gatedFeedbackMembers
-              ? `Replace the payload and timed feedback state (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the timer and command timing, batch the paired reset, read the payload command with \`peek\`, subscribe to the payload-gated content at its stable call site, and subscribe to feedback again only in its nested feedback leaf.`
-              : textDraftMembers
-                ? `Replace the co-written editable draft (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
-                : hasBoundedDialogGate
-                  ? `Replace the persistent dialog state (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; atomically assign the payload and open flag, keep close transitions as leaf writes, and move the complete payload gate plus ${[...targets].sort().join(", ")} into one always-mounted stable leaf wrapper. Subscribe there with \`useValue\` so the existing payload gate and dialog mount behavior stay unchanged.`
-                  : `Replace the co-written React state cluster (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; preserve paired payload/open transitions with atomic \`assign\` calls, keep independent close updates as leaf writes, and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
-          primary,
-        };
+      const names = sortedMembers.map((state) => state.valueName);
+      const targets = new Set(
+        sortedMembers.flatMap((state) => [...(usageByState.get(state)?.jsxTargets ?? [])]),
+      );
+      const cluster: StateCluster = {
+        action: "use-observable",
+        id: `state-cluster:${owner.getStart(sourceFile)}:${names.join(",")}`,
+        members: sortedMembers,
+        message: selectionMembers
+          ? `Replace the co-written selection mode (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve mode-and-clear transitions with atomic \`assign\` calls, keep independent collection edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at header, control, and keyed-row leaves.`
+          : gatedFeedbackMembers
+            ? `Replace the payload and timed feedback state (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the timer and command timing, batch the paired reset, read the payload command with \`peek\`, subscribe to the payload-gated content at its stable call site, and subscribe to feedback again only in its nested feedback leaf.`
+            : textDraftMembers
+              ? `Replace the co-written editable draft (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`
+              : hasBoundedDialogGate
+                ? `Replace the persistent dialog state (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; atomically assign the payload and open flag, keep close transitions as leaf writes, and move the complete payload gate plus ${[...targets].sort().join(", ")} into one always-mounted stable leaf wrapper. Subscribe there with \`useValue\` so the existing payload gate and dialog mount behavior stay unchanged.`
+                : `Replace the co-written React state cluster (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable dialog model; preserve paired payload/open transitions with atomic \`assign\` calls, keep independent close updates as leaf writes, and subscribe with \`useValue\` only inside ${[...targets].sort().join(", ")}.`,
+        primary,
+      };
       for (const member of sortedMembers) {
         result.set(member, cluster);
       }
@@ -1950,14 +1958,14 @@ function normalizeObservableSelectionClusterMembers(
   if (members.length !== 2) {
     return null;
   }
-  const mode = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword)),
-    selection = members.find(hasEmptyArrayStateInitializer);
+  const mode = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  const selection = members.find(hasEmptyArrayStateInitializer);
   if (!mode || !selection || mode === selection) {
     return null;
   }
 
-  const modeUsage = usageByState.get(mode),
-    selectionUsage = usageByState.get(selection);
+  const modeUsage = usageByState.get(mode);
+  const selectionUsage = usageByState.get(selection);
   if (
     !modeUsage ||
     !selectionUsage ||
@@ -1975,10 +1983,10 @@ function normalizeObservableSelectionClusterMembers(
     return null;
   }
 
-  const modeMutations = mutations.filter((mutation) => mutation.state === mode),
-    selectionMutations = mutations.filter((mutation) => mutation.state === selection),
-    resets = selectionMutations.filter((mutation) => callSetsEmptyArray(mutation)),
-    edits = selectionMutations.filter((mutation) => !callSetsEmptyArray(mutation));
+  const modeMutations = mutations.filter((mutation) => mutation.state === mode);
+  const selectionMutations = mutations.filter((mutation) => mutation.state === selection);
+  const resets = selectionMutations.filter((mutation) => callSetsEmptyArray(mutation));
+  const edits = selectionMutations.filter((mutation) => !callSetsEmptyArray(mutation));
   if (
     modeMutations.length < 2 ||
     resets.length === 0 ||
@@ -2036,14 +2044,14 @@ function normalizeObservableTextDraftClusterMembers(
   if (members.length !== 2) {
     return null;
   }
-  const cursor = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.NullKeyword)),
-    draft = members.find((state) => hasEmptyStringStateInitializer(state));
+  const cursor = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.NullKeyword));
+  const draft = members.find((state) => hasEmptyStringStateInitializer(state));
   if (!cursor || !draft || cursor === draft) {
     return null;
   }
 
-  const cursorUsage = usageByState.get(cursor),
-    draftUsage = usageByState.get(draft);
+  const cursorUsage = usageByState.get(cursor);
+  const draftUsage = usageByState.get(draft);
   if (
     !cursorUsage ||
     !draftUsage ||
@@ -2065,14 +2073,14 @@ function normalizeObservableTextDraftClusterMembers(
     return null;
   }
 
-  const cursorMutations = mutations.filter((mutation) => mutation.state === cursor),
-    draftMutations = mutations.filter((mutation) => mutation.state === draft),
-    cursorClears = cursorMutations.filter((mutation) =>
-      callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
-    ),
-    cursorOpens = cursorMutations.filter(
-      (mutation) => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
-    );
+  const cursorMutations = mutations.filter((mutation) => mutation.state === cursor);
+  const draftMutations = mutations.filter((mutation) => mutation.state === draft);
+  const cursorClears = cursorMutations.filter((mutation) =>
+    callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
+  );
+  const cursorOpens = cursorMutations.filter(
+    (mutation) => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
+  );
   if (
     cursorMutations.length < 2 ||
     draftMutations.length === 0 ||
@@ -2125,8 +2133,8 @@ function normalizeObservableTextDraftClusterMembers(
 }
 
 function callsAreAdjacentDraftWrites(left: ts.CallExpression, right: ts.CallExpression): boolean {
-  const leftStatement = left.parent,
-    rightStatement = right.parent;
+  const leftStatement = left.parent;
+  const rightStatement = right.parent;
   if (
     !ts.isExpressionStatement(leftStatement) ||
     leftStatement.expression !== left ||
@@ -2136,11 +2144,11 @@ function callsAreAdjacentDraftWrites(left: ts.CallExpression, right: ts.CallExpr
   ) {
     return false;
   }
-  const { parent } = leftStatement,
-    statements =
-      ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent)
-        ? parent.statements
-        : null;
+  const { parent } = leftStatement;
+  const statements =
+    ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent)
+      ? parent.statements
+      : null;
   if (statements === null) {
     return false;
   }
@@ -2160,8 +2168,8 @@ function setterReferencesAreCallsOrControlledValueWrites(state: StateCandidate):
   if (!state.setterName) {
     return false;
   }
-  let controlledWrites = 0,
-    safe = true;
+  let controlledWrites = 0;
+  let safe = true;
   visit(state.owner.body, (node) => {
     if (
       !safe ||
@@ -2172,8 +2180,8 @@ function setterReferencesAreCallsOrControlledValueWrites(state: StateCandidate):
     ) {
       return;
     }
-    const setterCall = ts.isCallExpression(node.parent) && node.parent.expression === node,
-      attribute = controlledValueWriteAttribute(node, state);
+    const setterCall = ts.isCallExpression(node.parent) && node.parent.expression === node;
+    const attribute = controlledValueWriteAttribute(node, state);
     if (setterCall) {
       if (attribute) {
         controlledWrites += 1;
@@ -2197,20 +2205,20 @@ function controlledValueWriteAttribute(
   if (!attribute || !isControlledInteractionProp(attribute.name.getText())) {
     return null;
   }
-  const opening = jsxOpeningForAttribute(attribute),
-    hasValue = opening?.attributes.properties.some((property) => {
-      if (
-        !ts.isJsxAttribute(property) ||
-        property.name.getText() !== "value" ||
-        !property.initializer ||
-        !ts.isJsxExpression(property.initializer) ||
-        !property.initializer.expression
-      ) {
-        return false;
-      }
-      const value = unwrapTransparentExpression(property.initializer.expression);
-      return ts.isIdentifier(value) && value.text === state.valueName;
-    });
+  const opening = jsxOpeningForAttribute(attribute);
+  const hasValue = opening?.attributes.properties.some((property) => {
+    if (
+      !ts.isJsxAttribute(property) ||
+      property.name.getText() !== "value" ||
+      !property.initializer ||
+      !ts.isJsxExpression(property.initializer) ||
+      !property.initializer.expression
+    ) {
+      return false;
+    }
+    const value = unwrapTransparentExpression(property.initializer.expression);
+    return ts.isIdentifier(value) && value.text === state.valueName;
+  });
   return hasValue ? attribute : null;
 }
 
@@ -2239,9 +2247,9 @@ function findStateCompanionWrites(
   all: ReadonlySet<StateCandidate>;
   nonClosing: ReadonlySet<StateCandidate>;
 } {
-  const all = new Set<StateCandidate>(),
-    nonClosing = new Set<StateCandidate>(),
-    statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
+  const all = new Set<StateCandidate>();
+  const nonClosing = new Set<StateCandidate>();
+  const statesByOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
   for (const state of states) {
     if (!state.setterName) {
       continue;
@@ -2253,11 +2261,11 @@ function findStateCompanionWrites(
 
   for (const [owner, ownerStates] of statesByOwner) {
     const stateBySetter = new Map(
-        ownerStates.flatMap((state) =>
-          state.setterName ? [[state.setterName, state] as const] : [],
-        ),
+      ownerStates.flatMap((state) =>
+        state.setterName ? [[state.setterName, state] as const] : [],
       ),
-      mutations: SetterMutation[] = [];
+    );
+    const mutations: SetterMutation[] = [];
     visit(owner.body, (node) => {
       if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
         return;
@@ -2424,15 +2432,15 @@ function findBranchUnmountMoves(
       continue;
     }
 
-    const callSite = directBranchReturnCallSite(usage, state.owner),
-      target = [...usage.valueTargets][0];
+    const callSite = directBranchReturnCallSite(usage, state.owner);
+    const target = [...usage.valueTargets][0];
     if (!callSite || !target) {
       continue;
     }
     const subtree: ts.Node = ts.isJsxOpeningElement(callSite.opening)
-        ? callSite.opening.parent
-        : callSite.opening,
-      gate = exactDiscriminatedBranchGate(callSite.opening, state.owner, states);
+      ? callSite.opening.parent
+      : callSite.opening;
+    const gate = exactDiscriminatedBranchGate(callSite.opening, state.owner, states);
     if (!gate) {
       continue;
     }
@@ -2446,8 +2454,8 @@ function findBranchUnmountMoves(
       continue;
     }
 
-    const branchCalls = usage.setterCallNodes.filter((call) => nodeWithin(call, subtree)),
-      outsideCalls = usage.setterCallNodes.filter((call) => !nodeWithin(call, subtree));
+    const branchCalls = usage.setterCallNodes.filter((call) => nodeWithin(call, subtree));
+    const outsideCalls = usage.setterCallNodes.filter((call) => !nodeWithin(call, subtree));
     if (
       branchCalls.length === 0 ||
       outsideCalls.length === 0 ||
@@ -2499,8 +2507,8 @@ function exactDiscriminatedBranchGate(
   ) {
     return null;
   }
-  const left = unwrapTransparentExpression(condition.left),
-    right = unwrapTransparentExpression(condition.right);
+  const left = unwrapTransparentExpression(condition.left);
+  const right = unwrapTransparentExpression(condition.right);
   if (
     !ts.isPropertyAccessExpression(left) ||
     !ts.isIdentifier(left.expression) ||
@@ -2508,8 +2516,10 @@ function exactDiscriminatedBranchGate(
   ) {
     return null;
   }
-  const controllerName = left.expression.text,
-    matches = states.filter((state) => state.owner === owner && state.valueName === controllerName);
+  const controllerName = left.expression.text;
+  const matches = states.filter(
+    (state) => state.owner === owner && state.valueName === controllerName,
+  );
   return matches.length === 1
     ? { controller: matches[0]!, property: left.name.text, value: right.text }
     : null;
@@ -2520,8 +2530,8 @@ function isDirectBranchInteractionWrite(
   opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   state: StateCandidate,
 ): boolean {
-  const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner),
-    callback = nearestMutationFunction(call, state.owner);
+  const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner);
+  const callback = nearestMutationFunction(call, state.owner);
   if (attribute === null || state.setterName === null) {
     return false;
   }
@@ -2554,11 +2564,11 @@ function isBranchUnmountReset(
     return false;
   }
   const closeCalls = controllerUsage.setterCallNodes.filter(
-      (call) =>
-        callsAreAdjacentStatements(reset, call) &&
-        callSetsDifferentDiscriminant(call, gate.property, gate.value),
-    ),
-    close = closeCalls.length === 1 ? closeCalls[0] : null;
+    (call) =>
+      callsAreAdjacentStatements(reset, call) &&
+      callSetsDifferentDiscriminant(call, gate.property, gate.value),
+  );
+  const close = closeCalls.length === 1 ? closeCalls[0] : null;
   if (!close) {
     return false;
   }
@@ -2576,8 +2586,8 @@ function isBranchUnmountReset(
 }
 
 function callsAreAdjacentStatements(left: ts.CallExpression, right: ts.CallExpression): boolean {
-  const leftStatement = left.parent,
-    rightStatement = right.parent;
+  const leftStatement = left.parent;
+  const rightStatement = right.parent;
   if (
     !ts.isExpressionStatement(leftStatement) ||
     leftStatement.expression !== left ||
@@ -2619,17 +2629,18 @@ function callDiscriminantValue(call: ts.CallExpression, property: string): strin
     return null;
   }
   const matches = value.properties.filter((candidate) => {
-      if (!ts.isPropertyAssignment(candidate)) {
-        return false;
-      }
-      const name =
-        ts.isIdentifier(candidate.name) || ts.isStringLiteral(candidate.name)
-          ? candidate.name.text
-          : null;
-      return name === property;
-    }),
-    assignment = matches.length === 1 && ts.isPropertyAssignment(matches[0]!) ? matches[0]! : null,
-    discriminator = assignment ? unwrapTransparentExpression(assignment.initializer) : null;
+    if (!ts.isPropertyAssignment(candidate)) {
+      return false;
+    }
+    const name =
+      ts.isIdentifier(candidate.name) || ts.isStringLiteral(candidate.name)
+        ? candidate.name.text
+        : null;
+    return name === property;
+  });
+  const assignment =
+    matches.length === 1 && ts.isPropertyAssignment(matches[0]!) ? matches[0]! : null;
+  const discriminator = assignment ? unwrapTransparentExpression(assignment.initializer) : null;
   return discriminator && ts.isStringLiteral(discriminator) ? discriminator.text : null;
 }
 
@@ -2637,9 +2648,9 @@ function findIndependentStateWrites(states: readonly StateCandidate[]): {
   directEventWrites: ReadonlySet<StateCandidate>;
   visibilitySetterTransports: ReadonlySet<StateCandidate>;
 } {
-  const directEventWrites = new Set<StateCandidate>(),
-    visibilitySetterTransports = new Set<StateCandidate>(),
-    byOwner = new Map<RuntimeFunctionLike, Map<string, StateCandidate>>();
+  const directEventWrites = new Set<StateCandidate>();
+  const visibilitySetterTransports = new Set<StateCandidate>();
+  const byOwner = new Map<RuntimeFunctionLike, Map<string, StateCandidate>>();
   for (const state of states) {
     if (!state.setterName) {
       continue;
@@ -2667,8 +2678,8 @@ function findIndependentStateWrites(states: readonly StateCandidate[]): {
         return;
       }
       if (ts.isIdentifier(node.initializer.expression)) {
-        const state = bySetter.get(node.initializer.expression.text),
-          opening = node.parent.parent;
+        const state = bySetter.get(node.initializer.expression.text);
+        const opening = node.parent.parent;
         if (
           state &&
           hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) &&
@@ -2689,13 +2700,13 @@ function findIndependentStateWrites(states: readonly StateCandidate[]): {
       ) {
         return;
       }
-      const callback = node.initializer.expression,
-        expression = ts.isBlock(callback.body)
-          ? callback.body.statements.length === 1 &&
-            ts.isExpressionStatement(callback.body.statements[0]!)
-            ? callback.body.statements[0]!.expression
-            : null
-          : callback.body;
+      const callback = node.initializer.expression;
+      const expression = ts.isBlock(callback.body)
+        ? callback.body.statements.length === 1 &&
+          ts.isExpressionStatement(callback.body.statements[0]!)
+          ? callback.body.statements[0]!.expression
+          : null
+        : callback.body;
       if (
         !expression ||
         !ts.isCallExpression(expression) ||
@@ -2735,21 +2746,21 @@ function findStateSubtreeClusters(
     if (candidates.length < 2) {
       continue;
     }
-    const first = candidates[0]!,
-      members = candidates.map((candidate) => candidate.state),
-      names = members.map((member) => member.valueName),
-      repeated = candidates.some((candidate) => candidate.subtree.repeated),
-      needsObservable =
-        repeated ||
-        candidates.some(
-          (candidate) => candidate.subtree.unstable || candidate.subtree.kind !== "direct",
-        ),
-      action: StateAction = needsObservable ? "use-observable" : "move-state-down",
-      ownership = repeated
-        ? "replace them with one component-lifetime observable model and subscribe with per-item `useValue` selectors in the repeated row leaf"
-        : needsObservable
-          ? "replace them with one component-lifetime observable model and subscribe in the extracted leaf with `useValue`"
-          : "move their ownership into the extracted leaf component";
+    const first = candidates[0]!;
+    const members = candidates.map((candidate) => candidate.state);
+    const names = members.map((member) => member.valueName);
+    const repeated = candidates.some((candidate) => candidate.subtree.repeated);
+    const needsObservable =
+      repeated ||
+      candidates.some(
+        (candidate) => candidate.subtree.unstable || candidate.subtree.kind !== "direct",
+      );
+    const action: StateAction = needsObservable ? "use-observable" : "move-state-down";
+    const ownership = repeated
+      ? "replace them with one component-lifetime observable model and subscribe with per-item `useValue` selectors in the repeated row leaf"
+      : needsObservable
+        ? "replace them with one component-lifetime observable model and subscribe in the extracted leaf with `useValue`"
+        : "move their ownership into the extracted leaf component";
     const cluster: StateCluster = {
       action,
       id: `state-cluster:subtree:${first.state.owner.getStart()}:${first.subtree.node.getStart()}:${names.join(",")}`,
@@ -2809,10 +2820,10 @@ function nullableDialogPayloadCut(
     return null;
   }
 
-  const ownerJsx = jsxElementCount(state.owner),
-    conditionalBoundary = conditionalNullablePayloadBoundary(state, usage, knownComponents),
-    dialog =
-      conditionalBoundary?.dialog ?? lowestCommonJsxSubtree(usage.directRenderNodes, state.owner);
+  const ownerJsx = jsxElementCount(state.owner);
+  const conditionalBoundary = conditionalNullablePayloadBoundary(state, usage, knownComponents);
+  const dialog =
+    conditionalBoundary?.dialog ?? lowestCommonJsxSubtree(usage.directRenderNodes, state.owner);
   if (
     !dialog ||
     ts.isJsxFragment(dialog) ||
@@ -2828,9 +2839,9 @@ function nullableDialogPayloadCut(
     return null;
   }
 
-  const returned = uniqueReturnedExpression(state.owner),
-    opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog,
-    target = opening.tagName.getText();
+  const returned = uniqueReturnedExpression(state.owner);
+  const opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog;
+  const target = opening.tagName.getText();
   if (
     !returned ||
     !nodeWithin(conditionalBoundary?.gate ?? dialog, returned) ||
@@ -2886,9 +2897,9 @@ function conditionalNullablePayloadBoundary(
   }
 
   for (const read of usage.directRenderNodes) {
-    const gate = findAncestorUntil(read, ts.isJsxExpression, state.owner),
-      expression = gate?.expression && unwrapTransparentExpression(gate.expression),
-      dialog = expression ? directDialogPayloadGateBranch(expression, state.valueName) : null;
+    const gate = findAncestorUntil(read, ts.isJsxExpression, state.owner);
+    const expression = gate?.expression && unwrapTransparentExpression(gate.expression);
+    const dialog = expression ? directDialogPayloadGateBranch(expression, state.valueName) : null;
     if (
       !gate ||
       !expression ||
@@ -2901,8 +2912,8 @@ function conditionalNullablePayloadBoundary(
       continue;
     }
 
-    const opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog,
-      target = opening.tagName.getText();
+    const opening = ts.isJsxElement(dialog) ? dialog.openingElement : dialog;
+    const target = opening.tagName.getText();
     if (
       (isCustomJsxTarget(target) && !knownComponents.has(target)) ||
       usage.directRenderNodes.some(
@@ -2937,8 +2948,8 @@ function isNullablePayloadOpenExpression(expression: ts.Expression, stateName: s
   ) {
     return false;
   }
-  const left = unwrapTransparentExpression(value.left),
-    right = unwrapTransparentExpression(value.right);
+  const left = unwrapTransparentExpression(value.left);
+  const right = unwrapTransparentExpression(value.right);
   return (
     (ts.isIdentifier(left) &&
       left.text === stateName &&
@@ -3011,8 +3022,8 @@ function callbackResolvesToDeferredEvent(
   }
 
   const nextSeen = new Set(seen).add(name);
-  let referenced = false,
-    safe = true;
+  let referenced = false;
+  let safe = true;
   for (const node of identifiersNamed(owner.body, name)) {
     if (!safe) {
       break;
@@ -3062,8 +3073,8 @@ function callbackHasDirectJsxEventRoot(
   if (!name || bindingDeclarationCount(owner, name) !== 1) {
     return false;
   }
-  let referenced = false,
-    safe = true;
+  let referenced = false;
+  let safe = true;
   for (const node of identifiersNamed(owner.body, name)) {
     if (!safe) {
       break;
@@ -3085,8 +3096,8 @@ function jsxEventAttributeIsDeferred(
   attribute: ts.JsxAttribute,
   childContracts: ChildContractResolver | null,
 ): boolean {
-  const prop = attribute.name.getText(),
-    target = jsxTargetName(attribute);
+  const prop = attribute.name.getText();
+  const target = jsxTargetName(attribute);
   if (!target || !/^on[A-Z]/.test(prop)) {
     return false;
   }
@@ -3107,8 +3118,8 @@ function normalizeObservableDialogClusterMembers(
   if (members.length < 2) {
     return null;
   }
-  const payloads = members.filter(hasDialogPayloadInitializer),
-    flags = members.filter((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  const payloads = members.filter(hasDialogPayloadInitializer);
+  const flags = members.filter((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
   if (
     payloads.length !== 1 ||
     flags.length === 0 ||
@@ -3121,10 +3132,10 @@ function normalizeObservableDialogClusterMembers(
   if (!payload) {
     return null;
   }
-  const payloadMutations = mutations.filter((mutation) => mutation.state === payload),
-    payloadOpenMutations = payloadMutations.filter(
-      (mutation) => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
-    );
+  const payloadMutations = mutations.filter((mutation) => mutation.state === payload);
+  const payloadOpenMutations = payloadMutations.filter(
+    (mutation) => !callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
+  );
   if (payloadOpenMutations.length === 0) {
     return null;
   }
@@ -3134,8 +3145,8 @@ function normalizeObservableDialogClusterMembers(
   if (latches.length > 1) {
     return null;
   }
-  const latch = latches[0] ?? null,
-    targetSets: ReadonlySet<string>[] = [];
+  const latch = latches[0] ?? null;
+  const targetSets: ReadonlySet<string>[] = [];
   for (const member of members) {
     const usage = usageByState.get(member);
     if (
@@ -3168,15 +3179,15 @@ function normalizeObservableDialogClusterMembers(
     if (flag === latch) {
       continue;
     }
-    const flagMutations = mutations.filter((mutation) => mutation.state === flag),
-      openMutations = flagMutations.filter((mutation) =>
-        callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
-      ),
-      flagUsage = usageByState.get(flag),
-      canClose =
-        flagMutations.some((mutation) => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) ||
-        flagMutations.some(isControlledBooleanTransition) ||
-        (flagUsage?.setterTargets.size ?? 0) > 0;
+    const flagMutations = mutations.filter((mutation) => mutation.state === flag);
+    const openMutations = flagMutations.filter((mutation) =>
+      callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
+    );
+    const flagUsage = usageByState.get(flag);
+    const canClose =
+      flagMutations.some((mutation) => callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword)) ||
+      flagMutations.some(isControlledBooleanTransition) ||
+      (flagUsage?.setterTargets.size ?? 0) > 0;
     if (openMutations.length === 0 || !canClose) {
       return null;
     }
@@ -3224,14 +3235,14 @@ function normalizePersistentScalarDialogClusterMembers(
   if (!childContracts || members.length !== 2) {
     return null;
   }
-  const payload = members.find(hasLiteralScalarDialogPayloadInitializer),
-    flag = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  const payload = members.find(hasLiteralScalarDialogPayloadInitializer);
+  const flag = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
   if (!payload || !flag || payload === flag) {
     return null;
   }
 
-  const payloadUsage = usageByState.get(payload),
-    flagUsage = usageByState.get(flag);
+  const payloadUsage = usageByState.get(payload);
+  const flagUsage = usageByState.get(flag);
   if (
     !payloadUsage ||
     !flagUsage ||
@@ -3263,10 +3274,10 @@ function normalizePersistentScalarDialogClusterMembers(
     return null;
   }
 
-  const target = [...payloadUsage.valueTargets][0],
-    payloadCallSite = directUniqueReturnCallSite(payloadUsage, payload.owner)?.opening,
-    flagCallSite = directUniqueReturnCallSite(flagUsage, flag.owner)?.opening,
-    closeTransport = directSetterTransport(flag);
+  const target = [...payloadUsage.valueTargets][0];
+  const payloadCallSite = directUniqueReturnCallSite(payloadUsage, payload.owner)?.opening;
+  const flagCallSite = directUniqueReturnCallSite(flagUsage, flag.owner)?.opening;
+  const closeTransport = directSetterTransport(flag);
   if (
     !target ||
     !knownComponents.has(target) ||
@@ -3281,17 +3292,17 @@ function normalizePersistentScalarDialogClusterMembers(
     return null;
   }
 
-  const payloadMutations = mutations.filter((mutation) => mutation.state === payload),
-    flagMutations = mutations.filter((mutation) => mutation.state === flag),
-    opens = flagMutations.filter((mutation) =>
-      callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
-    ),
-    closes = flagMutations.filter((mutation) =>
-      callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword),
-    ),
-    paired = (left: SetterMutation, right: SetterMutation) =>
-      left.region === right.region &&
-      mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow);
+  const payloadMutations = mutations.filter((mutation) => mutation.state === payload);
+  const flagMutations = mutations.filter((mutation) => mutation.state === flag);
+  const opens = flagMutations.filter((mutation) =>
+    callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
+  );
+  const closes = flagMutations.filter((mutation) =>
+    callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword),
+  );
+  const paired = (left: SetterMutation, right: SetterMutation) =>
+    left.region === right.region &&
+    mutationsAreProvenCoexecuting(left.call, right.call, left.region, stateFlow);
   if (
     payloadMutations.length === 0 ||
     opens.length === 0 ||
@@ -3361,8 +3372,8 @@ function isMonotonicDialogLatch(
   payloadOpenMutations: readonly SetterMutation[],
   stateFlow: StateFlowIndex,
 ): boolean {
-  const usage = usageByState.get(flag),
-    flagMutations = mutations.filter((mutation) => mutation.state === flag);
+  const usage = usageByState.get(flag);
+  const flagMutations = mutations.filter((mutation) => mutation.state === flag);
   return (
     usage !== undefined &&
     usage.localRenderReads > 0 &&
@@ -3399,14 +3410,14 @@ function normalizeGatedFeedbackClusterMembers(
   if (members.length !== 2) {
     return null;
   }
-  const payload = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.NullKeyword)),
-    feedback = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
+  const payload = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.NullKeyword));
+  const feedback = members.find((state) => hasStateInitializer(state, ts.SyntaxKind.FalseKeyword));
   if (!payload || !feedback || payload === feedback) {
     return null;
   }
 
-  const payloadUsage = usageByState.get(payload),
-    feedbackUsage = usageByState.get(feedback);
+  const payloadUsage = usageByState.get(payload);
+  const feedbackUsage = usageByState.get(feedback);
   if (
     !payloadUsage ||
     !feedbackUsage ||
@@ -3430,17 +3441,17 @@ function normalizeGatedFeedbackClusterMembers(
     return null;
   }
 
-  const payloadMutations = mutations.filter((mutation) => mutation.state === payload),
-    feedbackMutations = mutations.filter((mutation) => mutation.state === feedback),
-    payloadResets = payloadMutations.filter((mutation) =>
-      callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
-    ),
-    feedbackResets = feedbackMutations.filter((mutation) =>
-      callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword),
-    ),
-    feedbackStarts = feedbackMutations.filter((mutation) =>
-      callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
-    );
+  const payloadMutations = mutations.filter((mutation) => mutation.state === payload);
+  const feedbackMutations = mutations.filter((mutation) => mutation.state === feedback);
+  const payloadResets = payloadMutations.filter((mutation) =>
+    callSetsLiteral(mutation, ts.SyntaxKind.NullKeyword),
+  );
+  const feedbackResets = feedbackMutations.filter((mutation) =>
+    callSetsLiteral(mutation, ts.SyntaxKind.FalseKeyword),
+  );
+  const feedbackStarts = feedbackMutations.filter((mutation) =>
+    callSetsLiteral(mutation, ts.SyntaxKind.TrueKeyword),
+  );
   if (
     payloadMutations.length < 2 ||
     payloadResets.length === 0 ||
@@ -3636,9 +3647,9 @@ function stateHasBoundedDialogGate(
   if (!firstRead) {
     return false;
   }
-  const gate = findAncestorUntil(firstRead, ts.isJsxExpression, state.owner),
-    expression = gate?.expression && unwrapTransparentExpression(gate.expression),
-    trueBranch = expression ? directDialogPayloadGateBranch(expression, state.valueName) : null;
+  const gate = findAncestorUntil(firstRead, ts.isJsxExpression, state.owner);
+  const expression = gate?.expression && unwrapTransparentExpression(gate.expression);
+  const trueBranch = expression ? directDialogPayloadGateBranch(expression, state.valueName) : null;
   if (
     !gate ||
     !expression ||
@@ -3707,8 +3718,8 @@ function isControlledBooleanTransition(mutation: SetterMutation): boolean {
   if (!argument || !ts.isIdentifier(argument)) {
     return false;
   }
-  const callback = isInlineRuntimeCallback(mutation.region) ? mutation.region : null,
-    parameter = callback?.parameters[0];
+  const callback = isInlineRuntimeCallback(mutation.region) ? mutation.region : null;
+  const parameter = callback?.parameters[0];
   if (!parameter || !ts.isIdentifier(parameter.name) || parameter.name.text !== argument.text) {
     return false;
   }
@@ -3783,8 +3794,8 @@ class DisjointSet {
   }
 
   join(left: number, right: number): void {
-    const leftRoot = this.find(left),
-      rightRoot = this.find(right);
+    const leftRoot = this.find(left);
+    const rightRoot = this.find(right);
     if (leftRoot !== rightRoot) {
       this.parents[rightRoot] = leftRoot;
     }
@@ -3929,8 +3940,8 @@ function findLegendValueMirrors(
     return mirrors;
   }
   for (const state of states) {
-    const usage = usageByState.get(state),
-      initial = state.call.arguments[0];
+    const usage = usageByState.get(state);
+    const initial = state.call.arguments[0];
     if (
       !usage ||
       !state.setterName ||
@@ -3948,9 +3959,9 @@ function findLegendValueMirrors(
     ) {
       continue;
     }
-    const sourceName = initial.text,
-      source = uniqueVariableDeclaration(state.owner, sourceName),
-      hookCall = source?.initializer ? unwrapTransparentExpression(source.initializer) : null;
+    const sourceName = initial.text;
+    const source = uniqueVariableDeclaration(state.owner, sourceName);
+    const hookCall = source?.initializer ? unwrapTransparentExpression(source.initializer) : null;
     if (
       !source ||
       !hookCall ||
@@ -3984,10 +3995,10 @@ function sourceBindingOnlySeedsState(
   if (!ts.isIdentifier(source.name) || !state.owner.body) {
     return false;
   }
-  const binding = source.name,
-    initial = state.call.arguments[0];
-  let references = 0,
-    safe = true;
+  const binding = source.name;
+  const initial = state.call.arguments[0];
+  let references = 0;
+  let safe = true;
   visit(state.owner.body, (node) => {
     if (
       !safe ||
@@ -4021,8 +4032,8 @@ function hasAdjacentBridgeWrite(
   ) {
     return false;
   }
-  const { statements } = statement.parent,
-    index = statements.indexOf(statement);
+  const { statements } = statement.parent;
+  const index = statements.indexOf(statement);
   return [statements[index - 1], statements[index + 1]].some((candidate) => {
     if (!candidate || !ts.isExpressionStatement(candidate)) {
       return false;
@@ -4031,8 +4042,8 @@ function hasAdjacentBridgeWrite(
     if (!ts.isCallExpression(expression) || expression.arguments.length !== 1) {
       return false;
     }
-    const [argument] = expression.arguments,
-      [setterArgument] = setterCall.arguments;
+    const [argument] = expression.arguments;
+    const [setterArgument] = setterCall.arguments;
     return (
       argument !== undefined &&
       setterArgument !== undefined &&
@@ -4187,8 +4198,8 @@ function classifyState(
       message: `Move React state \`${state.valueName}\` into \`${branchUnmountMove.target}\`; every read and interactive write belongs to that branch, and the owner resets it only when that branch unmounts.`,
     };
   }
-  const unusedStateDeletionConfidence = setterCallsDiscardConfidence(usage.setterCallNodes),
-    onlyCalculatesOwnSetter = stateReadsOnlyCalculateOwnSetter(state, usage);
+  const unusedStateDeletionConfidence = setterCallsDiscardConfidence(usage.setterCallNodes);
+  const onlyCalculatesOwnSetter = stateReadsOnlyCalculateOwnSetter(state, usage);
   if (
     usage.setterCalls > 0 &&
     usage.setterReferences === usage.setterCalls &&
@@ -4213,48 +4224,48 @@ function classifyState(
           : `Delete React state \`${state.valueName}\` and its setter calls; assigned values are never consumed.`,
     };
   }
-  const directCallSite = directUniqueReturnCallSite(usage, state.owner),
-    branchCallSite = directBranchReturnCallSite(usage, state.owner),
-    branchSubtree = branchCallSite
-      ? ts.isJsxOpeningElement(branchCallSite.opening)
-        ? branchCallSite.opening.parent
-        : branchCallSite.opening
-      : null,
-    hasIndependentTransportRenderCut =
-      branchCallSite !== null &&
-      branchSubtree !== null &&
-      hasIndependentRenderCutWitness(
-        branchCallSite.returned,
-        [branchSubtree],
-        localComponents,
-        sourceComponents,
-      ),
-    hasRepeatedOwnerRenderCut =
-      branchSubtree !== null && hasRepeatedJsxRenderWorkOutside(state.owner, branchSubtree),
-    hasVisibilityValueTransport = [...usage.valueProps.values()].some((props) =>
-      [...props].some((prop) => /^(?:isOpen|isVisible|open|visible)$/.test(prop)),
-    ),
-    hasCompactBooleanTransportCut =
-      hasIndependentTransportRenderCut &&
-      !hasCompanionWrites &&
-      !hasReactiveMutationPath &&
-      usage.setterTargets.size === 0 &&
-      usage.setterCallNodes.every((call) => setterCallEndsCommand(call, state.owner)) &&
-      (hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
-        hasStateInitializer(state, ts.SyntaxKind.TrueKeyword)),
-    descendantControlledCut =
-      branchCallSite !== null &&
-      branchSubtree !== null &&
-      hasIndependentVisibilitySetterTransport &&
-      setterOwnedByValueCallSite(usage, state.owner) &&
-      hasIndependentTransportRenderCut,
-    callbackLeaf = findLazyCallbackLeaf(
-      state,
-      usage,
+  const directCallSite = directUniqueReturnCallSite(usage, state.owner);
+  const branchCallSite = directBranchReturnCallSite(usage, state.owner);
+  const branchSubtree = branchCallSite
+    ? ts.isJsxOpeningElement(branchCallSite.opening)
+      ? branchCallSite.opening.parent
+      : branchCallSite.opening
+    : null;
+  const hasIndependentTransportRenderCut =
+    branchCallSite !== null &&
+    branchSubtree !== null &&
+    hasIndependentRenderCutWitness(
+      branchCallSite.returned,
+      [branchSubtree],
       localComponents,
       sourceComponents,
-      LAZY_CALLBACK_LEAF_PROOFS,
     );
+  const hasRepeatedOwnerRenderCut =
+    branchSubtree !== null && hasRepeatedJsxRenderWorkOutside(state.owner, branchSubtree);
+  const hasVisibilityValueTransport = [...usage.valueProps.values()].some((props) =>
+    [...props].some((prop) => /^(?:isOpen|isVisible|open|visible)$/.test(prop)),
+  );
+  const hasCompactBooleanTransportCut =
+    hasIndependentTransportRenderCut &&
+    !hasCompanionWrites &&
+    !hasReactiveMutationPath &&
+    usage.setterTargets.size === 0 &&
+    usage.setterCallNodes.every((call) => setterCallEndsCommand(call, state.owner)) &&
+    (hasStateInitializer(state, ts.SyntaxKind.FalseKeyword) ||
+      hasStateInitializer(state, ts.SyntaxKind.TrueKeyword));
+  const descendantControlledCut =
+    branchCallSite !== null &&
+    branchSubtree !== null &&
+    hasIndependentVisibilitySetterTransport &&
+    setterOwnedByValueCallSite(usage, state.owner) &&
+    hasIndependentTransportRenderCut;
+  const callbackLeaf = findLazyCallbackLeaf(
+    state,
+    usage,
+    localComponents,
+    sourceComponents,
+    LAZY_CALLBACK_LEAF_PROOFS,
+  );
   if (
     callbackLeaf &&
     usage.effectReads === 0 &&
@@ -4282,14 +4293,14 @@ function classifyState(
     };
   }
   if (isAsyncLeafStatus) {
-    const target = [...usage.valueTargets][0],
-      callSiteCount = usage.valueTransportSites.size,
-      boundary =
-        callSiteCount > 1
-          ? `${callSiteCount === 2 ? "two" : "three"} stable status call sites`
-          : target
-            ? `the stable \`${target}\` call site`
-            : "the stable pending-control call site";
+    const target = [...usage.valueTargets][0];
+    const callSiteCount = usage.valueTransportSites.size;
+    const boundary =
+      callSiteCount > 1
+        ? `${callSiteCount === 2 ? "two" : "three"} stable status call sites`
+        : target
+          ? `the stable \`${target}\` call site`
+          : "the stable pending-control call site";
     return {
       action: "use-observable",
       confidence: "probable",
@@ -4418,10 +4429,10 @@ function classifyState(
     hasOnlyEventCommandReads(state, EMPTY_NODES, eventTransitionCallbacks) &&
     controlledLeafRenderCut(state, usage, localComponents, sourceComponents);
   if (controlledLeafCut) {
-    const target = [...usage.valueTargets][0] ?? "the controlled child",
-      controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlledLeafCut.opening)
-        ? controlledLeafCut.opening.parent
-        : controlledLeafCut.opening;
+    const target = [...usage.valueTargets][0] ?? "the controlled child";
+    const controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlledLeafCut.opening)
+      ? controlledLeafCut.opening.parent
+      : controlledLeafCut.opening;
     if (stateReferencesConfinedTo(state, controlledSubtree)) {
       return {
         action: "move-state-down",
@@ -4495,23 +4506,23 @@ function classifyState(
     };
   }
   const hasFunctionalSnapshotHazard = functionalUpdaterPrecedesSnapshotRead(
-      state,
-      usage,
-      nearestMutationFunction,
-    ),
-    preservesFunctionalSnapshot =
-      hasFunctionalSnapshotHazard &&
-      functionalCounterUpdaterPreservesSnapshot(state, usage, nearestMutationFunction),
-    hasEventCommandReadProof = hasOnlyEventCommandReads(
-      state,
-      EMPTY_NODES,
-      eventTransitionCallbacks,
-    ),
-    hasCommandSnapshotHazard = refWouldChangeCommandSnapshot(
-      state,
-      usage,
-      hasEventCommandReadProof,
-    );
+    state,
+    usage,
+    nearestMutationFunction,
+  );
+  const preservesFunctionalSnapshot =
+    hasFunctionalSnapshotHazard &&
+    functionalCounterUpdaterPreservesSnapshot(state, usage, nearestMutationFunction);
+  const hasEventCommandReadProof = hasOnlyEventCommandReads(
+    state,
+    EMPTY_NODES,
+    eventTransitionCallbacks,
+  );
+  const hasCommandSnapshotHazard = refWouldChangeCommandSnapshot(
+    state,
+    usage,
+    hasEventCommandReadProof,
+  );
   if (
     isCustomHookOwner(state.owner) &&
     usage.localRenderReads === 0 &&
@@ -4659,8 +4670,8 @@ function classifyState(
       message: `Extract the ${directSubtree.label} subtree at line ${directSubtree.line} into a leaf component and move \`${state.valueName}\` into it; every read and command is confined to that stable subtree.`,
     };
   }
-  const projectionSubtree = subtree?.kind === "projection" ? subtree : null,
-    gateSubtree = subtree?.kind === "gate" ? subtree : null;
+  const projectionSubtree = subtree?.kind === "projection" ? subtree : null;
+  const gateSubtree = subtree?.kind === "gate" ? subtree : null;
   if (gateSubtree && !hasCompanionWrites) {
     return {
       action: "use-observable",
@@ -4727,14 +4738,14 @@ function classifyState(
   if (usage.localRenderReads > 0) {
     if (isCustomHookOwner(state.owner) || jsxElementCount(state.owner) >= 5) {
       const boundary = isCustomHookOwner(state.owner)
-          ? "its unknown hook consumers"
-          : `this owner with ${jsxElementCount(state.owner)} JSX elements`,
-        competing =
-          ownerObservableSubscriptions === 0
-            ? ""
-            : ownerObservableSubscriptions === 1
-              ? " The owner also re-renders through an existing observable subscription; isolate this state only if it updates less often than that subscription."
-              : ` The owner also re-renders through ${ownerObservableSubscriptions} existing observable subscriptions; isolate this state only if it updates less often than they do.`;
+        ? "its unknown hook consumers"
+        : `this owner with ${jsxElementCount(state.owner)} JSX elements`;
+      const competing =
+        ownerObservableSubscriptions === 0
+          ? ""
+          : ownerObservableSubscriptions === 1
+            ? " The owner also re-renders through an existing observable subscription; isolate this state only if it updates less often than that subscription."
+            : ` The owner also re-renders through ${ownerObservableSubscriptions} existing observable subscriptions; isolate this state only if it updates less often than they do.`;
       return {
         action: "review-state",
         confidence: "probable",
@@ -4821,10 +4832,10 @@ function classifyState(
       );
     })
   ) {
-    const [target] = [...usage.jsxTargets],
-      propNames = target ? usage.valueProps.get(target) : undefined,
-      propName = propNames && propNames.size === 1 ? [...propNames][0]! : null,
-      child = target ? childContracts.resolveComponent(target) : null;
+    const [target] = [...usage.jsxTargets];
+    const propNames = target ? usage.valueProps.get(target) : undefined;
+    const propName = propNames && propNames.size === 1 ? [...propNames][0]! : null;
+    const child = target ? childContracts.resolveComponent(target) : null;
     if (target && propName && child && propIsLeafRenderConsumer(child, propName)) {
       return {
         action: "use-observable",
@@ -4877,8 +4888,8 @@ function controlledFilterLeafCut(
     return null;
   }
 
-  const reads = stateValueReferences(state),
-    filter = reads.length === 1 ? exactStringFilter(reads[0]!, state.owner) : null;
+  const reads = stateValueReferences(state);
+  const filter = reads.length === 1 ? exactStringFilter(reads[0]!, state.owner) : null;
   if (!filter || !collectionBindingIsReadOnly(filter.sourceName, state.owner)) {
     return null;
   }
@@ -4895,17 +4906,19 @@ function controlledFilterLeafCut(
     return null;
   }
   const repeated = commonContainingRepeatedRender(
-      [setterTransport.reference, ...resultReferences],
-      state.owner,
-    ),
-    producer = repeated ? repeatedRenderBinding(repeated, state.owner) : null,
-    producerReferences = producer ? bindingReferences(state.owner, producer.text, producer) : [],
-    slot =
-      producerReferences.length === 1
-        ? directReturnedJsxSlot(producerReferences[0]!, state.owner)
-        : null,
-    ownerElements = jsxElementCount(state.owner),
-    producerElements = repeated ? jsxElementCountIn(repeated) : ownerElements;
+    [setterTransport.reference, ...resultReferences],
+    state.owner,
+  );
+  const producer = repeated ? repeatedRenderBinding(repeated, state.owner) : null;
+  const producerReferences = producer
+    ? bindingReferences(state.owner, producer.text, producer)
+    : [];
+  const slot =
+    producerReferences.length === 1
+      ? directReturnedJsxSlot(producerReferences[0]!, state.owner)
+      : null;
+  const ownerElements = jsxElementCount(state.owner);
+  const producerElements = repeated ? jsxElementCountIn(repeated) : ownerElements;
   if (
     !repeated ||
     !producer ||
@@ -4945,8 +4958,8 @@ function directSetterTransport(state: StateCandidate): {
     ) {
       return;
     }
-    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner),
-      target = attribute ? jsxTargetName(attribute) : null;
+    const attribute = findAncestorUntil(node, ts.isJsxAttribute, state.owner);
+    const target = attribute ? jsxTargetName(attribute) : null;
     if (attribute && target && isDirectJsxAttributeExpression(attribute, node)) {
       matches.push({ attribute, reference: node, target });
     }
@@ -4993,8 +5006,8 @@ function exactStringFilter(
   ) {
     return null;
   }
-  const callback = findAncestorUntil(includesCall, isRuntimeFunctionLike, owner),
-    parameter = callback?.parameters[0]?.name;
+  const callback = findAncestorUntil(includesCall, isRuntimeFunctionLike, owner);
+  const parameter = callback?.parameters[0]?.name;
   if (
     !callback ||
     !ts.isArrowFunction(callback) ||
@@ -5006,11 +5019,11 @@ function exactStringFilter(
   ) {
     return null;
   }
-  const filterCall = callback.parent,
-    source =
-      ts.isCallExpression(filterCall) && ts.isPropertyAccessExpression(filterCall.expression)
-        ? unwrapTransparentExpression(filterCall.expression.expression)
-        : null;
+  const filterCall = callback.parent;
+  const source =
+    ts.isCallExpression(filterCall) && ts.isPropertyAccessExpression(filterCall.expression)
+      ? unwrapTransparentExpression(filterCall.expression.expression)
+      : null;
   if (
     !ts.isCallExpression(filterCall) ||
     filterCall.arguments.length !== 1 ||
@@ -5035,53 +5048,53 @@ function exactStringFilter(
 }
 
 const READ_ONLY_COLLECTION_METHODS = new Set([
-    "at",
-    "concat",
-    "entries",
-    "every",
-    "filter",
-    "find",
-    "findIndex",
-    "findLast",
-    "findLastIndex",
-    "flat",
-    "flatMap",
-    "forEach",
-    "includes",
-    "indexOf",
-    "join",
-    "keys",
-    "lastIndexOf",
-    "map",
-    "reduce",
-    "reduceRight",
-    "slice",
-    "some",
-    "toReversed",
-    "toSorted",
-    "toSpliced",
-    "values",
-  ]),
-  RENDER_COLLECTION_WORK_METHODS = new Set([
-    "concat",
-    "every",
-    "filter",
-    "find",
-    "findIndex",
-    "findLast",
-    "findLastIndex",
-    "flat",
-    "flatMap",
-    "forEach",
-    "map",
-    "reduce",
-    "reduceRight",
-    "slice",
-    "some",
-    "toReversed",
-    "toSorted",
-    "toSpliced",
-  ]);
+  "at",
+  "concat",
+  "entries",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "flat",
+  "flatMap",
+  "forEach",
+  "includes",
+  "indexOf",
+  "join",
+  "keys",
+  "lastIndexOf",
+  "map",
+  "reduce",
+  "reduceRight",
+  "slice",
+  "some",
+  "toReversed",
+  "toSorted",
+  "toSpliced",
+  "values",
+]);
+const RENDER_COLLECTION_WORK_METHODS = new Set([
+  "concat",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "flat",
+  "flatMap",
+  "forEach",
+  "map",
+  "reduce",
+  "reduceRight",
+  "slice",
+  "some",
+  "toReversed",
+  "toSorted",
+  "toSpliced",
+]);
 
 function collectionBindingIsReadOnly(
   declaration: ts.Identifier,
@@ -5155,8 +5168,8 @@ function directReturnedJsxSlot(
   reference: ts.Identifier,
   owner: RuntimeFunctionLike,
 ): ts.Identifier | null {
-  const expression = findAncestorUntil(reference, ts.isJsxExpression, owner),
-    returned = uniqueReturnedExpression(owner);
+  const expression = findAncestorUntil(reference, ts.isJsxExpression, owner);
+  const returned = uniqueReturnedExpression(owner);
   return expression?.expression &&
     (ts.isJsxElement(expression.parent) || ts.isJsxFragment(expression.parent)) &&
     unwrapTransparentExpression(expression.expression) === reference &&
@@ -5179,9 +5192,9 @@ function renderCollectionWorkOutside(
   let count = 0;
   visitSkippingNestedRuntimeFunctions(body, (node) => {
     const declaration = ts.isCallExpression(node)
-        ? findAncestorUntil(node, ts.isVariableDeclaration, owner)
-        : null,
-      statement = declaration?.parent.parent;
+      ? findAncestorUntil(node, ts.isVariableDeclaration, owner)
+      : null;
+    const statement = declaration?.parent.parent;
     if (
       !ts.isCallExpression(node) ||
       node === movedFilter ||
@@ -5196,10 +5209,10 @@ function renderCollectionWorkOutside(
     ) {
       return;
     }
-    const callee = node.expression,
-      receiver = ts.isPropertyAccessExpression(callee)
-        ? unwrapTransparentExpression(callee.expression)
-        : null;
+    const callee = node.expression;
+    const receiver = ts.isPropertyAccessExpression(callee)
+      ? unwrapTransparentExpression(callee.expression)
+      : null;
     if (
       ts.isPropertyAccessExpression(callee) &&
       callee.questionDotToken === undefined &&
@@ -5301,11 +5314,11 @@ function isCohesiveDelayedPendingState(state: StateCandidate, usage: StateUsage)
     return false;
   }
   const pending = usage.setterCallNodes.find(
-      (call) => call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword,
-    ),
-    reset = usage.setterCallNodes.find(
-      (call) => call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword,
-    );
+    (call) => call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword,
+  );
+  const reset = usage.setterCallNodes.find(
+    (call) => call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword,
+  );
   if (!pending || !reset) {
     return false;
   }
@@ -5345,8 +5358,8 @@ function isCohesiveDelayedPendingState(state: StateCandidate, usage: StateUsage)
   ) {
     return false;
   }
-  const tryStatement = findAncestorUntil(reset, ts.isTryStatement, command),
-    finalizer = tryStatement?.finallyBlock;
+  const tryStatement = findAncestorUntil(reset, ts.isTryStatement, command);
+  const finalizer = tryStatement?.finallyBlock;
   if (
     !finalizer ||
     finalizer.statements.length !== 2 ||
@@ -5451,8 +5464,8 @@ function setterOwnedByValueTransitionCallSite(state: StateCandidate, usage: Stat
   }
   if (usage.setterCalls > 0) {
     return usage.setterCallNodes.every((call) => {
-      const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner),
-        opening = attribute?.parent.parent;
+      const attribute = findAncestorUntil(call, ts.isJsxAttribute, state.owner);
+      const opening = attribute?.parent.parent;
       return (
         attribute !== null &&
         opening !== undefined &&
@@ -5495,10 +5508,10 @@ function controlledLeafRenderCut(
   if (!callSite) {
     return null;
   }
-  const controlled = callSite.opening,
-    controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlled)
-      ? controlled.parent
-      : controlled;
+  const controlled = callSite.opening;
+  const controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlled)
+    ? controlled.parent
+    : controlled;
   return hasIndependentRenderCutWitness(
     callSite.returned,
     [controlledSubtree],
@@ -5851,8 +5864,8 @@ function isExactControlledArrayMembershipToggle(state: StateCandidate, usage: St
   ) {
     return false;
   }
-  const setterCall = usage.setterCallNodes[0]!,
-    updater = setterCall.arguments[0] && unwrapTransparentExpression(setterCall.arguments[0]);
+  const setterCall = usage.setterCallNodes[0]!;
+  const updater = setterCall.arguments[0] && unwrapTransparentExpression(setterCall.arguments[0]);
   if (
     !updater ||
     (!ts.isArrowFunction(updater) && !ts.isFunctionExpression(updater)) ||
@@ -5863,8 +5876,8 @@ function isExactControlledArrayMembershipToggle(state: StateCandidate, usage: St
   ) {
     return false;
   }
-  const previous = updater.parameters[0]!.name.text,
-    toggle = arrayMembershipToggle(updater);
+  const previous = updater.parameters[0]!.name.text;
+  const toggle = arrayMembershipToggle(updater);
   if (!toggle) {
     return false;
   }
@@ -5908,8 +5921,8 @@ function arrayMembershipToggle(updater: ts.ArrowFunction | ts.FunctionExpression
   if (!ts.isIfStatement(statement) || !statement.elseStatement) {
     return null;
   }
-  const whenPresent = returnedStatementExpression(statement.thenStatement),
-    whenAbsent = returnedStatementExpression(statement.elseStatement);
+  const whenPresent = returnedStatementExpression(statement.thenStatement);
+  const whenAbsent = returnedStatementExpression(statement.elseStatement);
   return whenPresent && whenAbsent
     ? { condition: statement.expression, whenAbsent, whenPresent }
     : null;
@@ -5979,8 +5992,8 @@ function isArrayMembershipRemoval(
   ) {
     return false;
   }
-  const item = predicate.parameters[0]!.name.text,
-    comparison = returnedCallbackExpression(predicate);
+  const item = predicate.parameters[0]!.name.text;
+  const comparison = returnedCallbackExpression(predicate);
   return (
     comparison !== null &&
     ts.isBinaryExpression(comparison) &&
@@ -6194,8 +6207,8 @@ function stateReadsOnlyCalculateOwnSetter(state: StateCandidate, usage: StateUsa
     return false;
   }
 
-  let reads = 0,
-    safe = true;
+  let reads = 0;
+  let safe = true;
   visit(state.owner.body, (node) => {
     if (
       !safe ||
@@ -6234,8 +6247,8 @@ function stateOnlyReceivesItsInitialPrimitive(state: StateCandidate, usage: Stat
 }
 
 function samePrimitiveLiteral(left: ts.Expression, right: ts.Expression): boolean {
-  const leftValue = unwrapTransparentExpression(left),
-    rightValue = unwrapTransparentExpression(right);
+  const leftValue = unwrapTransparentExpression(left);
+  const rightValue = unwrapTransparentExpression(right);
   if (leftValue.kind !== rightValue.kind) {
     return false;
   }
@@ -6318,22 +6331,20 @@ function analyzeStateSubtree(
   effectOwnedMemoizedCommand: boolean,
   childContracts: ChildContractResolver | null,
 ): StateSubtree | null {
-  const ownerJsx = jsxElementCount(state.owner),
-    effectWrittenPresentation =
-      usage.effectWrites > 0 &&
-      usage.effectWrites === usage.setterCalls &&
-      usage.setterReferences === usage.setterCalls &&
-      usage.setterCallNodes.every((call) => hasAncestorInSet(call, directEffectCalls)) &&
-      usage.deferredReads === 0 &&
-      !usage.setterUsesPreviousValue,
-    allowedProjectionCalls = effectWrittenPresentation
-      ? new Set(
-          [...pureProjectionImports].filter((name) => !ownerDeclaresBinding(state.owner, name)),
-        )
-      : EMPTY_BINDINGS,
-    splitEffectProjection = effectWrittenPresentation
-      ? effectSplitProjectionSubtree(state, usage, ownerJsx, pureProjectionImports)
-      : null;
+  const ownerJsx = jsxElementCount(state.owner);
+  const effectWrittenPresentation =
+    usage.effectWrites > 0 &&
+    usage.effectWrites === usage.setterCalls &&
+    usage.setterReferences === usage.setterCalls &&
+    usage.setterCallNodes.every((call) => hasAncestorInSet(call, directEffectCalls)) &&
+    usage.deferredReads === 0 &&
+    !usage.setterUsesPreviousValue;
+  const allowedProjectionCalls = effectWrittenPresentation
+    ? new Set([...pureProjectionImports].filter((name) => !ownerDeclaresBinding(state.owner, name)))
+    : EMPTY_BINDINGS;
+  const splitEffectProjection = effectWrittenPresentation
+    ? effectSplitProjectionSubtree(state, usage, ownerJsx, pureProjectionImports)
+    : null;
   if (
     (ownerJsx < 8 && !effectWrittenPresentation) ||
     stateMayHoldCallable(state) ||
@@ -6360,21 +6371,24 @@ function analyzeStateSubtree(
     return splitEffectProjection;
   }
   const renderReadsInNestedCallbacks = projectionNodes.some(
-      (node) => nearestNestedFunction(node, state.owner) !== null,
-    ),
-    safeJsxChildProjection =
-      renderReadsInNestedCallbacks &&
-      sharesJsxChildRenderCallback(projectionNodes, state.owner) &&
-      projectionWritesAreDeferred(usage, state.owner, directEffectCalls, childContracts),
-    uniqueRepeatedProjection = isUniquelySelectedRepeatedProjection(projectionNodes, state.owner);
+    (node) => nearestNestedFunction(node, state.owner) !== null,
+  );
+  const safeJsxChildProjection =
+    renderReadsInNestedCallbacks &&
+    sharesJsxChildRenderCallback(projectionNodes, state.owner) &&
+    projectionWritesAreDeferred(usage, state.owner, directEffectCalls, childContracts);
+  const uniqueRepeatedProjection = isUniquelySelectedRepeatedProjection(
+    projectionNodes,
+    state.owner,
+  );
   if (
     !effectWrittenPresentation &&
     usage.transportedOccurrences === 0 &&
     projectionAllowed &&
     !renderReadsInNestedCallbacks
   ) {
-    const directNodes = [...usage.directRenderNodes, ...usage.setterCallNodes],
-      direct = lowestCommonJsxSubtree(directNodes, state.owner);
+    const directNodes = [...usage.directRenderNodes, ...usage.setterCallNodes];
+    const direct = lowestCommonJsxSubtree(directNodes, state.owner);
     if (direct) {
       const subtreeJsx = jsxElementCountIn(direct);
       if (ownerJsx >= 12 && subtreeJsx >= 2 && subtreeJsx / ownerJsx <= 0.4) {
@@ -6384,13 +6398,13 @@ function analyzeStateSubtree(
   }
 
   const gateProjection = renderReadsInNestedCallbacks
-      ? null
-      : commonRenderGateSubtree(projectionNodes, state.owner),
-    safeProjectionReferences = projectionNodes.every(
-      (node) =>
-        isSafeJsxProjectionReference(node, state.owner, allowedProjectionCalls) ||
-        (effectWrittenPresentation && isSafeEffectPresentationReference(node, state.owner)),
-    );
+    ? null
+    : commonRenderGateSubtree(projectionNodes, state.owner);
+  const safeProjectionReferences = projectionNodes.every(
+    (node) =>
+      isSafeJsxProjectionReference(node, state.owner, allowedProjectionCalls) ||
+      (effectWrittenPresentation && isSafeEffectPresentationReference(node, state.owner)),
+  );
   if (
     !projectionAllowed ||
     !(safeProjectionReferences || gateProjection) ||
@@ -6440,10 +6454,11 @@ function projectionWritesAreDeferred(
     if (ancestorCallInSet(call, directEffectCalls, owner)) {
       return true;
     }
-    const callback = nearestMutationFunction(call, owner),
-      attribute = callback === owner ? null : findAncestorUntil(callback, ts.isJsxAttribute, owner),
-      prop = attribute?.name.getText() ?? null,
-      target = attribute ? jsxTargetName(attribute) : null;
+    const callback = nearestMutationFunction(call, owner);
+    const attribute =
+      callback === owner ? null : findAncestorUntil(callback, ts.isJsxAttribute, owner);
+    const prop = attribute?.name.getText() ?? null;
+    const target = attribute ? jsxTargetName(attribute) : null;
     if (!attribute || !prop || !target || !/^on[A-Z]/.test(prop)) {
       return false;
     }
@@ -6517,10 +6532,10 @@ function effectSplitProjectionSubtree(
   }
 
   const allowedCalls = new Set([
-      ...pureProjectionImports,
-      ...localPureProjectionBindings(state.owner.getSourceFile()),
-    ]),
-    renderRoots = effectSplitRenderRoots(state, usage, allowedCalls);
+    ...pureProjectionImports,
+    ...localPureProjectionBindings(state.owner.getSourceFile()),
+  ]);
+  const renderRoots = effectSplitRenderRoots(state, usage, allowedCalls);
   if (!renderRoots) {
     return null;
   }
@@ -6533,8 +6548,8 @@ function effectSplitProjectionSubtree(
   for (const terminal of terminals) {
     const repeated = nearestRepeatedRenderCall(terminal, state.owner);
     if (repeated) {
-      const callback = repeated.arguments[0],
-        leaf = nearestJsxElement(repeated, state.owner);
+      const callback = repeated.arguments[0];
+      const leaf = nearestJsxElement(repeated, state.owner);
       if (
         !callback ||
         (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -6584,8 +6599,8 @@ function effectSplitRenderRoots(
   if (!state.owner.body) {
     return null;
   }
-  const direct = new Set(usage.directRenderNodes),
-    roots: ts.Identifier[] = [];
+  const direct = new Set(usage.directRenderNodes);
+  const roots: ts.Identifier[] = [];
   let safe = true;
   visit(state.owner.body, (node) => {
     if (
@@ -6639,9 +6654,9 @@ function terminalRenderProjectionReferences(
   if (!owner.body || roots.some((root) => !ts.isIdentifier(root))) {
     return null;
   }
-  const pending = roots.map((root) => ({ depth: 0, reference: root as ts.Identifier })),
-    terminals: ts.Identifier[] = [],
-    visited = new Set<number>();
+  const pending = roots.map((root) => ({ depth: 0, reference: root as ts.Identifier }));
+  const terminals: ts.Identifier[] = [];
+  const visited = new Set<number>();
 
   while (pending.length > 0) {
     const current = pending.pop()!;
@@ -6885,8 +6900,8 @@ function isSafeEffectPresentationReference(node: ts.Node, owner: RuntimeFunction
 }
 
 function isKeyedRepeatedProjection(nodes: readonly ts.Node[], owner: RuntimeFunctionLike): boolean {
-  const repeated = commonRepeatedRender(nodes, owner),
-    callback = repeated?.arguments[0];
+  const repeated = commonRepeatedRender(nodes, owner);
+  const callback = repeated?.arguments[0];
   if (
     !callback ||
     (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -6941,8 +6956,8 @@ function isSafeMixedProjectionTransport(
   common: JsxSubtreeNode,
   allowNestedSite = false,
 ): boolean {
-  const site = [...usage.valueTransportSites][0],
-    target = [...usage.valueTargets][0];
+  const site = [...usage.valueTransportSites][0];
+  const target = [...usage.valueTargets][0];
   if (
     usage.valueTransportSites.size !== 1 ||
     usage.setterTransportSites.size > 0 ||
@@ -6969,8 +6984,8 @@ function setterReactiveMutationPaths(
   usage: StateUsage,
   mutationBindings: ReadonlySet<string>,
 ): { all: boolean; any: boolean } {
-  let any = false,
-    all = mutationBindings.size > 0 && usage.setterCallNodes.length > 0;
+  let any = false;
+  let all = mutationBindings.size > 0 && usage.setterCallNodes.length > 0;
   for (const call of usage.setterCallNodes) {
     const pathHasMutation =
       mutationBindings.size > 0 &&
@@ -7093,20 +7108,20 @@ function isSourceProvenMemoizedOptionCommand(
     return false;
   }
 
-  let callbackProp: string | null = null,
-    memoCall: ts.CallExpression | null = null;
+  let callbackProp: string | null = null;
+  let memoCall: ts.CallExpression | null = null;
   for (const setter of deferredSetters) {
     const containingMemo = findAncestorUntil(
-        setter,
-        (node): node is ts.CallExpression =>
-          ts.isCallExpression(node) &&
-          isImportedHookCall(node, imports.useMemo, imports.reactNamespaces, "useMemo"),
-        state.owner,
-      ),
-      factory = containingMemo?.arguments[0],
-      property = factory ? findAncestorUntil(setter, ts.isPropertyAssignment, factory) : null,
-      propertyName = property ? staticPropertyName(property.name) : null,
-      callback = property ? nearestNestedFunction(setter, state.owner) : null;
+      setter,
+      (node): node is ts.CallExpression =>
+        ts.isCallExpression(node) &&
+        isImportedHookCall(node, imports.useMemo, imports.reactNamespaces, "useMemo"),
+      state.owner,
+    );
+    const factory = containingMemo?.arguments[0];
+    const property = factory ? findAncestorUntil(setter, ts.isPropertyAssignment, factory) : null;
+    const propertyName = property ? staticPropertyName(property.name) : null;
+    const callback = property ? nearestNestedFunction(setter, state.owner) : null;
     if (
       !containingMemo ||
       !factory ||
@@ -7139,10 +7154,10 @@ function isSourceProvenMemoizedOptionCommand(
   }
   const memoBinding = declaration.name.text;
 
-  let propName: string | null = null,
-    safe = true,
-    target: string | null = null,
-    transportCount = 0;
+  let propName: string | null = null;
+  let safe = true;
+  let target: string | null = null;
+  let transportCount = 0;
   visit(state.owner.body, (node) => {
     if (
       !safe ||
@@ -7166,9 +7181,9 @@ function isSourceProvenMemoizedOptionCommand(
       safe = false;
       return;
     }
-    const opening = jsxOpeningForAttribute(attribute),
-      nextTarget = opening?.tagName.getText() ?? null,
-      nextProp = attribute.name.getText();
+    const opening = jsxOpeningForAttribute(attribute);
+    const nextTarget = opening?.tagName.getText() ?? null;
+    const nextProp = attribute.name.getText();
     if (
       !nextTarget ||
       transportCount > 0 ||
@@ -7228,8 +7243,8 @@ function isEffectOwnedMemoizedPresentationState(
     return false;
   }
 
-  const factory = memoCall.arguments[0],
-    declaration = findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner);
+  const factory = memoCall.arguments[0];
+  const declaration = findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner);
   if (
     !factory ||
     (!ts.isArrowFunction(factory) && !ts.isFunctionExpression(factory)) ||
@@ -7243,8 +7258,8 @@ function isEffectOwnedMemoizedPresentationState(
   }
 
   const binding = declaration.name.text;
-  let invokedByEffect = false,
-    safe = true;
+  let invokedByEffect = false;
+  let safe = true;
   visit(state.owner.body, (node) => {
     if (
       !safe ||
@@ -7267,11 +7282,11 @@ function isEffectOwnedMemoizedPresentationState(
       return;
     }
     const memberCall =
-        ts.isPropertyAccessExpression(node.parent) &&
-        node.parent.expression === node &&
-        ts.isCallExpression(node.parent.parent) &&
-        node.parent.parent.expression === node.parent,
-      dependencies = effectCall.arguments[1];
+      ts.isPropertyAccessExpression(node.parent) &&
+      node.parent.expression === node &&
+      ts.isCallExpression(node.parent.parent) &&
+      node.parent.parent.expression === node.parent;
+    const dependencies = effectCall.arguments[1];
     if (memberCall || (dependencies !== undefined && nodeWithin(node, dependencies))) {
       return;
     }
@@ -7301,16 +7316,16 @@ function isEffectOwnedSelfRefreshingCommandState(
   }
 
   const memoCall = findAncestorUntil(
-      setterCall,
-      (node): node is ts.CallExpression =>
-        ts.isCallExpression(node) &&
-        isImportedHookCall(node, imports.useCallback, imports.reactNamespaces, "useCallback"),
-      state.owner,
-    ),
-    factory = memoCall?.arguments[0],
-    declaration = memoCall
-      ? findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner)
-      : null;
+    setterCall,
+    (node): node is ts.CallExpression =>
+      ts.isCallExpression(node) &&
+      isImportedHookCall(node, imports.useCallback, imports.reactNamespaces, "useCallback"),
+    state.owner,
+  );
+  const factory = memoCall?.arguments[0];
+  const declaration = memoCall
+    ? findAncestorUntil(memoCall, ts.isVariableDeclaration, state.owner)
+    : null;
   if (
     !memoCall ||
     !factory ||
@@ -7324,9 +7339,9 @@ function isEffectOwnedSelfRefreshingCommandState(
     return false;
   }
 
-  let bodyReads = 0,
-    dependencyReads = 0,
-    unsafe = false;
+  let bodyReads = 0;
+  let dependencyReads = 0;
+  let unsafe = false;
   const reads: ts.Identifier[] = [];
   visit(state.owner.body, (node) => {
     if (unsafe || ts.isAwaitExpression(node) || ts.isYieldExpression(node)) {
@@ -7474,8 +7489,8 @@ function commonRepeatedRender(
   nodes: readonly ts.Node[],
   boundary: ts.Node,
 ): ts.CallExpression | null {
-  const calls = nodes.map((node) => nearestRepeatedRenderCall(node, boundary)),
-    first = calls[0];
+  const calls = nodes.map((node) => nearestRepeatedRenderCall(node, boundary));
+  const first = calls[0];
   return first && calls.every((call) => call === first) ? first : null;
 }
 
@@ -7550,12 +7565,12 @@ function legendCandidateMessage(
   usage: StateUsage,
   sourceComponents: ReadonlySet<string> = new Set(),
 ): string {
-  const targets = [...usage.jsxTargets].sort().join(", ") || "the receiving descendants",
-    resolved = [...usage.jsxTargets].filter((target) => sourceComponents.has(target)),
-    proof =
-      resolved.length > 0
-        ? ` Source declarations resolved for ${resolved.sort().join(", ")}, but their prop contracts and mount identity still need verification.`
-        : "";
+  const targets = [...usage.jsxTargets].sort().join(", ") || "the receiving descendants";
+  const resolved = [...usage.jsxTargets].filter((target) => sourceComponents.has(target));
+  const proof =
+    resolved.length > 0
+      ? ` Source declarations resolved for ${resolved.sort().join(", ")}, but their prop contracts and mount identity still need verification.`
+      : "";
   return `Legend-first restructuring candidate: keep \`${state.valueName}\` in a stable observable owner and subscribe only inside ${targets}; verify the child contract before changing it.${proof}`;
 }
 
@@ -7613,14 +7628,14 @@ function effectEvidence(
 }
 
 function ownerEvidence(owner: RuntimeFunctionLike, sourceFile: ts.SourceFile): string {
-  const start = sourceFile.getLineAndCharacterOfPosition(owner.getStart(sourceFile)).line + 1,
-    end = sourceFile.getLineAndCharacterOfPosition(owner.end).line + 1;
+  const start = sourceFile.getLineAndCharacterOfPosition(owner.getStart(sourceFile)).line + 1;
+  const end = sourceFile.getLineAndCharacterOfPosition(owner.end).line + 1;
   return `owner: ${runtimeFunctionName(owner) ?? "anonymous"}, lines ${start}-${end}`;
 }
 
 function ownerLineSpan(owner: RuntimeFunctionLike, sourceFile: ts.SourceFile): number {
-  const start = sourceFile.getLineAndCharacterOfPosition(owner.getStart(sourceFile)).line,
-    end = sourceFile.getLineAndCharacterOfPosition(owner.end).line;
+  const start = sourceFile.getLineAndCharacterOfPosition(owner.getStart(sourceFile)).line;
+  const end = sourceFile.getLineAndCharacterOfPosition(owner.end).line;
   return end - start + 1;
 }
 
@@ -7688,8 +7703,8 @@ function returnsStateAndSetter(state: StateCandidate): boolean {
   if (!state.owner.body || !state.setterName) {
     return false;
   }
-  let matched = false,
-    returns = 0;
+  let matched = false;
+  let returns = 0;
   visitSkippingNestedRuntimeFunctions(state.owner.body, (node) => {
     if (!ts.isReturnStatement(node) || !node.expression) {
       return;
@@ -7758,8 +7773,8 @@ function effectCursorReadsAreDeferred(
     if (dependencies && nodeWithin(node, dependencies)) {
       return;
     }
-    const callback = effect.arguments[0],
-      nested = nearestNestedFunction(node, state.owner);
+    const callback = effect.arguments[0];
+    const nested = nearestNestedFunction(node, state.owner);
     if (
       !callback ||
       (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -7777,8 +7792,8 @@ function effectCursorReadsAreDeferred(
     safe &&
     nestedReadEffects.size > 0 &&
     [...nestedReadEffects].every((effect) => {
-      const callback = effect.arguments[0],
-        dependencies = effect.arguments[1];
+      const callback = effect.arguments[0];
+      const dependencies = effect.arguments[1];
       if (
         callback === undefined ||
         (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
@@ -7803,8 +7818,8 @@ function registeredCallbackHasEffectCleanup(
   effect: ts.ArrowFunction | ts.FunctionExpression,
   childContracts: ChildContractResolver,
 ): boolean {
-  const call = callback.parent,
-    owner = findAncestor(effect, isRuntimeFunctionLike);
+  const call = callback.parent;
+  const owner = findAncestor(effect, isRuntimeFunctionLike);
   if (
     !owner ||
     !ts.isCallExpression(call) ||
@@ -7832,8 +7847,8 @@ function registeredCallbackHasEffectCleanup(
   ) {
     return false;
   }
-  const disposerName = declaration.name.text,
-    references: ts.Identifier[] = [];
+  const disposerName = declaration.name.text;
+  const references: ts.Identifier[] = [];
   visit(effect.body, (node) => {
     if (
       ts.isIdentifier(node) &&
@@ -7886,8 +7901,8 @@ function ancestorCallInSet(
 }
 
 function jsxTargetName(attribute: ts.JsxAttribute): string | null {
-  const properties = attribute.parent,
-    opening = properties.parent;
+  const properties = attribute.parent;
+  const opening = properties.parent;
   if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) {
     return null;
   }

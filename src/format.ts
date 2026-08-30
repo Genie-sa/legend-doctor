@@ -2,10 +2,10 @@ import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types
 
 export function formatTextReport(report: AnalysisReport, target?: string): string {
   const { findings } = report;
-  const lines = [...findings.map(formatFinding), ...report.practices.map(formatPracticeFinding)],
-    scope = target
-      ? `Scanned ${report.files} files under ${target}`
-      : `Scanned ${report.files} files`;
+  const lines = [...findings.map(formatFinding), ...report.practices.map(formatPracticeFinding)];
+  const scope = target
+    ? `Scanned ${report.files} files under ${target}`
+    : `Scanned ${report.files} files`;
   lines.push(
     `${scope}: ${report.hooks.states} useState, ${report.hooks.effects} useEffect, ${findings.length + report.practices.length} shown.`,
   );

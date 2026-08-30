@@ -27,42 +27,42 @@ export interface HookImports {
   useValue: ReadonlySet<string>;
 }
 
-const LEGEND_REACT_MODULE = "@legendapp/state/react",
-  REACT_MODULE = "react";
+const LEGEND_REACT_MODULE = "@legendapp/state/react";
+const REACT_MODULE = "react";
 
 export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
-  const batch = new Set<string>(),
-    reactNamespaces = new Set<string>(),
-    legendNamespaces = new Set<string>(),
-    legendReactNamespaces = new Set<string>(),
-    legacyUseValue = new Set<string>(),
-    hostComponents = new Set<string>(),
-    lazy = new Set<string>(),
-    observable = new Set<string>(),
-    observableTypes = new Set<string>(),
-    startTransition = new Set<string>(),
-    useCallback = new Set<string>(),
-    useEffect = new Set<string>(),
-    useInsertionEffect = new Set<string>(),
-    useImperativeHandle = new Set<string>(),
-    useLayoutEffect = new Set<string>(),
-    useMemo = new Set<string>(),
-    useMount = new Set<string>(),
-    useObservable = new Set<string>(),
-    useObserveEffect = new Set<string>(),
-    useRef = new Set<string>(),
-    useState = new Set<string>(),
-    useTransition = new Set<string>(),
-    useUnmount = new Set<string>(),
-    useValue = new Set<string>();
+  const batch = new Set<string>();
+  const reactNamespaces = new Set<string>();
+  const legendNamespaces = new Set<string>();
+  const legendReactNamespaces = new Set<string>();
+  const legacyUseValue = new Set<string>();
+  const hostComponents = new Set<string>();
+  const lazy = new Set<string>();
+  const observable = new Set<string>();
+  const observableTypes = new Set<string>();
+  const startTransition = new Set<string>();
+  const useCallback = new Set<string>();
+  const useEffect = new Set<string>();
+  const useInsertionEffect = new Set<string>();
+  const useImperativeHandle = new Set<string>();
+  const useLayoutEffect = new Set<string>();
+  const useMemo = new Set<string>();
+  const useMount = new Set<string>();
+  const useObservable = new Set<string>();
+  const useObserveEffect = new Set<string>();
+  const useRef = new Set<string>();
+  const useState = new Set<string>();
+  const useTransition = new Set<string>();
+  const useUnmount = new Set<string>();
+  const useValue = new Set<string>();
 
   for (const statement of sourceFile.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
       continue;
     }
 
-    const moduleName = statement.moduleSpecifier.text,
-      clause = statement.importClause;
+    const moduleName = statement.moduleSpecifier.text;
+    const clause = statement.importClause;
     if (!clause) {
       continue;
     }
@@ -89,8 +89,8 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
     }
 
     for (const element of bindings.elements) {
-      const importedName = element.propertyName?.text ?? element.name.text,
-        localName = element.name.text;
+      const importedName = element.propertyName?.text ?? element.name.text;
+      const localName = element.name.text;
       if (moduleName === "react-native") {
         hostComponents.add(localName);
       }

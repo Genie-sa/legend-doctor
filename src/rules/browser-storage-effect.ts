@@ -92,8 +92,8 @@ function isPureStorageHelper(call: ts.CallExpression, owner: RuntimeFunctionLike
   if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression)) {
     return false;
   }
-  const root = callee.expression.text,
-    method = callee.name.text;
+  const root = callee.expression.text;
+  const method = callee.name.text;
   return (
     bindingDeclarationCount(owner, root) === 0 &&
     ((root === "JSON" && method === "stringify") || (root === "Object" && method === "keys"))

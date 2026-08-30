@@ -52,16 +52,16 @@ import type { StateFlowCoverage } from "./state-flow.js";
 import type { AnalysisReport, HookFinding, LegendPracticeFinding } from "./types.js";
 
 const IGNORED_DIRECTORIES = new Set([
-    ".git",
-    ".next",
-    ".turbo",
-    "build",
-    "coverage",
-    "dist",
-    "node_modules",
-    "vendor",
-  ]),
-  SOURCE_READ_BATCH_SIZE = 64;
+  ".git",
+  ".next",
+  ".turbo",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "vendor",
+]);
+const SOURCE_READ_BATCH_SIZE = 64;
 
 export interface AnalysisContext {
   installedLegendState: InstalledLegendState | null;
@@ -90,8 +90,8 @@ export async function createAnalysisContext(
   rootPath: string,
   options: AnalysisContextOptions = {},
 ): Promise<AnalysisContext> {
-  const root = path.resolve(rootPath),
-    files = await collectSourceFiles(root);
+  const root = path.resolve(rootPath);
+  const files = await collectSourceFiles(root);
   return createAnalysisContextFromFiles(root, files, options);
 }
 
@@ -102,8 +102,8 @@ async function createAnalysisContextFromFiles(
 ): Promise<AnalysisContext> {
   const sources = new Map<string, string>();
   for (let start = 0; start < files.length; start += SOURCE_READ_BATCH_SIZE) {
-    const batch = files.slice(start, start + SOURCE_READ_BATCH_SIZE),
-      results = await Promise.allSettled(batch.map((file) => readFile(file, "utf8")));
+    const batch = files.slice(start, start + SOURCE_READ_BATCH_SIZE);
+    const results = await Promise.allSettled(batch.map((file) => readFile(file, "utf8")));
     for (let index = 0; index < batch.length; index += 1) {
       const result = results[index]!;
       if (result.status === "rejected") {
@@ -112,10 +112,10 @@ async function createAnalysisContextFromFiles(
       sources.set(batch[index]!, result.value);
     }
   }
-  const project = new AnalysisProject(sources),
-    semantic = options.configFilePath
-      ? createSemanticContext(project, { configFilePath: options.configFilePath })
-      : { context: null, diagnostics: [] };
+  const project = new AnalysisProject(sources);
+  const semantic = options.configFilePath
+    ? createSemanticContext(project, { configFilePath: options.configFilePath })
+    : { context: null, diagnostics: [] };
   return {
     installedLegendState: await resolveInstalledLegendState(root),
     project,
@@ -155,45 +155,45 @@ async function analyzePathInternal(
   sharedContext: AnalysisContext | undefined,
   includeDetails: boolean,
 ): Promise<AnalysisReport | DetailedAnalysisResult> {
-  const absoluteTarget = path.resolve(targetPath),
-    targetStats = await stat(absoluteTarget),
-    analysisRoot = targetStats.isDirectory() ? absoluteTarget : path.dirname(absoluteTarget),
-    files = targetStats.isDirectory() ? await collectSourceFiles(absoluteTarget) : [absoluteTarget],
-    context =
-      sharedContext ??
-      (targetStats.isDirectory()
-        ? await createAnalysisContextFromFiles(analysisRoot, files, {})
-        : await createAnalysisContext(analysisRoot)),
-    findings: HookFinding[] = [],
-    practices: LegendPracticeFinding[] = [],
-    analysisFiles = files.map((file) => {
-      const reportFileName = path.relative(analysisRoot, file) || path.basename(file);
-      if (!isSupportedAnalysisFile(file)) {
-        return { analysisFile: null, file, functionEntries: [], reportFileName };
-      }
-      const analysisFile = context.project.getFile(file);
-      if (!analysisFile) {
-        throw new Error(`analysis context does not own target file: ${reportFileName}`);
-      }
-      return {
-        analysisFile,
-        file,
-        functionEntries: includeDetails
-          ? functionCoverageEntries(analysisFile, reportFileName)
-          : [],
-        reportFileName,
-      };
-    }),
-    coverage = includeDetails
-      ? new AnalysisCoverageLedger(
-          analysisFiles.flatMap((entry) => [
-            { file: entry.reportFileName, kind: "file" as const },
-            ...entry.functionEntries.map((functionEntry) => functionEntry.target),
-          ]),
-        )
-      : null,
-    diagnostics: AnalysisDiagnostic[] = [],
-    reactCompiler = new ReactCompilerResolver();
+  const absoluteTarget = path.resolve(targetPath);
+  const targetStats = await stat(absoluteTarget);
+  const analysisRoot = targetStats.isDirectory() ? absoluteTarget : path.dirname(absoluteTarget);
+  const files = targetStats.isDirectory()
+    ? await collectSourceFiles(absoluteTarget)
+    : [absoluteTarget];
+  const context =
+    sharedContext ??
+    (targetStats.isDirectory()
+      ? await createAnalysisContextFromFiles(analysisRoot, files, {})
+      : await createAnalysisContext(analysisRoot));
+  const findings: HookFinding[] = [];
+  const practices: LegendPracticeFinding[] = [];
+  const analysisFiles = files.map((file) => {
+    const reportFileName = path.relative(analysisRoot, file) || path.basename(file);
+    if (!isSupportedAnalysisFile(file)) {
+      return { analysisFile: null, file, functionEntries: [], reportFileName };
+    }
+    const analysisFile = context.project.getFile(file);
+    if (!analysisFile) {
+      throw new Error(`analysis context does not own target file: ${reportFileName}`);
+    }
+    return {
+      analysisFile,
+      file,
+      functionEntries: includeDetails ? functionCoverageEntries(analysisFile, reportFileName) : [],
+      reportFileName,
+    };
+  });
+  const coverage = includeDetails
+    ? new AnalysisCoverageLedger(
+        analysisFiles.flatMap((entry) => [
+          { file: entry.reportFileName, kind: "file" as const },
+          ...entry.functionEntries.map((functionEntry) => functionEntry.target),
+        ]),
+      )
+    : null;
+  const diagnostics: AnalysisDiagnostic[] = [];
+  const reactCompiler = new ReactCompilerResolver();
   for (const { analysisFile, file, functionEntries, reportFileName } of analysisFiles) {
     if (!analysisFile) {
       coverage?.record({
@@ -210,13 +210,13 @@ async function analyzePathInternal(
         })),
       );
     }
-    const stateFlow = new StateFlowIndex(),
-      hookImports = findingHookImports(analysisFile),
-      mayContainPractice = mayContainLegendPractice(analysisFile),
-      analyzeHooks = hookImports !== null || includeDetails,
-      analyzePractices = mayContainPractice || includeDetails,
-      childContracts =
-        analyzeHooks || analyzePractices ? createChildContractResolver(context, file) : null;
+    const stateFlow = new StateFlowIndex();
+    const hookImports = findingHookImports(analysisFile);
+    const mayContainPractice = mayContainLegendPractice(analysisFile);
+    const analyzeHooks = hookImports !== null || includeDetails;
+    const analyzePractices = mayContainPractice || includeDetails;
+    const childContracts =
+      analyzeHooks || analyzePractices ? createChildContractResolver(context, file) : null;
     if (analyzeHooks) {
       findings.push(
         ...analyzeSourceFile(
@@ -233,10 +233,10 @@ async function analyzePathInternal(
     }
     if (analyzePractices) {
       const importedObservables = new Set([
-          ...context.sourceIndex.observablesFor(file),
-          ...context.sourceIndex.observablePathsFor(file),
-        ]),
-        importedObservableFactories = context.sourceIndex.observableFactoriesFor(file);
+        ...context.sourceIndex.observablesFor(file),
+        ...context.sourceIndex.observablePathsFor(file),
+      ]);
+      const importedObservableFactories = context.sourceIndex.observableFactoriesFor(file);
       practices.push(
         ...analyzeLegendPracticesFile(
           analysisFile,
@@ -266,15 +266,15 @@ async function analyzePathInternal(
     }
   }
 
-  const states = findings.filter((finding) => finding.hook === "useState").length,
-    effects = findings.filter((finding) => finding.hook === "useEffect").length,
-    report: AnalysisReport = {
-      files: files.length,
-      findings,
-      hooks: { effects, states, total: states + effects },
-      practices,
-      schemaVersion: 1,
-    };
+  const states = findings.filter((finding) => finding.hook === "useState").length;
+  const effects = findings.filter((finding) => finding.hook === "useEffect").length;
+  const report: AnalysisReport = {
+    files: files.length,
+    findings,
+    hooks: { effects, states, total: states + effects },
+    practices,
+    schemaVersion: 1,
+  };
   if (!coverage) {
     return report;
   }
@@ -301,8 +301,8 @@ function functionCoverageEntries(
   file: AnalysisFile,
   reportFileName: string,
 ): FunctionCoverageEntry[] {
-  const entries: FunctionCoverageEntry[] = [],
-    { sourceFile } = file;
+  const entries: FunctionCoverageEntry[] = [];
+  const { sourceFile } = file;
   const visit = (node: ts.Node): void => {
     if (isRuntimeFunctionLike(node) && node.body) {
       entries.push({
@@ -435,9 +435,9 @@ function analyzedFunctionCoverage(
   stateFlow: StateFlowIndex,
 ): AnalysisCoverageStages {
   const recovered = file.parserDiagnostics.some((diagnostic) =>
-      diagnosticAffectsTarget(diagnostic, target),
-    ),
-    fileRecovered = file.parserDiagnostics.length > 0;
+    diagnosticAffectsTarget(diagnostic, target),
+  );
+  const fileRecovered = file.parserDiagnostics.length > 0;
   return {
     detector: fileRecovered
       ? outcome(
@@ -592,93 +592,89 @@ function createChildContractResolver(
   context: AnalysisContext,
   importerFile: string,
 ): ChildContractResolver {
-  const callbackContracts = new Map<string, boolean>(),
-    arrayItemCallbackContracts = new Map<string, boolean>(),
-    componentCallbackContracts = new Map<string, boolean>(),
-    componentInvocationCallbackContracts = new Map<string, boolean>(),
-    componentEffectCallbackContracts = new Map<string, boolean>(),
-    componentSources = new Map<string, ChildComponentSource | null>(),
-    keyedCursorContracts = new Map<string, boolean>(),
-    hookSources = new Map<string, SourceHookDeclaration | null>(),
-    hookResolver: SourceHookResolver = {
-      resolveHook(file: string, name: string): SourceHookDeclaration | null {
-        const key = `${file}\0${name}`;
-        if (hookSources.has(key)) {
-          return hookSources.get(key) ?? null;
-        }
-        const resolved = context.sourceIndex.hookDeclarationFor(file, name);
-        if (!resolved) {
-          hookSources.set(key, null);
-          return null;
-        }
-        const analysisFile = context.project.getFile(resolved.file);
-        if (!analysisFile) {
-          hookSources.set(key, null);
-          return null;
-        }
-        const owner = findHookDeclaration(analysisFile.sourceFile, resolved.localName),
-          source = owner
-            ? { file: resolved.file, owner, sourceFile: analysisFile.sourceFile }
-            : null;
-        hookSources.set(key, source);
-        return source;
-      },
-    },
-    resolveComponent = (file: string, name: string): ChildComponentSource | null => {
+  const callbackContracts = new Map<string, boolean>();
+  const arrayItemCallbackContracts = new Map<string, boolean>();
+  const componentCallbackContracts = new Map<string, boolean>();
+  const componentInvocationCallbackContracts = new Map<string, boolean>();
+  const componentEffectCallbackContracts = new Map<string, boolean>();
+  const componentSources = new Map<string, ChildComponentSource | null>();
+  const keyedCursorContracts = new Map<string, boolean>();
+  const hookSources = new Map<string, SourceHookDeclaration | null>();
+  const hookResolver: SourceHookResolver = {
+    resolveHook(file: string, name: string): SourceHookDeclaration | null {
       const key = `${file}\0${name}`;
-      if (componentSources.has(key)) {
-        return componentSources.get(key) ?? null;
+      if (hookSources.has(key)) {
+        return hookSources.get(key) ?? null;
       }
-      const resolved = context.sourceIndex.componentDeclarationFor(file, name);
+      const resolved = context.sourceIndex.hookDeclarationFor(file, name);
       if (!resolved) {
-        componentSources.set(key, null);
+        hookSources.set(key, null);
         return null;
       }
-      const analysisFile = context.project.getFile(resolved.file),
-        source = analysisFile
-          ? findComponentDeclaration(
-              analysisFile.sourceFile,
-              resolved.file,
-              resolved.localName,
-              context.sourceIndex.deferredCallbackHooksFor(resolved.file),
-            )
-          : null;
-      componentSources.set(key, source);
+      const analysisFile = context.project.getFile(resolved.file);
+      if (!analysisFile) {
+        hookSources.set(key, null);
+        return null;
+      }
+      const owner = findHookDeclaration(analysisFile.sourceFile, resolved.localName),
+        source = owner ? { file: resolved.file, owner, sourceFile: analysisFile.sourceFile } : null;
+      hookSources.set(key, source);
       return source;
     },
-    callbackSourceResolver: CallbackContractSourceResolver = {
-      contextReaderHooks(file, contextName) {
-        return context.sourceIndex.contextReaderHooksFor(file, contextName);
-      },
-      deferredCallbackHooks(file) {
-        return context.sourceIndex.deferredCallbackHooksFor(file);
-      },
-      frameworkEventComponent(file, name) {
-        return context.sourceIndex.frameworkEventComponentFor(file, name);
-      },
-      hookCallbackIsDeferred(file, name, argumentIndex): boolean {
-        const source = hookResolver.resolveHook(file, name);
-        return (
-          source !== null && sourceHookDefersCallback(source, argumentIndex, null, hookResolver)
-        );
-      },
-      resolveComponent,
-      resolveHook(file, name): ChildComponentSource | null {
-        const source = hookResolver.resolveHook(file, name);
-        if (!source?.owner.body) {
-          return null;
-        }
-        return {
-          ...source,
-          body: source.owner.body,
-          deferredCallbackHooks: context.sourceIndex.deferredCallbackHooksFor(source.file),
-        };
-      },
-      sourceFile(file): ts.SourceFile | null {
-        return context.project.getFile(file)?.sourceFile ?? null;
-      },
+  };
+  const resolveComponent = (file: string, name: string): ChildComponentSource | null => {
+    const key = `${file}\0${name}`;
+    if (componentSources.has(key)) {
+      return componentSources.get(key) ?? null;
+    }
+    const resolved = context.sourceIndex.componentDeclarationFor(file, name);
+    if (!resolved) {
+      componentSources.set(key, null);
+      return null;
+    }
+    const analysisFile = context.project.getFile(resolved.file),
+      source = analysisFile
+        ? findComponentDeclaration(
+            analysisFile.sourceFile,
+            resolved.file,
+            resolved.localName,
+            context.sourceIndex.deferredCallbackHooksFor(resolved.file),
+          )
+        : null;
+    componentSources.set(key, source);
+    return source;
+  };
+  const callbackSourceResolver: CallbackContractSourceResolver = {
+    contextReaderHooks(file, contextName) {
+      return context.sourceIndex.contextReaderHooksFor(file, contextName);
     },
-    deferredRegistrations = context.sourceIndex.deferredCallbackRegistrationsFor(importerFile);
+    deferredCallbackHooks(file) {
+      return context.sourceIndex.deferredCallbackHooksFor(file);
+    },
+    frameworkEventComponent(file, name) {
+      return context.sourceIndex.frameworkEventComponentFor(file, name);
+    },
+    hookCallbackIsDeferred(file, name, argumentIndex): boolean {
+      const source = hookResolver.resolveHook(file, name);
+      return source !== null && sourceHookDefersCallback(source, argumentIndex, null, hookResolver);
+    },
+    resolveComponent,
+    resolveHook(file, name): ChildComponentSource | null {
+      const source = hookResolver.resolveHook(file, name);
+      if (!source?.owner.body) {
+        return null;
+      }
+      return {
+        ...source,
+        body: source.owner.body,
+        deferredCallbackHooks: context.sourceIndex.deferredCallbackHooksFor(source.file),
+      };
+    },
+    sourceFile(file): ts.SourceFile | null {
+      return context.project.getFile(file)?.sourceFile ?? null;
+    },
+  };
+  const deferredRegistrations = context.sourceIndex.deferredCallbackRegistrationsFor(importerFile);
   return {
     callbackPropertyIsDeferred(hookName, argumentIndex, property): boolean {
       const key = `${hookName}\0${argumentIndex}\0${property}`;

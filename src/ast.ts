@@ -12,15 +12,15 @@ export type RuntimeFunctionLike =
   | ts.SetAccessorDeclaration;
 
 const RUNTIME_FUNCTION_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
-    ts.SyntaxKind.ArrowFunction,
-    ts.SyntaxKind.Constructor,
-    ts.SyntaxKind.FunctionDeclaration,
-    ts.SyntaxKind.FunctionExpression,
-    ts.SyntaxKind.GetAccessor,
-    ts.SyntaxKind.MethodDeclaration,
-    ts.SyntaxKind.SetAccessor,
-  ]),
-  identifiersByNode = new WeakMap<ts.Node, ReadonlyMap<string, readonly ts.Identifier[]>>();
+  ts.SyntaxKind.ArrowFunction,
+  ts.SyntaxKind.Constructor,
+  ts.SyntaxKind.FunctionDeclaration,
+  ts.SyntaxKind.FunctionExpression,
+  ts.SyntaxKind.GetAccessor,
+  ts.SyntaxKind.MethodDeclaration,
+  ts.SyntaxKind.SetAccessor,
+]);
+const identifiersByNode = new WeakMap<ts.Node, ReadonlyMap<string, readonly ts.Identifier[]>>();
 
 export function findAncestor<T extends ts.Node>(
   node: ts.Node,

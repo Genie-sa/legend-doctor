@@ -106,8 +106,8 @@ export function isPropertyLocalObjectDraftState(
       return false;
     }
     for (const reference of resolved) {
-      const subtree = nearestJsxElement(reference, state.owner),
-        maximumLeafSize = Math.max(4, Math.floor(jsxElementCount(state.owner) * 0.4));
+      const subtree = nearestJsxElement(reference, state.owner);
+      const maximumLeafSize = Math.max(4, Math.floor(jsxElementCount(state.owner) * 0.4));
       if (!subtree || jsxElementCountIn(subtree) > maximumLeafSize) {
         return false;
       }
@@ -142,8 +142,8 @@ function typedStringDraftProperties(state: StateCandidate): ReadonlySet<string> 
       }
     }
   }
-  const declaration = declarations.length === 1 ? declarations[0] : null,
-    object = declaration?.initializer && unwrapTransparentExpression(declaration.initializer);
+  const declaration = declarations.length === 1 ? declarations[0] : null;
+  const object = declaration?.initializer && unwrapTransparentExpression(declaration.initializer);
   if (
     !declaration?.type ||
     !ts.isTypeReferenceNode(declaration.type) ||
@@ -159,14 +159,14 @@ function typedStringDraftProperties(state: StateCandidate): ReadonlySet<string> 
     return null;
   }
 
-  const typeName = declaration.type.typeName.text,
-    types = state.call
-      .getSourceFile()
-      .statements.filter(
-        (statement): statement is ts.InterfaceDeclaration =>
-          ts.isInterfaceDeclaration(statement) && statement.name.text === typeName,
-      ),
-    type = types.length === 1 ? types[0] : null;
+  const typeName = declaration.type.typeName.text;
+  const types = state.call
+    .getSourceFile()
+    .statements.filter(
+      (statement): statement is ts.InterfaceDeclaration =>
+        ts.isInterfaceDeclaration(statement) && statement.name.text === typeName,
+    );
+  const type = types.length === 1 ? types[0] : null;
   if (
     !type ||
     type.members.length !== object.properties.length ||
@@ -252,16 +252,14 @@ function exactPropertyWrite(
   ) {
     return null;
   }
-  const previous = updater.parameters[0]!.name.text,
-    object = unwrapTransparentExpression(updater.body);
+  const previous = updater.parameters[0]!.name.text;
+  const object = unwrapTransparentExpression(updater.body);
   if (!ts.isObjectLiteralExpression(object) || object.properties.length !== 2) {
     return null;
   }
-  const [spread, assignment] = object.properties,
-    spreadValue =
-      spread && ts.isSpreadAssignment(spread)
-        ? unwrapTransparentExpression(spread.expression)
-        : null;
+  const [spread, assignment] = object.properties;
+  const spreadValue =
+    spread && ts.isSpreadAssignment(spread) ? unwrapTransparentExpression(spread.expression) : null;
   if (
     !spreadValue ||
     !ts.isIdentifier(spreadValue) ||
@@ -286,11 +284,11 @@ function deferredSetterOnlyOpening(
   owner: RuntimeFunctionLike,
   childContracts: ChildContractResolver | null,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  const attribute = findAncestorUntil(call, ts.isJsxAttribute, owner),
-    expression =
-      attribute?.initializer && ts.isJsxExpression(attribute.initializer)
-        ? attribute.initializer.expression
-        : null;
+  const attribute = findAncestorUntil(call, ts.isJsxAttribute, owner);
+  const expression =
+    attribute?.initializer && ts.isJsxExpression(attribute.initializer)
+      ? attribute.initializer.expression
+      : null;
   if (
     !attribute ||
     !/^on[A-Z]/u.test(attribute.name.getText()) ||
@@ -323,13 +321,13 @@ function openingReadsProperty(
 ): boolean {
   return opening.attributes.properties.some((candidate) => {
     const expression =
-        ts.isJsxAttribute(candidate) &&
-        candidate.name.getText() === "value" &&
-        candidate.initializer &&
-        ts.isJsxExpression(candidate.initializer)
-          ? candidate.initializer.expression
-          : null,
-      access = expression && unwrapTransparentExpression(expression);
+      ts.isJsxAttribute(candidate) &&
+      candidate.name.getText() === "value" &&
+      candidate.initializer &&
+      ts.isJsxExpression(candidate.initializer)
+        ? candidate.initializer.expression
+        : null;
+    const access = expression && unwrapTransparentExpression(expression);
     return (
       access !== null &&
       access !== undefined &&
@@ -396,11 +394,11 @@ function projectionSinks(
     }
 
     const declarations = new Set(
-        references.map((reference) =>
-          findAncestorUntil(reference, ts.isVariableDeclaration, state.owner),
-        ),
+      references.map((reference) =>
+        findAncestorUntil(reference, ts.isVariableDeclaration, state.owner),
       ),
-      declaration = declarations.size === 1 ? [...declarations][0] : null;
+    );
+    const declaration = declarations.size === 1 ? [...declarations][0] : null;
     if (
       !declaration?.initializer ||
       !ts.isIdentifier(declaration.name) ||
@@ -427,10 +425,10 @@ function safeStringTrim(
   stateName: string,
   stringProperties: ReadonlySet<string>,
 ): boolean {
-  const callee = call.expression,
-    receiver = ts.isPropertyAccessExpression(callee)
-      ? unwrapTransparentExpression(callee.expression)
-      : null;
+  const callee = call.expression;
+  const receiver = ts.isPropertyAccessExpression(callee)
+    ? unwrapTransparentExpression(callee.expression)
+    : null;
   return (
     call.arguments.length === 0 &&
     ts.isPropertyAccessExpression(callee) &&

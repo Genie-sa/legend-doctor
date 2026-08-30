@@ -29,8 +29,8 @@ export class StateFlowIndex {
       flow = new FunctionWriteFlow(fn);
       this.#flows.set(fn, flow);
     }
-    const result = flow.prove(left, right),
-      previous = this.#coverage.get(fn);
+    const result = flow.prove(left, right);
+    const previous = this.#coverage.get(fn);
     this.#coverage.set(fn, previous === "unknown" || result === "unknown" ? "unknown" : "complete");
     return result;
   }
@@ -74,8 +74,8 @@ class FunctionWriteFlow {
     if (!this.#body || !nodeWithinFunction(left, this.fn) || !nodeWithinFunction(right, this.fn)) {
       return "unknown";
     }
-    const leftControls = controlArms(left, this.fn),
-      rightControls = controlArms(right, this.fn);
+    const leftControls = controlArms(left, this.fn);
+    const rightControls = controlArms(right, this.fn);
     if (haveOppositeSharedArm(leftControls, rightControls)) {
       return "disproven";
     }
@@ -88,10 +88,10 @@ class FunctionWriteFlow {
       return "unknown";
     }
 
-    const initial: ExecutionPath = { awaitEpoch: 0, events: [], termination: null },
-      result = ts.isBlock(this.#body)
-        ? lowerStatements(this.#body.statements, [initial], { breakable: false }, left, right)
-        : lowerExpression(this.#body, [initial], left, right);
+    const initial: ExecutionPath = { awaitEpoch: 0, events: [], termination: null };
+    const result = ts.isBlock(this.#body)
+      ? lowerStatements(this.#body.statements, [initial], { breakable: false }, left, right)
+      : lowerExpression(this.#body, [initial], left, right);
     if (result.unknown) {
       return "unknown";
     }
@@ -180,11 +180,11 @@ function lowerStatements(
   left: ts.CallExpression,
   right: ts.CallExpression,
 ): PathResult {
-  let paths = clonePaths(incoming),
-    unknown = false;
+  let paths = clonePaths(incoming);
+  let unknown = false;
   for (const statement of statements) {
-    const active = paths.filter((path) => path.termination === null),
-      finished = paths.filter((path) => path.termination !== null);
+    const active = paths.filter((path) => path.termination === null);
+    const finished = paths.filter((path) => path.termination !== null);
     if (active.length === 0) {
       break;
     }
@@ -223,12 +223,18 @@ function lowerStatement(
     return result;
   }
   if (ts.isIfStatement(statement)) {
-    const condition = lowerExpression(statement.expression, incoming, left, right),
-      thenResult = lowerStatement(statement.thenStatement, condition.paths, context, left, right),
-      elseResult = statement.elseStatement
-        ? lowerStatement(statement.elseStatement, condition.paths, context, left, right)
-        : { paths: clonePaths(condition.paths), unknown: false },
-      constant = constantBoolean(statement.expression);
+    const condition = lowerExpression(statement.expression, incoming, left, right);
+    const thenResult = lowerStatement(
+      statement.thenStatement,
+      condition.paths,
+      context,
+      left,
+      right,
+    );
+    const elseResult = statement.elseStatement
+      ? lowerStatement(statement.elseStatement, condition.paths, context, left, right)
+      : { paths: clonePaths(condition.paths), unknown: false };
+    const constant = constantBoolean(statement.expression);
     return {
       paths:
         constant === true
@@ -284,8 +290,8 @@ function lowerSwitch(
 ): PathResult {
   const discriminant = lowerExpression(statement.expression, incoming, left, right);
   let { unknown } = discriminant;
-  const outputs: ExecutionPath[] = [],
-    { clauses } = statement.caseBlock;
+  const outputs: ExecutionPath[] = [];
+  const { clauses } = statement.caseBlock;
   for (let start = 0; start < clauses.length; start += 1) {
     let paths = clonePaths(discriminant.paths);
     for (let index = start; index < clauses.length; index += 1) {
@@ -304,8 +310,8 @@ function lowerSwitch(
         right,
       );
       unknown ||= result.unknown;
-      const broken = result.paths.filter((path) => path.termination === "break"),
-        returned = result.paths.filter((path) => path.termination === "return");
+      const broken = result.paths.filter((path) => path.termination === "break");
+      const returned = result.paths.filter((path) => path.termination === "return");
       outputs.push(...broken.map((path) => ({ ...path, termination: null })), ...returned);
       paths = result.paths.filter((path) => path.termination === null);
       if (paths.length === 0) {
@@ -333,10 +339,10 @@ function lowerExpression(
     return lowerExpression(expression.expression, incoming, left, right);
   }
   if (ts.isConditionalExpression(expression)) {
-    const condition = lowerExpression(expression.condition, incoming, left, right),
-      whenTrue = lowerExpression(expression.whenTrue, condition.paths, left, right),
-      whenFalse = lowerExpression(expression.whenFalse, condition.paths, left, right),
-      constant = constantBoolean(expression.condition);
+    const condition = lowerExpression(expression.condition, incoming, left, right);
+    const whenTrue = lowerExpression(expression.whenTrue, condition.paths, left, right);
+    const whenFalse = lowerExpression(expression.whenFalse, condition.paths, left, right);
+    const constant = constantBoolean(expression.condition);
     return {
       paths:
         constant === true
@@ -353,9 +359,9 @@ function lowerExpression(
       expression.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
       expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
   ) {
-    const leftResult = lowerExpression(expression.left, incoming, left, right),
-      rightResult = lowerExpression(expression.right, leftResult.paths, left, right),
-      rightExecution = shortCircuitRightExecution(expression);
+    const leftResult = lowerExpression(expression.left, incoming, left, right);
+    const rightResult = lowerExpression(expression.right, leftResult.paths, left, right);
+    const rightExecution = shortCircuitRightExecution(expression);
     return {
       paths:
         rightExecution === "always"
@@ -518,8 +524,8 @@ function unconditionalCallPrecedesControlledCall(
     return false;
   }
   return paths.every((path) => {
-    const uncontrolledIndex = path.events.findIndex((event) => event.call === uncontrolled),
-      controlledIndex = path.events.findIndex((event) => event.call === controlled);
+    const uncontrolledIndex = path.events.findIndex((event) => event.call === uncontrolled);
+    const controlledIndex = path.events.findIndex((event) => event.call === controlled);
     return uncontrolledIndex !== -1 && uncontrolledIndex < controlledIndex;
   });
 }
@@ -529,8 +535,8 @@ function callsShareAwaitEpoch(
   left: ts.CallExpression,
   right: ts.CallExpression,
 ): boolean {
-  let leftEpoch: number | null = null,
-    rightEpoch: number | null = null;
+  let leftEpoch: number | null = null;
+  let rightEpoch: number | null = null;
   for (const event of path.events) {
     if (event.call === left) {
       leftEpoch = event.epoch;

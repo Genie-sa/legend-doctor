@@ -105,8 +105,8 @@ class ProgramSemanticContext implements SemanticContext {
       return undefined;
     }
 
-    const direct = this.#checker.getSymbolAtLocation(node),
-      directProvenance = direct && importProvenanceOfSymbol(direct);
+    const direct = this.#checker.getSymbolAtLocation(node);
+    const directProvenance = direct && importProvenanceOfSymbol(direct);
     if (directProvenance) {
       return directProvenance;
     }
@@ -115,8 +115,8 @@ class ProgramSemanticContext implements SemanticContext {
     if (!access) {
       return undefined;
     }
-    const namespaceSymbol = this.#checker.getSymbolAtLocation(access.root),
-      namespaceProvenance = namespaceSymbol && importProvenanceOfSymbol(namespaceSymbol);
+    const namespaceSymbol = this.#checker.getSymbolAtLocation(access.root);
+    const namespaceProvenance = namespaceSymbol && importProvenanceOfSymbol(namespaceSymbol);
     if (namespaceProvenance?.kind !== "namespace") {
       return undefined;
     }
@@ -136,8 +136,8 @@ export function createSemanticContext(
   project: AnalysisProject,
   options: CreateSemanticContextOptions,
 ): SemanticContextResult {
-  const configFilePath = path.resolve(options.configFilePath),
-    readResult = ts.readConfigFile(configFilePath, ts.sys.readFile);
+  const configFilePath = path.resolve(options.configFilePath);
+  const readResult = ts.readConfigFile(configFilePath, ts.sys.readFile);
   if (readResult.error) {
     return unavailable(normalizeTypeScriptDiagnostic("config-read-failed", readResult.error));
   }
@@ -158,18 +158,20 @@ export function createSemanticContext(
     };
   }
 
-  const host = createIdentityPreservingHost(parsedConfig.options, project.files),
-    rootNames = uniqueCanonicalPaths(parsedConfig.fileNames),
-    program = ts.createProgram({
-      configFileParsingDiagnostics: parsedConfig.errors,
-      host,
-      options: parsedConfig.options,
-      rootNames,
-      ...(parsedConfig.projectReferences
-        ? { projectReferences: parsedConfig.projectReferences }
-        : {}),
-    }),
-    unconfiguredFiles = project.files.filter((file) => !program.getSourceFile(file.identityPath));
+  const host = createIdentityPreservingHost(parsedConfig.options, project.files);
+  const rootNames = uniqueCanonicalPaths(parsedConfig.fileNames);
+  const program = ts.createProgram({
+    configFileParsingDiagnostics: parsedConfig.errors,
+    host,
+    options: parsedConfig.options,
+    rootNames,
+    ...(parsedConfig.projectReferences
+      ? { projectReferences: parsedConfig.projectReferences }
+      : {}),
+  });
+  const unconfiguredFiles = project.files.filter(
+    (file) => !program.getSourceFile(file.identityPath),
+  );
   if (unconfiguredFiles.length > 0) {
     return {
       context: null,
@@ -206,9 +208,9 @@ function createIdentityPreservingHost(
   options: ts.CompilerOptions,
   files: readonly AnalysisFile[],
 ): ts.CompilerHost {
-  const host = ts.createCompilerHost(options, true),
-    filesByPath = new Map(files.map((file) => [pathIdentityKey(file.identityPath), file])),
-    defaultGetSourceFile = host.getSourceFile.bind(host);
+  const host = ts.createCompilerHost(options, true);
+  const filesByPath = new Map(files.map((file) => [pathIdentityKey(file.identityPath), file]));
+  const defaultGetSourceFile = host.getSourceFile.bind(host);
 
   host.fileExists = (fileName) =>
     filesByPath.has(pathIdentityKey(fileName)) || ts.sys.fileExists(fileName);

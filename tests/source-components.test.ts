@@ -134,9 +134,9 @@ test("resolves package imports when an extended config is unavailable", async ()
       "tsconfig.json": '{"extends":"@fixture/tsconfig/vite.json","include":["src"]}',
     },
     (root, sources) => {
-      const index = buildSourceIndex(root, sources),
-        screen = path.join(root, "src/screen.ts"),
-        observables = index.observablesFor(screen);
+      const index = buildSourceIndex(root, sources);
+      const screen = path.join(root, "src/screen.ts");
+      const observables = index.observablesFor(screen);
       assert.deepEqual([...observables], ["appState$"]);
       assert.deepEqual(
         [...(index.observableKeysFor(screen).get("appState$") ?? [])],
@@ -265,9 +265,9 @@ test("resolves observables created by explicitly typed project factories", async
       `,
     },
     (root, sources) => {
-      const index = buildSourceIndex(root, sources),
-        factories = index.observableFactoriesFor(path.join(root, "theme.ts")),
-        observables = index.observablesFor(path.join(root, "screen.ts"));
+      const index = buildSourceIndex(root, sources);
+      const factories = index.observableFactoriesFor(path.join(root, "theme.ts"));
+      const observables = index.observablesFor(path.join(root, "screen.ts"));
       assert.deepEqual([...factories], ["makeStore"]);
       assert.deepEqual([...observables], ["appTheme$"]);
     },
@@ -363,8 +363,8 @@ test("rejects styled hosts without plain factory, const binding, and proven targ
       `,
     },
     (root, sources) => {
-      const index = buildSourceIndex(root, sources),
-        file = path.join(root, "hosts.tsx");
+      const index = buildSourceIndex(root, sources);
+      const file = path.join(root, "hosts.tsx");
       for (const name of [
         "Configured",
         "Narrowed",

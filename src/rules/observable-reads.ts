@@ -34,8 +34,8 @@ import type { RuntimeFunctionLike } from "../ast.js";
 import type { HookImports } from "../imports.js";
 import type { ChildContractResolver } from "./child-contract.js";
 
-const MIN_LEAF_OWNER_ELEMENTS = 12,
-  MAX_LEAF_OWNER_SHARE = 0.4;
+const MAX_LEAF_OWNER_SHARE = 0.4,
+  MIN_LEAF_OWNER_ELEMENTS = 12;
 
 export const RESERVED_OBSERVABLE_MEMBERS = new Set([
   "assign",
@@ -123,9 +123,9 @@ function moveUseValueIntoChildFinding(
   ) {
     return null;
   }
-  const observable = provenObservablePath(call.arguments[0]!, observableBindings),
-    owner = findAncestor(declaration, isRuntimeFunctionLike),
-    localName = declaration.name.text;
+  const observable = provenObservablePath(call.arguments[0]!, observableBindings);
+  const owner = findAncestor(declaration, isRuntimeFunctionLike);
+  const localName = declaration.name.text;
   if (
     !observable ||
     !owner?.body ||
@@ -136,8 +136,8 @@ function moveUseValueIntoChildFinding(
     return null;
   }
 
-  let reference: ts.Identifier | null = null,
-    unsafe = false;
+  let reference: ts.Identifier | null = null;
+  let unsafe = false;
   visit(owner.body, (node) => {
     if (
       unsafe ||
@@ -171,9 +171,9 @@ function moveUseValueIntoChildFinding(
   }
 
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-      declaration.getStart(sourceFile),
-    ),
-    observablePath = observable.getText(sourceFile);
+    declaration.getStart(sourceFile),
+  );
+  const observablePath = observable.getText(sourceFile);
   return {
     action: "move-use-value-into-child",
     confidence: "certain",
@@ -206,9 +206,9 @@ function hasOtherGetReadOfPath(
     if (overlap || !ts.isCallExpression(node)) {
       return;
     }
-    const receiver = directGetReceiver(node),
-      other = receiver && provenObservablePath(receiver, observableBindings),
-      otherPath = other && staticPropertyPath(other);
+    const receiver = directGetReceiver(node);
+    const other = receiver && provenObservablePath(receiver, observableBindings);
+    const otherPath = other && staticPropertyPath(other);
     if (!otherPath) {
       return;
     }
@@ -244,8 +244,8 @@ function directJsxPropTransport(reference: ts.Identifier): DirectJsxPropTranspor
   ) {
     return null;
   }
-  const attribute = container.parent,
-    opening = attribute.parent.parent;
+  const attribute = container.parent;
+  const opening = attribute.parent.parent;
   if (!ts.isJsxOpeningElement(opening) && !ts.isJsxSelfClosingElement(opening)) {
     return null;
   }
@@ -278,8 +278,8 @@ function moveUseValueDownFinding(
   ) {
     return null;
   }
-  const owner = findAncestor(declaration, isRuntimeFunctionLike),
-    localName = declaration.name.text;
+  const owner = findAncestor(declaration, isRuntimeFunctionLike);
+  const localName = declaration.name.text;
   if (
     !owner?.body ||
     bindingDeclarationCount(owner, localName) !== 1 ||
@@ -316,10 +316,11 @@ function moveUseValueDownFinding(
     return null;
   }
 
-  const leaf = lowestCommonJsxSubtree(references, owner),
-    ownerElements = jsxElementCount(owner),
-    conditionalSlot = stableConditionalJsxSlot(references, owner, imports),
-    stableLeaf = conditionalSlot || !leaf || hasUnstableSubtreeLifetime(leaf, owner) ? null : leaf;
+  const leaf = lowestCommonJsxSubtree(references, owner);
+  const ownerElements = jsxElementCount(owner);
+  const conditionalSlot = stableConditionalJsxSlot(references, owner, imports);
+  const stableLeaf =
+    conditionalSlot || !leaf || hasUnstableSubtreeLifetime(leaf, owner) ? null : leaf;
   if (!stableLeaf && !conditionalSlot) {
     return null;
   }
@@ -331,24 +332,24 @@ function moveUseValueDownFinding(
   }
 
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-      declaration.getStart(sourceFile),
-    ),
-    target = stableLeaf ?? conditionalSlot!,
-    leafLine = sourceFile.getLineAndCharacterOfPosition(target.getStart(sourceFile)).line + 1,
-    leafLabel = stableLeaf
-      ? ts.isJsxFragment(stableLeaf)
-        ? "fragment"
-        : `<${ts.isJsxElement(stableLeaf) ? stableLeaf.openingElement.tagName.getText(sourceFile) : stableLeaf.tagName.getText(sourceFile)}>`
-      : "complete conditional JSX slot",
-    observable = call.arguments[0]!.getText(sourceFile),
-    readEvidence = stableLeaf
-      ? `${references.length} render read${references.length === 1 ? "" : "s"} of ${localName} occur${references.length === 1 ? "s" : ""} only inside the stable ${leafLabel} leaf at line ${leafLine}`
-      : `${references.length} render read${references.length === 1 ? "" : "s"} of ${localName} occur${references.length === 1 ? "s" : ""} only inside the complete conditional JSX slot at line ${leafLine}`,
-    lifetimeEvidence = stableLeaf
-      ? `that leaf contains ${leafElements} of the owner's ${ownerElements} JSX elements and is not conditional, keyed, repeated, or split across returns`
-      : `replacing the complete conditional JSX slot with one always-mounted wrapper preserves the subscription lifetime and the conditional child's mount behavior`,
-    wrapper = stableLeaf ? "a stable wrapper around" : "an always-mounted wrapper for",
-    props = stableLeaf ? "the leaf's other inputs" : "non-observable gate values";
+    declaration.getStart(sourceFile),
+  );
+  const target = stableLeaf ?? conditionalSlot!;
+  const leafLine = sourceFile.getLineAndCharacterOfPosition(target.getStart(sourceFile)).line + 1;
+  const leafLabel = stableLeaf
+    ? ts.isJsxFragment(stableLeaf)
+      ? "fragment"
+      : `<${ts.isJsxElement(stableLeaf) ? stableLeaf.openingElement.tagName.getText(sourceFile) : stableLeaf.tagName.getText(sourceFile)}>`
+    : "complete conditional JSX slot";
+  const observable = call.arguments[0]!.getText(sourceFile);
+  const readEvidence = stableLeaf
+    ? `${references.length} render read${references.length === 1 ? "" : "s"} of ${localName} occur${references.length === 1 ? "s" : ""} only inside the stable ${leafLabel} leaf at line ${leafLine}`
+    : `${references.length} render read${references.length === 1 ? "" : "s"} of ${localName} occur${references.length === 1 ? "s" : ""} only inside the complete conditional JSX slot at line ${leafLine}`;
+  const lifetimeEvidence = stableLeaf
+    ? `that leaf contains ${leafElements} of the owner's ${ownerElements} JSX elements and is not conditional, keyed, repeated, or split across returns`
+    : `replacing the complete conditional JSX slot with one always-mounted wrapper preserves the subscription lifetime and the conditional child's mount behavior`;
+  const wrapper = stableLeaf ? "a stable wrapper around" : "an always-mounted wrapper for";
+  const props = stableLeaf ? "the leaf's other inputs" : "non-observable gate values";
   return {
     action: "move-use-value-down",
     confidence: "certain",
@@ -366,8 +367,8 @@ function hasAncestorUseValueSubscription(
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
 ): boolean {
-  const currentObservable = provenObservablePath(currentCall.arguments[0]!, observableBindings),
-    currentPath = currentObservable && staticPropertyPath(currentObservable);
+  const currentObservable = provenObservablePath(currentCall.arguments[0]!, observableBindings);
+  const currentPath = currentObservable && staticPropertyPath(currentObservable);
   if (!owner.body || !currentPath) {
     return true;
   }
@@ -400,8 +401,8 @@ function trackedUseValuePaths(
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
 ): readonly ts.Expression[] {
-  const direct = call.arguments[0] && provenObservablePath(call.arguments[0], observableBindings),
-    simpleInput = directUseValueInput(call, imports, observableBindings)?.observable;
+  const direct = call.arguments[0] && provenObservablePath(call.arguments[0], observableBindings);
+  const simpleInput = directUseValueInput(call, imports, observableBindings)?.observable;
   if (direct || simpleInput) {
     return [direct ?? simpleInput!];
   }
@@ -415,8 +416,8 @@ function trackedUseValuePaths(
     if (!ts.isCallExpression(node)) {
       return;
     }
-    const receiver = directGetReceiver(node),
-      observable = receiver && provenObservablePath(receiver, observableBindings);
+    const receiver = directGetReceiver(node);
+    const observable = receiver && provenObservablePath(receiver, observableBindings);
     if (observable) {
       paths.push(observable);
     }
@@ -429,8 +430,8 @@ function stableConditionalJsxSlot(
   owner: RuntimeFunctionLike,
   imports: HookImports,
 ): ts.Expression | null {
-  const slots = references.map((reference) => enclosingConditionalJsxExpression(reference, owner)),
-    slot = slots[0];
+  const slots = references.map((reference) => enclosingConditionalJsxExpression(reference, owner));
+  const slot = slots[0];
   if (!slot || slots.some((candidate) => candidate !== slot) || !slot.expression) {
     return null;
   }
@@ -815,8 +816,8 @@ function nonTrackingSnapshotFinding(
   sourceFile: ts.SourceFile,
   fileName: string,
 ): LegendPracticeFinding {
-  const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile)),
-    path = snapshot.observable.getText(sourceFile);
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
+  const path = snapshot.observable.getText(sourceFile);
   return {
     action: "use-peek-for-snapshot",
     confidence: "probable",
@@ -848,8 +849,8 @@ function directUseValueInput(
   if (!isUseValueCall(call, imports) || call.arguments.length === 0 || call.arguments.length > 2) {
     return null;
   }
-  const input = call.arguments[0]!,
-    eagerObservable = directObservableReadPath(input, observableBindings);
+  const input = call.arguments[0]!;
+  const eagerObservable = directObservableReadPath(input, observableBindings);
   if (eagerObservable) {
     return { kind: "eager-read", observable: eagerObservable };
   }
@@ -1023,18 +1024,18 @@ function directUseValueFinding(
   sourceFile: ts.SourceFile,
   fileName: string,
 ): LegendPracticeFinding {
-  const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile)),
-    path = input.observable.getText(sourceFile),
-    typeArguments = call.typeArguments?.length
-      ? `<${call.typeArguments.map((argument) => argument.getText(sourceFile)).join(", ")}>`
-      : "",
-    hook = `${call.expression.getText(sourceFile)}${typeArguments}`,
-    current = `${hook}(${call.arguments.map((argument) => argument.getText(sourceFile)).join(", ")})`,
-    replacement = `${hook}(${[
-      path,
-      ...call.arguments.slice(1).map((argument) => argument.getText(sourceFile)),
-    ].join(", ")})`,
-    eager = input.kind === "eager-read";
+  const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
+  const path = input.observable.getText(sourceFile);
+  const typeArguments = call.typeArguments?.length
+    ? `<${call.typeArguments.map((argument) => argument.getText(sourceFile)).join(", ")}>`
+    : "";
+  const hook = `${call.expression.getText(sourceFile)}${typeArguments}`;
+  const current = `${hook}(${call.arguments.map((argument) => argument.getText(sourceFile)).join(", ")})`;
+  const replacement = `${hook}(${[
+    path,
+    ...call.arguments.slice(1).map((argument) => argument.getText(sourceFile)),
+  ].join(", ")})`;
+  const eager = input.kind === "eager-read";
   return {
     action: "pass-observable-to-use-value",
     confidence: "certain",
@@ -1074,11 +1075,11 @@ function narrowUseValueFinding(
   }
 
   if (ts.isObjectBindingPattern(declaration.name)) {
-    const element = declaration.name.elements[0],
-      property =
-        element && !ts.isOmittedExpression(element)
-          ? (element.propertyName?.getText(sourceFile) ?? element.name.getText(sourceFile))
-          : null;
+    const element = declaration.name.elements[0];
+    const property =
+      element && !ts.isOmittedExpression(element)
+        ? (element.propertyName?.getText(sourceFile) ?? element.name.getText(sourceFile))
+        : null;
     if (property && consumesEveryKnownField(observable, [[property]], observableKeys)) {
       return null;
     }
@@ -1093,14 +1094,14 @@ function narrowUseValueFinding(
   if (!ts.isIdentifier(declaration.name)) {
     return null;
   }
-  const localName = declaration.name.text,
-    owner = findAncestor(declaration, isRuntimeFunctionLike);
+  const localName = declaration.name.text;
+  const owner = findAncestor(declaration, isRuntimeFunctionLike);
   if (!owner?.body || bindingDeclarationCount(owner, localName) !== 1) {
     return null;
   }
 
-  const paths: (readonly string[])[] = [],
-    optionalReferences: ts.Identifier[] = [];
+  const paths: (readonly string[])[] = [];
+  const optionalReferences: ts.Identifier[] = [];
   let unsafe = false;
   visit(owner.body, (node) => {
     if (
@@ -1207,12 +1208,12 @@ function splitLeavesFinding(
     return null;
   }
 
-  const parentPath = observable.getText(sourceFile),
-    leafNames = leaves.map((path) => ({
-      name: leafSubscriptionName(path),
-      path,
-    })),
-    proposedNames = new Set(leafNames.map((leaf) => leaf.name));
+  const parentPath = observable.getText(sourceFile);
+  const leafNames = leaves.map((path) => ({
+    name: leafSubscriptionName(path),
+    path,
+  }));
+  const proposedNames = new Set(leafNames.map((leaf) => leaf.name));
   if (proposedNames.size !== leafNames.length) {
     return null;
   }
@@ -1233,11 +1234,11 @@ function splitLeavesFinding(
   }
 
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-      declaration.getStart(sourceFile),
-    ),
-    declarations = leafNames
-      .map((leaf) => `\`const ${leaf.name} = useValue(${parentPath}.${leaf.path.join(".")})\``)
-      .join(", ");
+    declaration.getStart(sourceFile),
+  );
+  const declarations = leafNames
+    .map((leaf) => `\`const ${leaf.name} = useValue(${parentPath}.${leaf.path.join(".")})\``)
+    .join(", ");
   return {
     action: "split-use-value-leaves",
     confidence: "certain",
@@ -1304,9 +1305,9 @@ function rawValuePathHasOptionalAccess(reference: ts.Identifier): boolean {
 }
 
 function optionalAccessPreservesSuffix(reference: ts.Identifier, commonLength: number): boolean {
-  let current: ts.Expression = reference,
-    optionalInsideBoundary = false,
-    segments = 0;
+  let current: ts.Expression = reference;
+  let optionalInsideBoundary = false;
+  let segments = 0;
   while (ts.isPropertyAccessExpression(current.parent) && current.parent.expression === current) {
     const access = current.parent;
     if (RESERVED_OBSERVABLE_MEMBERS.has(access.name.text) || propertyAccessIsExecutable(access)) {
@@ -1396,13 +1397,13 @@ function narrowFinding(
   fileName: string,
 ): LegendPracticeFinding {
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-      declaration.getStart(sourceFile),
-    ),
-    parentPath = observable.getText(sourceFile),
-    leafPath = `${parentPath}.${property}`,
-    instruction = destructured
-      ? `Replace the single-property destructure with \`const ${localName} = useValue(${leafPath})\``
-      : `Narrow \`${localName}\` from \`useValue(${parentPath})\` to \`useValue(${leafPath})\`; bind the leaf value directly and replace the \`${localName}.${property}\` reads`;
+    declaration.getStart(sourceFile),
+  );
+  const parentPath = observable.getText(sourceFile);
+  const leafPath = `${parentPath}.${property}`;
+  const instruction = destructured
+    ? `Replace the single-property destructure with \`const ${localName} = useValue(${leafPath})\``
+    : `Narrow \`${localName}\` from \`useValue(${parentPath})\` to \`useValue(${leafPath})\`; bind the leaf value directly and replace the \`${localName}.${property}\` reads`;
   return {
     action: "narrow-use-value-subscription",
     confidence: "certain",
@@ -1421,8 +1422,8 @@ function isUseValueCall(call: ts.CallExpression, imports: HookImports): boolean 
   if (!isImportedHookCall(call, imports.useValue, imports.legendReactNamespaces, "useValue")) {
     return false;
   }
-  const binding = rootIdentifier(call.expression),
-    owner = findAncestor(call, isRuntimeFunctionLike);
+  const binding = rootIdentifier(call.expression);
+  const owner = findAncestor(call, isRuntimeFunctionLike);
   return !binding || !owner || bindingDeclarationCount(owner, binding.text) === 0;
 }
 

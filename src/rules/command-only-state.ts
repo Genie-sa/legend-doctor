@@ -139,8 +139,8 @@ export function functionalCounterUpdaterPreservesSnapshot(
   usage: CommandOnlyUsage,
   nearestMutationFunction: (node: ts.Node, owner: RuntimeFunctionLike) => RuntimeFunctionLike,
 ): boolean {
-  const call = usage.setterCallNodes[0],
-    updater = call?.arguments[0];
+  const call = usage.setterCallNodes[0];
+  const updater = call?.arguments[0];
   if (
     usage.setterCallNodes.length !== 1 ||
     !call ||
@@ -152,8 +152,8 @@ export function functionalCounterUpdaterPreservesSnapshot(
   ) {
     return false;
   }
-  const expression = updater.body,
-    parameter = updater.parameters[0]!.name.text;
+  const expression = updater.body;
+  const parameter = updater.parameters[0]!.name.text;
   if (
     !ts.isBinaryExpression(expression) ||
     ![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken].includes(expression.operatorToken.kind) ||
@@ -168,8 +168,8 @@ export function functionalCounterUpdaterPreservesSnapshot(
   if (!region.body) {
     return false;
   }
-  let readsAfter = 0,
-    unsafe = false;
+  let readsAfter = 0;
+  let unsafe = false;
   visitSkippingNestedRuntimeFunctions(region.body, (node) => {
     if (ts.isAwaitExpression(node) || ts.isYieldExpression(node)) {
       unsafe = true;
@@ -308,8 +308,8 @@ export function stateFeedsReturnedSwitchCommand(state: StateCandidate): boolean 
       reads.push(node);
     }
   });
-  const read = reads.length === 1 ? reads[0]! : null,
-    callback = read ? nearestNestedFunction(read, state.owner) : null;
+  const read = reads.length === 1 ? reads[0]! : null;
+  const callback = read ? nearestNestedFunction(read, state.owner) : null;
   if (
     !read ||
     !callback ||
@@ -451,8 +451,8 @@ function isDirectReturnedObjectMember(
   ) {
     return false;
   }
-  const object = property.parent,
-    returned = ts.isObjectLiteralExpression(object) ? object.parent : null;
+  const object = property.parent;
+  const returned = ts.isObjectLiteralExpression(object) ? object.parent : null;
   return (
     returned !== null &&
     ts.isReturnStatement(returned) &&

@@ -8,8 +8,8 @@ export interface ReactComponentWrappers {
 }
 
 export function collectReactComponentWrappers(sourceFile: ts.SourceFile): ReactComponentWrappers {
-  const names = new Set<string>(),
-    namespaces = new Set<string>();
+  const names = new Set<string>();
+  const namespaces = new Set<string>();
   for (const statement of sourceFile.statements) {
     if (
       !ts.isImportDeclaration(statement) ||

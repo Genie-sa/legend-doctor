@@ -95,9 +95,9 @@ export function findEffectSynchronizedDrafts(
   sourceComponents: ReadonlySet<string>,
   proofs: EffectDraftProofs,
 ): EffectDraftAnalysis {
-  const clusters = new Map<StateCandidate, EffectDraftCluster>(),
-    synchronizedEffects = new Set<EffectCandidate>(),
-    singletons = new Set<StateCandidate>();
+  const clusters = new Map<StateCandidate, EffectDraftCluster>();
+  const synchronizedEffects = new Set<EffectCandidate>();
+  const singletons = new Set<StateCandidate>();
 
   for (const effect of effects) {
     if (
@@ -118,35 +118,35 @@ export function findEffectSynchronizedDrafts(
       continue;
     }
     const ownerSetters = new Set(
-        states.flatMap((state) =>
-          state.owner === effect.owner && state.setterName ? [state.setterName] : [],
-        ),
+      states.flatMap((state) =>
+        state.owner === effect.owner && state.setterName ? [state.setterName] : [],
       ),
-      editProofs = new Map(
-        members.map(
-          (state) =>
-            [
-              state,
-              draftEditProof(state, usageByState.get(state), effect, ownerSetters, proofs),
-            ] as const,
-        ),
+    );
+    const editProofs = new Map(
+      members.map(
+        (state) =>
+          [
+            state,
+            draftEditProof(state, usageByState.get(state), effect, ownerSetters, proofs),
+          ] as const,
       ),
-      complete = members.every((state) => {
-        const usage = usageByState.get(state);
-        return (
-          usage !== undefined &&
-          stateIsWrittenOnlyByEffect(usage, effect, effects) &&
-          usage.setterReferences > usage.effectWrites &&
-          usage.effectReads === 0 &&
-          !hasStaleUseCallbackCapture(state) &&
-          usage.localRenderReads + usage.transportedOccurrences > 0 &&
-          !usage.shadowed &&
-          !usage.escaped &&
-          !stateMayHoldCallable(state) &&
-          editProofs.get(state)?.reachable === true &&
-          !stateControlsHookOrRepeatedBoundary(state)
-        );
-      });
+    );
+    const complete = members.every((state) => {
+      const usage = usageByState.get(state);
+      return (
+        usage !== undefined &&
+        stateIsWrittenOnlyByEffect(usage, effect, effects) &&
+        usage.setterReferences > usage.effectWrites &&
+        usage.effectReads === 0 &&
+        !hasStaleUseCallbackCapture(state) &&
+        usage.localRenderReads + usage.transportedOccurrences > 0 &&
+        !usage.shadowed &&
+        !usage.escaped &&
+        !stateMayHoldCallable(state) &&
+        editProofs.get(state)?.reachable === true &&
+        !stateControlsHookOrRepeatedBoundary(state)
+      );
+    });
     if (
       !complete ||
       !members.some((state) => editProofs.get(state)?.independent) ||
@@ -172,17 +172,17 @@ export function findEffectSynchronizedDrafts(
       singletons.add(ordered[0]!);
       continue;
     }
-    const names = ordered.map((state) => state.valueName),
-      initialization = ordered.some((state) => hasLazyStateInitializer(state))
-        ? " Preserve every lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
-        : "",
-      cluster: EffectDraftCluster = {
-        action: "use-observable",
-        id: `state-cluster:effect-draft:${effect.owner.getStart()}:${effect.call.getStart()}`,
-        members: ordered,
-        message: `Replace the effect-synchronized React draft cluster (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the React synchronization effect and its dependencies, assign the draft atomically there, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.${initialization}`,
-        primary: ordered[0]!,
-      };
+    const names = ordered.map((state) => state.valueName);
+    const initialization = ordered.some((state) => hasLazyStateInitializer(state))
+      ? " Preserve every lazy initializer as a once-only owner snapshot; do not pass it to Legend as a computed function."
+      : "";
+    const cluster: EffectDraftCluster = {
+      action: "use-observable",
+      id: `state-cluster:effect-draft:${effect.owner.getStart()}:${effect.call.getStart()}`,
+      members: ordered,
+      message: `Replace the effect-synchronized React draft cluster (${names.map((name) => `\`${name}\``).join(", ")}) with one component-lifetime observable model; preserve the React synchronization effect and its dependencies, assign the draft atomically there, mutate from edit commands, snapshot once at command entry before deferred work, and subscribe only in rendered leaves.${initialization}`,
+      primary: ordered[0]!,
+    };
     for (const state of ordered) {
       clusters.set(state, cluster);
     }
@@ -213,28 +213,28 @@ function draftEditProof(
   if (!usage) {
     return { independent: false, reachable: false };
   }
-  const direct = hasDirectJsxEventSetter(state),
-    edits = usage.setterCallNodes.filter((call) => !nodeWithin(call, effect.call)),
-    reachable = edits.filter((call) => {
+  const direct = hasDirectJsxEventSetter(state);
+  const edits = usage.setterCallNodes.filter((call) => !nodeWithin(call, effect.call));
+  const reachable = edits.filter((call) => {
+    const region = proofs.nearestMutationFunction(call, state.owner);
+    return (
+      region !== state.owner &&
+      (ts.isArrowFunction(region) ||
+        ts.isFunctionDeclaration(region) ||
+        ts.isFunctionExpression(region)) &&
+      callbackIsEventRooted(region, state.owner, "", new Set())
+    );
+  });
+  const independent =
+    direct ||
+    reachable.some((call) => {
       const region = proofs.nearestMutationFunction(call, state.owner);
       return (
-        region !== state.owner &&
-        (ts.isArrowFunction(region) ||
-          ts.isFunctionDeclaration(region) ||
-          ts.isFunctionExpression(region)) &&
-        callbackIsEventRooted(region, state.owner, "", new Set())
+        (mutationRegionOnlyCallsStateSetters(region, ownerSetters) ||
+          mutationRegionForwardsDraftValue(region, call, ownerSetters, state.owner)) &&
+        setterArgumentDiffersFromEffect(call, state, effect)
       );
-    }),
-    independent =
-      direct ||
-      reachable.some((call) => {
-        const region = proofs.nearestMutationFunction(call, state.owner);
-        return (
-          (mutationRegionOnlyCallsStateSetters(region, ownerSetters) ||
-            mutationRegionForwardsDraftValue(region, call, ownerSetters, state.owner)) &&
-          setterArgumentDiffersFromEffect(call, state, effect)
-        );
-      });
+    });
   return { independent, reachable: direct || reachable.length > 0 };
 }
 
@@ -310,8 +310,8 @@ export function mutationRegionOnlyCallsStateSetters(
   if (!region.body) {
     return false;
   }
-  let sawSetter = false,
-    unsafeCall = false;
+  let sawSetter = false;
+  let unsafeCall = false;
   visitSkippingNestedFunctions(region.body, region, (node) => {
     if (unsafeCall || !ts.isCallExpression(node)) {
       return;
@@ -345,8 +345,8 @@ function mutationRegionForwardsDraftValue(
     return false;
   }
 
-  let forwardedCalls = 0,
-    safe = true;
+  let forwardedCalls = 0;
+  let safe = true;
   visitSkippingNestedFunctions(region.body, region, (node) => {
     if (!safe || !ts.isCallExpression(node)) {
       return;
@@ -386,41 +386,41 @@ function synchronousDraftSetters(
   if (!ts.isBlock(callback.body) || callbackHasCleanup(callback, stateBySetter)) {
     return null;
   }
-  const members = new Set<StateCandidate>(),
-    validStatement = (statement: ts.Statement): boolean => {
-      if (ts.isBlock(statement)) {
-        return statement.statements.every(validStatement);
-      }
-      if (ts.isIfStatement(statement)) {
-        return (
-          validStatement(statement.thenStatement) &&
-          (!statement.elseStatement || validStatement(statement.elseStatement))
-        );
-      }
-      if (ts.isReturnStatement(statement)) {
-        return statement.expression === undefined;
-      }
-      if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) {
-        return false;
-      }
-      const call = statement.expression;
-      if (!ts.isIdentifier(call.expression)) {
-        return false;
-      }
-      const state = stateBySetter.get(call.expression.text),
-        argument = call.arguments[0];
-      if (
-        !state ||
-        call.arguments.length !== 1 ||
-        !argument ||
-        ts.isArrowFunction(argument) ||
-        ts.isFunctionExpression(argument)
-      ) {
-        return false;
-      }
-      members.add(state);
-      return true;
-    };
+  const members = new Set<StateCandidate>();
+  const validStatement = (statement: ts.Statement): boolean => {
+    if (ts.isBlock(statement)) {
+      return statement.statements.every(validStatement);
+    }
+    if (ts.isIfStatement(statement)) {
+      return (
+        validStatement(statement.thenStatement) &&
+        (!statement.elseStatement || validStatement(statement.elseStatement))
+      );
+    }
+    if (ts.isReturnStatement(statement)) {
+      return statement.expression === undefined;
+    }
+    if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) {
+      return false;
+    }
+    const call = statement.expression;
+    if (!ts.isIdentifier(call.expression)) {
+      return false;
+    }
+    const state = stateBySetter.get(call.expression.text);
+    const argument = call.arguments[0];
+    if (
+      !state ||
+      call.arguments.length !== 1 ||
+      !argument ||
+      ts.isArrowFunction(argument) ||
+      ts.isFunctionExpression(argument)
+    ) {
+      return false;
+    }
+    members.add(state);
+    return true;
+  };
   return callback.body.statements.every(validStatement) ? [...members] : null;
 }
 
@@ -493,8 +493,8 @@ function referenceControlsHookOrRepeatedBoundary(
       return true;
     }
   }
-  const repeated = nearestRepeatedRenderCall(reference, owner),
-    repeatedOwner = repeated ? nearestNestedFunction(repeated, owner) : null;
+  const repeated = nearestRepeatedRenderCall(reference, owner);
+  const repeatedOwner = repeated ? nearestNestedFunction(repeated, owner) : null;
   if (
     repeated &&
     (!repeatedOwner || isSynchronousRenderCallback(repeatedOwner)) &&
@@ -520,8 +520,8 @@ function isOneHopKeyedRenderAlias(reference: ts.Identifier, repeated: ts.CallExp
   ) {
     return false;
   }
-  const declaration = findAncestorUntil(reference, ts.isVariableDeclaration, callback),
-    binding = callback.parameters[0]?.name;
+  const declaration = findAncestorUntil(reference, ts.isVariableDeclaration, callback);
+  const binding = callback.parameters[0]?.name;
   if (
     !binding ||
     !declaration?.initializer ||
@@ -535,8 +535,8 @@ function isOneHopKeyedRenderAlias(reference: ts.Identifier, repeated: ts.CallExp
     return false;
   }
   const aliasName = declaration.name.text;
-  let found = false,
-    safe = true;
+  let found = false;
+  let safe = true;
   visit(callback.body, (node) => {
     if (
       !safe ||
@@ -570,8 +570,8 @@ function hasStaleUseCallbackCapture(state: StateCandidate): boolean {
     ) {
       return;
     }
-    const callback = nearestNestedFunction(node, state.owner),
-      call = callback?.parent;
+    const callback = nearestNestedFunction(node, state.owner);
+    const call = callback?.parent;
     if (
       callback &&
       call &&
@@ -631,17 +631,17 @@ function hasExternalCompanionWrites(
   allStates: readonly StateCandidate[],
   proofs: EffectDraftProofs,
 ): boolean {
-  const memberSet = new Set(members),
-    stateBySetter = new Map(
-      allStates.flatMap((state) =>
-        state.owner === owner && state.setterName ? [[state.setterName, state] as const] : [],
-      ),
+  const memberSet = new Set(members);
+  const stateBySetter = new Map(
+    allStates.flatMap((state) =>
+      state.owner === owner && state.setterName ? [[state.setterName, state] as const] : [],
     ),
-    mutations: {
-      call: ts.CallExpression;
-      region: RuntimeFunctionLike;
-      state: StateCandidate;
-    }[] = [];
+  );
+  const mutations: {
+    call: ts.CallExpression;
+    region: RuntimeFunctionLike;
+    state: StateCandidate;
+  }[] = [];
   visit(owner.body, (node) => {
     if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
       return;
@@ -684,13 +684,13 @@ function hasDraftRenderCut(
   if (members.length === 1 && siblingRenderCuts.has(members[0]!)) {
     return true;
   }
-  const ownerJsx = jsxElementCount(owner),
-    localUsages = members.map((member) => usageByState.get(member)),
-    localCuts: JsxSubtreeNode[] = [];
+  const ownerJsx = jsxElementCount(owner);
+  const localUsages = members.map((member) => usageByState.get(member));
+  const localCuts: JsxSubtreeNode[] = [];
   for (let index = 0; index < members.length; index += 1) {
-    const member = members[index]!,
-      usage = localUsages[index],
-      directSetterRead = hasDirectJsxEventSetter(member) ? 1 : 0;
+    const member = members[index]!;
+    const usage = localUsages[index];
+    const directSetterRead = hasDirectJsxEventSetter(member) ? 1 : 0;
     if (
       !usage ||
       usage.transportedOccurrences !== 0 ||
@@ -741,8 +741,8 @@ function hasDraftRenderCut(
   if (!callSite) {
     return false;
   }
-  const target = callSite.opening,
-    targetSubtree: ts.Node = ts.isJsxOpeningElement(target) ? target.parent : target;
+  const target = callSite.opening;
+  const targetSubtree: ts.Node = ts.isJsxOpeningElement(target) ? target.parent : target;
   let independent = false;
   visitSkippingNestedRuntimeFunctions(callSite.returned, (node) => {
     if (

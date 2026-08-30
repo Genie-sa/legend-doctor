@@ -39,38 +39,38 @@ test("scans source files deterministically and ignores generated directories", a
 
 test("comments and blank lines never change findings", async (testContext) => {
   const plain = [
-      'import { useEffect, useState } from "react";',
-      "export function Price({ amount }: { amount: number }) {",
-      '  const [label, setLabel] = useState("");',
-      "  useEffect(() => {",
-      "    setLabel(`$${amount}`);",
-      "  }, [amount]);",
-      "  return <span>{label}</span>;",
-      "}",
-    ],
-    withTrivia = [
-      "/* banner */",
-      "",
-      ...plain.map((line) => `${line} // trailing`),
-      "",
-      "// footer",
-    ],
-    signatures = async (source: string) => {
-      const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-trivia-"));
-      testContext.after(() => rm(root, { force: true, recursive: true }));
-      await writeFile(path.join(root, "price.tsx"), source, "utf8");
-      const report = await analyzePath(root);
-      return report.findings.map((finding) => [
-        finding.hook,
-        finding.name,
-        finding.action,
-        finding.disposition,
-      ]);
-    },
-    [plainSignatures, triviaSignatures] = await Promise.all([
-      signatures(plain.join("\n")),
-      signatures(withTrivia.join("\n")),
+    'import { useEffect, useState } from "react";',
+    "export function Price({ amount }: { amount: number }) {",
+    '  const [label, setLabel] = useState("");',
+    "  useEffect(() => {",
+    "    setLabel(`$${amount}`);",
+    "  }, [amount]);",
+    "  return <span>{label}</span>;",
+    "}",
+  ];
+  const withTrivia = [
+    "/* banner */",
+    "",
+    ...plain.map((line) => `${line} // trailing`),
+    "",
+    "// footer",
+  ];
+  const signatures = async (source: string) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-trivia-"));
+    testContext.after(() => rm(root, { force: true, recursive: true }));
+    await writeFile(path.join(root, "price.tsx"), source, "utf8");
+    const report = await analyzePath(root);
+    return report.findings.map((finding) => [
+      finding.hook,
+      finding.name,
+      finding.action,
+      finding.disposition,
     ]);
+  };
+  const [plainSignatures, triviaSignatures] = await Promise.all([
+    signatures(plain.join("\n")),
+    signatures(withTrivia.join("\n")),
+  ]);
 
   assert.ok(plainSignatures.length > 0);
   assert.deepEqual(triviaSignatures, plainSignatures);
@@ -113,8 +113,8 @@ test("react compiler packages keep identity-changing clone writes", async (testC
   });
   testContext.after(() => rm(root, { force: true, recursive: true }));
 
-  const report = await analyzePath(root),
-    actions = new Set(report.practices.map((practice) => practice.action));
+  const report = await analyzePath(root);
+  const actions = new Set(report.practices.map((practice) => practice.action));
 
   assert.ok(actions.has("toggle-observable"));
   assert.ok(!actions.has("narrow-observable-write"));
@@ -146,8 +146,8 @@ test("expo experiments enable the react compiler gate", async (testContext) => {
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    actions = new Set(report.practices.map((practice) => practice.action));
+  const report = await analyzePath(root);
+  const actions = new Set(report.practices.map((practice) => practice.action));
 
   assert.ok(actions.has("toggle-observable"));
   assert.ok(!actions.has("narrow-observable-write"));
@@ -242,10 +242,10 @@ test("compiler ownership walks up from each file's nearest package", async (test
   await writeFile(path.join(root, "apps", "web", "pages.tsx"), CLONE_WRITE_COMPONENT, "utf8");
   await writeFile(path.join(root, "packages", "ui", "pages.tsx"), CLONE_WRITE_COMPONENT, "utf8");
 
-  const report = await analyzePath(root),
-    narrowWriteFiles = report.practices
-      .filter((practice) => practice.action === "narrow-observable-write")
-      .map((practice) => practice.location.file);
+  const report = await analyzePath(root);
+  const narrowWriteFiles = report.practices
+    .filter((practice) => practice.action === "narrow-observable-write")
+    .map((practice) => practice.location.file);
 
   assert.deepEqual(narrowWriteFiles, [path.join("packages", "ui", "pages.tsx")]);
 });
@@ -275,8 +275,8 @@ test("reports parser diagnostics and complete coverage without changing the defa
   );
   await writeFile(path.join(root, "valid.ts"), "export const value = 1;", "utf8");
 
-  const detailed = await analyzePathDetailed(root),
-    ordinary = await analyzePath(root);
+  const detailed = await analyzePathDetailed(root);
+  const ordinary = await analyzePath(root);
 
   assert.deepEqual(detailed.report, ordinary);
   assert.equal(detailed.diagnostics.parser.length, 1);
@@ -309,8 +309,8 @@ test("inventories named and anonymous runtime functions in coverage", async (tes
     "utf8",
   );
 
-  const detailed = await analyzePathDetailed(root),
-    functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function");
+  const detailed = await analyzePathDetailed(root);
+  const functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function");
 
   assert.deepEqual(
     functions.map((entry) => (entry.target.kind === "function" ? entry.target.name : null)),
@@ -338,14 +338,11 @@ test("reports complete, uncertain, and unrequested bounded state-flow coverage",
   `;
   await writeFile(path.join(root, "screen.tsx"), source, "utf8");
 
-  const detailed = await analyzePathDetailed(root),
-    functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function"),
-    byName = new Map(
-      functions.map((entry) => [
-        entry.target.kind === "function" ? entry.target.name : null,
-        entry,
-      ]),
-    );
+  const detailed = await analyzePathDetailed(root);
+  const functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function");
+  const byName = new Map(
+    functions.map((entry) => [entry.target.kind === "function" ? entry.target.name : null, entry]),
+  );
 
   assert.equal(
     requireValue(byName.get("complete")).stages.lowering.reason.code,
@@ -380,10 +377,10 @@ test("excludes ambient declarations, overload signatures, and abstract methods f
     "utf8",
   );
 
-  const detailed = await analyzePathDetailed(root),
-    names = detailed.coverage.entries.flatMap((entry) =>
-      entry.target.kind === "function" ? [entry.target.name] : [],
-    );
+  const detailed = await analyzePathDetailed(root);
+  const names = detailed.coverage.entries.flatMap((entry) =>
+    entry.target.kind === "function" ? [entry.target.name] : [],
+  );
 
   assert.deepEqual(names, ["overloaded"]);
 });
@@ -400,8 +397,8 @@ test("localizes parser recovery to the overlapping function", async (testContext
     "utf8",
   );
 
-  const detailed = await analyzePathDetailed(root),
-    functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function");
+  const detailed = await analyzePathDetailed(root);
+  const functions = detailed.coverage.entries.filter((entry) => entry.target.kind === "function");
 
   assert.deepEqual(
     functions.map((entry) => [
@@ -421,8 +418,8 @@ test("attributes an end-of-file recovery diagnostic to the unfinished function",
   testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(path.join(root, "screen.ts"), "function broken() { const value = 1;", "utf8");
 
-  const detailed = await analyzePathDetailed(root),
-    functionEntry = detailed.coverage.entries.find((entry) => entry.target.kind === "function");
+  const detailed = await analyzePathDetailed(root);
+  const functionEntry = detailed.coverage.entries.find((entry) => entry.target.kind === "function");
 
   assert.equal(
     requireValue(functionEntry).stages.parser.reason.code,
@@ -439,8 +436,8 @@ test("scopes directory coverage to supported sources and reports direct unsuppor
   const unsupportedPath = path.join(root, "component.vue");
   await writeFile(unsupportedPath, "<template />", "utf8");
 
-  const directory = await analyzePathDetailed(root),
-    direct = await analyzePathDetailed(unsupportedPath);
+  const directory = await analyzePathDetailed(root);
+  const direct = await analyzePathDetailed(unsupportedPath);
 
   assert.deepEqual(
     directory.coverage.entries.map((entry) => entry.target.file),
@@ -636,8 +633,8 @@ test("preserves the pre-update snapshot for state read by a source-proven deferr
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    ticks = report.findings.find((finding) => finding.name === "ticks");
+  const report = await analyzePath(root);
+  const ticks = report.findings.find((finding) => finding.name === "ticks");
   assert.equal(requireValue(ticks).action, "use-ref");
   assert.match(requireValue(ticks).message ?? "", /pre-update snapshot/u);
   assert.notEqual(
@@ -1047,12 +1044,12 @@ test("proves source-resolved event measurements have only bounded scalar leaf pr
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    states = new Map(
-      report.findings
-        .filter((finding) => finding.hook === "useState" && finding.name)
-        .map((finding) => [requireValue(finding.name), finding.action]),
-    );
+  const report = await analyzePath(root);
+  const states = new Map(
+    report.findings
+      .filter((finding) => finding.hook === "useState" && finding.name)
+      .map((finding) => [requireValue(finding.name), finding.action]),
+  );
   assert.equal(states.get("outerWidth"), "use-observable");
   assert.equal(states.get("eagerWidth"), "review-state");
   assert.equal(states.get("companionWidth"), "review-state");
@@ -1210,12 +1207,12 @@ test("isolates one event-owned scalar in a reactive host prop", async (testConte
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    states = new Map(
-      report.findings
-        .filter((finding) => finding.hook === "useState" && finding.name)
-        .map((finding) => [requireValue(finding.name), finding]),
-    );
+  const report = await analyzePath(root);
+  const states = new Map(
+    report.findings
+      .filter((finding) => finding.hook === "useState" && finding.name)
+      .map((finding) => [requireValue(finding.name), finding]),
+  );
   assert.equal(requireValue(states.get("scale")).action, "use-observable");
   assert.match(requireValue(states.get("scale")).message ?? "", /single host prop reactive/u);
   assert.equal(requireValue(states.get("scrollLeft")).action, "use-observable");
@@ -1333,12 +1330,12 @@ test("isolates effect-owned scalar ticks across bounded stable leaves", async (t
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    states = new Map(
-      report.findings
-        .filter((finding) => finding.hook === "useState" && finding.name)
-        .map((finding) => [requireValue(finding.name), finding.action]),
-    );
+  const report = await analyzePath(root);
+  const states = new Map(
+    report.findings
+      .filter((finding) => finding.hook === "useState" && finding.name)
+      .map((finding) => [requireValue(finding.name), finding.action]),
+  );
   assert.equal(states.get("elapsed"), "use-observable");
   for (const name of [
     "unkeyedElapsed",
@@ -1896,9 +1893,9 @@ test("proves keyed record commands through source-resolved event wrappers", asyn
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    safe = report.findings.find((finding) => finding.name === "safeFeedback"),
-    eager = report.findings.find((finding) => finding.name === "eagerFeedback");
+  const report = await analyzePath(root);
+  const safe = report.findings.find((finding) => finding.name === "safeFeedback");
+  const eager = report.findings.find((finding) => finding.name === "eagerFeedback");
   assert.equal(requireValue(safe).action, "use-observable");
   assert.match(requireValue(safe).message ?? "", /dynamic entry/u);
   assert.doesNotMatch(requireValue(eager).message ?? "", /dynamic entry/u);
@@ -1907,9 +1904,9 @@ test("proves keyed record commands through source-resolved event wrappers", asyn
 test("shares one cached AST across source indexing and both detector families", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cached-ast-"));
   testContext.after(() => rm(root, { force: true, recursive: true }));
-  const statePath = path.join(root, "state.ts"),
-    leafPath = path.join(root, "Leaf.tsx"),
-    screenPath = path.join(root, "Screen.tsx");
+  const statePath = path.join(root, "state.ts");
+  const leafPath = path.join(root, "Leaf.tsx");
+  const screenPath = path.join(root, "Screen.tsx");
   await writeFile(
     statePath,
     'import { observable } from "@legendapp/state"; export const profile$ = observable({ name: "Ada", email: "ada@example.com" });',
@@ -1935,14 +1932,14 @@ test("shares one cached AST across source indexing and both detector families", 
   `;
   await writeFile(screenPath, screenSource, "utf8");
 
-  const context = await createAnalysisContext(root),
-    file = context.project.getFile(screenPath);
+  const context = await createAnalysisContext(root);
+  const file = context.project.getFile(screenPath);
   assert.ok(file);
   assert.strictEqual(requireValue(context.project.getFile(screenPath)).sourceFile, file.sourceFile);
-  const reportName = "Screen.tsx",
-    components = context.sourceIndex.componentsFor(screenPath),
-    observables = context.sourceIndex.observablesFor(screenPath),
-    factories = context.sourceIndex.observableFactoriesFor(screenPath);
+  const reportName = "Screen.tsx";
+  const components = context.sourceIndex.componentsFor(screenPath);
+  const observables = context.sourceIndex.observablesFor(screenPath);
+  const factories = context.sourceIndex.observableFactoriesFor(screenPath);
 
   assert.deepEqual(
     analyzeSourceFile(file, reportName, components),
@@ -1981,10 +1978,10 @@ test("keeps display-path harness semantics separate from cached absolute identit
     "utf8",
   );
 
-  const directoryReport = await analyzePath(root),
-    focusedReport = await analyzePath(harnessPath),
-    [directoryFinding] = directoryReport.findings,
-    [focusedFinding] = focusedReport.findings;
+  const directoryReport = await analyzePath(root);
+  const focusedReport = await analyzePath(harnessPath);
+  const [directoryFinding] = directoryReport.findings;
+  const [focusedFinding] = focusedReport.findings;
   assert.equal(requireValue(directoryFinding).action, "keep-state");
   assert.equal(
     requireValue(directoryFinding).location.file,
@@ -1996,8 +1993,8 @@ test("keeps display-path harness semantics separate from cached absolute identit
 
 test("keeps JavaScript and JSX practice results stable through the cached parser", () => {
   for (const extension of ["js", "jsx", "mjs", "cjs"] as const) {
-    const fileName = `screen.${extension}`,
-      source = `
+    const fileName = `screen.${extension}`;
+    const source = `
       import { observable } from "@legendapp/state";
       import { useValue } from "@legendapp/state/react";
       const profile$ = observable({ name: "Ada" });
@@ -2006,9 +2003,9 @@ test("keeps JavaScript and JSX practice results stable through the cached parser
         const profile = useValue(profile$);
         return profile.name;
       }
-    `,
-      project = new AnalysisProject(new Map([[fileName, source]])),
-      [file] = project.files;
+    `;
+    const project = new AnalysisProject(new Map([[fileName, source]]));
+    const [file] = project.files;
     assert.ok(file);
     assert.deepEqual(
       analyzeLegendPracticesFile(file, fileName),
@@ -2021,8 +2018,8 @@ test("keeps JavaScript and JSX practice results stable through the cached parser
 test("reports optional semantic coverage only for an explicit tsconfig shard", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-semantic-context-"));
   testContext.after(() => rm(root, { force: true, recursive: true }));
-  const sourcePath = path.join(root, "screen.ts"),
-    configFilePath = path.join(root, "tsconfig.json");
+  const sourcePath = path.join(root, "screen.ts");
+  const configFilePath = path.join(root, "tsconfig.json");
   await writeFile(sourcePath, "export const value: string = 'ready';", "utf8");
   await writeFile(
     configFilePath,
@@ -2030,8 +2027,8 @@ test("reports optional semantic coverage only for an explicit tsconfig shard", a
     "utf8",
   );
 
-  const context = await createAnalysisContext(root, { configFilePath }),
-    detailed = await analyzePathDetailed(root, context);
+  const context = await createAnalysisContext(root, { configFilePath });
+  const detailed = await analyzePathDetailed(root, context);
 
   assert.ok(context.semanticContext);
   assert.deepEqual(detailed.diagnostics.semantic, []);
@@ -2039,9 +2036,9 @@ test("reports optional semantic coverage only for an explicit tsconfig shard", a
 });
 
 test("does not require application component provenance for a focused call-site wrapper", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-")),
-    components = path.join(root, "components"),
-    screens = path.join(root, "screens");
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-"));
+  const components = path.join(root, "components");
+  const screens = path.join(root, "screens");
   await mkdir(components);
   await mkdir(screens);
   await writeFile(
@@ -2065,16 +2062,16 @@ test("does not require application component provenance for a focused call-site 
   const focused = await analyzePath(screen);
   assert.equal(requireValue(focused.findings[0]).action, "use-observable");
 
-  const context = await createAnalysisContext(root),
-    contextual = await analyzePath(screen, context);
+  const context = await createAnalysisContext(root);
+  const contextual = await analyzePath(screen, context);
   assert.equal(contextual.files, 1);
   assert.equal(requireValue(contextual.findings[0]).location.file, "Screen.tsx");
   assert.equal(requireValue(contextual.findings[0]).action, "use-observable");
 });
 
 test("rejects targets outside a shared analysis project", async (testContext) => {
-  const contextRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-root-")),
-    targetRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-target-root-"));
+  const contextRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-context-root-"));
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-target-root-"));
   testContext.after(() => rm(contextRoot, { force: true, recursive: true }));
   testContext.after(() => rm(targetRoot, { force: true, recursive: true }));
   await writeFile(path.join(contextRoot, "owned.ts"), "export const owned = true;", "utf8");
@@ -2229,10 +2226,10 @@ test("moves a transported useValue subscription into one source-proven child", a
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    finding = report.practices.find(
-      (candidate) => candidate.action === "move-use-value-into-child",
-    );
+  const report = await analyzePath(root);
+  const finding = report.practices.find(
+    (candidate) => candidate.action === "move-use-value-into-child",
+  );
   assert.equal(requireValue(finding).location.file, "screen.tsx");
   assert.equal(requireValue(finding).location.line, 6);
   assert.match(requireValue(finding).message ?? "", /pass `paletteOpen\$` to `Palette`/u);
@@ -2360,8 +2357,8 @@ test("uses peek only for a source-proven effect callback prop", async (testConte
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    findings = report.practices.filter((finding) => finding.action === "use-peek-for-snapshot");
+  const report = await analyzePath(root);
+  const findings = report.practices.filter((finding) => finding.action === "use-peek-for-snapshot");
   assert.equal(findings.length, 1);
   assert.match(requireValue(findings[0]).message ?? "", /state\$\.ready\.peek\(\)/u);
   assert.match(
@@ -2481,8 +2478,8 @@ test("places an observable subscription at one resolved child call site", async 
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.equal(requireValue(finding).action, "use-observable");
   assert.match(requireValue(finding).message ?? "", /stable `StatusLeaf` call site/u);
 });
@@ -2516,8 +2513,8 @@ test("verifies a leaf child contract before promoting the transport", async () =
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.equal(requireValue(finding).action, "use-observable");
   assert.match(requireValue(finding).message ?? "", /child contract is verified/u);
   assert.match(requireValue(finding).message ?? "", /renders the `busy` value directly/u);
@@ -2591,11 +2588,11 @@ test("groups a literal popup payload with its visibility at one resolved child",
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    actions = new Map(report.findings.map((finding) => [finding.name, finding.action])),
-    popupOpenFinding = requireValue(
-      report.findings.find((finding) => finding.name === "popupOpen"),
-    );
+  const report = await analyzePath(root);
+  const actions = new Map(report.findings.map((finding) => [finding.name, finding.action]));
+  const popupOpenFinding = requireValue(
+    report.findings.find((finding) => finding.name === "popupOpen"),
+  );
   assert.equal(actions.get("popupOpen"), "use-observable");
   assert.equal(actions.get("popupLevel"), "use-observable");
   assert.equal(actions.get("splitOpen"), "review-state");
@@ -2707,8 +2704,8 @@ test("isolates source-proven async status across bounded leaf call sites", async
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    actions = new Map(report.findings.map((finding) => [finding.name, finding.action]));
+  const report = await analyzePath(root);
+  const actions = new Map(report.findings.map((finding) => [finding.name, finding.action]));
   assert.equal(actions.get("loading"), "use-observable");
   assert.equal(actions.get("smallLoading"), "review-state");
   assert.equal(actions.get("eagerLoading"), "review-state");
@@ -2844,8 +2841,8 @@ test("resolves a defaulted intrinsic branch through a polymorphic event wrapper"
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    actions = new Map(report.findings.map((finding) => [finding.name, finding.action]));
+  const report = await analyzePath(root);
+  const actions = new Map(report.findings.map((finding) => [finding.name, finding.action]));
   assert.equal(actions.get("loading"), "use-observable");
   assert.equal(actions.get("slotLoading"), "review-state");
   assert.equal(actions.get("dynamicLoading"), "review-state");
@@ -3119,8 +3116,8 @@ test("abstains when the resolved child stores the prop in its own state", async 
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
@@ -3151,8 +3148,8 @@ test("abstains when the resolved child forwards the prop to another component", 
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
@@ -3225,12 +3222,12 @@ test("isolates a compact transported leaf only with an independent sibling rende
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    compact = report.findings.find((finding) => finding.name === "expanded"),
-    cohesive = report.findings.find((finding) => finding.name === "cohesiveOpen"),
-    coupled = report.findings.find((finding) => finding.name === "coupledOpen"),
-    ordered = report.findings.find((finding) => finding.name === "orderedOpen"),
-    forwarded = report.findings.find((finding) => finding.name === "forwardedOpen");
+  const report = await analyzePath(root);
+  const compact = report.findings.find((finding) => finding.name === "expanded");
+  const cohesive = report.findings.find((finding) => finding.name === "cohesiveOpen");
+  const coupled = report.findings.find((finding) => finding.name === "coupledOpen");
+  const ordered = report.findings.find((finding) => finding.name === "orderedOpen");
+  const forwarded = report.findings.find((finding) => finding.name === "forwardedOpen");
   assert.equal(requireValue(compact).action, "use-observable");
   assert.match(requireValue(compact).message ?? "", /independent sibling render cut/u);
   assert.notEqual(requireValue(cohesive).action, "use-observable");
@@ -3266,8 +3263,8 @@ test("abstains when the resolved child reads the prop inside effects or callback
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
@@ -3297,8 +3294,8 @@ test("does not require child prop semantics for a call-site subscription wrapper
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "open");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "open");
   assert.equal(requireValue(finding).action, "use-observable");
 });
 
@@ -3356,12 +3353,12 @@ test("proves direct source-component callback timing before replacing command-on
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    states = new Map(
-      report.findings
-        .filter((finding) => finding.hook === "useState")
-        .map((finding) => [finding.name, finding.action]),
-    );
+  const report = await analyzePath(root);
+  const states = new Map(
+    report.findings
+      .filter((finding) => finding.hook === "useState")
+      .map((finding) => [finding.name, finding.action]),
+  );
   assert.equal(states.get("enabled"), "use-ref");
   assert.equal(states.get("eager"), "review-state");
   assert.equal(states.get("mixed"), "review-state");
@@ -3434,8 +3431,8 @@ test("moves reset effects through source wrappers into Base UI event callbacks",
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    effects = report.findings.filter((finding) => finding.hook === "useEffect");
+  const report = await analyzePath(root);
+  const effects = report.findings.filter((finding) => finding.hook === "useEffect");
   assert.equal(requireValue(effects[0]).action, "move-to-event");
   assert.equal(requireValue(effects[1]).action, "move-to-event");
   assert.equal(requireValue(effects[2]).action, "review-effect");
@@ -3490,8 +3487,8 @@ test("isolates pure controlled projections owned by one source component call si
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    states = report.findings.filter((finding) => finding.hook === "useState");
+  const report = await analyzePath(root);
+  const states = report.findings.filter((finding) => finding.hook === "useState");
   assert.equal(requireValue(states[0]).action, "use-observable");
   assert.equal(requireValue(states[1]).action, "review-state");
 });
@@ -3517,8 +3514,8 @@ test("wraps a shared primitive locally without changing its API", async () => {
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "open");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "open");
   assert.equal(requireValue(finding).action, "use-observable");
   assert.match(requireValue(finding).message ?? "", /call-site leaf wrapper/u);
 });
@@ -3539,8 +3536,8 @@ test("moves non-boolean controlled state into a stable local wrapper", async () 
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "tab");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "tab");
   assert.equal(requireValue(finding).action, "move-state-down");
   assert.match(requireValue(finding).message ?? "", /stable local wrapper/u);
 });
@@ -3579,8 +3576,8 @@ test("isolates immediate controlled state from delayed repeated owner work", asy
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "query");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "query");
   assert.equal(requireValue(finding).action, "use-observable");
   assert.match(requireValue(finding).message ?? "", /repeated render work/u);
 });
@@ -3786,8 +3783,8 @@ test("keeps delayed controlled state when its immediate update is atomic with ow
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "query");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "query");
   assert.equal(requireValue(finding).action, "review-state");
 });
 
@@ -3821,8 +3818,8 @@ test("does not count repeated work inside the leaf or a conditional sibling", as
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "query");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "query");
   assert.equal(requireValue(finding).action, "review-state");
 });
 
@@ -3847,8 +3844,8 @@ test("does not create a second observable for state initialized from a hook resu
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "name");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "name");
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -3876,8 +3873,8 @@ test("allows repeated row commands when the value has one stable leaf consumer",
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "selected");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "selected");
   assert.equal(requireValue(finding).action, "use-observable");
 });
 
@@ -3902,8 +3899,8 @@ test("keeps observable ownership stable when its one leaf subscription mounts co
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.equal(requireValue(finding).action, "use-observable");
 });
 
@@ -3930,8 +3927,8 @@ test("does not promote one imported-child state when its writes still invalidate
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "open");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "open");
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -3956,8 +3953,8 @@ test("does not promote imported-child state written by an effect", async () => {
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
@@ -3983,8 +3980,8 @@ test("does not promote a leaf call site when commands share reactive mutation ow
     `,
   );
 
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.doesNotMatch(requireValue(finding).message ?? "", /child contract is verified/u);
 });
 
@@ -4008,8 +4005,8 @@ test("does not promote a leaf call site inside an opaque render callback", async
       }
     `,
   );
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -4076,8 +4073,8 @@ test("does not miss reactive mutation ownership through a hook result object", a
       }
     `,
   );
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "busy");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "busy");
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -4100,8 +4097,8 @@ test("does not put nullable callable state into a leaf observable", async () => 
       }
     `,
   );
-  const report = await analyzePath(root),
-    finding = report.findings.find((candidate) => candidate.name === "callback");
+  const report = await analyzePath(root);
+  const finding = report.findings.find((candidate) => candidate.name === "callback");
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
@@ -4145,8 +4142,8 @@ test("requires source-proven deferred callbacks for one async status leaf", asyn
     `,
   );
 
-  const report = await analyzePath(root),
-    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
+  const report = await analyzePath(root);
+  const findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
     requireValue(findings.get("deferred")).action,
     "use-observable",
@@ -4286,8 +4283,8 @@ test("proves every async command path through source wrappers and inline event a
     `,
   );
 
-  const report = await analyzePath(root),
-    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
+  const report = await analyzePath(root);
+  const findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
     requireValue(findings.get("deleting")).action,
     "use-observable",
@@ -4410,8 +4407,8 @@ test("traces a conditionally selected event callback through prop spreads", asyn
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
+  const report = await analyzePath(root);
+  const findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
     requireValue(findings.get("preparing")).action,
     "use-observable",
@@ -4519,8 +4516,8 @@ test("proves Radix dropdown events through source wrappers without trusting look
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
+  const report = await analyzePath(root);
+  const findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
     requireValue(findings.get("duplicating")).action,
     "use-observable",
@@ -4640,8 +4637,8 @@ test("traces an async command through a child action array", async (testContext)
     "utf8",
   );
 
-  const report = await analyzePath(root),
-    findings = new Map(report.findings.map((finding) => [finding.name, finding]));
+  const report = await analyzePath(root);
+  const findings = new Map(report.findings.map((finding) => [finding.name, finding]));
   assert.equal(
     requireValue(findings.get("saving")).action,
     "use-observable",
@@ -4731,8 +4728,8 @@ test("proves async pending status through a React.useCallback adapter and a plai
   await writeFile(path.join(root, "Switch.tsx"), styledSwitchWrapper("React.useCallback"), "utf8");
   await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
 
-  const report = await analyzePath(root),
-    creating = report.findings.find((finding) => finding.name === "creating");
+  const report = await analyzePath(root);
+  const creating = report.findings.find((finding) => finding.name === "creating");
   assert.equal(requireValue(creating).action, "use-observable");
 });
 
@@ -4751,8 +4748,8 @@ test("keeps async pending status under review behind a lookalike namespace useCa
   );
   await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
 
-  const report = await analyzePath(root),
-    creating = report.findings.find((finding) => finding.name === "creating");
+  const report = await analyzePath(root);
+  const creating = report.findings.find((finding) => finding.name === "creating");
   assert.equal(requireValue(creating).action, "review-state");
 });
 
@@ -4795,8 +4792,8 @@ test("proves async pending status through a concise React.useMemo handler factor
   );
   await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
 
-  const report = await analyzePath(root),
-    creating = report.findings.find((finding) => finding.name === "creating");
+  const report = await analyzePath(root);
+  const creating = report.findings.find((finding) => finding.name === "creating");
   assert.equal(requireValue(creating).action, "use-observable");
 });
 
@@ -4812,7 +4809,7 @@ test("keeps async pending status under review behind a block-bodied useMemo hand
   );
   await writeFile(path.join(root, "Panel.tsx"), STYLED_SWITCH_PANEL, "utf8");
 
-  const report = await analyzePath(root),
-    creating = report.findings.find((finding) => finding.name === "creating");
+  const report = await analyzePath(root);
+  const creating = report.findings.find((finding) => finding.name === "creating");
   assert.equal(requireValue(creating).action, "review-state");
 });
