@@ -116,6 +116,12 @@ import {
 import { StateFlowIndex } from "./state-flow.js";
 import type { EffectAction, HookFinding, StateAction } from "./types.js";
 
+const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
+const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
+const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
+const EMPTY_STATE_CANDIDATES: ReadonlyMap<string, StateCandidate> = new Map();
+const EMPTY_STATE_USAGES: ReadonlyMap<string, StateUsage> = new Map();
+
 export interface StateCandidate {
   call: ts.CallExpression;
   owner: RuntimeFunctionLike;
@@ -949,12 +955,7 @@ function resolveEffectCallback(
   return inner && (ts.isArrowFunction(inner) || ts.isFunctionExpression(inner)) ? inner : null;
 }
 
-const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 const PURE_MATH_METHODS: ReadonlySet<string> = new Set(["abs", "max", "min"]);
-const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
-const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
-const EMPTY_STATE_CANDIDATES: ReadonlyMap<string, StateCandidate> = new Map();
-const EMPTY_STATE_USAGES: ReadonlyMap<string, StateUsage> = new Map();
 
 function collectEffectStateScopes(
   states: readonly StateCandidate[],

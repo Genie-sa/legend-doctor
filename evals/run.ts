@@ -212,8 +212,9 @@ function sameMembers(
   actual: readonly string[] | null | undefined,
   expected: readonly string[] | null,
 ): boolean {
-  if (actual == null || expected == null) {
-    return actual == null && expected == null;
+  const actualMissing = actual === null || actual === undefined;
+  if (actualMissing || expected === null) {
+    return actualMissing && expected === null;
   }
   return (
     actual.length === expected.length && actual.every((member, index) => member === expected[index])
