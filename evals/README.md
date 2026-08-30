@@ -336,9 +336,11 @@ non-const bindings, lookalike styled factories, shadowed imports, styled intrins
 block-bodied memo factories abstain. The remaining labels include unresolved local wrapper stacks and opaque prop
 spreads. They count against recall and form the next multi-file callback-contract work queue.
 
-`narrow-observable-write` abstains in packages that compile with React Compiler — an explicit
-`babel-plugin-react-compiler` or `react-compiler-runtime` dependency in any manifest on the file's directory chain, or
-Expo `experiments.reactCompiler`. Legend keeps the container reference on in-place child writes (verified against
+`narrow-observable-write` abstains in packages that compile with React Compiler. The proof walks each file's directory
+chain and accepts any known enablement spelling: a compiler dependency in a package manifest or its `babel` field, the
+plugin named in a Babel, Vite, or Next config, `reactCompilerPreset` from `@vitejs/plugin-react` (how Tree Map
+compiles), or a truthy `reactCompiler` config key (Next, Expo `experiments`); `reactCompiler: false` never gates.
+Legend keeps the container reference on in-place child writes (verified against
 `@legendapp/state` 3.0.0-beta.48), so compiler-memoized consumers of `useValue(container$)` never re-render and the UI
 goes stale; a production regression in Genie Courses pagination confirmed this failure. Four previously enforced labels
 (two Open WebUI array appends, one Genie Courses append, one Legend Music keyed child write) were withdrawn because

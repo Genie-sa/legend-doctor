@@ -1034,8 +1034,10 @@ items$.set(previous => [...previous, item]); // before
 items$.push(item);                           // after
 ```
 
-In a package that compiles with React Compiler (an explicit `babel-plugin-react-compiler` or `react-compiler-runtime`
-dependency, or Expo `experiments.reactCompiler`), Legend Doctor keeps the clone write and does not emit this finding:
+In a package that compiles with React Compiler — a compiler dependency in any manifest on the file's directory chain,
+the plugin named in a Babel, Vite, or Next config, `reactCompilerPreset` from `@vitejs/plugin-react`, or a truthy
+`reactCompiler` config key (Next, Expo `experiments`) — Legend Doctor keeps the clone write and does not emit this
+finding:
 the clone changes the container reference that compiler-memoized consumers of `useValue(container$)` key on, while an
 in-place child write preserves it and can leave that memoized JSX stale.
 

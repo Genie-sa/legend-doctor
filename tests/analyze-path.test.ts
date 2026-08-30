@@ -167,6 +167,62 @@ test("a code-based expo config enabling the compiler gates clone writes", async 
   assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
 });
 
+test("a babel config naming the compiler plugin gates clone writes", async t => {
+  const root = await cloneWriteRoot("legend-doctor-babel-compiler-", { name: "app" });
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "babel.config.js"),
+    'module.exports = { plugins: [["babel-plugin-react-compiler", { target: "19" }]] };\n',
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
+});
+
+test("a vite config using reactCompilerPreset gates clone writes", async t => {
+  const root = await cloneWriteRoot("legend-doctor-vite-compiler-", { name: "app" });
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "vite.config.js"),
+    'import react, { reactCompilerPreset } from "@vitejs/plugin-react";\nexport default { plugins: [react({ babel: { presets: [reactCompilerPreset()] } })] };\n',
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
+});
+
+test("a next config enabling reactCompiler gates clone writes", async t => {
+  const root = await cloneWriteRoot("legend-doctor-next-compiler-", { name: "app" });
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "next.config.mjs"),
+    "export default { experimental: { reactCompiler: true } };\n",
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.ok(!report.practices.some(practice => practice.action === "narrow-observable-write"));
+});
+
+test("a next config with reactCompiler disabled keeps clone writes narrowed", async t => {
+  const root = await cloneWriteRoot("legend-doctor-next-off-", { name: "app" });
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "next.config.mjs"),
+    "export default { experimental: { reactCompiler: false } };\n",
+    "utf8"
+  );
+
+  const report = await analyzePath(root);
+
+  assert.ok(report.practices.some(practice => practice.action === "narrow-observable-write"));
+});
+
 test("compiler ownership walks up from each file's nearest package", async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-compiler-workspace-"));
   t.after(() => rm(root, { force: true, recursive: true }));

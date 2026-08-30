@@ -4,6 +4,41 @@ import path from "node:path";
 const COMPILER_PACKAGES = ["babel-plugin-react-compiler", "react-compiler-runtime"];
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
 
+const CONFIG_FILES = [
+  "app.json",
+  "app.config.js",
+  "app.config.ts",
+  "app.config.cjs",
+  "app.config.mjs",
+  "app.config.json",
+  "babel.config.js",
+  "babel.config.cjs",
+  "babel.config.mjs",
+  "babel.config.ts",
+  "babel.config.json",
+  ".babelrc",
+  ".babelrc.js",
+  ".babelrc.cjs",
+  ".babelrc.json",
+  "vite.config.js",
+  "vite.config.ts",
+  "vite.config.mjs",
+  "vite.config.mts",
+  "vite.config.cjs",
+  "next.config.js",
+  "next.config.ts",
+  "next.config.mjs",
+  "next.config.cjs",
+  "next.config.mts",
+];
+
+// Matches every known enablement spelling: the Babel plugin name (Babel, Vite,
+// Metro configs), the pre-19 runtime package, @vitejs/plugin-react's
+// reactCompilerPreset, and the `reactCompiler: true | {...}` config key used by
+// Next.js and Expo `experiments`. `reactCompiler: false` stays unmatched.
+const CONFIG_MARKER =
+  /babel-plugin-react-compiler|react-compiler-runtime|reactCompilerPreset|\breactCompiler\b['"]?\s*:\s*(?:true|\{)/;
+
 export class ReactCompilerResolver {
   private readonly directories = new Map<string, Promise<boolean>>();
 
@@ -21,48 +56,36 @@ export class ReactCompilerResolver {
 
   private async resolveDirectory(directory: string): Promise<boolean> {
     if (await manifestDeclaresReactCompiler(path.join(directory, "package.json"))) return true;
-    if (await expoConfigEnablesReactCompiler(directory)) return true;
+    if (await configEnablesReactCompiler(directory)) return true;
     const parent = path.dirname(directory);
     return parent === directory ? false : this.directoryCompiles(parent);
   }
 }
 
 async function manifestDeclaresReactCompiler(manifestPath: string): Promise<boolean> {
-  const manifest = await readJson(manifestPath);
+  const text = await readText(manifestPath);
+  if (!text) return false;
+  const manifest = parseJson(text);
   if (!manifest) return false;
-  return DEPENDENCY_FIELDS.some(field => {
+  const declared = DEPENDENCY_FIELDS.some(field => {
     const dependencies = manifest[field];
     if (typeof dependencies !== "object" || dependencies === null) return false;
     return COMPILER_PACKAGES.some(name => name in (dependencies as Record<string, unknown>));
   });
+  if (declared) return true;
+  const babel = manifest["babel"];
+  return babel !== undefined && CONFIG_MARKER.test(JSON.stringify(babel));
 }
 
-async function expoConfigEnablesReactCompiler(directory: string): Promise<boolean> {
-  for (const name of ["app.json", "app.config.json"]) {
-    const config = await readJson(path.join(directory, name));
-    if (config && experimentsEnableReactCompiler(config)) return true;
-  }
-  for (const name of ["app.config.js", "app.config.ts", "app.config.mjs"]) {
+async function configEnablesReactCompiler(directory: string): Promise<boolean> {
+  for (const name of CONFIG_FILES) {
     const text = await readText(path.join(directory, name));
-    if (text && /\breactCompiler\b\s*:\s*true\b/.test(text)) return true;
+    if (text && CONFIG_MARKER.test(text)) return true;
   }
   return false;
 }
 
-function experimentsEnableReactCompiler(config: Record<string, unknown>): boolean {
-  const expo = config["expo"];
-  const roots = [config, typeof expo === "object" && expo !== null ? (expo as Record<string, unknown>) : null];
-  return roots.some(root => {
-    const experiments = root?.["experiments"];
-    return typeof experiments === "object" &&
-      experiments !== null &&
-      (experiments as Record<string, unknown>)["reactCompiler"] === true;
-  });
-}
-
-async function readJson(filePath: string): Promise<Record<string, unknown> | null> {
-  const text = await readText(filePath);
-  if (!text) return null;
+function parseJson(text: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(text);
     return typeof parsed === "object" && parsed !== null
