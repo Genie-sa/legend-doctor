@@ -239,20 +239,16 @@ async function assertReadableTarget(target: string): Promise<void> {
   }
 }
 
-function hasStringVersion(manifest: object): manifest is { version: string } {
-  return Object.entries(manifest).some(
-    ([key, value]) => key === "version" && String(value) === value,
-  );
-}
-
 async function packageVersion(): Promise<string> {
   const manifest: unknown = JSON.parse(
     await readFile(new URL("../../package.json", import.meta.url), "utf8"),
   );
-  if (!(manifest instanceof Object) || !hasStringVersion(manifest)) {
+  const declared =
+    manifest instanceof Object ? new Map(Object.entries(manifest)).get("version") : undefined;
+  if (String(declared) !== declared) {
     throw new Error("package.json does not declare a string version");
   }
-  return manifest.version;
+  return declared;
 }
 
 function filterReport(

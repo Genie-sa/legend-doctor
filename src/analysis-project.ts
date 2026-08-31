@@ -91,21 +91,14 @@ function compareText(left: string, right: string): number {
   return left > right ? 1 : 0;
 }
 
+const DIALECT_BY_SCRIPT_KIND = new Map<ts.ScriptKind, AnalysisDialect>([
+  [ts.ScriptKind.JS, "javascript"],
+  [ts.ScriptKind.JSX, "javascript-jsx"],
+  [ts.ScriptKind.TSX, "typescript-jsx"],
+]);
+
 function dialectForScriptKind(scriptKind: ts.ScriptKind): AnalysisDialect {
-  switch (scriptKind) {
-    case ts.ScriptKind.JS: {
-      return "javascript";
-    }
-    case ts.ScriptKind.JSX: {
-      return "javascript-jsx";
-    }
-    case ts.ScriptKind.TSX: {
-      return "typescript-jsx";
-    }
-    default: {
-      return "typescript";
-    }
-  }
+  return DIALECT_BY_SCRIPT_KIND.get(scriptKind) ?? "typescript";
 }
 
 export type { AnalysisDiagnostic } from "./parser-diagnostics.js";
