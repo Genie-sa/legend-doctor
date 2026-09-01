@@ -26,7 +26,7 @@ function isConstAssertion(node: TypeAssertionExpression): boolean {
 
 function isOutermostAssertionInChain(node: TypeAssertionExpression): boolean {
   let current: ESTree.Expression = node;
-  let {parent} = node;
+  let { parent } = node;
 
   while (parent.type === "ParenthesizedExpression" && parent.expression === current) {
     current = parent;

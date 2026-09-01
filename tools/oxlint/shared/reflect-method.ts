@@ -28,7 +28,7 @@ export function isGlobalReflectMethodCall(
 ): boolean {
   if (!("property" in callee) || !("object" in callee) || !("computed" in callee)) return false;
   if (!isGlobalReflect(sourceCode, callee.object)) return false;
-  const {property} = callee;
+  const { property } = callee;
   return callee.computed
     ? property.type === "Literal" && property.value === methodName
     : property.type === "Identifier" && property.name === methodName;

@@ -1,11 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "import", "node", "promise"],
-  "jsPlugins": [
-    { "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" },
-    { "name": "stella", "specifier": "./tools/oxlint/stella/index.ts" },
-    { "name": "local", "specifier": "./tools/oxlint/local/index.ts" }
-  ],
+  "jsPlugins": [{ "name": "house", "specifier": "./tools/oxlint/index.ts" }],
   "env": {
     "builtin": true
   },
@@ -66,33 +62,33 @@
     "unicorn/no-null": "off",
     // Explicit `| undefined` unions are part of the public TypeScript API.
     "eslint/no-undefined": "off",
-    "anti-slop/no-chained-type-assertions": "error",
-    "anti-slop/no-conditional-empty-object-spread": "error",
-    "anti-slop/no-known-value-widening": "error",
-    "anti-slop/no-module-mocking": "error",
-    "anti-slop/no-object-parameters": "error",
-    "anti-slop/no-reflect-apply": "error",
-    "anti-slop/no-reflect-get": "error",
-    "anti-slop/no-runtime-typeof": "error",
-    "anti-slop/no-shape-in-symbol-names": "error",
-    "anti-slop/no-unknown-parameters": "error",
-    "anti-slop/no-unknown-returns": "error",
-    "anti-slop/no-unknown-type-aliases": "error",
-    "anti-slop/no-unsafe-dictionary-type": "error",
-    "anti-slop/no-widen-then-assert": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error",
-    "stella/no-ambient-nondeterminism": "error",
-    "stella/no-async-context-enter-with": "error",
-    "stella/no-partial-record-satisfies": "error",
-    "stella/no-path-prefix-containment": "error",
-    "stella/no-swallowed-rejection": "error",
-    "stella/no-unvalidated-json-domain-cast": "error",
-    "stella/require-description": "error",
-    "stella/no-foreign-directive": "error",
-    "local/no-banned-type-assertions": "error",
-    "local/no-in-operator": "error",
-    "local/no-reexport-only-modules": "error",
-    "local/no-switch": "error",
+    "house/no-chained-type-assertions": "error",
+    "house/no-conditional-empty-object-spread": "error",
+    "house/no-known-value-widening": "error",
+    "house/no-module-mocking": "error",
+    "house/no-object-parameters": "error",
+    "house/no-reflect-apply": "error",
+    "house/no-reflect-get": "error",
+    "house/no-runtime-typeof": "error",
+    "house/no-shape-in-symbol-names": "error",
+    "house/no-unknown-parameters": "error",
+    "house/no-unknown-returns": "error",
+    "house/no-unknown-type-aliases": "error",
+    "house/no-unsafe-dictionary-type": "error",
+    "house/no-widen-then-assert": "error",
+    "house/require-safety-comment-for-type-assertion": "error",
+    "house/no-ambient-nondeterminism": "error",
+    "house/no-async-context-enter-with": "error",
+    "house/no-partial-record-satisfies": "error",
+    "house/no-path-prefix-containment": "error",
+    "house/no-swallowed-rejection": "error",
+    "house/no-unvalidated-json-domain-cast": "error",
+    "house/require-description": "error",
+    "house/no-foreign-directive": "error",
+    "house/no-banned-type-assertions": "error",
+    "house/no-in-operator": "error",
+    "house/no-reexport-only-modules": "error",
+    "house/no-switch": "error",
     // tsconfig sets noUncheckedIndexedAccess, so every proven-safe index access types as
     // T | undefined. Banning the `!` that resolves it would mean 200+ runtime guards for
     // statically-guaranteed reads. The compiler flag is the stronger guarantee; it stays.
@@ -137,14 +133,14 @@
       "files": ["evals/**"],
       "rules": {
         "eslint/no-magic-numbers": "off",
-        "anti-slop/require-safety-comment-for-type-assertion": "off"
+        "house/require-safety-comment-for-type-assertion": "off"
       }
     },
     {
       "files": ["src/index.ts"],
       "rules": {
         // The package root is an intentional public barrel.
-        "local/no-reexport-only-modules": "off"
+        "house/no-reexport-only-modules": "off"
       }
     }
   ],
