@@ -1,0 +1,21 @@
+name: Setup
+description: Install Node from .nvmrc and restore dependencies from the lockfile.
+
+inputs:
+  registry-url:
+    description: npm registry to authenticate against (only needed for publishing).
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci

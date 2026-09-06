@@ -1,0 +1,235 @@
+name: Legend Doctor
+description: Report the React renders and effects a pull request adds that Legend State can cut, with a sticky summary comment and inline review comments.
+branding:
+  icon: activity
+  color: purple
+
+inputs:
+  directory:
+    description: Directory to scan, relative to the repository root. Scan the smallest folder that holds the related components, hooks, and observables.
+    default: .
+  scope:
+    description: "On pull requests, what to report: 'changed' (only findings the pull request introduced, compared against the base branch), 'files' (every finding in changed files), or 'full' (every finding in the directory). Other events always scan the full directory."
+    default: changed
+  blocking:
+    description: "Disposition that fails the workflow: none (default, advisory), change, candidate, or style. A blocking disposition also blocks the stricter ones before it in that list."
+    default: none
+  materiality:
+    description: "'broad' proves render cuts only in components with 12+ JSX elements; 'compact' lowers the bar to 8. Empty defers to legend-doctor.config.json, then 'broad'."
+    default: ""
+  ignore-actions:
+    description: Comma-separated action names to hide, added to the ignoreActions of the repository's legend-doctor.config.json.
+    default: ""
+  comment:
+    description: Create or update one sticky pull request summary comment. Skipped when the pull request changes no React files.
+    default: "true"
+  review-comments:
+    description: Post inline review comments on the changed lines that carry a finding (pull requests only).
+    default: "true"
+  commit-status:
+    description: "Publish a commit status with the finding counts. Needs `statuses: write`; skipped with a warning otherwise."
+    default: "true"
+  node-version:
+    description: Node.js version used to run the scan.
+    default: "22"
+  version:
+    description: legend-doctor npm version to run. Empty builds the CLI from this action's checkout.
+    default: ""
+
+outputs:
+  total-findings:
+    description: Findings in scope. On pull requests with scope 'changed', findings the pull request introduced.
+    value: ${{ steps.render.outputs.total-findings }}
+  fixed-findings:
+    description: Findings the pull request removed. 0 outside scope 'changed'.
+    value: ${{ steps.render.outputs.fixed-findings }}
+  change-count:
+    description: Proven edits in scope.
+    value: ${{ steps.render.outputs.change-count }}
+  candidate-count:
+    description: Findings in scope that need one more fact.
+    value: ${{ steps.render.outputs.candidate-count }}
+  affected-files:
+    description: Files with at least one finding in scope.
+    value: ${{ steps.render.outputs.affected-files }}
+  skipped:
+    description: "'true' when the pull request changed no React files and the scan did not run."
+    value: ${{ steps.files.outputs.skipped }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Build legend-doctor from the action checkout
+      if: inputs.version == ''
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --ignore-scripts && npm run build
+
+    - name: Find changed React files
+      id: files
+      shell: bash
+      env:
+        DIRECTORY: ${{ inputs.directory }}
+        BASE_REF: ${{ github.base_ref }}
+        IS_PR: ${{ github.event_name == 'pull_request' }}
+      run: |
+        set -euo pipefail
+        list="$RUNNER_TEMP/legend-doctor-changed.txt"
+        : > "$list"
+        if [[ "$IS_PR" == "true" ]]; then
+          git fetch --no-tags --depth=2147483647 origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          git diff --name-only --diff-filter=ACMR "origin/$BASE_REF...HEAD" -- "$DIRECTORY" \
+            | grep -E '\.(tsx|jsx|ts|js|mts|cts|mjs|cjs)$' > "$list" || true
+          git diff -U0 --no-color "origin/$BASE_REF...HEAD" -- "$DIRECTORY" > "$RUNNER_TEMP/legend-doctor.patch"
+          if [[ ! -s "$list" ]]; then
+            echo "No changed React files under '$DIRECTORY'; skipping the scan."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+        fi
+        echo "skipped=false" >> "$GITHUB_OUTPUT"
+        echo "list=$list" >> "$GITHUB_OUTPUT"
+
+    - name: Scan
+      id: scan
+      if: steps.files.outputs.skipped == 'false'
+      shell: bash
+      env:
+        DIRECTORY: ${{ inputs.directory }}
+        SCOPE: ${{ inputs.scope }}
+        MATERIALITY: ${{ inputs.materiality }}
+        IGNORE_ACTIONS: ${{ inputs.ignore-actions }}
+        VERSION: ${{ inputs.version }}
+        BASE_REF: ${{ github.base_ref }}
+        IS_PR: ${{ github.event_name == 'pull_request' }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        scan() {
+          if [[ -n "$VERSION" ]]; then
+            npx --yes "legend-doctor@$VERSION" "$@" || true
+          else
+            node "$ACTION_PATH/dist/src/cli.js" "$@" || true
+          fi
+        }
+        common=(--actionable)
+        [[ -n "$MATERIALITY" ]] && common+=(--materiality "$MATERIALITY")
+        [[ -n "$IGNORE_ACTIONS" ]] && common+=(--ignore-action "$IGNORE_ACTIONS")
+        head="$RUNNER_TEMP/legend-doctor-head.json"
+        target="$(realpath "$DIRECTORY")"
+
+        if [[ "$IS_PR" == "true" && "$SCOPE" != "full" ]]; then
+          scan "$target" "${common[@]}" --since "origin/$BASE_REF" > "$head"
+        else
+          scan "$target" "${common[@]}" > "$head"
+        fi
+        echo "head=$head" >> "$GITHUB_OUTPUT"
+
+        if [[ "$IS_PR" == "true" && "$SCOPE" == "changed" ]]; then
+          base_tree="$RUNNER_TEMP/legend-doctor-base"
+          git worktree add --detach "$base_tree" "origin/$BASE_REF" > /dev/null
+          [[ -d node_modules && ! -e "$base_tree/node_modules" ]] && ln -s "$PWD/node_modules" "$base_tree/node_modules"
+          base="$RUNNER_TEMP/legend-doctor-base.json"
+          scan "$(realpath "$base_tree/$DIRECTORY")" "${common[@]}" > "$base"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Read existing review comments
+      id: existing
+      if: steps.files.outputs.skipped == 'false' && github.event_name == 'pull_request' && inputs.review-comments == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        out="$RUNNER_TEMP/legend-doctor-existing.json"
+        gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/comments" --paginate --jq '[.[].body]' > "$out" || echo '[]' > "$out"
+        echo "path=$out" >> "$GITHUB_OUTPUT"
+
+    - name: Render summary
+      id: render
+      if: steps.files.outputs.skipped == 'false'
+      shell: bash
+      env:
+        HEAD_REPORT: ${{ steps.scan.outputs.head }}
+        BASE_REPORT: ${{ steps.scan.outputs.base }}
+        CHANGED_FILES: ${{ steps.files.outputs.list }}
+        PATCH: ${{ runner.temp }}/legend-doctor.patch
+        EXISTING_COMMENTS: ${{ steps.existing.outputs.path }}
+        OUT_DIR: ${{ runner.temp }}
+        DIRECTORY: ${{ inputs.directory }}
+        SCOPE: ${{ inputs.scope }}
+        BLOCKING: ${{ inputs.blocking }}
+        IS_PR: ${{ github.event_name == 'pull_request' }}
+        SERVER_URL: ${{ github.server_url }}
+        REPOSITORY: ${{ github.repository }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      run: node "$GITHUB_ACTION_PATH/action/render-summary.mjs"
+
+    - name: Post sticky comment
+      if: steps.files.outputs.skipped == 'false' && github.event_name == 'pull_request' && inputs.comment == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        BODY_FILE: ${{ runner.temp }}/legend-doctor-comment.md
+      run: |
+        set -euo pipefail
+        marker="<!-- legend-doctor-sticky -->"
+        existing="$(gh api "repos/$REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+          --jq "map(select(.body | startswith(\"$marker\"))) | .[0].id // empty")"
+        if [[ -n "$existing" ]]; then
+          gh api --method PATCH "repos/$REPOSITORY/issues/comments/$existing" -F body=@"$BODY_FILE" > /dev/null \
+            || echo "::warning::Could not update the summary comment. A pull request from a fork gets a read-only token."
+        else
+          gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" -F body=@"$BODY_FILE" > /dev/null \
+            || echo "::warning::Could not post the summary comment. A pull request from a fork gets a read-only token."
+        fi
+
+    - name: Post inline review comments
+      if: steps.files.outputs.skipped == 'false' && github.event_name == 'pull_request' && inputs.review-comments == 'true' && steps.render.outputs.review-comment-count != '0'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REVIEW_FILE: ${{ runner.temp }}/legend-doctor-review.json
+      run: |
+        gh api --method POST "repos/$REPOSITORY/pulls/$PR_NUMBER/reviews" --input "$REVIEW_FILE" > /dev/null \
+          || echo "::warning::Could not post inline review comments. A pull request from a fork gets a read-only token."
+
+    - name: Publish commit status
+      if: inputs.commit-status == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPOSITORY: ${{ github.repository }}
+        SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        SKIPPED: ${{ steps.files.outputs.skipped }}
+        STATE: ${{ steps.render.outputs.status-state }}
+        DESCRIPTION: ${{ steps.render.outputs.status-description }}
+        TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        state="${STATE:-success}"
+        description="${DESCRIPTION:-Skipped: no React files changed}"
+        if [[ "$SKIPPED" == "true" ]]; then state="success"; fi
+        gh api --method POST "repos/$REPOSITORY/statuses/$SHA" \
+          -f state="$state" -f context="Legend Doctor" -f description="${description:0:140}" -f target_url="$TARGET_URL" > /dev/null \
+          || echo "::warning::Could not publish the commit status. Grant 'statuses: write' to the workflow."
+
+    - name: Gate
+      if: steps.render.outputs.gate-failed == 'true'
+      shell: bash
+      env:
+        REASON: ${{ steps.render.outputs.gate-reason }}
+      run: |
+        echo "::error::$REASON"
+        exit 3

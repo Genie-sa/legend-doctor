@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality gate
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Version or Publish
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          registry-url: "https://registry.npmjs.org"
+
+      # OIDC trusted publishing forces provenance, which require()s a bundled `sigstore` module npm 11.9+/12 dropped while still importing it. 11.5.1 is the last release that bundles it — pin until npm fixes the regression.
+      - name: Pin npm with working trusted-publishing provenance
+        run: npm install --global npm@11.5.1
+
+      # Opens/updates the Version Packages PR while changesets are pending; hasChangesets flips to false once that PR merges.
+      - name: Version
+        id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          version: npm run version-packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # No NPM_TOKEN: the publish authenticates over OIDC against the trusted publisher configured
+      # for this package, and npm attaches provenance on its own. prepack builds dist.
+      - name: Publish and release
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version > /dev/null 2>&1; then
+            echo "$name@$version already published — skipping"
+            exit 0
+          fi
+          echo "Publishing $name@$version"
+          npm publish --access public
+          notes=$(awk -v hdr="## $version" '$0==hdr{s=1} /^## /&&$0!=hdr{if(s)exit} s' CHANGELOG.md)
+          gh release create "v$version" --target "$GITHUB_SHA" --title "v$version" --notes "${notes:-v$version}"
+          # The README tells consumers to use Genie-sa/legend-doctor@v1, so move that tag to each v1 release.
+          if [ "${version%%.*}" = "1" ]; then
+            git tag -f v1 "$GITHUB_SHA"
+            git push -f origin v1
+          fi

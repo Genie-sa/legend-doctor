@@ -1,0 +1,161 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "node", "promise"],
+  "jsPlugins": [{ "name": "house", "specifier": "./tools/oxlint/index.ts" }],
+  "env": {
+    "builtin": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error",
+    "style": "error",
+    "restriction": "error",
+    "nursery": "error"
+  },
+  "rules": {
+    // --- Contradictory pairs: the lower-value rule yields to the higher-value one ---
+    // func-style demands function expressions, which do not hoist. This codebase has ~131
+    // mutually-recursive helper pairs, so const arrows would make no-use-before-define
+    // violations into real TDZ errors. Style yields to the rule that prevents runtime faults.
+    "eslint/func-style": "off",
+    // Hoisted function declarations are safe to call before their definition; variables and
+    // classes are not, and those are still enforced.
+    "eslint/no-use-before-define": ["error", { "functions": false }],
+    // Key order is observable: AnalysisCoverageLedger derives stage order from Object.keys,
+    // and alphabetizing it silently reordered the serialized report contract.
+    "eslint/sort-keys": "off",
+    // continue is a guard clause that removes nesting; banning it deepens blocks and fights
+    // max-depth and complexity, which measure the thing that actually matters.
+    "eslint/no-continue": "off",
+    // no-ternary subsumes and moots the precise readability guards; keep those instead.
+    "eslint/no-ternary": "off",
+    // One declarator per statement is the modern form, and it also makes sort-vars vacuous
+    // rather than leaving it in conflict with combined declarations.
+    "eslint/one-var": ["error", "never"],
+    // 0, 1 and -1 are the vocabulary of index and length arithmetic, not magic values.
+    "eslint/no-magic-numbers": [
+      "error",
+      { "ignore": [0, 1, -1], "ignoreArrayIndexes": true, "ignoreDefaultValues": true }
+    ],
+    // Keep async/await. The promise rules otherwise demand syntax this rule rejects.
+    "oxc/no-async-await": "off",
+    // Named exports are the package API; default exports remain forbidden.
+    "import/no-named-export": "off",
+    "import/prefer-default-export": "off",
+    // This is a Node CLI with a node:test suite and a separate tests directory.
+    "import/no-nodejs-modules": "off",
+    "import/no-relative-parent-imports": "off",
+    // Type-only imports stay separate under verbatimModuleSyntax.
+    "eslint/no-duplicate-imports": "off",
+    // Synchronous AST visitors are callbacks, not promise continuations.
+    "promise/prefer-await-to-callbacks": "off",
+    // Prefer modern, narrowing-safe TypeScript syntax.
+    "oxc/no-optional-chaining": "off",
+    "oxc/no-rest-spread-properties": "off",
+    // TypeScript compiler flags are bitmasks, and immutable map transforms must not be rewritten
+    // to in-place mutation.
+    "eslint/no-bitwise": "off",
+    "oxc/no-map-spread": "off",
+    // null is part of TypeScript's AST and this package's serialized report contracts.
+    "unicorn/no-null": "off",
+    // Explicit `| undefined` unions are part of the public TypeScript API.
+    "eslint/no-undefined": "off",
+    "house/no-chained-type-assertions": "error",
+    "house/no-conditional-empty-object-spread": "error",
+    "house/no-known-value-widening": "error",
+    "house/no-module-mocking": "error",
+    "house/no-object-parameters": "error",
+    "house/no-reflect-apply": "error",
+    "house/no-reflect-get": "error",
+    "house/no-runtime-typeof": "error",
+    "house/no-shape-in-symbol-names": "error",
+    "house/no-unknown-parameters": "error",
+    "house/no-unknown-returns": "error",
+    "house/no-unknown-type-aliases": "error",
+    "house/no-unsafe-dictionary-type": "error",
+    "house/no-widen-then-assert": "error",
+    "house/require-safety-comment-for-type-assertion": "error",
+    "house/no-ambient-nondeterminism": "error",
+    "house/no-async-context-enter-with": "error",
+    "house/no-partial-record-satisfies": "error",
+    "house/no-path-prefix-containment": "error",
+    "house/no-swallowed-rejection": "error",
+    "house/no-unvalidated-json-domain-cast": "error",
+    "house/require-description": "error",
+    "house/no-foreign-directive": "error",
+    "house/no-banned-type-assertions": "error",
+    "house/no-in-operator": "error",
+    "house/no-reexport-only-modules": "error",
+    "house/no-switch": "error",
+    // tsconfig sets noUncheckedIndexedAccess, so every proven-safe index access types as
+    // T | undefined. Banning the `!` that resolves it would mean 200+ runtime guards for
+    // statically-guaranteed reads. The compiler flag is the stronger guarantee; it stays.
+    "typescript/no-non-null-assertion": "off",
+    // Pure module-organization style with no correctness content. Both fight the inline
+    // `export function` idiom used throughout, cost 342 mechanical edits, and reduce locality.
+    "import/group-exports": "off",
+    "import/exports-last": "off",
+    // Modules are the unit of decomposition: when max-statements, complexity or
+    // max-lines-per-function force a helper out of a function, the helper goes to the module
+    // that owns its theme, so the file cap and the function-level metrics no longer fight.
+    // 400 lines is the ceiling; a module approaching it is a module with two themes.
+    "eslint/max-lines": ["error", { "max": 400, "skipBlankLines": true, "skipComments": true }],
+    // Pipeline entry points legitimately fan out to every stage module they orchestrate.
+    "import/max-dependencies": "off",
+    // Directly contradicts unicorn/prefer-top-level-await, which is also an error. The
+    // require(esm) hazard this guards against cannot arise in a #!/usr/bin/env node bin.
+    "node/no-top-level-await": "off",
+    // JSON.parse(JSON.stringify(x)) is not a clone here, it is the assertion that the report
+    // survives JSON serialization. structuredClone preserves what JSON drops and voids the test.
+    "unicorn/prefer-structured-clone": "off"
+  },
+  "overrides": [
+    {
+      // Fixture setup is deliberately sequential and synchronous, and table-driven test bodies
+      // are long by design; splitting them hides which case failed.
+      "files": ["tests/**"],
+      "rules": {
+        "node/no-sync": "off",
+        "eslint/no-await-in-loop": "off",
+        "unicorn/consistent-function-scoping": "off",
+        "eslint/max-lines-per-function": "off",
+        "eslint/max-statements": "off",
+        "eslint/no-magic-numbers": "off"
+      }
+    },
+    {
+      // Benchmark corpora are data: thresholds, scores and offsets are the content, and the
+      // harness parses that corpus rather than shipping in the CLI.
+      "files": ["evals/**"],
+      "rules": {
+        "eslint/no-magic-numbers": "off",
+        "house/require-safety-comment-for-type-assertion": "off"
+      }
+    },
+    {
+      // Pinned labels are data; one file per repository keeps every label for an app together.
+      "files": ["evals/corpus/**"],
+      "rules": {
+        "eslint/max-lines": "off"
+      }
+    },
+    {
+      // GitHub Actions passes every input through the environment, so the workflow entry script
+      // reads process.env by design; there is no other channel for an action's inputs.
+      "files": ["action/**"],
+      "rules": {
+        "node/no-process-env": "off"
+      }
+    },
+    {
+      "files": ["src/index.ts"],
+      "rules": {
+        // The package root is an intentional public barrel.
+        "house/no-reexport-only-modules": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["dist/**", ".claude/**", "tools/oxlint/**"]
+}
