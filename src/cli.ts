@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import type { Action, CliOptions, Disposition } from "./cli/options.js";
 import type { AnalysisReport, ReportScope } from "./core/types.js";
 import { CliError, EXIT_GATE_FAILED, EXIT_SCAN_FAILED } from "./cli/failures.js";
