@@ -80,7 +80,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: Genie-sa/legend-doctor@v1
+      - uses: Genie-sa/legend-doctor@v0.1.1
         with:
           directory: src
 ```

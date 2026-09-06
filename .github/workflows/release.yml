@@ -63,10 +63,11 @@ jobs:
           fi
           echo "Publishing $name@$version"
           npm publish --access public
+          # A release may already exist when a tag was cut by hand, for example to publish the
+          # action to the GitHub Marketplace, so creating one is best-effort.
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "release v$version already exists — skipping"
+            exit 0
+          fi
           notes=$(awk -v hdr="## $version" '$0==hdr{s=1} /^## /&&$0!=hdr{if(s)exit} s' CHANGELOG.md)
           gh release create "v$version" --target "$GITHUB_SHA" --title "v$version" --notes "${notes:-v$version}"
-          # The README tells consumers to use Genie-sa/legend-doctor@v1, so move that tag to each v1 release.
-          if [ "${version%%.*}" = "1" ]; then
-            git tag -f v1 "$GITHUB_SHA"
-            git push -f origin v1
-          fi
