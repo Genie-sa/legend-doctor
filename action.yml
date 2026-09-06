@@ -1,5 +1,5 @@
 name: Legend Doctor
-description: Report the React renders and effects a pull request adds that Legend State can cut, with a sticky summary comment and inline review comments.
+description: Reports only the wasted React renders and effects a pull request introduces, with the proven Legend State edit.
 branding:
   icon: activity
   color: purple
