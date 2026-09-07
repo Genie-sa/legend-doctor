@@ -46,10 +46,31 @@ function stateFinding(
   return { ...stateFindingBase(disposition), action, stateModel };
 }
 
-test("agent output includes candidates and changes but hides keeps", () => {
-  const findings = [finding("keep"), finding("candidate"), finding("change")];
+test("agent output includes answerable candidates and changes but hides keeps", () => {
+  const findings = [finding("keep"), answerableReview(), finding("change")];
   assert.deepEqual(
     agentFindings(findings).map((item) => item.disposition),
     ["candidate", "change"],
   );
 });
+
+test("agent output hides a review no answer could convert", () => {
+  assert.deepEqual(agentFindings([finding("candidate"), finding("change")]), [finding("change")]);
+});
+
+function answerableReview(): HookFinding {
+  return {
+    ...finding("candidate"),
+    assumption: {
+      facts: ["ownership-flow-unresolved"],
+      fingerprint: "abc123",
+      id: "fixture.tsx::Owner::value::ownership-flow-unresolved",
+      ifConfirmed: "use-observable",
+      question: "confirm every escaped consumer reads the value only after render",
+      renderCost: 12,
+      research: [{ check: "read the setter's callers", file: "fixture.tsx", line: 1 }],
+      status: "open",
+      updateSites: 1,
+    },
+  };
+}
