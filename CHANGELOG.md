@@ -1,5 +1,22 @@
 # legend-doctor
 
+## 0.2.0
+
+### Minor Changes
+
+- f366842: Preserve renders that refresh mutable data and committed values captured at mount. Bound expression flow, lower try/catch/finally conservatively, and keep hidden helper writes uncertain.
+
+  Group repeated research instructions with complete site counts, report group conversion counts, and tag compact findings only when the tier changes their outcome.
+
+  Report schema 4 removes unused semantic diagnostics and APIs; coverage schema 2 contains parser, lowering, and detector stages. Compact scans compare final findings with broad mode using the same parsed source.
+
+### Patch Changes
+
+- f4db5df: Stop treating a rebound hook name as React's hook. Recognition matched the imported name anywhere in
+  the file, so an injected or destructured `useState` in a closer scope still read as React state — and
+  `delete-unused-state` reported a proven `change` that would have deleted an unrelated call. A call now
+  reaches the import only when no enclosing scope rebinds the name.
+
 ## 0.1.3
 
 ### Patch Changes
