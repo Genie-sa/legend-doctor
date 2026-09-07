@@ -43,6 +43,16 @@ function bindingElementName(element: ts.ArrayBindingElement | undefined): string
   return element.name.text;
 }
 
+/** `const [, setTick] = useState(0)` binds no value, so the setter exists only to force a render. */
+export function omittedValueSetterName(call: ts.CallExpression): string | null {
+  const declaration = call.parent;
+  if (!ts.isVariableDeclaration(declaration) || !ts.isArrayBindingPattern(declaration.name)) {
+    return null;
+  }
+  const [value, setter] = declaration.name.elements;
+  return value && ts.isOmittedExpression(value) ? bindingElementName(setter) : null;
+}
+
 export function effectCandidate(call: ts.CallExpression, imports: HookImports): EffectCandidate {
   const [callbackArg, dependenciesArg] = call.arguments;
   const owner = findAncestor(call, isRuntimeFunctionLike);

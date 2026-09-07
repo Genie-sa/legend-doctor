@@ -54,8 +54,10 @@ interface IndependenceScope {
 /**
  * Resolves the local React state, Legend binding, or unresolvable owner binding that a dependency
  * effect's schedule (its dependency array) and body reach, following owner `const` initializers and
- * local functions transitively. A `null` schedule proves React props and external values alone decide
- * when the effect runs; a `null` body proves no state migration inside the owner changes its inputs.
+ * local functions transitively. A state with no setter binding can never be written, so it counts as a
+ * component-lifetime constant rather than a dependency. A `null` schedule proves React props, external
+ * values, and those constants alone decide when the effect runs; a `null` body proves no state
+ * migration inside the owner changes its inputs.
  */
 export function analyzeEffectStateDependencies(
   effect: EffectCandidate,
@@ -122,9 +124,16 @@ function dependenciesOfReference(
 ): readonly EffectStateDependency[] {
   const local = localStateDependency(name, scope.context);
   if (local) {
-    return declaredWithin.has(name) ? [{ kind: "unresolved", name }] : [local];
+    if (declaredWithin.has(name)) {
+      return [{ kind: "unresolved", name }];
+    }
+    return isConstantState(local) ? [] : [local];
   }
   return declaredWithin.has(name) ? [] : resolveOwnerBinding(name, scope);
+}
+
+function isConstantState(dependency: EffectStateDependency): boolean {
+  return dependency.kind === "value" && dependency.state.setterName === null;
 }
 
 function localStateDependency(

@@ -115,10 +115,10 @@ Put `legend-doctor.config.json` at the repository root, or anywhere above the fo
 }
 ```
 
-| Key             | Values                                     | Effect                                                    |
-| --------------- | ------------------------------------------ | --------------------------------------------------------- |
-| `ignoreActions` | Action names from [ACTIONS.md](ACTIONS.md) | Hide those findings. They count under `hidden`.           |
-| `materiality`   | `broad` or `compact`                       | Minimum component size for a render cut, 12 or 8 elements |
+| Key             | Values                                     | Effect                                                  |
+| --------------- | ------------------------------------------ | ------------------------------------------------------- |
+| `ignoreActions` | Action names from [ACTIONS.md](ACTIONS.md) | Hide those findings. They count under `hidden`.         |
+| `materiality`   | `broad` or `compact`                       | Minimum owner size for a size-gated render cut, 12 or 8 |
 
 Flags override the file. `--ignore-action a,b` adds to the list and `--materiality` replaces the tier. An unknown key
 or action name fails the scan with exit code 2, so a typo never silently hides findings.
@@ -192,8 +192,9 @@ legend-doctor <root> --actionable --staged              # staged files
 legend-doctor <root> --actionable --since origin/main   # this branch
 ```
 
-By default it reports a render cut only in components with 12 or more JSX elements. `--materiality compact` lowers
-that to 8. Run `--help` for every flag and exit code.
+By default a render cut proven by owner size needs a component with 12 or more JSX elements. `--materiality compact`
+lowers that to 8. Cuts proven another way — a transported read reaching a child that subscribes, or a custom hook
+owner — do not depend on the tier. Run `--help` for every flag and exit code.
 
 ## Safety rules
 

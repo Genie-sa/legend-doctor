@@ -167,3 +167,33 @@ test("abstains when state is shadowed", () => {
     ["review-state"],
   );
 });
+
+test("names the forced render when useState binds a setter but no value", () => {
+  const [finding] = analyzeSource(
+    `
+    import { useEffect, useState } from "react";
+    export function useEditorRevision(editor: { onChange: (run: () => void) => () => void }) {
+      const [, setRevision] = useState(0);
+      useEffect(() => editor.onChange(() => setRevision((current) => current + 1)), [editor]);
+    }
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(requireValue(finding).abstentionReason, "binding-shape-unsupported");
+  assert.match(requireValue(finding).message, /`setRevision` has no value binding/u);
+});
+
+test("still reports an unrecognized state binding shape as such", () => {
+  const [finding] = analyzeSource(
+    `
+    import { useState } from "react";
+    export function Example() {
+      const pair = useState(0);
+      return <span>{pair[0]}</span>;
+    }
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(requireValue(finding).abstentionReason, "binding-shape-unsupported");
+  assert.match(requireValue(finding).message, /not a standard `\[value, setter\]` tuple/u);
+});
