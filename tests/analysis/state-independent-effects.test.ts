@@ -231,3 +231,42 @@ test("does not prove independence across shadowed, mutable, enclosing, or non-tu
     assert.match(finding.message, /before choosing React lifecycle/u);
   }
 });
+
+test("treats a state with no setter binding as a component-lifetime constant, not a dependency", () => {
+  const findings = effects(`
+    import { useEffect, useMemo, useState } from "react";
+    import { limitsFor } from "./limits";
+    export function Panel({ label }: { label: string }) {
+      const [model] = useState("base");
+      const [duration, setDuration] = useState(0);
+      const limits = useMemo(() => limitsFor(model), [model]);
+      useEffect(() => {
+        setDuration((previous) => Math.min(limits.max, previous));
+      }, [limits.max]);
+      return <button onClick={() => setDuration(0)}>{label}{duration}</button>;
+    }
+  `);
+  const [finding] = findings;
+  assert.equal(findings.length, 1);
+  assert.equal(requireValue(finding).action, "keep-effect");
+  assert.match(requireValue(finding).message, /\(`duration`\) stays React state/u);
+  assert.doesNotMatch(requireValue(finding).message, /model/u);
+});
+
+test("keeps an effect scheduled only by states that have no setter binding", () => {
+  const findings = effects(`
+    import { useEffect, useState } from "react";
+    import { report } from "./report";
+    export function Banner({ label }: { label: string }) {
+      const [tier] = useState("free");
+      useEffect(() => {
+        report(tier);
+      }, [tier]);
+      return <span>{label}</span>;
+    }
+  `);
+  const [finding] = findings;
+  assert.equal(findings.length, 1);
+  assert.equal(requireValue(finding).action, "keep-effect");
+  assert.match(requireValue(finding).message, /reads only props, refs, module bindings/u);
+});

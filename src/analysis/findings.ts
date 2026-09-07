@@ -25,6 +25,7 @@ import type { StateClassificationInputs } from "./verdicts/classification-contex
 import { classifyState } from "./verdicts/classify-state.js";
 import { effectFindingFor } from "./effect-findings.js";
 import { hasLazyStateInitializer } from "../rules/effect-drafts/effect-drafts.js";
+import { omittedValueSetterName } from "./candidates.js";
 import { resolveStateClassification } from "./assumptions/review-assumptions.js";
 import type ts from "typescript";
 import { verificationFor } from "./assumptions/verification.js";
@@ -264,14 +265,16 @@ function withAssumption(
 }
 
 function unmatchedStateFinding(call: ts.CallExpression, analysis: SourceAnalysis): HookFinding {
+  const forcedRenderSetter = omittedValueSetterName(call);
   return findingFor(
     call,
     {
       action: "review-state",
       abstentionReason: "binding-shape-unsupported",
       confidence: "probable",
-      message:
-        "Review this React state; its binding shape is not a standard `[value, setter]` tuple.",
+      message: forcedRenderSetter
+        ? `Review this forced-render state; \`${forcedRenderSetter}\` has no value binding, so nothing reads it and every call re-renders the whole owner. Confirm which rendered values that re-render refreshes, then subscribe those leaves to an observable instead.`
+        : "Review this React state; its binding shape is not a standard `[value, setter]` tuple.",
     },
     { fileName: analysis.fileName, hook: "useState", name: null, sourceFile: analysis.sourceFile },
   );

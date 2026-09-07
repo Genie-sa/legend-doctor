@@ -41,9 +41,11 @@ Flags
                             live in the nearest legend-doctor.config.json at or
                             above the target: { "ignoreActions": [...],
                             "materiality": "broad" | "compact" }; flags win
-  --materiality <tier>      broad (default) proves cuts only in owners with
-                            12+ JSX elements; compact lowers the bar to 8 and
-                            tags those findings with materiality: compact
+  --materiality <tier>      broad (default) needs 12+ JSX elements for a cut
+                            proven by owner size; compact lowers that to 8 and
+                            tags those findings with materiality: compact. Cuts
+                            proven by a transported read or a hook owner ignore
+                            the tier
   --changed                 Analyze only files with uncommitted changes (staged,
                             unstaged, or untracked) relative to HEAD
   --staged                  Analyze only files in the git index, at their
