@@ -68,7 +68,7 @@ test("isolates one nullable payload inside a bounded dialog boundary", () => {
         "setPage(2);",
       ),
     ),
-    ["review-state", "delete-unused-state"],
+    ["review-state", "review-state"],
   );
 
   assert.deepEqual(

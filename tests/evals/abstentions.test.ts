@@ -53,7 +53,7 @@ function report(findings: HookFinding[]): AnalysisReport {
     findings,
     hooks: { effects, states, total: findings.length },
     practices: [],
-    schemaVersion: 3,
+    schemaVersion: 4,
   };
 }
 

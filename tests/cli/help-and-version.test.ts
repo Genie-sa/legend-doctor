@@ -17,7 +17,7 @@ test("--help documents flags, dispositions, and exit codes on stdout", async () 
   assert.match(stdout, /candidate \| change \| keep \| style/u);
   assert.match(stdout, /^Examples$/mu);
   assert.match(stdout, /--fail-on <value,\.\.\.>/u);
-  assert.match(stdout, /schemaVersion 3/u);
+  assert.match(stdout, /schemaVersion 4/u);
   assert.match(stdout, /abstentionReason/u);
   assert.match(stdout, /^ {2}3 {2}scan completed and a shown finding matched --fail-on$/mu);
   assert.doesNotMatch(stdout, /^ {2}-[-\w, <>.]+ {2,}[A-Z][^\n]*\.$/mu);

@@ -271,7 +271,6 @@ function recordEntryCoverage(
   }
   coverage.record({
     stages: analyzedFileCoverage({
-      context: pass.context,
       file: entry.analysisFile,
       functionEntries: entry.functionEntries,
       stateFlow,
@@ -281,7 +280,6 @@ function recordEntryCoverage(
   for (const { node, target } of entry.functionEntries) {
     coverage.record({
       stages: analyzedFunctionCoverage({
-        context: pass.context,
         file: entry.analysisFile,
         node,
         stateFlow,

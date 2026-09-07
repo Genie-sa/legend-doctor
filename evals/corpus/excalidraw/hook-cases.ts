@@ -226,12 +226,13 @@ export const excalidrawHookCases = [
   },
   {
     action: "use-ref",
+    enforced: false,
     file: "components/PasteChartDialog.tsx",
     hook: "useState",
     line: 47,
     name: "chartElements",
     rationale:
-      "Rendered chart elements are produced by the layout effect and consumed only by the insert click command; they do not participate in React rendering.",
+      "The layout effect produces chart elements for the insert command. The rendered label also comes from getChartTypeLabel and translation calls; a ref migration remains an opportunity until their independent refresh is proven.",
     target: "excalidraw",
   },
   {

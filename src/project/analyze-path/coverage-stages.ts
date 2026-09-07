@@ -4,7 +4,6 @@ import type {
   AnalysisCoverageTarget,
 } from "../analysis-coverage.js";
 import type { AnalysisDiagnostic, AnalysisFile } from "../analysis-project.js";
-import type { AnalysisContext } from "./analysis-context.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateFlowCoverage } from "../state-flow/model.js";
 import type { StateFlowIndex } from "../state-flow/state-flow.js";
@@ -61,14 +60,12 @@ function outcome(
 }
 
 interface FileCoverageInputs {
-  context: AnalysisContext;
   file: AnalysisFile;
   functionEntries: readonly FunctionCoverageEntry[];
   stateFlow: StateFlowIndex;
 }
 
 interface FunctionCoverageInputs {
-  context: AnalysisContext;
   file: AnalysisFile;
   node: RuntimeFunctionLike;
   stateFlow: StateFlowIndex;
@@ -76,7 +73,7 @@ interface FunctionCoverageInputs {
 }
 
 export function analyzedFileCoverage(inputs: FileCoverageInputs): AnalysisCoverageStages {
-  const { context, file, functionEntries, stateFlow } = inputs;
+  const { file, functionEntries, stateFlow } = inputs;
   const recovered = file.parserDiagnostics.length > 0;
   return {
     detector: recovered
@@ -97,12 +94,11 @@ export function analyzedFileCoverage(inputs: FileCoverageInputs): AnalysisCovera
     parser: recovered
       ? outcome("analyzed", "parser-recovered", "The parser recovered with reported diagnostics.")
       : outcome("analyzed", "parser-complete", "The source parsed without recovery diagnostics."),
-    semantic: semanticCoverage(file, context),
   };
 }
 
 export function analyzedFunctionCoverage(inputs: FunctionCoverageInputs): AnalysisCoverageStages {
-  const { context, file, node, stateFlow, target } = inputs;
+  const { file, node, stateFlow, target } = inputs;
   const recovered = file.parserDiagnostics.some((diagnostic) =>
     diagnosticAffectsTarget(diagnostic, target),
   );
@@ -131,7 +127,6 @@ export function analyzedFunctionCoverage(inputs: FunctionCoverageInputs): Analys
           "parser-complete",
           "No parser recovery diagnostic overlaps this function.",
         ),
-    semantic: semanticCoverage(file, context),
   };
 }
 
@@ -185,30 +180,6 @@ function diagnosticAffectsTarget(
   return diagnostic.start < target.end && end > target.start;
 }
 
-function semanticCoverage(file: AnalysisFile, context: AnalysisContext): AnalysisCoverageOutcome {
-  if (context.semanticContext?.getSourceFile(file)) {
-    return outcome(
-      "analyzed",
-      "semantic-complete",
-      "Semantic facts are available from the selected tsconfig shard.",
-    );
-  }
-  if (context.semanticContext) {
-    return outcome(
-      "unknown",
-      "semantic-file-not-owned",
-      "The selected semantic shard does not own this file.",
-    );
-  }
-  return context.semanticDiagnostics.length > 0
-    ? outcome(
-        "unknown",
-        "semantic-unavailable",
-        "The requested semantic context could not be created.",
-      )
-    : outcome("skipped", "semantic-not-requested", "Semantic project analysis was not requested.");
-}
-
 export function unsupportedFileCoverage(): AnalysisCoverageStages {
   return {
     detector: outcome(
@@ -222,11 +193,6 @@ export function unsupportedFileCoverage(): AnalysisCoverageStages {
       "This file extension is not supported.",
     ),
     parser: outcome(
-      "unsupported",
-      "unsupported-extension",
-      "This file extension is not supported.",
-    ),
-    semantic: outcome(
       "unsupported",
       "unsupported-extension",
       "This file extension is not supported.",

@@ -5,6 +5,9 @@ import {
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import type { EffectClassificationContext } from "./model.js";
+import type { HostTagImports } from "../../core/imports.js";
+import { findAncestor } from "../../core/ast.js";
+import { isHostTag } from "../../core/imports.js";
 import { soleDirectSetterCall } from "./callback-shape.js";
 import ts from "typescript";
 
@@ -22,7 +25,23 @@ export function findPureDerivedSetter(
   }
   const state = context.stateBySetter.get(call.expression.text);
   const [value] = call.arguments;
-  return state && value && isTransparentDerivedValue(value, dependencies) ? state : null;
+  const initializer = state?.call.arguments[0];
+  const usage = state ? context.usageBySetter.get(call.expression.text) : undefined;
+  return state &&
+    value &&
+    initializer &&
+    usage &&
+    callback.parameters.length === 0 &&
+    unwrapTransparentExpression(initializer).getText() ===
+      unwrapTransparentExpression(value).getText() &&
+    isTransparentDerivedValue(value, dependencies) &&
+    usage.effectReads === 0 &&
+    usage.deferredReads === 0 &&
+    !usage.unstableTransport &&
+    usage.transportedOccurrences === 0 &&
+    hasOnlyLiveTextConsumers(usage, context.imports)
+    ? state
+    : null;
 }
 
 function isSoleUnescapedSetterUsage(usage: StateUsage | undefined): boolean {
@@ -105,4 +124,39 @@ function inspectDerivedInput(node: ts.Node, scan: DerivedInputScan): void {
     return;
   }
   recordDerivedInput(inputText, scan);
+}
+
+/** Text can refresh in place; attributes, projected aliases and element gates can own mount inputs. */
+function hasOnlyLiveTextConsumers(usage: StateUsage, imports: HostTagImports): boolean {
+  return (
+    usage.directRenderNodes.length > 0 &&
+    usage.directRenderNodes.every((node) => {
+      const expression = findAncestor(node, ts.isJsxExpression);
+      return (
+        expression !== null &&
+        !ts.isJsxAttribute(expression.parent) &&
+        !containsElement(expression) &&
+        !hasCapturingParent(expression, imports)
+      );
+    })
+  );
+}
+
+function containsElement(node: ts.Node): boolean {
+  return (
+    ts.isJsxElement(node) ||
+    ts.isJsxSelfClosingElement(node) ||
+    ts.isJsxFragment(node) ||
+    Boolean(node.forEachChild(containsElement))
+  );
+}
+
+function hasCapturingParent(node: ts.Node, imports: HostTagImports): boolean {
+  return (
+    findAncestor(
+      node,
+      (ancestor): ancestor is ts.JsxElement =>
+        ts.isJsxElement(ancestor) && !isHostTag(ancestor.openingElement.tagName.getText(), imports),
+    ) !== null
+  );
 }

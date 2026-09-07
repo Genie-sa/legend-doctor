@@ -2,6 +2,16 @@ import type { GoldHookCase } from "../contracts.js";
 
 export const legendMusicHookCases = [
   {
+    action: "review-state",
+    file: "components/AlbumArt.tsx",
+    hook: "useState",
+    line: 153,
+    name: "isLoading",
+    rationale:
+      "The download effect sets loading before awaiting, and clears it on both success and catch while also writing imageUri. The suspension and partial exception paths do not establish one synchronous atomic transition across these writes.",
+    target: "legend-music",
+  },
+  {
     action: "use-observable",
     file: "components/PlaybackControls.tsx",
     hook: "useState",
@@ -119,20 +129,23 @@ export const legendMusicHookCases = [
   },
   {
     action: "delete-unused-state",
+    enforced: false,
     file: "components/AlbumArt.tsx",
     hook: "useState",
     line: 154,
     name: "_hasError",
     rationale: "The setter causes renders, but the assigned error value is never consumed.",
+    // The owner also renders calls or mutable reads; independent refresh is not yet proven.
     target: "legend-music",
   },
   {
-    action: "delete-unused-state",
+    action: "review-state",
     file: "components/dnd/DraggableItem.tsx",
     hook: "useState",
     line: 44,
     name: "_layout",
-    rationale: "The assigned layout is never read and duplicates the measurement ref.",
+    rationale:
+      "The layout event writes childMeasurementsRef.current and setLayout; the portal reads that ref for its mount condition and dimensions. No proof establishes that another state update always refreshes those reads, so deleting the unread layout state is unsafe.",
     target: "legend-music",
   },
   ...[

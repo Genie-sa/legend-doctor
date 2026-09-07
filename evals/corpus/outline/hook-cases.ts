@@ -474,9 +474,11 @@ export const outlineHookCases = [
     file: "SwitchHostDialog.tsx",
     hook: "useState",
     line: 24,
+    enforced: false,
     name: "validatedUrl",
     rationale:
       "The validated URL never renders directly and is consumed only by the submit event; the separately rendered status already owns validation feedback.",
+    // Rendered calls or mutable reads still need an independent-refresh proof.
     target: "outline-switch-host-state",
   },
   {

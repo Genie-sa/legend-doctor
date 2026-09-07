@@ -2,7 +2,11 @@
 
 Field-level detail for the JSON report. Read [README.md](README.md) first.
 
-Version-gate consumers with `schemaVersion`, currently `3`.
+Version-gate consumers with `schemaVersion`, currently `4`.
+
+Schema 4 removes the unused `diagnostics.semantic` field. Coverage schema 2 reports only `parser`, `lowering`,
+and `detector`: no detector consumed the former semantic stage. The experimental `createSemanticContext`,
+`AnalysisContextOptions.configFilePath`, and semantic context types have been removed.
 
 Important fields:
 
@@ -31,7 +35,7 @@ When one yes/no fact is all that blocks a `review-state` finding, the finding al
 | `id`          | Stable across line shifts: report file, owner, state name, blocker                           |
 | `question`    | The concrete fact to confirm, naming the states, targets, or read sites involved             |
 | `facts`       | The blockers a "yes" assumes away; one, or two when a second blocker stands behind the first |
-| `research`    | Exact places to read before answering, each with `file`, `line`, and the `check` to verify   |
+| `research`    | Distinct checks with `file`, first `line`, all `lines`, and the full source-site `total`     |
 | `ifConfirmed` | The action a confirmed answer produces; the tool re-ran its proofs with that fact assumed    |
 | `fingerprint` | Digest of the owner's source; an answer recorded for a different digest is reported `stale`  |
 | `renderCost`  | JSX elements the owner renders per update of this state                                      |
@@ -39,7 +43,10 @@ When one yes/no fact is all that blocks a `review-state` finding, the finding al
 | `status`      | `open`, `confirmed`, `rejected`, or `stale`                                                  |
 
 A question is asked only when the hypothetical run yields a conversion, so every "yes" has a concrete instruction.
-`report.questions` lists the open ones by `rank`. Record answers in `<root>/.legend-doctor/confirmations.json`, which
+`report.questions` lists the open ones by `rank`. A group reports the first converting member's action in
+`ifConfirmed` and the number that convert in `convertingCount`; individual outcomes remain in `members`.
+Repeated research instructions list every relevant line and a full site count, including multiple sites on one line. A step without `lines` or `total` describes one site at `line`.
+Record answers in `<root>/.legend-doctor/confirmations.json`, which
 every scan of that root reads, or in any file passed with `--confirm`:
 
 ```json
@@ -82,8 +89,7 @@ Its `members` list says what a "yes" does to each: members whose standalone proo
 one cluster instruction written with `assign`, and a member another blocker still holds is re-examined without the
 co-write blocker and gets its next question on the same scan.
 
-A confirmed id turns the finding into `ifConfirmed` with disposition `change`, and the answer is recorded in its
-evidence. Such a finding also carries `verification`: the conversion rests on an answer rather than a proof, so the
+A confirmed individual question turns its finding into `ifConfirmed` with disposition `change`; a group converts only the members whose outcome is actionable. The answer is recorded in each converted finding's evidence. Such a finding also carries `verification`: the conversion rests on an answer rather than a proof, so the
 recipe names the jsdom harness exported as `legend-doctor/runtime` (`mountDom`, `count`), the before/after comparison
 to run, and the render-count and DOM expectations that must hold; a failed comparison means the answer was wrong. A rejected id keeps the review verdict and stops the question from being asked again. When the owner's code
 changes, the fingerprint no longer matches: the answer is reported `stale`, not applied, and the question is asked
@@ -92,3 +98,10 @@ and lists ids no finding produced.
 
 Failures are also valid JSON. They include `status: "error"`, a stable `reason`, a useful `message`, and
 sometimes a `next` command.
+
+## Compact provenance
+
+`materiality: "compact"` means compact mode changed the finding's action or made a new conversion confirmable.
+Kept findings and outcomes already available in broad mode are untagged. This comparison includes consumer-size
+thresholds for hook-owned state. Compact mode evaluates both policies on the same parsed source; it adds analysis
+work but does not reread or reparse files.

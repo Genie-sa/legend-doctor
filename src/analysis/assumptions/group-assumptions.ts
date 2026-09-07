@@ -134,11 +134,17 @@ function memberResearch(
       file: scope.reportFile,
       line: lineOf(member.call, sourceFile),
     },
-    ...lines.map((line) => ({
-      check: `this write to \`${member.valueName}\` runs in a handler that also writes other members of ${names}; confirm a render could never observe one member updated without the others`,
-      file: scope.reportFile,
-      line,
-    })),
+    ...(lines.length === 0
+      ? []
+      : [
+          {
+            check: `this write to \`${member.valueName}\` runs in a handler that also writes other members of ${names}; confirm a render could never observe one member updated without the others`,
+            file: scope.reportFile,
+            line: lines[0]!,
+            lines,
+            total: new Set(writes.map((call) => call.getStart(sourceFile))).size,
+          },
+        ]),
   ];
 }
 
@@ -227,7 +233,8 @@ export function groupAssumption(scope: GroupAssumptionScope): GroupAssumptionRes
   const { inputs, members, result } = scope;
   const outcomes = members.map((member) => ({ alone: result.classifyAlone(member), member }));
   const own = outcomes.find(({ member }) => member === inputs.state);
-  if (!own || convertingOutcomes(outcomes).length === 0) {
+  const [firstConversion] = convertingOutcomes(outcomes);
+  if (!own || !firstConversion) {
     return null;
   }
   const owner = runtimeFunctionName(inputs.state.owner) ?? "this owner";
@@ -238,7 +245,7 @@ export function groupAssumption(scope: GroupAssumptionScope): GroupAssumptionRes
       facts: [GROUP_REASON],
       fingerprint,
       id,
-      ifConfirmed: groupConversion(own.alone) ?? "review-state",
+      ifConfirmed: groupConversion(firstConversion.alone)!,
       members: outcomes.map((outcome) => outcomeLabel(outcome)),
       question: groupQuestion(owner, outcomes),
       renderCost: jsxElementCount(inputs.state.owner),

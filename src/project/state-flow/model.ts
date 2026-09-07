@@ -10,7 +10,7 @@ export type RightExecution = "always" | "maybe" | "never";
 export interface ExecutionPath {
   awaitEpoch: number;
   events: { call: ts.CallExpression; epoch: number }[];
-  termination: "break" | "return" | null;
+  termination: "break" | "return" | "throw" | null;
 }
 
 export interface PathResult {

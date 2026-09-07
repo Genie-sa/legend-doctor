@@ -1,4 +1,3 @@
-import type { AnalysisDiagnostic, AnalysisFile } from "../analysis-project.js";
 import {
   analysisFileEntries,
   analysisReport,
@@ -13,20 +12,18 @@ import {
 import type { AnalysisContext } from "./analysis-context.js";
 import { AnalysisCoverageLedger } from "../analysis-coverage.js";
 import type { AnalysisCoverageReport } from "../analysis-coverage.js";
+import type { AnalysisDiagnostic } from "../analysis-project.js";
 import type { AnalysisReport } from "../../core/types.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import { DEFAULT_MATERIALITY } from "../../analysis/constants.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
-import type { SemanticContextDiagnostic } from "../semantic-context/model.js";
 import path from "node:path";
-import { pathIdentityKey } from "../../core/path-identity.js";
 import { stat } from "node:fs/promises";
 
 export interface DetailedAnalysisResult {
   coverage: AnalysisCoverageReport;
   diagnostics: {
     parser: readonly AnalysisDiagnostic[];
-    semantic: readonly SemanticContextDiagnostic[];
   };
   report: AnalysisReport;
 }
@@ -108,11 +105,6 @@ async function analyzePathInternal(
     coverage: coverage.report(),
     diagnostics: {
       parser: pass.accumulator.diagnostics,
-      semantic: displaySemanticDiagnostics(
-        context.semanticDiagnostics,
-        entries.flatMap((entry) => (entry.analysisFile ? [entry.analysisFile] : [])),
-        target.analysisRoot,
-      ),
     },
     report,
   };
@@ -137,41 +129,6 @@ async function resolveAnalysisTarget(targetPath: string): Promise<AnalysisTarget
 
 function createTargetContext(target: AnalysisTarget): Promise<AnalysisContext> {
   return target.isDirectory
-    ? createAnalysisContextFromFiles(target.analysisRoot, target.files, {})
+    ? createAnalysisContextFromFiles(target.analysisRoot, target.files)
     : createAnalysisContext(target.analysisRoot);
-}
-
-function displaySemanticDiagnostics(
-  diagnostics: readonly SemanticContextDiagnostic[],
-  files: readonly AnalysisFile[],
-  root: string,
-): SemanticContextDiagnostic[] {
-  const fileKeys = new Set(files.map((file) => pathIdentityKey(file.identityPath)));
-  return diagnostics
-    .filter(
-      (diagnostic) =>
-        !diagnostic.fileName ||
-        diagnostic.code === "config-invalid" ||
-        diagnostic.code === "config-read-failed" ||
-        fileKeys.has(pathIdentityKey(diagnostic.fileName)),
-    )
-    .map((diagnostic) => {
-      if (!diagnostic.fileName) {
-        return { ...diagnostic, message: portableDiagnosticMessage(diagnostic.message, root) };
-      }
-      const fileName =
-        path.relative(root, diagnostic.fileName) || path.basename(diagnostic.fileName);
-      return {
-        ...diagnostic,
-        fileName,
-        message: portableDiagnosticMessage(
-          diagnostic.message.replaceAll(diagnostic.fileName, fileName),
-          root,
-        ),
-      };
-    });
-}
-
-function portableDiagnosticMessage(message: string, root: string): string {
-  return message.replaceAll(`${path.resolve(root)}${path.sep}`, "");
 }

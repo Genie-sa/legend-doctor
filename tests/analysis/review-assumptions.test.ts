@@ -60,8 +60,6 @@ test("a render-cut review carries the question whose yes wraps each read site", 
     [
       ["src/panel.tsx", 4],
       ["src/panel.tsx", 6],
-      ["src/panel.tsx", 7],
-      ["src/panel.tsx", 8],
     ],
   );
   assert.match(requireValue(assumption.research[0]).check, /declared here/u);
@@ -98,7 +96,7 @@ test("group questions point at every member's declaration and write sites", () =
   const [open] = states(CO_WRITTEN_DRAWER);
   const { research } = requireValue(requireValue(open).assumption);
   assert.deepEqual(
-    research.map((step) => step.line),
+    research.flatMap((step) => step.lines ?? [step.line]),
     [4, 6, 10, 5, 6],
   );
   assert.match(
@@ -106,7 +104,7 @@ test("group questions point at every member's declaration and write sites", () =
     /`open` is declared here .*on its own it would become use-observable/u,
   );
   assert.match(
-    requireValue(research[3]).check,
+    requireValue(research[2]).check,
     /`error` is declared here .*stays under review for render-cut-unproven/u,
   );
   assert.match(
@@ -130,7 +128,7 @@ test("a co-written group asks one question, naming what a yes converts and what 
   ]);
   const partner = requireValue(requireValue(error).assumption);
   assert.equal(partner.id, groupId);
-  assert.equal(partner.ifConfirmed, "review-state");
+  assert.equal(partner.ifConfirmed, "use-observable");
 });
 
 test("a confirmed group converts its provable members as a cluster and chains the rest to their next question", () => {
@@ -348,4 +346,38 @@ test("without a child-contract resolver, the leaf-wrap rewrite is the confirmabl
   );
   assert.match(assumption.question, /each receiving component renders the value directly/u);
   assert.ok(assumption.research.some((step) => /passed to a child here/u.test(step.check)));
+});
+
+for (const separator of ["\n", ""]) {
+  test(`research lists every render site beyond twenty sites on ${separator ? "many lines" : "one line"}`, () => {
+    const lines = Array.from(
+      { length: 24 },
+      (_value, index) => `<p>{format(count, ${index})}</p>`,
+    ).join(separator);
+    const [finding] = states(`import { useState } from "react";
+    function Panel() {
+      const [count, setCount] = useState(0);
+      return <main><button onClick={() => setCount(count + 1)}>Add</button>
+      ${lines}</main>;
+    }
+  `);
+    const { research } = requireValue(requireValue(finding).assumption);
+    const checks = research.filter((step) => /read in render here/u.test(step.check));
+    assert.equal(checks.length, 1);
+    assert.equal(checks[0]?.total, 24);
+    assert.equal(checks[0]?.lines?.length, separator ? 24 : 1);
+    assert.equal(checks[0]?.lines?.at(-1), separator ? 28 : 5);
+  });
+}
+
+test("ranked group outcomes count conversions even when the first member stays blocked", () => {
+  const source = CO_WRITTEN_DRAWER.replace(
+    "const [open, setOpen] = useState(false);\n    const [error, setError] = useState<string | null>(null);",
+    "const [error, setError] = useState<string | null>(null);\n    const [open, setOpen] = useState(false);",
+  );
+  const findings = states(source);
+  const [question] = rankedQuestions(findings);
+  assert.equal(question?.name, "error");
+  assert.equal(question?.ifConfirmed, "use-observable");
+  assert.equal(question?.convertingCount, 1);
 });

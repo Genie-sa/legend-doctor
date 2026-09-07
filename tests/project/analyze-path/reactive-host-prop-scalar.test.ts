@@ -178,5 +178,5 @@ test("isolates one event-owned scalar in a reactive host prop", async (testConte
     requireValue(states.get("customWidth")).message ?? "",
     /single host prop reactive/u,
   );
-  assert.equal(requireValue(states.get("effectOpacity")).action, "delete-derived-state");
+  assert.equal(requireValue(states.get("effectOpacity")).action, "use-observable");
 });

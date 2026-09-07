@@ -23,7 +23,6 @@ function entry(
     stages: {
       parser: outcome("analyzed", "parsed"),
       lowering: outcome("skipped", "lowering-not-requested"),
-      semantic: outcome("unsupported", "project-context-unavailable"),
       detector: outcome(detectorStatus, "detector-complete"),
     },
     target,
@@ -41,7 +40,6 @@ test("reports every analysis stage explicitly for file and function targets", ()
   assert.deepEqual(Object.keys(requireValue(report.entries[0]).stages ?? {}), [
     "parser",
     "lowering",
-    "semantic",
     "detector",
   ]);
   assert.deepEqual(requireValue(report.entries[1]).target, {
@@ -129,12 +127,11 @@ test("rejects impossible detector coverage and duplicate function ranges", () =>
 });
 
 test("rejects omitted stages and blank reasons instead of treating them as unknown", () => {
-  // SAFETY: The `semantic` stage is deliberately absent so that `record` is exercised on input
+  // SAFETY: The `lowering` stage is deliberately absent so that `record` is exercised on input
   // AnalysisCoverageEntry cannot express; every other field matches a well-formed file entry.
   const missingStage = {
     stages: {
       parser: outcome("analyzed", "parsed"),
-      lowering: outcome("skipped", "lowering-not-requested"),
       detector: outcome("analyzed", "detector-complete"),
     },
     target: { file: "src/missing.tsx", kind: "file" },
@@ -157,6 +154,6 @@ test("rejects omitted stages and blank reasons instead of treating them as unkno
 test("defines an empty report as no registered targets", () => {
   assert.deepEqual(new AnalysisCoverageLedger().report(), {
     entries: [],
-    schemaVersion: 1,
+    schemaVersion: 2,
   });
 });

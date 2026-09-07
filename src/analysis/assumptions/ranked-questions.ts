@@ -45,7 +45,7 @@ export function rankedQuestions(findings: readonly HookFinding[]): RankedQuestio
     .map(({ finding, priority }, index) => {
       // SAFETY: the filter above keeps only findings whose assumption is present.
       const assumption = finding.assumption!;
-      return {
+      const question: RankedQuestion = {
         file: finding.location.file,
         id: assumption.id,
         ifConfirmed: assumption.ifConfirmed,
@@ -54,5 +54,11 @@ export function rankedQuestions(findings: readonly HookFinding[]): RankedQuestio
         priority,
         rank: index + 1,
       };
+      if (assumption.members) {
+        question.convertingCount = assumption.members.filter(
+          (member) => member.outcome !== "review-state",
+        ).length;
+      }
+      return question;
     });
 }

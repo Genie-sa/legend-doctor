@@ -5,6 +5,16 @@ export const openWebuiReactNativeHookCases = [
     action: "use-observable",
     file: "component.tsx",
     hook: "useState",
+    line: 37,
+    name: "isFocused",
+    rationale:
+      "One deferred interaction callback writes the reveal flag without branching or suspension. The full AnimatedView gate can subscribe independently while preserving the original effect and conditional mount; bounded path analysis must not lose this ordinary case.",
+    target: "open-webui-search-archived-chats",
+  },
+  {
+    action: "use-observable",
+    file: "component.tsx",
+    hook: "useState",
     line: 85,
     name: "options",
     rationale:

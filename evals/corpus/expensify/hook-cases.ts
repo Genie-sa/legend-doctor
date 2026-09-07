@@ -424,9 +424,11 @@ export const expensifyHookCases = [
     file: "BigNumberPad.tsx",
     hook: "useState",
     line: 39,
+    enforced: false,
     name: "timer",
     rationale:
       "The interval handle is written by long-press setup and read only by the release command; it never renders.",
+    // Rendered calls or mutable reads still need an independent-refresh proof.
     target: "expensify-big-number-pad",
   },
   {
@@ -958,23 +960,23 @@ export const expensifyHookCases = [
     target: "expensify-search-autocomplete",
   },
   {
-    action: "delete-derived-state",
+    action: "review-state",
     file: "DynamicContactMethodDetailsPage.tsx",
     hook: "useState",
     line: 68,
     name: "isValidateCodeFormVisible",
     rationale:
-      "The state is assigned only from an exact dependency path; the additional dependency can only repeat the same assignment.",
+      "The true initializer differs from the prop-derived effect value; preserving the first committed value and child mount inputs requires keeping the synchronization lifecycle.",
     target: "expensify-contact-method-details",
   },
   {
-    action: "delete-effect",
+    action: "review-effect",
     file: "DynamicContactMethodDetailsPage.tsx",
     hook: "useEffect",
     line: 183,
     name: null,
     rationale:
-      "The effect only mirrors an exact dependency path into otherwise-derived React state.",
+      "The true initializer differs from the prop-derived effect value; preserving the first committed value and child mount inputs requires keeping the synchronization lifecycle.",
     target: "expensify-contact-method-details",
   },
   ...[
@@ -1109,9 +1111,11 @@ export const expensifyHookCases = [
     file: "WorkspaceDuplicateSelectFeaturesForm.tsx",
     hook: "useState",
     line: 48,
+    enforced: false,
     name: "duplicatedWorkspaceAvatar",
     rationale:
       "The asynchronously loaded file never renders and is consumed only by the eventual confirm command; conversion requires proving the memoized confirmation callback chain.",
+    // Rendered calls or mutable reads still need an independent-refresh proof.
     target: "expensify-workspace-duplicate-features-state",
   },
   {
@@ -1221,6 +1225,7 @@ export const expensifyHookCases = [
     ["expensify-iou-merchant", "IOURequestStepMerchant.tsx", 77, "currentMerchant"],
   ].map(([target, file, line, name]) => ({
     action: "use-ref" as const,
+    enforced: name !== "currentDescription",
     file: file as string,
     hook: "useState" as const,
     line: line as number,

@@ -5,11 +5,11 @@ import type {
   StateCandidate,
   StateUsage,
 } from "./model.js";
-import { DEFAULT_MATERIALITY, WIDE_OWNER_LINE_SPAN } from "./constants.js";
 import type { HookAction, HookFinding, StateAction } from "../core/types.js";
 import { ownerLineSpan, runtimeFunctionName } from "./ast-helpers.js";
 import type { MaterialityPolicy } from "./constants.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
+import { WIDE_OWNER_LINE_SPAN } from "./constants.js";
 import { callbackHasCleanup } from "../rules/effects/effects.js";
 import { jsxElementCount } from "../rules/state-proofs/jsx-subtrees.js";
 import path from "node:path";
@@ -122,18 +122,6 @@ const STATE_MODEL_BY_ACTION = {
 
 function stateModelFor(action: StateAction): NonNullable<HookFinding["stateModel"]> {
   return { ...STATE_MODEL_BY_ACTION[action] };
-}
-
-/** Marks findings the compact tier admitted below the default broad-owner size. */
-export function withMaterialityTier(
-  finding: HookFinding,
-  state: StateCandidate,
-  materiality: MaterialityPolicy,
-): HookFinding {
-  return materiality.tier === "compact" &&
-    jsxElementCount(state.owner) < DEFAULT_MATERIALITY.broadOwnerJsx
-    ? { ...finding, materiality: "compact" }
-    : finding;
 }
 
 export function stateEvidence(
