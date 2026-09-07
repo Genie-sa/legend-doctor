@@ -10,11 +10,24 @@ export interface GateResult {
   matched: number;
 }
 
-/** One entry per edit: keep findings drop, and a finding group is represented by its primary member. */
+const REVIEW_ACTIONS: ReadonlySet<HookFinding["action"]> = new Set([
+  "review-effect",
+  "review-state",
+]);
+
+/** A review finding with no assumption has no question to answer, so no answer can turn it into an edit. */
+function isUnanswerableReview(finding: HookFinding): boolean {
+  return REVIEW_ACTIONS.has(finding.action) && !finding.assumption;
+}
+
+/**
+ * One entry per edit: keep findings drop, reviews that cannot be converted by any answer drop, and a
+ * finding group is represented by its primary member.
+ */
 export function agentFindings(findings: readonly HookFinding[]): HookFinding[] {
   const seenGroups = new Set<string>();
   return findings.filter((finding) => {
-    if (finding.disposition === "keep") {
+    if (finding.disposition === "keep" || isUnanswerableReview(finding)) {
       return false;
     }
     if (!finding.group) {
