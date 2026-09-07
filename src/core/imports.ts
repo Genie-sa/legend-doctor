@@ -1,3 +1,6 @@
+import { isRuntimeFunctionLike, visitSkippingNestedRuntimeFunctions } from "./ast.js";
+import type { RuntimeFunctionLike } from "./ast.js";
+import { collectBindingNames } from "./analysis-ast.js";
 import ts from "typescript";
 
 export type LegendReactComponent = "Computed" | "For" | "Memo" | "Show" | "Switch";
@@ -320,6 +323,34 @@ export interface HookCallQuery {
   readonly namespaceNames: ReadonlySet<string>;
 }
 
+/**
+ * A call reaches the import only when no closer scope rebinds the name. Without this an injected or
+ * destructured `useState` reads as React's, and deleting its call would delete unrelated behaviour.
+ */
+function isReboundBeforeModuleScope(call: ts.CallExpression, name: string): boolean {
+  for (let current: ts.Node = call; current.parent; current = current.parent) {
+    if (isRuntimeFunctionLike(current) && declaresNameInOwnScope(current, name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function declaresNameInOwnScope(owner: RuntimeFunctionLike, name: string): boolean {
+  const names = new Set<string>();
+  for (const parameter of owner.parameters) {
+    collectBindingNames(parameter.name, names);
+  }
+  if (owner.body) {
+    visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+      if (ts.isVariableDeclaration(node)) {
+        collectBindingNames(node.name, names);
+      }
+    });
+  }
+  return names.has(name);
+}
+
 export function isImportedHookCall({
   call,
   canonicalName,
@@ -328,7 +359,7 @@ export function isImportedHookCall({
 }: HookCallQuery): boolean {
   const { expression } = call;
   if (ts.isIdentifier(expression)) {
-    return localNames.has(expression.text);
+    return localNames.has(expression.text) && !isReboundBeforeModuleScope(call, expression.text);
   }
   return (
     ts.isPropertyAccessExpression(expression) &&

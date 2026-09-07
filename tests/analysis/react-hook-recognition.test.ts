@@ -197,3 +197,48 @@ test("still reports an unrecognized state binding shape as such", () => {
   assert.equal(requireValue(finding).abstentionReason, "binding-shape-unsupported");
   assert.match(requireValue(finding).message, /not a standard `\[value, setter\]` tuple/u);
 });
+
+test("a hook name rebound by a closer scope is not React's hook", () => {
+  assert.deepEqual(
+    actions(`
+      import { useState } from "react";
+      export function makePanel(useState: (n: number) => [number, (n: number) => void]) {
+        return function Panel() {
+          const [unused, setUnused] = useState(0);
+          return <button onClick={() => setUnused(1)}>go</button>;
+        };
+      }
+    `),
+    [],
+  );
+});
+
+test("a hook name destructured from a local object is not React's hook", () => {
+  assert.deepEqual(
+    actions(`
+      import { useState } from "react";
+      export function Panel({ lib }: { lib: { useState: (n: number) => [number, (v: number) => void] } }) {
+        const { useState } = lib;
+        const [unused, setUnused] = useState(0);
+        return <button onClick={() => setUnused(1)}>go</button>;
+      }
+    `),
+    [],
+  );
+});
+
+test("a sibling scope rebinding the name leaves React's hook recognized", () => {
+  assert.deepEqual(
+    actions(`
+      import { useState } from "react";
+      function inject(useState: (n: number) => [number, (n: number) => void]) {
+        return useState(0);
+      }
+      export function Panel() {
+        const [count, setCount] = useState(0);
+        return <button onClick={() => setCount(count + 1)}>{count}{inject.name}</button>;
+      }
+    `),
+    ["keep-state"],
+  );
+});
