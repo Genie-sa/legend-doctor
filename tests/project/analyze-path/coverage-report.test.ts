@@ -5,7 +5,6 @@ import {
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { analyzeSource } from "../../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
-import { createAnalysisContext } from "../../../src/project/analyze-path/analysis-context.js";
 import os from "node:os";
 import path from "node:path";
 import { requireValue } from "./harness.js";
@@ -27,7 +26,6 @@ test("reports parser diagnostics and complete coverage without changing the defa
   assert.deepEqual(detailed.report, ordinary);
   assert.equal(detailed.diagnostics.parser.length, 1);
   assert.equal(requireValue(detailed.diagnostics.parser[0]).file, "broken.ts");
-  assert.deepEqual(detailed.diagnostics.semantic, []);
   assert.equal(detailed.coverage.entries.length, 2);
   assert.deepEqual(
     detailed.coverage.entries.map((entry) => [
@@ -195,24 +193,4 @@ test("scopes directory coverage to supported sources and reports direct unsuppor
     "unsupported-extension",
   );
   assert.equal(requireValue(direct.coverage.entries[0]).stages.detector.status, "unsupported");
-});
-
-test("reports optional semantic coverage only for an explicit tsconfig shard", async (testContext) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-semantic-context-"));
-  testContext.after(() => rm(root, { force: true, recursive: true }));
-  const sourcePath = path.join(root, "screen.ts");
-  const configFilePath = path.join(root, "tsconfig.json");
-  await writeFile(sourcePath, "export const value: string = 'ready';", "utf8");
-  await writeFile(
-    configFilePath,
-    JSON.stringify({ compilerOptions: { strict: true }, files: ["screen.ts"] }),
-    "utf8",
-  );
-
-  const context = await createAnalysisContext(root, { configFilePath });
-  const detailed = await analyzePathDetailed(root, { sharedContext: context });
-
-  assert.ok(context.semanticContext);
-  assert.deepEqual(detailed.diagnostics.semantic, []);
-  assert.equal(requireValue(detailed.coverage.entries[0]).stages.semantic.status, "analyzed");
 });

@@ -246,7 +246,7 @@ test("isolates an event-owned boolean across small presentation leaves and react
   );
   assert.equal(
     requireValue(report.findings.find((finding) => finding.name === "effectOwned")).action,
-    "delete-derived-state",
+    "use-observable",
   );
   assert.equal(
     requireValue(report.findings.find((finding) => finding.name === "measuredOverflow")).action,

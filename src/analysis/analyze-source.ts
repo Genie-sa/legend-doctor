@@ -319,7 +319,7 @@ function ownerBindingIndexes(sourceFile: ts.SourceFile, imports: HookImports): O
   };
 }
 
-function analyzeParsedSource(
+function findingsForPolicy(
   sourceFile: ts.SourceFile,
   fileName: string,
   options: ParsedSourceAnalysisOptions,
@@ -340,5 +340,30 @@ function analyzeParsedSource(
     effectProofs,
     leaves,
     ownership,
+  });
+}
+
+/** Compare final outcomes so consumer thresholds and alternative proofs are accounted for. */
+function analyzeParsedSource(
+  sourceFile: ts.SourceFile,
+  fileName: string,
+  options: ParsedSourceAnalysisOptions,
+): HookFinding[] {
+  const findings = findingsForPolicy(sourceFile, fileName, options);
+  if (options.materiality?.tier !== "compact") {
+    return findings;
+  }
+  const broad = findingsForPolicy(sourceFile, fileName, {
+    ...options,
+    materiality: DEFAULT_MATERIALITY,
+    stateFlow: new StateFlowIndex(),
+  });
+  return findings.map((finding, index) => {
+    const baseline = broad[index];
+    return finding.disposition !== "keep" &&
+      (finding.action !== baseline?.action ||
+        finding.assumption?.ifConfirmed !== baseline?.assumption?.ifConfirmed)
+      ? { ...finding, materiality: "compact" }
+      : finding;
   });
 }

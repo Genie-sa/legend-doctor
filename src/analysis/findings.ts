@@ -16,7 +16,7 @@ import {
   commitSensitiveStateClassification,
   stateIsCommitSensitive,
 } from "./commit-sensitive-state.js";
-import { findingFor, stateEvidence, withMaterialityTier } from "./finding-format.js";
+import { findingFor, stateEvidence } from "./finding-format.js";
 import { EMPTY_RUNTIME_FUNCTIONS } from "./constants.js";
 import type { FindingsScope } from "./finding-clusters.js";
 import type { HookFinding } from "../core/types.js";
@@ -223,17 +223,13 @@ function stateFindingFor(state: StateCandidate, result: FindingsScope): HookFind
     return null;
   }
   const resolved = resolveStateVerdict(state, usage, result);
-  const finding = withMaterialityTier(
-    findingFor(state.call, resolved.classification, {
-      evidence: [...stateEvidence(state, usage, analysis.sourceFile), ...resolved.evidence],
-      fileName: analysis.fileName,
-      hook: "useState",
-      name: state.valueName,
-      sourceFile: analysis.sourceFile,
-    }),
-    state,
-    analysis.materiality,
-  );
+  const finding = findingFor(state.call, resolved.classification, {
+    evidence: [...stateEvidence(state, usage, analysis.sourceFile), ...resolved.evidence],
+    fileName: analysis.fileName,
+    hook: "useState",
+    name: state.valueName,
+    sourceFile: analysis.sourceFile,
+  });
   withAssumption(finding, { analysis, resolved, state });
   attachGroup(finding, { cluster: stateClusterFor(state, result), resolved, state });
   return finding;

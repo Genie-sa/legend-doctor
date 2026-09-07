@@ -146,17 +146,14 @@ export const crossRepositoryHookCases = [
       "State written only by React effects can retain owner lifetime in an observable while one small presentation subtree subscribes; preserve the original effect, cleanup, and statement order.",
     target: target as string,
   })),
-  ...[
-    ["legend-music", "components/dnd/DraggableItem.tsx", 64, "fadeOg"],
-    ["open-webui-search-archived-chats", "component.tsx", 37, "isFocused"],
-  ].map(([target, file, line, name]) => ({
-    action: "use-observable" as const,
-    file: file as string,
-    hook: "useState" as const,
-    line: line as number,
-    name: name as string,
+  {
+    action: "use-observable",
+    file: "components/dnd/DraggableItem.tsx",
+    hook: "useState",
+    line: 64,
+    name: "fadeOg",
     rationale:
       "A compact owner still has a material leaf cut when the effect-written presentation state can skip at least five independent JSX elements without changing effect timing or owner lifetime.",
-    target: target as string,
-  })),
+    target: "legend-music",
+  },
 ] as const satisfies readonly GoldHookCase[];

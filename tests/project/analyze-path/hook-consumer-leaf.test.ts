@@ -1,5 +1,7 @@
+import { COMPACT_MATERIALITY, DEFAULT_MATERIALITY } from "../../../src/analysis/constants.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { HookFinding } from "../../../src/core/types.js";
+import type { MaterialityPolicy } from "../../../src/analysis/constants.js";
 import { analyzePath } from "../../../src/project/analyze-path/analyze-path.js";
 import assert from "node:assert/strict";
 import os from "node:os";
@@ -38,7 +40,10 @@ const HOOKS_FILE = `
   }
 `;
 
-async function scan(files: Readonly<Record<string, string>>): Promise<HookFinding[]> {
+async function scan(
+  files: Readonly<Record<string, string>>,
+  materiality: MaterialityPolicy = DEFAULT_MATERIALITY,
+): Promise<HookFinding[]> {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-hook-consumer-"));
   try {
     await Promise.all(
@@ -46,7 +51,7 @@ async function scan(files: Readonly<Record<string, string>>): Promise<HookFindin
         writeFile(path.join(root, name), source, "utf8"),
       ),
     );
-    const report = await analyzePath(root);
+    const report = await analyzePath(root, { materiality });
     return report.findings.filter((finding) => finding.hook === "useState");
   } finally {
     await rm(root, { force: true, recursive: true });
@@ -333,3 +338,24 @@ test("publishes a closed co-written hook model without splitting its transition"
   const source = findings.find((finding) => finding.name === "source");
   assert.deepEqual(source?.group?.members, ["source", "loaded"]);
 });
+
+for (const siblings of [7, 12]) {
+  test(`compact provenance follows a hook's ${siblings + 2}-element consumer`, async () => {
+    const files = {
+      "hooks.ts": `import { useCallback, useState } from "react";
+        export function useStatus() {
+          const [ready, setReady] = useState(false);
+          const activate = useCallback(() => setReady(true), []);
+          return { ready, activate };
+        }`,
+      "Panel.tsx": `import { useStatus } from "./hooks";
+        export function Panel() {
+          const { ready, activate } = useStatus();
+          return <main>${"<i/>".repeat(siblings)}<button disabled={ready} onClick={activate}>Go</button></main>;
+        }`,
+    };
+    const [finding] = await scan(files, COMPACT_MATERIALITY);
+    assert.equal(finding?.action, "use-observable");
+    assert.equal(finding?.materiality, siblings === 7 ? "compact" : undefined);
+  });
+}

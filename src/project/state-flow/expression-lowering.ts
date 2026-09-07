@@ -4,7 +4,10 @@ import {
   isShortCircuitBinary,
   shortCircuitRightExecution,
 } from "./constant-conditions.js";
+import { boundPaths } from "./path-budget.js";
+import { containsOwnerStateWrite } from "../../rules/async-leaf-status/owner-state-writes.js";
 import { isRuntimeFunctionLike } from "../../core/ast.js";
+import { localFunctionBinding } from "../../rules/state-proofs/binding-lookup.js";
 import ts from "typescript";
 
 export function selectBranchPaths(
@@ -26,10 +29,10 @@ export function lowerExpression(
   incoming: readonly ExecutionPath[],
   lowering: Lowering,
 ): PathResult {
-  return (
+  return boundPaths(
     lowerBranchingExpression(expression, incoming, lowering) ??
-    lowerSuspendingExpression(expression, incoming, lowering) ??
-    lowerChildren(expression, incoming, lowering)
+      lowerSuspendingExpression(expression, incoming, lowering) ??
+      lowerChildren(expression, incoming, lowering),
   );
 }
 
@@ -148,7 +151,32 @@ function lowerCall(
   }
   return expression === lowering.left || expression === lowering.right
     ? recordCallEvent(result, expression)
-    : result;
+    : { ...result, unknown: result.unknown || hidesTrackedWrite(expression, lowering) };
+}
+
+/** An unexpanded local helper can invalidate a negative coexecution proof. */
+function hidesTrackedWrite(call: ts.CallExpression, lowering: Lowering): boolean {
+  if (!ts.isIdentifier(call.expression)) {
+    return false;
+  }
+  for (let node: ts.Node | undefined = call.parent; node; node = node.parent) {
+    if (!isRuntimeFunctionLike(node)) {
+      continue;
+    }
+    const helper = localFunctionBinding(node, call.expression.text);
+    if (helper?.body) {
+      return containsOwnerStateWrite(helper.body, {
+        before: helper.body.end,
+        owner: node,
+        ownerSetters: new Set([
+          lowering.left.expression.getText(),
+          lowering.right.expression.getText(),
+        ]),
+        seen: new Set([call.expression.text]),
+      });
+    }
+  }
+  return false;
 }
 
 function recordCallEvent(result: PathResult, call: ts.CallExpression): PathResult {

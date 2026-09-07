@@ -29,7 +29,7 @@ function armsFor(current: ts.Node): ControlArm[] {
   if (ts.isCaseClause(parent) || ts.isDefaultClause(parent)) {
     return [{ arm: String(parent.getStart()), control: parent.parent.parent, exclusive: false }];
   }
-  return [];
+  return exceptionArms(current);
 }
 
 function ifArms(current: ts.Node, parent: ts.IfStatement): ControlArm[] {
@@ -93,4 +93,15 @@ export function shareSwitchControl(
       !leftArm.exclusive &&
       right.some((rightArm) => !rightArm.exclusive && leftArm.control === rightArm.control),
   );
+}
+
+function exceptionArms(current: ts.Node): ControlArm[] {
+  const { parent } = current;
+  if (ts.isTryStatement(parent) && current === parent.tryBlock) {
+    return [{ arm: "try", control: parent, exclusive: false }];
+  }
+  if (ts.isCatchClause(parent)) {
+    return [{ arm: "catch", control: parent.parent, exclusive: false }];
+  }
+  return [];
 }

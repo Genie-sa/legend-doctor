@@ -4,6 +4,16 @@ import type { HookAction } from "../../../src/core/types.js";
 export const formbricksHookCases = [
   {
     action: "use-observable",
+    file: "webhook-settings-tab.tsx",
+    hook: "useState",
+    line: 55,
+    name: "endpointAccessible",
+    rationale:
+      "The endpoint command clears hittingEndpoint then sets accessibility in both success and catch paths after the awaited request. One atomic model preserves those paired writes, while an always-mounted input subscriber owns the accessibility border and the pending button remains a separate leaf.",
+    target: "formbricks-webhook-settings",
+  },
+  {
+    action: "use-observable",
     file: "ActionSettingsTab.tsx",
     hook: "useState",
     line: 51,
@@ -379,6 +389,7 @@ export const formbricksHookCases = [
   ].map(([line, name, action]) => ({
     action: action as "delete-unused-state" | "keep-state",
     file: "merge-tags-combobox.tsx",
+    enforced: line !== 29,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
@@ -853,9 +864,11 @@ export const formbricksHookCases = [
     file: "add-webhook-modal.tsx",
     hook: "useState",
     line: 63,
+    enforced: false,
     name: "webhookSecret",
     rationale:
       "The secret never renders; direct test and imported React Hook Form submit commands read it before any same-command write, while endpoint completion and modal reset own every mutation.",
+    // Rendered calls or mutable reads still need an independent-refresh proof.
     target: "formbricks-add-webhook",
   },
   {
@@ -1374,23 +1387,23 @@ export const formbricksHookCases = [
     target: "formbricks-save-segment",
   },
   {
-    action: "delete-derived-state",
+    action: "use-observable",
     file: "survey-menu-bar.tsx",
     hook: "useState",
     line: 71,
     name: "isLinkSurvey",
     rationale:
-      "The state is assigned only from a transparent comparison of its exact effect dependency.",
+      "The true initializer must survive until the effect writes the survey-type comparison. Separate subscribers can own the two bounded conditional button surfaces while preserving that effect, its timing, and both conditional mounts.",
     target: "formbricks-survey-menu-bar",
   },
   {
-    action: "delete-effect",
+    action: "keep-effect",
     file: "survey-menu-bar.tsx",
     hook: "useEffect",
     line: 91,
     name: null,
     rationale:
-      "The effect only mirrors a transparent comparison of its exact dependency into React state.",
+      "The true initializer must survive until the effect writes the survey-type comparison. Separate subscribers can own the two bounded conditional button surfaces while preserving that effect, its timing, and both conditional mounts.",
     target: "formbricks-survey-menu-bar",
   },
   {

@@ -15,7 +15,7 @@ test("--disposition change keeps only change findings and practices", async (tes
   // SAFETY: the CLI exited successfully, so stdout is a serialized AnalysisReport.
   const report = JSON.parse(stdout) as AnalysisReport;
 
-  assert.equal(report.schemaVersion, 3);
+  assert.equal(report.schemaVersion, 4);
   assert.equal(report.findings.length, 0);
   assert.deepEqual(
     report.practices.map((practice) => [practice.action, practice.disposition]),

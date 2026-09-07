@@ -8,7 +8,7 @@ test("deletes a pure derivation state and effect pair", () => {
     actions(`
       import { useEffect, useState } from "react";
       export function Name({ first, last }: { first: string; last: string }) {
-        const [fullName, setFullName] = useState("");
+        const [fullName, setFullName] = useState(first + " " + last);
         useEffect(() => { setFullName(first + " " + last); }, [first, last]);
         return <span>{fullName}</span>;
       }
@@ -22,7 +22,7 @@ test("deletes derived state only when transparent inputs match effect dependenci
     actions(`
       import { useEffect, useState } from "react";
       export function Status({ login }: { login: { validated?: boolean; error?: string } }) {
-        const [visible, setVisible] = useState(true);
+        const [visible, setVisible] = useState(!login.validated);
         useEffect(() => { setVisible(!login.validated); }, [login.validated, login.error]);
         return <span>{String(visible)}</span>;
       }
@@ -66,7 +66,7 @@ test("does not leak a derived-state deletion across sibling component bindings",
       return <input value={value} onChange={event => setValue(event.target.value)} />;
     }
     export function Derived({ input }: { input: string }) {
-      const [value, setValue] = useState("");
+      const [value, setValue] = useState(input + "!");
       useEffect(() => { setValue(input + "!"); }, [input]);
       return <span>{value}</span>;
     }

@@ -1,4 +1,7 @@
-export const ANALYSIS_COVERAGE_STAGES = ["parser", "lowering", "semantic", "detector"] as const;
+// oxlint-disable-next-line eslint/no-magic-numbers -- Public coverage protocol version.
+const COVERAGE_SCHEMA_VERSION = 2 as const;
+
+export const ANALYSIS_COVERAGE_STAGES = ["parser", "lowering", "detector"] as const;
 
 export type AnalysisCoverageStage = (typeof ANALYSIS_COVERAGE_STAGES)[number];
 
@@ -17,7 +20,6 @@ export interface AnalysisCoverageOutcome {
 export interface AnalysisCoverageStages {
   readonly parser: AnalysisCoverageOutcome;
   readonly lowering: AnalysisCoverageOutcome;
-  readonly semantic: AnalysisCoverageOutcome;
   readonly detector: AnalysisCoverageOutcome;
 }
 
@@ -40,7 +42,7 @@ export interface AnalysisCoverageEntry {
 }
 
 export interface AnalysisCoverageReport {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: typeof COVERAGE_SCHEMA_VERSION;
   /** An empty list means that no targets were registered, never unknown coverage. */
   readonly entries: readonly AnalysisCoverageEntry[];
 }
@@ -158,16 +160,13 @@ function normalizeStages(stages: AnalysisCoverageStages): AnalysisCoverageStages
     suppliedStages.length !== ANALYSIS_COVERAGE_STAGES.length ||
     suppliedStages.some((stage) => !(ANALYSIS_COVERAGE_STAGES as readonly string[]).includes(stage))
   ) {
-    throw new TypeError(
-      "coverage must explicitly report parser, lowering, semantic, and detector stages",
-    );
+    throw new TypeError("coverage must explicitly report parser, lowering, and detector stages");
   }
 
   return {
     detector: normalizeOutcome("detector", stages.detector),
     lowering: normalizeOutcome("lowering", stages.lowering),
     parser: normalizeOutcome("parser", stages.parser),
-    semantic: normalizeOutcome("semantic", stages.semantic),
   };
 }
 
@@ -229,12 +228,11 @@ export class AnalysisCoverageLedger {
           stages: {
             parser: normalizeOutcome("parser", entry.stages.parser),
             lowering: normalizeOutcome("lowering", entry.stages.lowering),
-            semantic: normalizeOutcome("semantic", entry.stages.semantic),
             detector: normalizeOutcome("detector", entry.stages.detector),
           },
           target: { ...entry.target },
         })),
-      schemaVersion: 1,
+      schemaVersion: COVERAGE_SCHEMA_VERSION,
     };
   }
 

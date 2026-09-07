@@ -116,22 +116,14 @@ function resolveOnce(
   };
 }
 
-/**
- * One step per line. Chaining a second fact often reaches a line the first fact already named, and
- * both asks belong to whoever opens it, so distinct checks join instead of one displacing the other.
- */
+/** Chained hypotheses may repeat the same instruction and its source sites. */
 function dedupeResearch(steps: readonly ResearchStep[]): ResearchStep[] {
-  const byLine = new Map<string, ResearchStep>();
+  const distinct = new Map<string, ResearchStep>();
   for (const step of steps) {
-    const key = `${step.file}:${step.line}`;
-    const merged = byLine.get(key);
-    if (!merged) {
-      byLine.set(key, step);
-    } else if (!merged.check.includes(step.check)) {
-      byLine.set(key, { ...merged, check: `${merged.check}; also ${step.check}` });
-    }
+    const key = JSON.stringify([step.file, step.check, step.lines ?? [step.line]]);
+    distinct.set(key, step);
   }
-  return [...byLine.values()];
+  return [...distinct.values()];
 }
 
 function chainSecond(

@@ -2,7 +2,6 @@ export { createAnalysisContext } from "./project/analyze-path/analysis-context.j
 export { analyzePath, analyzePathDetailed } from "./project/analyze-path/analyze-path.js";
 export { analyzeSource } from "./analysis/analyze-source.js";
 export { AnalysisProject, createAnalysisFile } from "./project/analysis-project.js";
-export { createSemanticContext } from "./project/semantic-context/semantic-context.js";
 export { resolveInstalledLegendState } from "./project/legend-state-package.js";
 export { GitScopeError, resolveScopedFiles } from "./project/git-scope.js";
 export {
@@ -21,10 +20,7 @@ export type {
   PracticeRuleId,
   PracticeRuleInput,
 } from "./practices/practice-rules.js";
-export type {
-  AnalysisContext,
-  AnalysisContextOptions,
-} from "./project/analyze-path/analysis-context.js";
+export type { AnalysisContext } from "./project/analyze-path/analysis-context.js";
 export type { DetailedAnalysisResult } from "./project/analyze-path/analyze-path.js";
 export type {
   AnalysisCoverageOutcome,
@@ -40,13 +36,6 @@ export type {
   AnalysisDialect,
   AnalysisFile,
 } from "./project/analysis-project.js";
-export type {
-  CreateSemanticContextOptions,
-  ImportProvenance,
-  SemanticContext,
-  SemanticContextDiagnostic,
-  SemanticContextResult,
-} from "./project/semantic-context/model.js";
 export type {
   AbstentionReason,
   AnalysisReport,

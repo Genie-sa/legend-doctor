@@ -28,7 +28,6 @@ export interface Hypothesis {
 }
 
 const RENDER_READ_LINE_PREVIEW = 5;
-const MAX_RESEARCH_STEPS = 20;
 
 type HypothesisBuilder = (scope: HypothesisScope) => Hypothesis | null;
 
@@ -55,9 +54,19 @@ function sortedLines(nodes: readonly ts.Node[], sourceFile: ts.SourceFile): numb
 }
 
 function stepsAt(scope: HypothesisScope, nodes: readonly ts.Node[], check: string): ResearchStep[] {
-  return sortedLines(nodes, scope.inputs.sourceFile)
-    .slice(0, MAX_RESEARCH_STEPS)
-    .map((line) => ({ check, file: scope.reportFile, line }));
+  const lines = sortedLines(nodes, scope.inputs.sourceFile);
+  const [line] = lines;
+  return line === undefined
+    ? []
+    : [
+        {
+          check,
+          file: scope.reportFile,
+          line,
+          lines,
+          total: new Set(nodes.map((node) => node.getStart(scope.inputs.sourceFile))).size,
+        },
+      ];
 }
 
 function declarationStep(scope: HypothesisScope): ResearchStep {

@@ -55,3 +55,16 @@ test("--materiality accepts the two tiers and rejects others", () => {
     /must be one of: broad, compact/u,
   );
 });
+
+for (const source of [
+  "function Panel() { const [value] = useState(0); return <span>{value}</span>; }",
+  "function Panel() { const [value, setValue] = useState(0); return <button onClick={() => setValue(1)}>Go</button>; }",
+]) {
+  test(`compact does not claim an unchanged outcome: ${source}`, () => {
+    const input = `import { useState } from "react"; ${source}`;
+    const [broad] = analyzeSourceWith(input, "fixture.tsx", { materiality: DEFAULT_MATERIALITY });
+    const [compact] = analyzeSourceWith(input, "fixture.tsx", { materiality: COMPACT_MATERIALITY });
+    assert.equal(compact?.action, broad?.action);
+    assert.equal(compact?.materiality, undefined);
+  });
+}

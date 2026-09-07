@@ -245,3 +245,28 @@ test("does not cross an early exit or scheduled reset to prove async status", ()
     assert.doesNotMatch(finding.message, /async pending flag/u);
   }
 });
+
+test("try lowering does not hide the validation helper's companion state write", () => {
+  const findings = analyzeSource(
+    `
+    import { useState } from "react";
+    function LoadingButton({ loading }) { return <button>{loading ? "Wait" : "Save"}</button>; }
+    function Form({ valid }) {
+      const [saving, setSaving] = useState(false);
+      const [error, setError] = useState("");
+      const validate = () => { setError(""); return true; };
+      async function save() {
+        if (!valid) { setError("Required"); return; }
+        if (!validate()) return;
+        setSaving(true);
+        try { await persist(); } finally { setSaving(false); }
+      }
+      return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
+        <p>{error}</p><form onSubmit={save}><LoadingButton loading={saving} /></form>
+      </main>;
+    }
+  `,
+    "fixture.tsx",
+  );
+  assert.equal(findings.find((finding) => finding.name === "saving")?.disposition, "candidate");
+});

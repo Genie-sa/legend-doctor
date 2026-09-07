@@ -15,7 +15,7 @@ test("rejects an unknown disposition value as a usage error payload", async (tes
   assert.equal(code, 2);
   assert.equal(stderr, "");
   assert.deepEqual(payload, {
-    schemaVersion: 3,
+    schemaVersion: 4,
     status: "error",
     reason: "invalid_usage",
     message: "--disposition must be one of: candidate, change, keep, style; got 'bogus'",

@@ -147,7 +147,7 @@ test("proves source-resolved event measurements have only bounded scalar leaf pr
   assert.equal(states.get("companionWidth"), "review-state");
   assert.equal(states.get("mutableWidth"), "review-state");
   assert.equal(states.get("repeatedWidth"), "review-state");
-  assert.equal(states.get("effectWidth"), "delete-derived-state");
+  assert.equal(states.get("effectWidth"), "use-observable");
   assert.equal(states.get("impureWidth"), "review-state");
 });
 

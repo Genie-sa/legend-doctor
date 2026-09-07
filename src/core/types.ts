@@ -1,7 +1,7 @@
 type Confidence = "certain" | "probable";
 
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public JSON protocol version.
-const SCHEMA_VERSION = 3 as const;
+const SCHEMA_VERSION = 4 as const;
 
 type AbstentionReason =
   | "atomic-transition-unproven"
@@ -24,15 +24,21 @@ type AssumptionAnswer = "no" | "yes";
 
 type AssumptionStatus = "confirmed" | "open" | "rejected" | "stale";
 
-/** One place an agent must read to answer a review question, and what to verify there. */
+/** One research instruction and the source sites where it applies. */
 interface ResearchStep {
   check: string;
   file: string;
   line: number;
+  /** All source lines for this instruction, including the first. */
+  lines?: number[];
+  /** Total source sites, including several occurrences on the same line. */
+  total?: number;
 }
 
 /** An open review question ordered by the renders an answer is expected to save. */
 interface RankedQuestion {
+  /** Present for a group: members converted by this answer. */
+  convertingCount?: number;
   file: string;
   id: string;
   ifConfirmed: StateAssumption["ifConfirmed"];
@@ -67,7 +73,7 @@ interface StateAssumption {
   fingerprint: string;
   /** Stable across line shifts: report file, owner name, state name, and blocker reasons. */
   id: string;
-  /** The action this finding takes once the assumption is confirmed. */
+  /** The confirmed action, or the first converting member's action for a group. */
   ifConfirmed: AssumptionOutcome;
   /** Present on co-written group questions: every member and its outcome once the group is confirmed. */
   members?: AssumptionGroupMember[];
@@ -156,7 +162,7 @@ interface HookFindingBase {
     primary: boolean;
   };
   location: SourceLocation;
-  /** Present when the compact tier admitted an owner below the default broad-owner size. */
+  /** Present when compact mode changes the action or makes a new conversion confirmable. */
   materiality?: "compact";
   message: string;
   name: string | null;

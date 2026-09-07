@@ -6,10 +6,9 @@ import {
   selectBranchPaths,
 } from "./expression-lowering.js";
 import { constantBoolean, isInertCaseExpression } from "./constant-conditions.js";
+import { boundPaths } from "./path-budget.js";
 import { isRuntimeFunctionLike } from "../../core/ast.js";
 import ts from "typescript";
-
-const MAX_PATHS = 128;
 
 export function lowerStatements(
   statements: readonly ts.Statement[],
@@ -21,9 +20,9 @@ export function lowerStatements(
     if (result.paths.every((path) => path.termination !== null)) {
       break;
     }
-    result = advanceStatement(statement, result, lowering);
-    if (result.paths.length > MAX_PATHS) {
-      return { paths: result.paths.slice(0, MAX_PATHS), unknown: true };
+    result = boundPaths(advanceStatement(statement, result, lowering));
+    if (result.unknown) {
+      return result;
     }
   }
   return result;
@@ -45,6 +44,9 @@ function lowerStatement(
   incoming: readonly ExecutionPath[],
   lowering: Lowering,
 ): PathResult {
+  if (ts.isTryStatement(statement)) {
+    return lowerTry(statement, incoming, lowering);
+  }
   const lowered =
     lowerStructuredStatement(statement, incoming, lowering) ??
     lowerControlStatement(statement, incoming, lowering);
@@ -104,7 +106,6 @@ function isUnsupportedStatement(statement: ts.Statement): boolean {
     ts.isForOfStatement(statement) ||
     ts.isWhileStatement(statement) ||
     ts.isDoStatement(statement) ||
-    ts.isTryStatement(statement) ||
     ts.isWithStatement(statement) ||
     ts.isLabeledStatement(statement) ||
     ts.isContinueStatement(statement)
@@ -156,7 +157,10 @@ function lowerTermination(
     ? lowerExpression(statement.expression, incoming, lowering)
     : { paths: clonePaths(incoming), unknown: false };
   return {
-    paths: result.paths.map((path) => ({ ...path, termination: "return" })),
+    paths: result.paths.map((path) => ({
+      ...path,
+      termination: ts.isThrowStatement(statement) ? "throw" : "return",
+    })),
     unknown: result.unknown,
   };
 }
@@ -211,9 +215,97 @@ function advanceClause(run: ClauseRun, clause: ts.CaseOrDefaultClause, lowering:
     { ...lowering, breakable: true },
   );
   const broken = result.paths.filter((path) => path.termination === "break");
-  const returned = result.paths.filter((path) => path.termination === "return");
+  const returned = result.paths.filter(
+    (path) => path.termination === "return" || path.termination === "throw",
+  );
   run.outputs.push(...broken.map((path) => ({ ...path, termination: null })), ...returned);
   run.paths = result.paths.filter((path) => path.termination === null);
   run.unknown ||=
     result.unknown || (ts.isCaseClause(clause) && !isInertCaseExpression(clause.expression));
+}
+
+/** Keep normal completion and every possible partial execution reaching a catch/finally. */
+function lowerTry(
+  statement: ts.TryStatement,
+  incoming: readonly ExecutionPath[],
+  lowering: Lowering,
+): PathResult {
+  let result: PathResult = { paths: [], unknown: false };
+  for (const initial of incoming) {
+    const next = lowerTryPath(statement, initial, lowering);
+    result = boundPaths({ paths: [...result.paths, ...next.paths], unknown: next.unknown });
+    if (result.unknown) {
+      return result;
+    }
+  }
+  return statement.finallyBlock ? lowerFinally(statement.finallyBlock, result, lowering) : result;
+}
+
+function lowerTryPath(
+  statement: ts.TryStatement,
+  initial: ExecutionPath,
+  lowering: Lowering,
+): PathResult {
+  const tried = lowerStatements(statement.tryBlock.statements, [initial], lowering);
+  if (tried.unknown) {
+    return tried;
+  }
+  const exceptional = exceptionPrefixes(initial, tried.paths);
+  if (exceptional.unknown) {
+    return exceptional;
+  }
+  const caught = statement.catchClause
+    ? lowerStatements(statement.catchClause.block.statements, exceptional.paths, lowering)
+    : {
+        paths: exceptional.paths.map((path) => ({ ...path, termination: "throw" as const })),
+        unknown: false,
+      };
+  return boundPaths({
+    paths: [...tried.paths.filter((path) => path.termination !== "throw"), ...caught.paths],
+    unknown: caught.unknown,
+  });
+}
+
+function exceptionPrefixes(initial: ExecutionPath, paths: readonly ExecutionPath[]): PathResult {
+  let result: PathResult = { paths: [], unknown: false };
+  for (const path of paths) {
+    for (let { length } = initial.events; length <= path.events.length; length += 1) {
+      const firstEpoch = path.events[length - 1]?.epoch ?? initial.awaitEpoch;
+      const lastEpoch = path.events[length]?.epoch ?? path.awaitEpoch;
+      for (let epoch = firstEpoch; epoch <= lastEpoch; epoch += 1) {
+        result = boundPaths({
+          paths: [
+            ...result.paths,
+            { events: path.events.slice(0, length), awaitEpoch: epoch, termination: null },
+          ],
+          unknown: false,
+        });
+        if (result.unknown) {
+          return result;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function lowerFinally(block: ts.Block, incoming: PathResult, lowering: Lowering): PathResult {
+  let result: PathResult = { paths: [], unknown: false };
+  for (const path of incoming.paths) {
+    const finalized = lowerStatements(block.statements, [{ ...path, termination: null }], lowering);
+    result = boundPaths({
+      paths: [
+        ...result.paths,
+        ...finalized.paths.map((next) => ({
+          ...next,
+          termination: next.termination ?? path.termination,
+        })),
+      ],
+      unknown: finalized.unknown,
+    });
+    if (result.unknown) {
+      return result;
+    }
+  }
+  return result;
 }

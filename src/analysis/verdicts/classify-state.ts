@@ -53,6 +53,7 @@ import {
 } from "./small-owner-verdicts.js";
 import { stateCommandSnapshotEvidence, stateRenderCutEvidence } from "./classification-context.js";
 import type { ClassifiedState } from "../model.js";
+import { ownerHasMutableRenderRead } from "../../rules/state-proofs/render-purpose.js";
 import { siteSubscriptionVerdict } from "./site-subscription-verdict.js";
 
 const STATE_VERDICTS: readonly StateVerdict[] = [
@@ -103,6 +104,17 @@ export function classifyState(inputs: StateClassificationInputs): ClassifiedStat
   for (const verdict of STATE_VERDICTS) {
     const classified = verdict(context);
     if (classified) {
+      if (
+        (classified.action === "use-ref" || classified.action === "delete-unused-state") &&
+        ownerHasMutableRenderRead(inputs.state.owner)
+      ) {
+        return {
+          action: "review-state",
+          abstentionReason: "render-cut-unproven",
+          confidence: "probable",
+          message: `Review \`${inputs.state.valueName}\`; its render may refresh mutable refs or imperative reads even though the state value does not render. Preserve the update until every refreshed value has an independent subscription.`,
+        };
+      }
       return withDetachedEffectNote(classified, context);
     }
   }
