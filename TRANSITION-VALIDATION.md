@@ -100,3 +100,47 @@ are separately recognized. The prefix improvement also has a direct analyzer reg
 showing automatic grouped conversion before unrelated unsupported work, but it produces no new
 action in this pinned sample. This phase improves detection coverage and review specificity;
 it does not claim a measured reduction in the corpus review backlog.
+
+## Pre-push source review
+
+The review of `d71a472` against `fabc583` found two proof gaps, fixed without
+changing corpus targets, labels, or scoring.
+
+### Standards
+
+The Base UI callback proof previously accepted plain merge inputs that could
+remove or suppress the event. It now rejects competing event fields, including
+constant objects and escaped identifier names, prototype overrides, and calls
+exceeding the five arguments consumed by `mergeProps`. This is intentionally
+conservative for competing handlers; it does not establish which compositions
+would be safe by their names.
+
+### Spec
+
+An event-origin confirmation previously accepted unreachable nested command
+calls. Inline adapters now require a direct expression call or a single
+return/expression statement, and cannot be generators. Other control flow stays
+under review instead of claiming that event timing is the only missing fact.
+
+### Source and documentation evidence
+
+- [Base UI mergeProps documentation](https://base-ui.com/react/utils/merge-props)
+  describes right-to-left handler execution, prevention, and the five-argument
+  limit. Installed Base UI 1.7.0 `merge-props/mergeProps.mjs`, especially
+  `mergeProps`, `mutablyMergeInto`, and `mergeEventHandlers`, establishes the exact
+  version used by the tests. Direct runtime counterexamples confirmed that null
+  removes the event, a sixth argument is ignored, and prevention suppresses the
+  earlier handler. Current online documentation is newer than this pinned source.
+- [Legend batching documentation](https://legendapp.com/open-source/state/v3/usage/reactivity/#batching)
+  agrees with installed 3.0.0-beta.48 `index.mjs`: `batch` ends in a synchronous
+  `finally`; `assign` batches its property writes. JavaScript evaluates arguments
+  before entering `assign`, so sequential setter evaluation is not automatically
+  equivalent to constructing its argument object.
+- [Legend React API](https://legendapp.com/open-source/state/v3/react/react-api/)
+  and installed `react.mjs` agree that `useObservable` retains its observable in a
+  React ref. [React state identity](https://react.dev/learn/preserving-and-resetting-state)
+  remains a separate obligation when changing component ownership or boundaries.
+
+Ten adversarial cases failed before their respective fixes: six merge-input
+cases and four nonexecuting adapters. A direct inline adapter remains supported.
+These fixtures are unit tests, not new pinned-app labels.

@@ -10,6 +10,8 @@ import { climbTransparentExpression } from "./carried-values.js";
 import ts from "typescript";
 import { uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 
+const MAX_MERGE_ARGUMENTS = 5;
+
 const UTILITY_MODULES = {
   mergeProps: "@base-ui/react/merge-props",
   useRender: "@base-ui/react/use-render",
@@ -48,19 +50,30 @@ function isUtility(
   });
 }
 
-function plainObject(expression: ts.Expression): ts.ObjectLiteralExpression | null {
+function plainObject(expression: ts.Expression, event: string): ts.ObjectLiteralExpression | null {
   const value = unwrapTransparentExpression(expression);
   return ts.isObjectLiteralExpression(value) &&
-    value.properties.every(
-      (property) => ts.isPropertyAssignment(property) && !ts.isComputedPropertyName(property.name),
-    )
+    value.properties.every((property) => {
+      if (!ts.isPropertyAssignment(property) || ts.isComputedPropertyName(property.name)) {
+        return false;
+      }
+      const name =
+        ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name)
+          ? property.name.text
+          : property.name.getText();
+      return name !== event && name !== "__proto__";
+    })
     ? value
     : null;
 }
 
 /** Function merge inputs execute eagerly; mutable/escaped defaults can hide one too. */
-function isObjectMergeInput(expression: ts.Expression, source: ChildComponentSource): boolean {
-  if (plainObject(expression)) {
+function isObjectMergeInput(
+  expression: ts.Expression,
+  source: ChildComponentSource,
+  event: string,
+): boolean {
+  if (plainObject(expression, event)) {
     return true;
   }
   const value = unwrapTransparentExpression(expression);
@@ -72,7 +85,7 @@ function isObjectMergeInput(expression: ts.Expression, source: ChildComponentSou
     declaration?.initializer &&
     ts.isVariableDeclarationList(declaration.parent) &&
     (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
-    plainObject(declaration.initializer) &&
+    plainObject(declaration.initializer, event) &&
     identifiersNamed(source.body, value.text).every(
       (reference) =>
         reference === value || isBindingName(reference) || isNonValueIdentifier(reference),
@@ -189,7 +202,8 @@ export function baseUiRenderEventStage({
   path,
   source,
 }: CallbackExpressionProbe): boolean | null {
-  if (path.length !== 1 || !/^on[A-Z]/u.test(path[0] ?? "")) {
+  const [event] = path;
+  if (path.length !== 1 || !event || !/^on[A-Z]/u.test(event)) {
     return null;
   }
   const merge = expression.parent;
@@ -201,8 +215,9 @@ export function baseUiRenderEventStage({
     return null;
   }
   if (
+    merge.arguments.length > MAX_MERGE_ARGUMENTS ||
     !merge.arguments.every(
-      (argument) => argument === expression || isObjectMergeInput(argument, source),
+      (argument) => argument === expression || isObjectMergeInput(argument, source, event),
     )
   ) {
     return false;

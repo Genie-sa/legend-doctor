@@ -53,3 +53,21 @@ test("a known render-time invocation cannot be waived by an event-origin questio
   assert.equal(finding.assumption, undefined);
   assert.equal(finding.review?.kind, "investigate");
 });
+
+for (const adapter of [
+  "() => { if (false) submit(); }",
+  "() => { return; submit(); }",
+  "() => { while (false) submit(); }",
+  "function* () { return submit(); }",
+]) {
+  test(`does not waive command execution through ${adapter}`, () => {
+    const finding = pending(PENDING.replace("onClick={submit}", `onClick={${adapter}}`));
+    assert.equal(finding.action, "review-state");
+    assert.equal(finding.assumption, undefined);
+  });
+}
+
+test("a direct inline command adapter can still be researched", () => {
+  const finding = pending(PENDING.replace("onClick={submit}", "onClick={() => submit()}"));
+  assert.equal(requireValue(finding.assumption).ifConfirmed, "use-observable");
+});

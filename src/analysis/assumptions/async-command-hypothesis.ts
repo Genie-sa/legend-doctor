@@ -9,6 +9,23 @@ import { isBindingName } from "../../rules/child-contract/prop-bindings.js";
 import { runtimeFunctionName } from "../ast-helpers.js";
 import ts from "typescript";
 
+/** Timing confirmation cannot establish execution through arbitrary control flow. */
+function directAdapterCall(
+  expression: ts.ArrowFunction | ts.FunctionExpression,
+): ts.Expression | undefined {
+  const { body } = expression;
+  if (!ts.isBlock(body)) {
+    return body;
+  }
+  const [statement] = body.statements;
+  if (body.statements.length !== 1 || !statement) {
+    return undefined;
+  }
+  return ts.isExpressionStatement(statement) || ts.isReturnStatement(statement)
+    ? statement.expression
+    : undefined;
+}
+
 /** A direct JSX event reference or inline event adapter can be researched; an eager call cannot. */
 function eventReference(reference: ts.Identifier, scope: HypothesisScope): ts.JsxAttribute | null {
   const attribute = findAncestorUntil(reference, ts.isJsxAttribute, scope.inputs.state.owner);
@@ -26,13 +43,25 @@ function eventReference(reference: ts.Identifier, scope: HypothesisScope): ts.Js
   if (expression === reference) {
     return attribute;
   }
-  const caller = nearestNestedFunction(reference, scope.inputs.state.owner);
-  return ts.isCallExpression(reference.parent) &&
-    reference.parent.expression === reference &&
-    caller === expression &&
-    (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression))
-    ? attribute
-    : null;
+  return isDirectAdapter(reference, expression, scope) ? attribute : null;
+}
+
+function isDirectAdapter(
+  reference: ts.Identifier,
+  expression: ts.Expression,
+  scope: HypothesisScope,
+): boolean {
+  if (
+    !ts.isCallExpression(reference.parent) ||
+    reference.parent.expression !== reference ||
+    nearestNestedFunction(reference, scope.inputs.state.owner) !== expression ||
+    (!ts.isArrowFunction(expression) && !ts.isFunctionExpression(expression)) ||
+    expression.asteriskToken
+  ) {
+    return false;
+  }
+  const call = directAdapterCall(expression);
+  return Boolean(call && unwrapTransparentExpression(call) === reference.parent);
 }
 
 function commandEventReferences(scope: HypothesisScope): readonly ts.JsxAttribute[] | null {

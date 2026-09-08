@@ -34,7 +34,58 @@ function screen(attributes: string): string {
 }
 
 const CASES = [
+  {
+    name: "escaped event override",
+    attributes: "",
+    wrapper: WRAPPER.replace(
+      "combine(defaults, props)",
+      String.raw`combine(defaults, props, { on\u0043lick: null })`,
+    ),
+    action: "review-state",
+  },
   { name: "default DOM rendering", attributes: "", wrapper: WRAPPER, action: "use-observable" },
+  {
+    name: "null event override",
+    attributes: "",
+    wrapper: WRAPPER.replace(
+      "combine(defaults, props)",
+      "combine(defaults, props, { onClick: null })",
+    ),
+    action: "review-state",
+  },
+  {
+    name: "prevented event",
+    attributes: "",
+    wrapper: WRAPPER.replace(
+      "combine(defaults, props)",
+      "combine(defaults, props, { onClick: event => event.preventBaseUIHandler() })",
+    ),
+    action: "review-state",
+  },
+  {
+    name: "ignored sixth argument",
+    attributes: "",
+    wrapper: WRAPPER.replace("combine(defaults, props)", "combine({}, {}, {}, {}, {}, props)"),
+    action: "review-state",
+  },
+  {
+    name: "prototype event override",
+    attributes: "",
+    wrapper: WRAPPER.replace(
+      "combine(defaults, props)",
+      "combine(defaults, props, { __proto__: { onClick: null } })",
+    ),
+    action: "review-state",
+  },
+  {
+    name: "constant event override",
+    attributes: "",
+    wrapper: WRAPPER.replace(
+      "const defaults =",
+      "const overrides = { onClick: null }; const defaults =",
+    ).replace("combine(defaults, props)", "combine(defaults, props, overrides)"),
+    action: "review-state",
+  },
   {
     name: "custom element",
     attributes: "render={<Unknown />}",
