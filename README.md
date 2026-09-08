@@ -1,25 +1,8 @@
 # Legend Doctor
 
-Your React app renders more than it needs to. Legend Doctor proves where, and shows the exact edit that cuts it.
-
-It is a read-only scanner for TypeScript and JavaScript. It reads your `useState`, `useEffect`, and
-[Legend State](https://legendapp.com/open-source/state/) code and reports:
-
-- proven edits that remove a render or an effect
-- edits that need one more fact before they are safe
-- code that is already right and should stay as it is
-
-It never edits files. It never guesses. It emits `change` only when the TypeScript structure proves the edit.
-
-## Why fewer renders
-
-Most React apps re-render whole trees when one value changes. Legend State fixes this by letting each leaf subscribe
-to exactly the value it renders. Jay Meistrich, who built Legend State, explains the idea and the numbers in his
-App.js Conf 2026 talk:
-
-[![How to Build the Fastest Apps: Break the Rules](https://i.ytimg.com/vi/K3flMIHS-cI/hqdefault.jpg)](https://youtu.be/K3flMIHS-cI)
-
-Legend Doctor is the tool that finds those cuts in an existing codebase, and holds every one of them to a proof.
+A read-only analyzer for React and Legend State in TypeScript and JavaScript.
+It reports suggested render and effect optimizations, unresolved opportunities, and code to keep.
+Results are JSON; source files are never modified.
 
 ## Quick start
 
@@ -46,17 +29,12 @@ Copy the skill into your project, then the agent scans before and after every st
 cp -r node_modules/legend-doctor/skills/legend-doctor /path/to/app/.claude/skills/
 ```
 
-The report JSON is stable and versioned. Agents apply `change` findings, read the named source for `candidate`
-findings, and rescan.
-
-To see the effect at runtime, pair it with [genie-react](https://github.com/Genie-sa/genie-react). Genie counts real
-renders in the running app, so the agent can record a render count before the edit and check it dropped after.
+Apply related findings together, validate the changes, and rescan. See [EXAMPLES.md](EXAMPLES.md).
 
 ## Run in CI
 
-The GitHub Action reviews every pull request and reports only the findings the change introduced, not the existing
-backlog. It posts one sticky summary comment, inline review comments on the changed lines, and a commit status. It is
-advisory by default. Add `.github/workflows/legend-doctor.yml`:
+The GitHub Action reports findings introduced by a pull request. It is advisory by default.
+Add `.github/workflows/legend-doctor.yml`:
 
 ```yaml
 name: Legend Doctor
@@ -80,29 +58,14 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: Genie-sa/legend-doctor@v0.2.0
+      - uses: Genie-sa/legend-doctor@v0.3.0
         with:
           directory: src
 ```
 
 Keep `fetch-depth: 0`. The action diffs the pull request against its base branch and needs the history.
 
-Or paste this to your coding agent:
-
-> Add Legend Doctor to this repository so it reviews every pull request. Create a branch, add the workflow file shown
-> in the "Run in CI" section of https://github.com/Genie-sa/legend-doctor exactly as written, set `directory` to the
-> folder that holds our React components, commit only that file, and open a pull request titled "Add Legend Doctor
-> CI". Do not change application code.
-
-| Input            | Default   | Meaning                                                                                  |
-| ---------------- | --------- | ---------------------------------------------------------------------------------------- |
-| `directory`      | `.`       | Folder to scan                                                                           |
-| `scope`          | `changed` | `changed` reports what the PR introduced, `files` every finding in changed files, `full` |
-| `blocking`       | `none`    | Fail the check on `change`, `candidate`, or `style` findings                             |
-| `materiality`    | config    | `compact` also reports render cuts in components with 8 to 11 JSX elements               |
-| `ignore-actions` | config    | Comma-separated actions to hide, added to the config file's list                         |
-
-The action skips pull requests that change no React files. [action.yml](action.yml) lists every input and output.
+See [action.yml](action.yml) for scope, blocking, filtering, and other options.
 
 ## Configure
 
@@ -141,62 +104,8 @@ Every finding has a disposition:
 | `keep`      | Correct as is. Leave the React or lifecycle boundary alone.               |
 | `style`     | Cleaner form. Apply only when the installed Legend State API supports it. |
 
-Stdout is always one JSON document and stays valid JSON when the scan fails, so a caller parses a single channel and
-never prose. Nothing is written to stderr.
-
-`legend-doctor --help` documents every report field. [REPORT.md](REPORT.md) goes further: the `assumption` a
-`review-state` finding carries when one yes/no fact would turn it into a `change`, and how to record the answer.
-Reviews also carry `review.kind`, known `blockers`, and a concrete `next` step, distinguishing open questions,
-stale or declined answers, dependent findings, unsupported analysis, and cases with no proven benefit.
-Grouped findings include `transitions`: exact write sites and their execution relations. The report
-distinguishes adjacent literal handoffs from separate or unresolved phases, so a group of related
-states is never an instruction to collapse an entire async handler into one update.
-
-## Plan subscription changes together
-
-The JSON report includes `subscriptionAnalysis.version: 1`: an inventory of recognized `useValue` calls,
-explicit unresolved reasons, and coordinated plans for each owner. Plans follow safe aliases, defaults,
-and memo projections, merge overlapping child boundaries, and preserve observable ownership and effect
-lifecycles. New boundaries use ordinary module-level child components.
-
-Static JSX impact and supplied runtime render counts are reported separately. See
-[the report contract and measurement format](REPORT.md#coordinated-subscriptions-version-1).
-
-## Workspace implementation context
-
-Directory scans can follow imports into declared monorepo member packages without reporting hooks
-from those dependency files. Workspace discovery uses `@manypkg/get-packages`; TypeScript resolves
-package exports, export conditions, and project aliases. In an uninstalled workspace, only an
-unambiguous same-name `workspace:*` dependency gets an in-memory package link. Existing installed
-packages take precedence. Other workspace ranges and aliases require real installed links; the tool
-does not guess registry-version compatibility. Declaration exports do not count as implementation
-proofs, and files with parser errors cannot supply cross-file contracts. Missing or unsupported source
-keeps the affected opportunity in review.
-
-## The loop
-
-1. Scan.
-2. Apply one group of `change` findings.
-3. Read the source for each `candidate`. Edit only when the missing fact is proven.
-4. Run your formatter, typecheck, and tests.
-5. Scan again. Stop when every remaining finding is `keep` or an understood `candidate`.
-
-Check [EXAMPLES.md](EXAMPLES.md) before applying an action you have not seen before.
-
-## What it cuts
-
-| Cost                                               | Typical action                                         |
-| -------------------------------------------------- | ------------------------------------------------------ |
-| A parent render caused by one child's local state  | `move-state-down`, `use-observable`                    |
-| A render for a value only commands or cleanup read | `use-ref`                                              |
-| Derived state kept in sync by an effect            | `delete-derived-state`, `delete-effect`                |
-| An effect that runs after an event it could join   | `move-to-event`                                        |
-| A render used only to run an external reaction     | `use-observe-effect`                                   |
-| A subscription wider than the value rendered       | `narrow-use-value-subscription`, `move-use-value-down` |
-| A render read that never subscribes                | `use-value-for-render-read`                            |
-| A parent clone where one path changed              | `narrow-observable-write`, `assign-observable-fields`  |
-
-[EXAMPLES.md](EXAMPLES.md) has one worked example per action.
+See [REPORT.md](REPORT.md) for review blockers, grouped transitions, subscription plans, and runtime measurements.
+Validate suggested edits with your formatter, typecheck, and tests, then rescan.
 
 ## Commands
 
@@ -218,28 +127,8 @@ legend-doctor <root> --actionable --staged              # staged files
 legend-doctor <root> --actionable --since origin/main   # this branch
 ```
 
-By default a render cut proven by owner size needs a component with 12 or more JSX elements. `--materiality compact`
-lowers that to 8. Cuts proven another way — a transported read reaching a child that subscribes, or a custom hook
-owner — do not depend on the tier. Run `--help` for every flag and exit code.
-
-## Safety rules
-
-- One owner per value. Do not mirror React state and an observable.
-- `useObservable` for state tied to a component's lifetime.
-- `useValue` at the smallest stable leaf that renders the value.
-- `.peek()` only in a proven non-tracking command.
-- `.assign()` or `batch()` when several writes are one update.
-- Keep small, one-control state in React when an observable removes no render.
-- Keep an effect when its timing, replay, or cleanup is not proven equivalent.
-- Apply grouped findings together.
-- Check the installed `@legendapp/state` version before changing an API.
-
-Under `@legendapp/state` 2.x the tracking rule is off, because `enableReactTracking({ auto: true })` can make render
-reads track app-wide. In React Compiler projects, keep clone writes unless the report proves the in-place write safe.
-
-These rules follow the [Legend State React API](https://legendapp.com/open-source/state/v3/react/react-api/), the
-[reactivity guide](https://legendapp.com/open-source/state/v3/usage/reactivity/), and the
-[Legend State best-practices skill](https://github.com/LegendApp/legend-skills/tree/main/legend-state-best-practices).
+See `legend-doctor --help` for all flags and exit codes, [ACTIONS.md](ACTIONS.md) for actions, and
+[EXAMPLES.md](EXAMPLES.md) for worked examples.
 
 ## Develop
 
@@ -251,22 +140,5 @@ npm run eval
 
 Read [evals/README.md](evals/README.md) before changing corpus targets, labels, or scoring. `npm run bench` times
 the analysis pipeline on a checkout you point it at.
-
-### Release a change
-
-Include a changeset in each PR that changes the published package:
-
-```bash
-npm run changeset
-npm run changeset -- status
-```
-
-Select `legend-doctor`, choose the version bump, and describe the user-visible change. Commit the generated
-`.changeset/*.md` file with the implementation. Use a patch for fixes and a minor for new features.
-Documentation-only changes do not need a changeset.
-
-After the PR merges into `main` and the quality gate passes, the release workflow opens or updates a
-**Version Packages** PR. Merge that PR to publish the package and create its GitHub release. A merged feature PR
-without a changeset does not schedule a version bump.
 
 MIT licensed.
