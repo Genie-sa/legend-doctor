@@ -9,9 +9,11 @@ import { isInsideOwnerReturn, stableConditionalJsxSlot } from "./conditional-jsx
 import { isUseValueCall, provenObservablePath } from "./observable-paths.js";
 import { nodeWithin, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import type { SubscriptionFlow } from "./subscription-flow.js";
 import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import { ownerHasMutableRenderRead } from "../state-proofs/render-purpose.js";
+import { pureFlowExpression } from "./flow-expressions.js";
 import ts from "typescript";
 
 const MAX_LEAF_OWNER_SHARE = 0.4;
@@ -27,13 +29,13 @@ export interface MoveDownTarget {
 export function moveDownTargets(
   references: readonly ts.Identifier[],
   use: UseValueDeclaration,
-  { scan }: { scan: ObservableReadScan },
+  { scan, flow }: { scan: ObservableReadScan; flow: SubscriptionFlow },
 ): readonly MoveDownTarget[] {
   const { owner } = use;
   if (hasUnprovenOwnerWork(owner, scan)) {
     return [];
   }
-  if (ownerHasMutableRenderRead(owner, use.call, trackedCalls(owner, scan))) {
+  if (ownerHasMutableRenderRead(owner, use.call, trackedCalls(owner, scan, flow))) {
     return [];
   }
   const common = moveDownTarget(references, owner, scan);
@@ -43,13 +45,19 @@ export function moveDownTargets(
   return separateTargets(references, owner, scan);
 }
 
-function trackedCalls(owner: RuntimeFunctionLike, scan: ObservableReadScan): ReadonlySet<ts.Node> {
+function trackedCalls(
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+  flow: SubscriptionFlow,
+): ReadonlySet<ts.Node> {
+  const scope = { names: flow.names, primitives: flow.primitives, sourceFile: scan.sourceFile };
   const trackedSources = new Set<ts.Node>();
   if (owner.body) {
     visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
       if (
         ts.isCallExpression(node) &&
         (isDirectSubscription(node, scan) ||
+          pureFlowExpression(node, scope) ||
           (["useMemo", "useCallback"] as const).some((canonicalName) =>
             isImportedHookCall({
               call: node,

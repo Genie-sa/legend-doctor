@@ -201,3 +201,18 @@ test("a cached callback cannot hide eagerly evaluated factory work", () => {
     0,
   );
 });
+
+for (const content of [
+  "<Clock time={time}/><h1>{bins}</h1>",
+  "<Clock {...{ time }}/><h1>{bins}</h1>",
+]) {
+  test(`subscription relocation preserves prop snapshots in ${content}`, () => {
+    assert.equal(
+      moves(
+        "const raw = useValue(state$.count); const bins = raw ?? 64; const time = Date.now();",
+        content,
+      ).length,
+      0,
+    );
+  });
+}

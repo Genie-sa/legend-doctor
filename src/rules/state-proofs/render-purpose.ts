@@ -26,7 +26,13 @@ export function ownerHasMutableRenderRead(
     if (ts.isCallExpression(node) && calledHelperReadsRef(node)) {
       return true;
     }
-    if (ts.isJsxExpression(node) && node.expression && !ts.isJsxAttribute(node.parent)) {
+    // Subscription cuts also preserve prop snapshots. Command-only state retains
+    // Its separate callback proof rather than treating callback factories as snapshots.
+    if (
+      (ts.isJsxExpression(node) || ts.isJsxSpreadAttribute(node)) &&
+      node.expression &&
+      (trackedRead !== null || (ts.isJsxExpression(node) && !ts.isJsxAttribute(node.parent)))
+    ) {
       return (
         hasImperativeRead(node.expression, { owner, trackedRead, trackedSources }, new Set()) ||
         Boolean(node.forEachChild(inspect))

@@ -1,8 +1,8 @@
 import { bindingContainsName, uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 import {
   bindingDeclarationCount,
-  isDeclarationName,
-  isNonValueIdentifier,
+  isAssignmentOperator,
+  unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import {
   isReactEffectCall,
@@ -98,26 +98,54 @@ function parameterPrimitive(parameter: ts.ParameterDeclaration, name: string): b
 function bindingWritten(owner: RuntimeFunctionLike, name: string): boolean {
   let written = false;
   visit(owner.body, (node) => {
-    if (
-      !ts.isIdentifier(node) ||
-      node.text !== name ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
-    const { parent } = node;
-    if (
-      (ts.isBinaryExpression(parent) &&
-        parent.left === node &&
-        parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-        parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment) ||
-      ts.isPostfixUnaryExpression(parent) ||
-      (ts.isPrefixUnaryExpression(parent) &&
-        [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(parent.operator))
-    ) {
+    const target = assignmentTarget(node);
+    if (target && targetWritesBinding(target, name)) {
       written = true;
     }
   });
   return written;
+}
+
+function assignmentTarget(node: ts.Node): ts.Expression | null {
+  if (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind)) {
+    return node.left;
+  }
+  if (ts.isForOfStatement(node) || ts.isForInStatement(node)) {
+    return ts.isVariableDeclarationList(node.initializer) ? null : node.initializer;
+  }
+  return ts.isPostfixUnaryExpression(node) ||
+    (ts.isPrefixUnaryExpression(node) &&
+      [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(node.operator))
+    ? node.operand
+    : null;
+}
+
+/** Follow assignment targets only: property receivers, keys, and defaults are reads. */
+function targetWritesBinding(expression: ts.Expression, name: string): boolean {
+  const target = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(target)) {
+    return target.text === name;
+  }
+  if (ts.isArrayLiteralExpression(target)) {
+    return target.elements.some((element) => targetWritesBinding(element, name));
+  }
+  if (ts.isObjectLiteralExpression(target)) {
+    return target.properties.some((property) => {
+      if (ts.isShorthandPropertyAssignment(property)) {
+        return property.name.text === name;
+      }
+      if (ts.isPropertyAssignment(property)) {
+        return targetWritesBinding(property.initializer, name);
+      }
+      return ts.isSpreadAssignment(property) && targetWritesBinding(property.expression, name);
+    });
+  }
+  if (ts.isSpreadElement(target)) {
+    return targetWritesBinding(target.expression, name);
+  }
+  return (
+    ts.isBinaryExpression(target) &&
+    target.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    targetWritesBinding(target.left, name)
+  );
 }

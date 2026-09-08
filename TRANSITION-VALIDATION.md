@@ -199,7 +199,8 @@ deltas. Four initially over-conservative withdrawals were restored by the bounde
 cached/deferred-work proofs above. No eval labels were adjusted to hide the
 remaining discrepancies.
 
-The fixes are committed locally; the push is held because the user requested it
-only if everything was good and the unchanged eval suite is not green. The
+The fixes were initially held because the unchanged eval suite was not green.
+The user subsequently authorized pushing them as `c7a1afc`. See
+[the full branch review](BRANCH-REVIEW.md) for the later PR checkpoint. The
 remaining metadata opportunity needs a structural purity/data-property proof;
 it must not regain certainty from a property type or application-specific exception.
