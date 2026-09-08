@@ -153,3 +153,32 @@ test("measurement ranking distinguishes positive, unmeasured, and regressive evi
     assert.ok(report.subscriptionAnalysis!.plans.every((item) => item.impact.measurement === null));
   }
 });
+
+test("programmatic measurements use the same validation as persisted measurements", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-measurement-input-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, "Screen.tsx"), source);
+  const baseline = await analyzePath(root);
+  const plan = baseline.subscriptionAnalysis!.plans[0]!;
+  const measurement = {
+    planId: plan.id,
+    fingerprint: plan.fingerprint,
+    scenario: "toggle",
+    samples: 1,
+    before: { ownerRenders: 1, siblingRenders: 1 },
+    after: { ownerRenders: 0, siblingRenders: 0 },
+    behaviorEquivalent: true as const,
+  };
+  for (const invalid of [
+    { ...measurement, samples: 0 },
+    { ...measurement, scenario: "" },
+    { ...measurement, before: { ownerRenders: -1, siblingRenders: 0 } },
+    { ...measurement, samples: Number.NaN },
+  ]) {
+    const report = await analyzePath(root, { subscriptionMeasurements: [invalid] });
+    assert.equal(report.subscriptionAnalysis!.rejectedMeasurements.length, 1);
+    assert.ok(report.subscriptionAnalysis!.plans.every((item) => item.impact.measurement === null));
+  }
+  const valid = await analyzePath(root, { subscriptionMeasurements: [measurement] });
+  assert.equal(valid.subscriptionAnalysis!.plans[0]!.impact.basis, "provided-runtime-measurement");
+});

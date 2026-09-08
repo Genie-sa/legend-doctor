@@ -61,7 +61,7 @@ function flowFinding(
   if (references === null) {
     return null;
   }
-  const targets = moveDownTargets(references, use, { scan, derived: directReferences === null });
+  const targets = moveDownTargets(references, use, { scan });
   if (
     targets.length === 0 ||
     (targets.length > 1 && flow.derivations.some((derivation) => derivation.kind === "useMemo"))

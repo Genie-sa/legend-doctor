@@ -77,9 +77,9 @@ function compoundFlowExpression(value: ts.Expression, scope: ExpressionScope): b
       pureFlowExpression(value.whenFalse, scope)
     );
   }
-  return ts.isPropertyAccessExpression(value)
-    ? pureFlowExpression(value.expression, scope)
-    : pureStringCall(value, scope);
+  // A raw observable object may retain getters; moving a property read can change
+  // Its timing or duplicate it across leaves. Primitive types do not prove a data descriptor.
+  return pureStringCall(value, scope);
 }
 
 function pureStringCall(value: ts.Expression, scope: ExpressionScope): boolean {

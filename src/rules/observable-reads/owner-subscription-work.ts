@@ -21,7 +21,7 @@ export function hasUnprovenOwnerWork(
   let found = false;
   visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
     if (
-      (ts.isCallExpression(node) && unstableMemo(node, owner, scan)) ||
+      (ts.isCallExpression(node) && unstableCachedHook(node, owner, scan)) ||
       (ts.isJsxAttribute(node) && node.name.getText() === "ref") ||
       (ts.isPropertyAccessExpression(node) && node.name.text === "current") ||
       (ts.isElementAccessExpression(node) &&
@@ -49,23 +49,27 @@ export function hasUnprovenOwnerWork(
   return found;
 }
 
-function unstableMemo(
+function unstableCachedHook(
   call: ts.CallExpression,
   owner: RuntimeFunctionLike,
   scan: ObservableReadScan,
 ): boolean {
   if (
-    !isImportedHookCall({
-      call,
-      canonicalName: "useMemo",
-      localNames: scan.imports.useMemo,
-      namespaceNames: scan.imports.reactNamespaces,
-    })
+    !(["useMemo", "useCallback"] as const).some((canonicalName) =>
+      isImportedHookCall({
+        call,
+        canonicalName,
+        localNames: scan.imports[canonicalName],
+        namespaceNames: scan.imports.reactNamespaces,
+      }),
+    )
   ) {
     return false;
   }
-  const [, dependencies] = call.arguments;
+  const [callback, dependencies] = call.arguments;
   return (
+    !callback ||
+    (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
     !dependencies ||
     !ts.isArrayLiteralExpression(dependencies) ||
     !dependencies.elements.every((dependency) => stableMemoDependency(dependency, owner, scan))

@@ -5,13 +5,13 @@ import {
   jsxElementCountIn,
   lowestCommonJsxSubtree,
 } from "../state-proofs/jsx-subtrees.js";
-import { identifiedUseValueDeclaration, isUseValueCall } from "./observable-paths.js";
 import { isInsideOwnerReturn, stableConditionalJsxSlot } from "./conditional-jsx-slots.js";
+import { isUseValueCall, provenObservablePath } from "./observable-paths.js";
 import { nodeWithin, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
+import { isImportedHookCall } from "../../core/imports.js";
 import { ownerHasMutableRenderRead } from "../state-proofs/render-purpose.js";
-import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
 
 const MAX_LEAF_OWNER_SHARE = 0.4;
@@ -27,42 +27,41 @@ export interface MoveDownTarget {
 export function moveDownTargets(
   references: readonly ts.Identifier[],
   use: UseValueDeclaration,
-  { scan, derived = false }: { scan: ObservableReadScan; derived?: boolean },
+  { scan }: { scan: ObservableReadScan },
 ): readonly MoveDownTarget[] {
   const { owner } = use;
   if (hasUnprovenOwnerWork(owner, scan)) {
+    return [];
+  }
+  if (ownerHasMutableRenderRead(owner, use.call, trackedCalls(owner, scan))) {
     return [];
   }
   const common = moveDownTarget(references, owner, scan);
   if (common) {
     return [common];
   }
-  if (ownerHasMutableRenderRead(owner, use.call, trackedCalls(owner, scan, derived))) {
-    return [];
-  }
   return separateTargets(references, owner, scan);
 }
 
-function trackedCalls(
-  owner: RuntimeFunctionLike,
-  scan: ObservableReadScan,
-  derived: boolean,
-): ReadonlySet<ts.Node> {
+function trackedCalls(owner: RuntimeFunctionLike, scan: ObservableReadScan): ReadonlySet<ts.Node> {
   const trackedSources = new Set<ts.Node>();
-  if (derived && owner.body) {
+  if (owner.body) {
     visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
-      if (ts.isCallExpression(node) && isUseValueCall(node, scan.imports)) {
+      if (
+        ts.isCallExpression(node) &&
+        (isDirectSubscription(node, scan) ||
+          (["useMemo", "useCallback"] as const).some((canonicalName) =>
+            isImportedHookCall({
+              call: node,
+              canonicalName,
+              localNames: scan.imports[canonicalName],
+              namespaceNames: scan.imports.reactNamespaces,
+            }),
+          ))
+      ) {
+        // Owner-work validation checks memo dependencies first. A cached value or
+        // Deferred callback is not a fresh imperative read on this subscription's update.
         trackedSources.add(node);
-      }
-      if (ts.isVariableDeclaration(node)) {
-        const subscription = identifiedUseValueDeclaration(node, scan);
-        if (subscription) {
-          for (const item of subscriptionFlow(subscription, scan).derivations) {
-            if (item.kind === "useMemo") {
-              trackedSources.add(item.declaration.initializer!);
-            }
-          }
-        }
       }
     });
   }
@@ -110,4 +109,12 @@ function moveDownTarget(
   return leafElements / ownerElements <= MAX_LEAF_OWNER_SHARE
     ? { leaf, leafElements, node, ownerElements, references }
     : null;
+}
+
+function isDirectSubscription(call: ts.CallExpression, scan: ObservableReadScan): boolean {
+  return (
+    isUseValueCall(call, scan.imports) &&
+    call.arguments.length === 1 &&
+    provenObservablePath(call.arguments[0]!, scan.observableBindings) !== null
+  );
 }

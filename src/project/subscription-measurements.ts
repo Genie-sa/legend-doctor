@@ -17,7 +17,8 @@ export async function attachSubscriptionMeasurements(
   if (report.subscriptionAnalysis) {
     report.subscriptionAnalysis = applySubscriptionMeasurements(
       report.subscriptionAnalysis,
-      supplied ?? (await loadSubscriptionMeasurements(root)),
+      supplied?.map((entry) => parseMeasurement(entry)) ??
+        (await loadSubscriptionMeasurements(root)),
     );
   }
 }
@@ -46,7 +47,7 @@ function isMissingFile(cause: unknown): cause is Error & { code: "ENOENT" } {
     cause instanceof Error && Object.getOwnPropertyDescriptor(cause, "code")?.value === "ENOENT"
   );
 }
-function isObject(value: JsonValue | undefined): value is JsonObject {
+function isObject(value: JsonValue | SubscriptionMeasurement | undefined): value is JsonObject {
   return value instanceof Object && !Array.isArray(value);
 }
 function isString(value: JsonValue | undefined): value is string {
@@ -60,7 +61,9 @@ function parseCounts(value: JsonValue | undefined): SubscriptionMeasurement["bef
     ? { ownerRenders: value.ownerRenders, siblingRenders: value.siblingRenders }
     : null;
 }
-function parseMeasurement(value: JsonValue): SubscriptionMeasurement | null {
+function parseMeasurement(
+  value: JsonValue | SubscriptionMeasurement,
+): SubscriptionMeasurement | null {
   if (
     !isObject(value) ||
     !isString(value.planId) ||

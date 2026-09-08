@@ -144,3 +144,62 @@ under review instead of claiming that event timing is the only missing fact.
 Ten adversarial cases failed before their respective fixes: six merge-input
 cases and four nonexecuting adapters. A direct inline adapter remains supported.
 These fixtures are unit tests, not new pinned-app labels.
+
+### Review of the subsequently merged subscription work
+
+The remote advanced to `2ff621b` during review. The fixes above were rebased on
+that commit, preserving the merged work and its existing eval changes.
+
+Standards review found two additional correctness defects. Raw object property
+reads were treated as pure derivations; Legend preserves getters, so duplicating
+a derived value into multiple children can change both invocation count and
+rendered values. Property-derived flows now abstain until data-property/purity
+evidence exists. The positive closed-memo fixture uses a primitive subscription;
+a TypeScript primitive property annotation cannot prove the absence of getters.
+The mutable-render safeguard now runs for cohesive child cuts as well as separate
+children. Independent recognized subscriptions retain their tracked-source
+exemption, while clock snapshots continue to block relocation.
+
+Spec review found that supplied programmatic measurements bypassed the validation
+applied to persisted JSON. Both paths now use the same parser. Zero samples,
+negative counts, empty scenarios, and nonfinite samples cannot become runtime
+evidence. Valid supplied measurements still work.
+
+Four more tests failed before these fixes: a duplicated getter, two cohesive-child
+clock snapshots, and invalid programmatic measurement input. The getter behavior
+was independently reproduced with installed Legend 3.0.0-beta.48: one shared
+derivation rendered equal strings; two evaluations returned different strings.
+No eval targets, labels, or scoring were changed during this review.
+
+The cohesive-cut safeguard also distinguishes independent cached/deferred work
+from fresh snapshots. Only direct observable arguments qualify as tracked
+`useValue` sources; an opaque selector may execute on every owner render.
+`useMemo` and `useCallback` exemptions require inline callbacks and dependencies
+that pass owner-work validation, so eager callback factories and dynamic
+dependency expressions cannot hide imperative work. Positive fixtures preserve
+independent cached snapshots and callbacks embedded in JSX aliases; negative
+fixtures cover selector reads, unstable dependencies, and eager factories.
+
+### Final validation and push decision
+
+All **935 tests** pass, as do lint, formatting, typecheck, build, and package
+dry-run. The final Doctor scan of `src` reports no findings or practices.
+
+The unchanged full public/private corpus inventories **2,428 hooks across 246
+targets and 14 apps**. Discrepancies increase from **5 at 2ff621b to 7**. Hook
+actions and group instructions are unchanged: 877/896 hook labels, 30/30 groups,
+471/471 labeled actionable precision, and 471/490 recall. Legend practice matches
+change from 106/109 to 104/109.
+
+Two recommendations are withdrawn: Legend Music's getter-dependent metadata
+projection (a conservative proof gap), and a private clipboard-feedback
+subscription whose owner also refreshes displayed expiry state from the clock
+(a behavior-preservation correction). The other twelve apps have zero action
+deltas. Four initially over-conservative withdrawals were restored by the bounded
+cached/deferred-work proofs above. No eval labels were adjusted to hide the
+remaining discrepancies.
+
+The fixes are committed locally; the push is held because the user requested it
+only if everything was good and the unchanged eval suite is not green. The
+remaining metadata opportunity needs a structural purity/data-property proof;
+it must not regain certainty from a property type or application-specific exception.

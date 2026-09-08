@@ -8,7 +8,7 @@ function moves(setup: string, content: string, extra = ""): LegendPracticeFindin
     fileName: "flow.tsx",
     sourceText: `
     import { useObservable, useValue } from "@legendapp/state/react";
-    import { useMemo, useEffect } from "react";
+    import { useMemo, useEffect, useCallback } from "react";
     export function Screen({ label }: { label: string }) {
       const state$ = useObservable({ count: 0, track: { title: "", artist: "" } });
       ${setup}
@@ -30,16 +30,16 @@ test("follows a defaulted value to all distant render consumers", () => {
   assert.match(result[0]!.message, /2 separate child/u);
 });
 
-test("moves a memoized metadata derivation together with its source subscription", () => {
+test("moves a memoized primitive derivation together with its source subscription", () => {
   const result = moves(
-    `const track = useValue(state$.track);
+    `const artist = useValue(state$.track.artist);
     const subtitle = useMemo(() => {
-      if (!track) return "";
+      if (!artist) return "";
       const parts: string[] = [];
-      if (track.artist) parts.push(track.artist);
+      if (artist) parts.push(artist);
       return parts.join(" • ");
-    }, [track]);`,
-    "<section><h1>{track?.title}</h1>{subtitle ? <p>{subtitle}</p> : null}</section>",
+    }, [artist]);`,
+    "<section>{subtitle ? <p>{subtitle}</p> : null}</section>",
   );
   assert.equal(result.length, 1);
   assert.match(result[0]!.message, /subtitle/u);
@@ -110,4 +110,94 @@ test("single-child cuts also preserve unrelated memos that recompute every rende
       0,
     );
   }
+});
+
+test("does not duplicate getter-based derivations into separate children", () => {
+  const result = analyzeLegendPractices({
+    fileName: "getter.tsx",
+    sourceText: `
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      let reads = 0;
+      const state$ = observable({ track: { get title() { return String(++reads); } } });
+      export function Screen() {
+        const track = useValue(state$.track);
+        const title = track ? track.title : "";
+        return <main><Header/><Toolbar/><Summary/><Filters/><List/><Footer/>
+          <Aside/><Help/><Status/><Actions/><Search/><h1>{title}</h1><h2>{title}</h2></main>;
+      }
+    `,
+  });
+  assert.ok(result.every((finding) => finding.action !== "move-use-value-down"));
+});
+
+for (const read of ["Date.now()", "clock.read()"]) {
+  test(`a single subscription child preserves the owner's ${read} snapshot`, () => {
+    assert.equal(
+      moves(
+        `const raw = useValue(state$.count); const bins = raw ?? 64; const time = ${read};`,
+        "<output>{time}</output><h1>{bins}</h1>",
+      ).length,
+      0,
+    );
+  });
+}
+
+test("retains a cached snapshot owned by an independent subscription", () => {
+  assert.equal(
+    moves(
+      `const raw = useValue(state$.count); const bins = raw ?? 64;
+     const artist = useValue(state$.track.artist);
+     const cached = useMemo(() => clock.read(), [artist]);`,
+      "<output>{cached}</output><h1>{bins}</h1>",
+    ).length,
+    1,
+  );
+});
+
+test("retains independent deferred callbacks inside rendered JSX aliases", () => {
+  assert.equal(
+    moves(
+      `const raw = useValue(state$.count); const bins = raw ?? 64;
+     const handler = useCallback(() => clock.read(), []);
+     const pane = <button onClick={handler}/>;`,
+      "{pane}<h1>{bins}</h1>",
+    ).length,
+    1,
+  );
+});
+
+test("does not treat an unstable callback dependency as cached render work", () => {
+  assert.equal(
+    moves(
+      `const raw = useValue(state$.count); const bins = raw ?? 64;
+     const handler = useCallback(() => act(), [clock.read()]);
+     const pane = <button onClick={handler}/>;`,
+      "{pane}<h1>{bins}</h1>",
+    ).length,
+    0,
+  );
+});
+
+test("a selector hook cannot hide a fresh imperative snapshot", () => {
+  assert.equal(
+    moves(
+      `const raw = useValue(state$.count); const bins = raw ?? 64;
+     const time = useValue(() => clock.read());`,
+      "<output>{time}</output><h1>{bins}</h1>",
+    ).length,
+    0,
+  );
+});
+
+test("a cached callback cannot hide eagerly evaluated factory work", () => {
+  assert.equal(
+    moves(
+      `const raw = useValue(state$.count); const bins = raw ?? 64;
+     const handler = useCallback(clock.read(), []);
+     const pane = <button onClick={handler}/>;`,
+      "{pane}<h1>{bins}</h1>",
+    ).length,
+    0,
+  );
 });
