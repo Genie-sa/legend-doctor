@@ -8,6 +8,7 @@ export type JsxSubtree = ts.JsxElement | ts.JsxFragment | ts.JsxSelfClosingEleme
 export type HookCallback = ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression;
 
 export interface ObservableReadScan {
+  readonly primitivePaths?: ReadonlySet<string>;
   readonly imports: HookImports;
   readonly observableBindings: ReadonlySet<string>;
   readonly observableKeys: ReadonlyMap<string, ReadonlySet<string>>;

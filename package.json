@@ -34,7 +34,8 @@
   "files": [
     "dist/src",
     "skills",
-    "EXAMPLES.md"
+    "EXAMPLES.md",
+    "REPORT.md"
   ],
   "type": "module",
   "exports": {

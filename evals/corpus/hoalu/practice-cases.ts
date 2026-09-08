@@ -45,8 +45,9 @@ export const hoaluPracticeCases = [
     action: "move-use-value-down",
     file: "components/expenses/expense-filter-dropdown.tsx",
     line: 67,
+    enforced: false,
     rationale:
-      "The transaction kind is rendered only by the category panel's conditional child slot, so an always-mounted wrapper can retain the subscription while preventing kind changes from rebuilding the full filter dropdown.",
+      "The transaction kind is rendered only by the category panel's conditional child slot, so an always-mounted wrapper can retain the subscription while preventing kind changes from rebuilding the full filter dropdown. This remains non-enforced: the owner also computes memo inputs from live-query hooks and a fresh date-range projection. Their identities and render-time refresh behavior need structural proof before removing owner renders; unstable memo dependencies conservatively block this cut.",
     target: "hoalu-app",
   },
   ...[
@@ -85,7 +86,7 @@ export const hoaluPracticeCases = [
     file: "components/providers/workspace-action-provider.tsx",
     line: 32,
     rationale:
-      "The provider unwraps commandPaletteOpen$ only to transport its value into one stable source-resolved CommandPalette child; subscribing in that existing child removes the provider render while preserving the child's render and lifetime.",
+      "The provider unwraps commandPaletteOpen$ only to transport its value into one stable source-resolved CommandPalette child; subscribing in that existing child removes the provider render while preserving the child's render and lifetime. Its useEffect import is unused: there are no React effect calls, JSX refs, or direct imperative render snapshots that require the removed render.",
     target: "hoalu-app",
   },
 ] as const satisfies readonly GoldPracticeCase[];

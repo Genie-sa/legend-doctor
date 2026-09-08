@@ -105,3 +105,63 @@ sometimes a `next` command.
 Kept findings and outcomes already available in broad mode are untagged. This comparison includes consumer-size
 thresholds for hook-owned state. Compact mode evaluates both policies on the same parsed source; it adds analysis
 work but does not reread or reparse files.
+
+## Coordinated subscriptions (version 1)
+
+`subscriptionAnalysis` is an additive section of schema 4. Its own `version` is `1`.
+
+- `inventory` records each recognized imported `useValue` call in eligible scanned files, including aliases.
+  Each entry contains its source location, binding, observable, classified reads, derivations, and status:
+  `planned`, `other-action`, or `unresolved`. Unresolved entries have explicit reasons; they are not findings.
+- `coverage` counts those three statuses and their total. This is subscription inventory coverage, separate
+  from hook coverage and manually labeled corpus recall. It does not count hidden subscriptions inside
+  arbitrary custom hooks or unrecognized imports.
+- `plans` groups actionable subscription cuts by owner. Overlapping JSX boundaries merge into one child.
+  Each plan lists subscriptions, complete derivation chains, child locations, remaining parent inputs,
+  implementation steps, and behavioral verification. Define new children at module scope and retain their
+  mount slots. Keep observable creation and atomic writes in their existing owner.
+- `impact.basis: "static-jsx"` ranks by owner JSX elements outside the proposed children. These are source
+  counts, not render counts, elapsed time, or a promised speedup. `rank` starts at 1.
+- `impact.basis: "provided-runtime-measurement"` identifies externally supplied before/after render counts.
+  Measurements do not bypass detector proofs or create findings.
+- `rejectedMeasurements` reports malformed, stale, duplicate, or unmatched measurement entries.
+
+A practice finding with a coordinated cut also has `subscription` metadata. Report filters remove matching
+plans and mark filtered inventory entries `excluded-by-report-filter`, so ignored actions do not reappear
+as implementation instructions. Filtering away any part of a plan also removes its runtime measurement;
+measurements of a complete edit cannot rank a partial edit.
+
+To attach runtime evidence, create `<analysis-root>/.legend-doctor/subscription-measurements.json`:
+
+```json
+[
+  {
+    "planId": "copy plans[i].id from the baseline report",
+    "fingerprint": "copy plans[i].fingerprint from the baseline report",
+    "scenario": "toggle the setting ten times with unrelated UI mounted",
+    "samples": 10,
+    "before": { "ownerRenders": 10, "siblingRenders": 30 },
+    "after": { "ownerRenders": 0, "siblingRenders": 0 },
+    "behaviorEquivalent": true
+  }
+]
+```
+
+Record equal interaction samples before and after in the same runtime configuration, excluding initial
+mounts. Verify visible values, drafts, callback snapshots, identity, effect cleanup, and atomic updates
+before setting `behaviorEquivalent`. The analyzer trusts this supplied assertion; it does not run the app.
+Attach the evidence when scanning the **baseline source**: the fingerprint hashes the owner's source text,
+so a scan of the edited owner rejects it as stale. External modules and runtime settings are not included
+in that fingerprint; repeat measurements when either changes. Programmatic `analyzePath` callers may pass
+`subscriptionMeasurements` instead of creating the file.
+
+Measured positive savings rank first, unmeasured static plans next, and measured zero/negative savings last.
+Within measured groups, ranking uses total owner-plus-sibling renders saved per sample. This ordering is a
+triage aid; scenario frequency and render duration still require application profiling.
+
+Closed `const` aliases/defaults and supported `useMemo` projections move with their subscriptions. Memo
+identity and dependencies remain intact. Literal primitive effect dependencies and explicitly typed primitive
+props can prove that an independent effect will not rerun on subscription-only updates. Missing/unstable
+or unresolved dependencies, callback snapshots, refs, overlapping parent subscriptions, repeated render
+callbacks, and unsupported expressions remain conservative blockers. General selector relocation is not
+implied by inventory coverage.

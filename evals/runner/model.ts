@@ -26,6 +26,10 @@ export interface Tally {
   predictions: number;
 }
 
+export interface PracticeScore extends Tally {
+  knownMisses: number;
+}
+
 export interface HookPair {
   finding: HookFinding;
   gold: GoldHookCase;

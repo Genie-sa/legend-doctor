@@ -21,6 +21,7 @@ import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
 import { observablePathsFor } from "./observable-containers.js";
+import { observablePrimitivePathsFor } from "./observable-primitive-paths.js";
 import type ts from "typescript";
 
 export interface SourceIndex {
@@ -39,6 +40,7 @@ export interface SourceIndex {
   hookDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
   legendValueBridgesFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observableArrayPathsFor: (file: string) => ReadonlySet<string>;
+  observablePrimitivePathsFor: (file: string) => ReadonlySet<string>;
   observableFactoriesFor: (file: string) => ReadonlySet<string>;
   observableKeysFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observablePathsFor: (file: string) => ReadonlySet<string>;
@@ -68,6 +70,7 @@ export function buildSourceIndexFromFiles(
     hookDeclarationFor: (file, name) => hookDeclarationFor(state, file, name),
     legendValueBridgesFor: (file) => legendValueBridgesFor(state, file),
     observableArrayPathsFor: (file) => observableArrayPathsFor(state, file),
+    observablePrimitivePathsFor: (file) => observablePrimitivePathsFor(state, file),
     observableFactoriesFor: (file) =>
       new Set(resolvedFor(state, file, "observable-factory").keys()),
     observableKeysFor: (file) => observableKeysFor(state, file),

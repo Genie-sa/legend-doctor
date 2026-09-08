@@ -11,12 +11,19 @@ import {
   outermostTransparentParent,
   provenObservablePath,
 } from "./observable-paths.js";
+import {
+  hasUnstableSubtreeLifetime,
+  jsxElementCount,
+  jsxElementCountIn,
+} from "../state-proofs/jsx-subtrees.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { hasAncestorUseValueSubscription } from "./move-down.js";
-import { hasUnstableSubtreeLifetime } from "../state-proofs/jsx-subtrees.js";
+import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
 import { isInsideOwnerReturn } from "./conditional-jsx-slots.js";
 import { propIsPrimitiveValueConsumer } from "../child-contract/child-contract.js";
+import { subscriptionCut } from "./subscription-cut.js";
+import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
@@ -28,6 +35,7 @@ export function moveUseValueIntoChildFinding(
   if (
     !use ||
     bindingDeclarationCount(use.owner, use.localName) !== 1 ||
+    hasUnprovenOwnerWork(use.owner, scan) ||
     hasAncestorUseValueSubscription(use.call, use.owner, scan) ||
     hasOtherGetReadOfPath(use.owner, use.observable, scan.observableBindings)
   ) {
@@ -38,7 +46,21 @@ export function moveUseValueIntoChildFinding(
   if (!transport || !childAcceptsPrimitiveProp(transport, use.owner, scan)) {
     return null;
   }
-  return moveIntoChildFinding(use, transport, scan);
+  const cut = subscriptionCut(
+    subscriptionFlow(use, scan),
+    [
+      {
+        leaf: transport.subtree,
+        node: transport.subtree,
+        references: [reference!],
+        ownerElements: jsxElementCount(use.owner),
+        leafElements: jsxElementCountIn(transport.subtree),
+      },
+    ],
+    scan,
+  );
+  cut.boundaries = cut.boundaries.map((boundary) => ({ ...boundary, kind: "existing-child" }));
+  return { ...moveIntoChildFinding(use, transport, scan), subscription: cut };
 }
 
 function soleValueReference(use: UseValueDeclaration): ts.Identifier | null {

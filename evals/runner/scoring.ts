@@ -3,6 +3,7 @@ import type {
   Evaluation,
   HookPair,
   HookScore,
+  PracticeScore,
   SourceLocation,
   Tally,
 } from "./model.js";
@@ -184,7 +185,7 @@ function practiceKey(target: string, location: SourceLocation, action: string): 
   return `${target}\0${path.normalize(location.file)}\0${location.line}\0${action}`;
 }
 
-function scorePracticeCase(run: Evaluation, gold: GoldPracticeCase, score: Tally): void {
+function scorePracticeCase(run: Evaluation, gold: GoldPracticeCase, score: PracticeScore): void {
   const target = run.targets.get(gold.target);
   if (!target) {
     return;
@@ -194,7 +195,8 @@ function scorePracticeCase(run: Evaluation, gold: GoldPracticeCase, score: Tally
     (candidate) => isAt(candidate.location, gold) && candidate.action === gold.action,
   );
   score.matches += finding ? 1 : 0;
-  if (finding) {
+  score.knownMisses += !finding && gold.enforced === false ? 1 : 0;
+  if (finding || gold.enforced === false) {
     return;
   }
   run.failures.push(
@@ -224,8 +226,8 @@ function recordUnexpectedPractices(
 export function scorePractices(
   run: Evaluation,
   cases: readonly GoldPracticeCase[] = goldPracticeCases,
-): Tally {
-  const score: Tally = { labels: 0, matches: 0, predictions: 0 };
+): PracticeScore {
+  const score: PracticeScore = { labels: 0, matches: 0, predictions: 0, knownMisses: 0 };
   const labeled = new Set(cases.map((gold) => practiceKey(gold.target, gold, gold.action)));
   for (const gold of cases) {
     scorePracticeCase(run, gold, score);

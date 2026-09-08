@@ -30,6 +30,7 @@ test("moves a transported useValue subscription into one source-proven child", a
     path.join(root, "screen.tsx"),
     `
       import { useValue } from "@legendapp/state/react";
+      import { useEffect } from "react";
       import { Palette } from "./palette";
       import { paletteOpen$ } from "./state";
       export function Screen({ children }: { children: React.ReactNode }) {
@@ -46,7 +47,7 @@ test("moves a transported useValue subscription into one source-proven child", a
     (candidate) => candidate.action === "move-use-value-into-child",
   );
   assert.equal(requireValue(finding).location.file, "screen.tsx");
-  assert.equal(requireValue(finding).location.line, 6);
+  assert.equal(requireValue(finding).location.line, 7);
   assert.match(requireValue(finding).message ?? "", /pass `paletteOpen\$` to `Palette`/u);
   assert.match(requireValue(finding).message ?? "", /subscribe inside the child/u);
 });
@@ -81,6 +82,7 @@ test("keeps transported useValue subscriptions without one stable primitive chil
     path.join(root, "screen.tsx"),
     `
       import { useValue } from "@legendapp/state/react";
+      import { useEffect, useLayoutEffect as layout, useRef } from "react";
       import { MemoPalette, ObjectPalette, Palette } from "./palette";
       import { open$, panel$ } from "./state";
       export function Conditional({ enabled }: { enabled: boolean }) {
@@ -111,6 +113,29 @@ test("keeps transported useValue subscriptions without one stable primitive chil
       export function NonPrimitive() {
         const panel = useValue(panel$);
         return <ObjectPalette panel={panel} />;
+      }
+      export function CommitWork() {
+        const open = useValue(open$);
+        useEffect(() => publish());
+        return <Palette open={open} />;
+      }
+      export function LayoutWork() {
+        const open = useValue(open$);
+        layout(() => publish());
+        return <Palette open={open} />;
+      }
+      export function CallbackRef() {
+        const open = useValue(open$);
+        return <><div ref={node => publish(node)} /><Palette open={open} /></>;
+      }
+      export function Snapshot() {
+        const open = useValue(open$);
+        return <><output>{panel$.open.peek()}</output><Palette open={open} /></>;
+      }
+      export function RefSnapshot() {
+        const open = useValue(open$);
+        const ref = useRef(0);
+        return <><output>{ref.current}</output><Palette open={open} /></>;
       }
     `,
     "utf8",

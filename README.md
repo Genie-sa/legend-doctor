@@ -227,3 +227,14 @@ Read [evals/README.md](evals/README.md) before changing corpus targets, labels, 
 the analysis pipeline on a checkout you point it at.
 
 MIT licensed.
+
+### Plan subscription changes together
+
+The JSON report includes `subscriptionAnalysis.version: 1`: an inventory of recognized `useValue` calls,
+explicit unresolved reasons, and coordinated plans for each owner. Plans follow safe aliases, defaults,
+and memo projections, merge overlapping child boundaries, and preserve observable ownership and effect
+lifecycles. New boundaries use ordinary module-level child components.
+
+Static JSX impact and supplied runtime render counts are reported separately. See
+[the report contract and measurement format](REPORT.md#coordinated-subscriptions-version-1) and
+[the implementation validation](evals/reports/integrated-subscriptions.md).

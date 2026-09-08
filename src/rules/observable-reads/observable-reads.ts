@@ -7,14 +7,19 @@ import type { ChildContractResolver } from "../child-contract/model.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
+import type { SubscriptionInventory } from "../../core/subscriptions.js";
+import { localPrimitivePaths } from "./primitive-paths.js";
 import { moveUseValueDownFinding } from "./move-down.js";
 import { moveUseValueIntoChildFinding } from "./move-into-child.js";
 import { narrowUseValueFinding } from "./narrow-use-value.js";
 import { splitUseValueResultFinding } from "./fresh-selector-results.js";
+import { subscriptionInventory } from "./subscription-inventory.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
 export interface ObservableReadRequest {
+  readonly inventory?: SubscriptionInventory[] | undefined;
+  readonly primitivePaths?: ReadonlySet<string>;
   readonly childContracts?: ChildContractResolver | null;
   readonly fileName: string;
   readonly imports: HookImports;
@@ -29,6 +34,10 @@ export function findObservableReadPractices(
   const { sourceFile } = request;
   const scan: ObservableReadScan = {
     ...request,
+    primitivePaths: new Set([
+      ...(request.primitivePaths ?? []),
+      ...localPrimitivePaths(sourceFile, request.observableBindings),
+    ]),
     childContracts: request.childContracts ?? null,
     observableKeys: request.observableKeys ?? new Map(),
   };
@@ -36,6 +45,7 @@ export function findObservableReadPractices(
   visit(sourceFile, (node) => {
     collectReadFindings(node, scan, findings);
   });
+  request.inventory?.push(...subscriptionInventory(scan, findings));
   return findings;
 }
 

@@ -1,3 +1,5 @@
+import type { SubscriptionAnalysis, SubscriptionCut } from "./subscriptions.js";
+
 type Confidence = "certain" | "probable";
 
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public JSON protocol version.
@@ -191,6 +193,7 @@ type HookFinding = HookFindingBase &
   );
 
 interface LegendPracticeFinding {
+  subscription?: SubscriptionCut;
   action: LegendPracticeAction;
   confidence: Confidence;
   disposition: "change" | "style";
@@ -214,6 +217,7 @@ interface ReportConfirmations {
 }
 
 interface AnalysisReport {
+  subscriptionAnalysis?: SubscriptionAnalysis;
   /** Present when a confirmations file was supplied. */
   confirmations?: ReportConfirmations;
   files: number;
