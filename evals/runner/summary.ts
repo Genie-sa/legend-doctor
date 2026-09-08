@@ -1,6 +1,7 @@
 import type { ActionScore, Evaluation, HookScore, Tally } from "./model.js";
 import { abstentionSummaryLines } from "./abstentions.js";
 import { hookCoverageSummaryLines } from "./hook-coverage.js";
+import { reviewWorkloadSummaryLines } from "./review-workload.js";
 
 function percentage(ratio: number): string {
   return (ratio * 100).toFixed(1);
@@ -34,6 +35,7 @@ export function summaryLines(
     `Matched ${hooks.assumptions.matched}/${hooks.assumptions.labeled} review questions.`,
     ...abstentionSummaryLines(run),
     ...hookCoverageSummaryLines(run),
+    ...reviewWorkloadSummaryLines(run),
     `Matched ${groups.matches}/${groups.labels} grouped agent instructions.`,
     `Matched ${practices.matches}/${practices.labels} Legend practice findings.`,
     `Legend practice precision: ${percentage(hitRate)}% (${practices.matches}/${practices.predictions}).`,

@@ -1,9 +1,12 @@
+import type { StateTransitionEvidence } from "./state-transitions.js";
+
 type Confidence = "certain" | "probable";
 
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public JSON protocol version.
 const SCHEMA_VERSION = 4 as const;
 
 type AbstentionReason =
+  | "async-command-origin-unresolved"
   | "atomic-transition-unproven"
   | "binding-shape-unsupported"
   | "callback-timing-unresolved"
@@ -145,6 +148,10 @@ interface Verification {
 }
 
 interface HookFindingBase {
+  /** Direct write locations and pairwise execution evidence for grouped states. */
+  transitions?: StateTransitionEvidence;
+  /** Triage guidance for review findings; never an authorization to apply a conversion. */
+  review?: ReviewGuidance;
   /** Present on review findings with a confirmable blocker, and on findings a confirmation converted. */
   assumption?: StateAssumption;
   /** Present on findings a confirmation converted: the runtime check that validates the answer. */
@@ -176,6 +183,21 @@ interface HookFindingBase {
       | "owner-use-value"
       | "review";
   };
+}
+
+interface ReviewGuidance {
+  /** Known blockers from this verdict and its question; not an exhaustive proof inventory. */
+  blockers: AbstentionReason[];
+  kind:
+    | "confirm"
+    | "recheck"
+    | "declined"
+    | "dependency"
+    | "unsupported"
+    | "no-proven-benefit"
+    | "investigate";
+  /** The next concrete investigation or answer to supply. */
+  next: string;
 }
 
 type HookFinding = HookFindingBase &
@@ -284,6 +306,7 @@ export type {
   ReportConfirmations,
   ReportScope,
   ResearchStep,
+  ReviewGuidance,
   SourceLocation,
   StateAction,
   StateAssumption,

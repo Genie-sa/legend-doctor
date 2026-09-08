@@ -62,9 +62,11 @@
     "version-packages": "changeset version"
   },
   "dependencies": {
+    "@manypkg/get-packages": "3.1.0",
     "typescript": "5.9.3"
   },
   "devDependencies": {
+    "@base-ui/react": "1.7.0",
     "@changesets/cli": "^2.31.0",
     "@legendapp/state": "3.0.0-beta.48",
     "@oxlint/plugins": "1.81.0",

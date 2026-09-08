@@ -146,7 +146,7 @@ function hasProvenCompanion(state: StateCandidate, proven: readonly CoexecutionP
 export function cowrittenGroupIntro(names: readonly string[], hookOwned: boolean): string {
   const quoted = names.map((name) => `\`${name}\``).join(", ");
   const lifetime = hookOwned ? "hook-lifetime" : "component-lifetime";
-  return `Replace the co-written React states (${quoted}) with one ${lifetime} observable object; write the members a handler changes together with one atomic \`assign\` so no render observes a partial transition, and keep single-member writes as leaf \`set\` calls.`;
+  return `Replace the co-written React states (${quoted}) with one ${lifetime} observable object; preserve each synchronous transition with \`batch\` around the original ordered writes, or one atomic \`assign\` for adjacent independent literal replacements. Keep single-member writes as leaf \`set\` calls. Preserve branches, throwing expressions, and every await/catch/finally boundary; never batch an async function or move writes between execution phases.`;
 }
 
 function cowrittenCluster({

@@ -146,6 +146,11 @@ never prose. Nothing is written to stderr.
 
 `legend-doctor --help` documents every report field. [REPORT.md](REPORT.md) goes further: the `assumption` a
 `review-state` finding carries when one yes/no fact would turn it into a `change`, and how to record the answer.
+Reviews also carry `review.kind`, known `blockers`, and a concrete `next` step, distinguishing open questions,
+stale or declined answers, dependent findings, unsupported analysis, and cases with no proven benefit.
+Grouped findings include `transitions`: exact write sites and their execution relations. The report
+distinguishes adjacent literal handoffs from separate or unresolved phases, so a group of related
+states is never an instruction to collapse an entire async handler into one update.
 
 ## The loop
 
@@ -227,3 +232,14 @@ Read [evals/README.md](evals/README.md) before changing corpus targets, labels, 
 the analysis pipeline on a checkout you point it at.
 
 MIT licensed.
+
+### Workspace implementation context
+
+Directory scans can follow imports into declared monorepo member packages without reporting hooks
+from those dependency files. Workspace discovery uses `@manypkg/get-packages`; TypeScript resolves
+package exports, export conditions, and project aliases. In an uninstalled workspace, only an
+unambiguous same-name `workspace:*` dependency gets an in-memory package link. Existing installed
+packages take precedence. Other workspace ranges and aliases require real installed links; the tool
+does not guess registry-version compatibility. Declaration exports do not count as implementation
+proofs, and files with parser errors cannot supply cross-file contracts. Missing or unsupported source
+keeps the affected opportunity in review.
