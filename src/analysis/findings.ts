@@ -29,6 +29,8 @@ import { omittedValueSetterName } from "./candidates.js";
 import { resolveStateClassification } from "./assumptions/review-assumptions.js";
 import type ts from "typescript";
 import { verificationFor } from "./assumptions/verification.js";
+import { withReviewGuidance } from "./review-guidance.js";
+import { withTransitionEvidence } from "./transition-evidence.js";
 
 export function buildFindings(result: StateAnalysisResult): HookFinding[] {
   const { analysis } = result;
@@ -45,12 +47,14 @@ export function buildFindings(result: StateAnalysisResult): HookFinding[] {
     ...analysis.unmatchedStateCalls.map((call) => unmatchedStateFinding(call, analysis)),
     ...analysis.effects.flatMap((effect) => effectFindingFor(effect, result, stateFindings) ?? []),
   ];
-  return findings.toSorted(
-    (left, right) =>
-      left.location.line - right.location.line ||
-      left.location.column - right.location.column ||
-      left.hook.localeCompare(right.hook),
-  );
+  return findings
+    .map((finding) => withReviewGuidance(finding))
+    .toSorted(
+      (left, right) =>
+        left.location.line - right.location.line ||
+        left.location.column - right.location.column ||
+        left.hook.localeCompare(right.hook),
+    );
 }
 
 function stateClassificationInputs(
@@ -232,6 +236,7 @@ function stateFindingFor(state: StateCandidate, result: FindingsScope): HookFind
   });
   withAssumption(finding, { analysis, resolved, state });
   attachGroup(finding, { cluster: stateClusterFor(state, result), resolved, state });
+  withTransitionEvidence(finding, state, result);
   return finding;
 }
 

@@ -172,7 +172,10 @@ test("requires source-proven deferred callbacks for one async status leaf", asyn
     "review-state",
     requireValue(findings.get("eager")).message,
   );
-  assert.equal(requireValue(findings.get("eager")).abstentionReason, "callback-timing-unresolved");
+  assert.equal(
+    requireValue(findings.get("eager")).abstentionReason,
+    "async-command-origin-unresolved",
+  );
   assert.equal(
     requireValue(findings.get("opaque")).action,
     "review-state",

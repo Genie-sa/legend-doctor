@@ -125,7 +125,7 @@ test("review findings serialize abstentionReason", async (testContext) => {
   const finding = report.findings.find((candidate) => candidate.name === "loading");
   assert.ok(finding);
   assert.equal(finding.action, "review-state");
-  assert.equal(finding.abstentionReason, "callback-timing-unresolved");
+  assert.equal(finding.abstentionReason, "async-command-origin-unresolved");
 });
 
 test("a single-file target resolves root to its directory", async (testContext) => {

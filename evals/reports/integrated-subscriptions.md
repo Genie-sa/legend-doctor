@@ -42,7 +42,7 @@ subscription needs optimization. Custom hooks and unrecognized imports are outsi
   primitive dependency comparisons, and setup/cleanup timing. Normal and StrictMode fixtures exercise
   both the baseline and migrated component structures, including observer-wrapped owners.
 
-## Validation
+## Subscription phase validation (before branch integration)
 
 - Typecheck, build, lint, formatting, and diff whitespace checks pass. The post-validation Legend Doctor
   self-scan reports zero actionable findings. Package dry-run passes.
@@ -92,3 +92,45 @@ The report audit reproduced one additional defect: filtering away a subscription
 runtime measurement attached to the remaining partial plan. Evidence now survives filtering only when the
 complete edit still matches. The regression checks partial, empty, and unchanged plans; it failed before the
 fix. This changes reporting only, with zero additional action deltas in all seven corpus applications.
+
+The requested destination branch also contains Base UI and workspace-resolution work. Its installed
+Base UI 1.7.0 `mergeProps`, `useRender`, and `useRenderElement` implementations were checked against
+[mergeProps documentation](https://base-ui.com/react/utils/merge-props) and
+[useRender documentation](https://base-ui.com/react/utils/use-render): props getters and render callbacks
+execute during rendering, while merged event handlers retain their event semantics. The installed
+`@manypkg/get-packages` 3.1.0 source and [package documentation](https://github.com/Thinkmill/manypkg/tree/main/packages/get-packages)
+confirm workspace discovery and missing-name validation. These existing branch changes are preserved.
+
+| Reporting risk                           | Protected behavior                                      | Regression evidence                          |
+| ---------------------------------------- | ------------------------------------------------------- | -------------------------------------------- |
+| Partial filter reuses whole-plan metrics | A different edit must use static ranking until measured | Partial-plan assertion failed before the fix |
+| Unchanged filter loses valid evidence    | Keeping the complete edit retains its measurement       | Unchanged-plan assertion passes              |
+| Empty filter leaves actionable plans     | Hidden actions cannot reappear through plans            | Empty-plan and coverage assertions pass      |
+
+## Combined destination branch validation
+
+Integrated with `codex/improve-legend-detection-and-reviews` at `d71a472`, preserving its transition
+review and workspace-resolution changes. Full `npm run check` passes: lint, formatting, typecheck,
+build, **915 tests**, and package dry-run. `REPORT.md` is included in the package. The final self-scan
+has zero actionable findings.
+
+All **237 pinned targets** pass: **1,236 hooks**, **508/524 hook labels**, **74/75 Legend practice
+labels**, one explicit Legend known miss, and no unexpected recommendations. The 16 known hook misses
+remain visible. Subscription actions do not change during integration.
+
+Relative to the pre-integration subscription snapshot, the combined branch has these additional action
+deltas from the destination branch's detector work:
+
+| Application             | Additional action delta                |
+| ----------------------- | -------------------------------------- |
+| Legend Music            | 0                                      |
+| Excalidraw              | 0                                      |
+| Expensify               | 0                                      |
+| Formbricks              | 0                                      |
+| Outline                 | 0                                      |
+| Open WebUI React Native | 0                                      |
+| Hoalu                   | `review-state` −1; `use-observable` +1 |
+
+TypeScript's [module reference](https://www.typescriptlang.org/docs/handbook/modules/reference.html#packagejson-exports)
+and [5.9.3 resolver source](https://github.com/microsoft/TypeScript/blob/v5.9.3/src/compiler/moduleNameResolver.ts)
+were also checked against the workspace resolver's use of the compiler API and its in-memory host.

@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import type { InstalledLegendState } from "../legend-state-package.js";
 import type { SourceIndex } from "../source-components/source-components.js";
 import { buildSourceIndexFromFiles } from "../source-components/source-components.js";
+import { loadWorkspaceSources } from "../workspace/source-closure.js";
 import path from "node:path";
 import { resolveInstalledLegendState } from "../legend-state-package.js";
 
@@ -38,12 +39,13 @@ export async function createAnalysisContextFromFiles(
 ): Promise<AnalysisContext> {
   const sources = new Map<string, string>();
   await readSourceBatch(files, 0, sources);
+  const host = await loadWorkspaceSources(root, sources);
   const project = new AnalysisProject(sources);
   return {
     installedLegendState: await resolveInstalledLegendState(root),
     project,
     root,
-    sourceIndex: buildSourceIndexFromFiles(root, project.files),
+    sourceIndex: buildSourceIndexFromFiles(root, project.files, host),
   };
 }
 

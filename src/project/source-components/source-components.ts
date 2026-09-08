@@ -56,8 +56,9 @@ export function buildSourceIndex(root: string, sources: ReadonlyMap<string, stri
 export function buildSourceIndexFromFiles(
   root: string,
   files: readonly AnalysisFile[],
+  host?: ts.ModuleResolutionHost,
 ): SourceIndex {
-  const state = createSourceIndexState(root, files);
+  const state = createSourceIndexState(root, files, host);
   return {
     componentDeclarationFor: (file, name) => componentDeclarationFor(state, file, name),
     componentsFor: (file) => new Set(resolvedFor(state, file, "component").keys()),
@@ -80,10 +81,18 @@ export function buildSourceIndexFromFiles(
   };
 }
 
-function createSourceIndexState(root: string, files: readonly AnalysisFile[]): SourceIndexState {
+function createSourceIndexState(
+  root: string,
+  files: readonly AnalysisFile[],
+  host?: ts.ModuleResolutionHost,
+): SourceIndexState {
   const records = new Map<string, ModuleRecord>();
   const sourceFiles = new Map<string, ts.SourceFile>();
   for (const file of files) {
+    // Parser recovery is useful for diagnostics, but cannot establish a dependency's contract.
+    if (file.parserDiagnostics.some((diagnostic) => diagnostic.category === "error")) {
+      continue;
+    }
     const normalized = normalizeFile(file.identityPath);
     records.set(normalized, moduleRecord(file.sourceFile));
     sourceFiles.set(normalized, file.sourceFile);
@@ -97,7 +106,7 @@ function createSourceIndexState(root: string, files: readonly AnalysisFile[]): S
     configFilesByDirectory: new Map(),
     contextReaders: new Map(),
     contextReadersBySymbol: new Map(),
-    moduleResolutionHost: cachedModuleResolutionHost(new Set(records.keys())),
+    moduleResolutionHost: host ?? cachedModuleResolutionHost(new Set(records.keys())),
     records,
     resolvedByKind: new Map(),
     resolvedHooks: new Map(),

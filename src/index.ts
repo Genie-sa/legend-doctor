@@ -10,6 +10,7 @@ export {
   enabledPracticeRules,
 } from "./practices/practice-rules.js";
 export { SCHEMA_VERSION } from "./core/types.js";
+export type { StateTransitionEvidence } from "./core/state-transitions.js";
 export type { ScanScope, ScanScopeMode } from "./project/git-scope.js";
 export type { FileCapabilities } from "./project/capabilities.js";
 export type {
@@ -49,6 +50,7 @@ export type {
   LegendPracticeFinding,
   ReportCapabilities,
   ReportScope,
+  ReviewGuidance,
   StateAction,
   SyncExport,
   UseValueExport,

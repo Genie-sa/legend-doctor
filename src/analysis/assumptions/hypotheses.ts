@@ -3,6 +3,7 @@ import type { ClassifiedState, StateCandidate } from "../model.js";
 import { isCustomHookOwner, runtimeFunctionName } from "../ast-helpers.js";
 import { AssumedLeafContracts } from "./assumed-leaf-contracts.js";
 import type { StateClassificationInputs } from "../verdicts/classification-context.js";
+import { asyncCommandHypothesis } from "./async-command-hypothesis.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import path from "node:path";
 import { pathIdentityKey } from "../../core/path-identity.js";
@@ -383,6 +384,7 @@ export function leafWrapHypothesis(scope: HypothesisScope): Hypothesis | null {
 }
 
 const HYPOTHESES: ReadonlyMap<AbstentionReason, HypothesisBuilder> = new Map([
+  ["async-command-origin-unresolved", asyncCommandHypothesis],
   ["atomic-transition-unproven", atomicTransitionHypothesis],
   ["callback-timing-unresolved", callbackTimingHypothesis],
   ["child-contract-unresolved", childContractHypothesis],

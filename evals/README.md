@@ -21,6 +21,12 @@ The primary metric is precision among non-review recommendations. Recall is repo
 abstention cannot masquerade as accuracy. The runner also prints a deterministic abstention-reason histogram globally
 and per application root.
 
+The summary also separates review findings from distinct open question versions, dependent findings,
+answered/stale findings, and findings without a question. Group outcomes show which members would
+convert if confirmed and which remain blocked or retained. These are descriptive workload metrics,
+not additional approvals, an exhaustive blocker ledger, or changes to precision/recall scoring.
+Question identity includes its target, id, and source fingerprint.
+
 ## Corpus
 
 Pinned public repositories, each at a fixed commit with focused source roots where the application is large:

@@ -250,7 +250,7 @@ export function pairedAsyncStatusVerdict(
   if (isUnprovenAsyncStatus) {
     return {
       action: "review-state",
-      abstentionReason: "callback-timing-unresolved",
+      abstentionReason: "async-command-origin-unresolved",
       confidence: "probable",
       message: `Review \`${state.valueName}\`; its async pending interval and leaf boundary are proven, but source does not prove that every command runs from a deferred event. Do not publish these writes through an observable until the callback contract resolves.`,
     };

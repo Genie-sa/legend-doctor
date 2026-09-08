@@ -24,21 +24,49 @@ function resolveLocalModule(
   importer: string,
   specifier: string,
 ): string | null {
-  const { cache, options } = compilerContextFor(importer, state.root, state);
+  const resolved = resolveSourceModule(state, importer, specifier);
+  const key = resolved ? normalizeFile(resolved) : null;
+  return key && state.records.has(key) ? key : null;
+}
+
+export interface SourceResolutionContext extends CompilerContextCaches {
+  root: string;
+  moduleResolutionHost: ts.ModuleResolutionHost;
+}
+
+export function resolveSourceModule(
+  context: SourceResolutionContext,
+  importer: string,
+  specifier: string,
+): string | null {
+  const { cache, options } = compilerContextFor(importer, context.root, context);
   const resolution = ts.resolveModuleName(
     specifier,
     importer,
     options,
-    state.moduleResolutionHost,
+    context.moduleResolutionHost,
     cache,
+    undefined,
+    resolutionModeFor(importer, options, context.moduleResolutionHost),
   ).resolvedModule;
-  if (!resolution || resolution.isExternalLibraryImport) {
+  // A declaration describes a type contract, never the callback's execution timing.
+  if (!resolution || /\.d\.(?:ts|mts|cts)$/u.test(resolution.resolvedFileName)) {
     return null;
   }
-  const resolved = normalizeFile(
-    resolution.resolvedFileName.replace(/\.d\.(?:ts|mts|cts)$/u, ".ts"),
-  );
-  return state.records.has(resolved) ? resolved : null;
+  return resolution.resolvedFileName;
+}
+
+function resolutionModeFor(
+  importer: string,
+  options: ts.CompilerOptions,
+  host: ts.ModuleResolutionHost,
+): ts.ResolutionMode {
+  return options.moduleResolution === ts.ModuleResolutionKind.Node16 ||
+    options.moduleResolution === ts.ModuleResolutionKind.NodeNext ||
+    options.module === ts.ModuleKind.Node16 ||
+    options.module === ts.ModuleKind.NodeNext
+    ? ts.getImpliedNodeFormatForFile(importer, undefined, host, options)
+    : undefined;
 }
 
 export function cachedModuleResolutionHost(
