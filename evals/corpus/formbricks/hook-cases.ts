@@ -4,17 +4,6 @@ import type { HookAction } from "../../../src/core/types.js";
 export const formbricksHookCases = [
   {
     action: "use-observable",
-    enforced: false,
-    file: "survey-dropdown-menu.tsx",
-    hook: "useState",
-    line: 82,
-    name: "isDuplicating",
-    rationale:
-      "Manually audited at the pinned commit: after the workspace guard, lines 193-194 set duplication pending and close the menu before any awaited work. These literal writes form one local assign; the finally reset at line 210 remains separate, including rejection and the early success return. The stable button leaf owns disabled/className reads. The complete seven-member menu group still needs a completion plan for archive success versus finally; this label must not waive that obstruction.",
-    target: "formbricks-survey-dropdown",
-  },
-  {
-    action: "use-observable",
     file: "webhook-settings-tab.tsx",
     hook: "useState",
     line: 55,

@@ -42,8 +42,6 @@ export interface GoldStateGroupCase {
 
 export interface GoldPracticeCase {
   action: LegendPracticeAction;
-  /** Audited opportunities not yet implemented still count against labeled recall. */
-  enforced?: boolean;
   file: string;
   line: number;
   rationale: string;

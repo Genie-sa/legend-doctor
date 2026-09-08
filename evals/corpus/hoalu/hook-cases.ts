@@ -57,12 +57,13 @@ export const hoaluHookCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "components/receipt/receipt-scanner.tsx",
     hook: "useState",
     line: 90,
     name: "isEncoding",
     rationale:
-      "Manually audited the pinned app package workspace:* dependency, UI ./button export, ReceiptScanner, and packages/ui/src/components/button.tsx: encoding starts before awaited file work and clears in finally; its only consumer is a queue button using Base UI useRender with defaultTagName button and mergeProps(defaultProps, props). This invocation supplies neither render nor a spread, so onClick reaches the default DOM event. A leaf subscription removes the pre-await scanner render while retaining the pending-files gate and completion writes.",
+      "Encoding starts before awaited file work and clears in finally, while one stable queue button renders the flag through a pure disabled projection; a leaf subscription removes the pre-await scanner render without moving the pending-files gate or async boundary.",
     target: "hoalu-app",
   },
   {

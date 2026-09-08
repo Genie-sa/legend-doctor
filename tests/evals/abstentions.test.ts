@@ -145,7 +145,7 @@ test("reports deterministic global and per-app abstention histograms without cha
       },
       {
         groups: { labels: 0, matches: 0, predictions: 0 },
-        practices: { labels: 0, matches: 0, predictions: 0, knownMisses: 0 },
+        practices: { labels: 0, matches: 0, predictions: 0 },
       },
     ).slice(4, 4 + expectedSummary.length),
     expectedSummary,

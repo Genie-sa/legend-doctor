@@ -163,8 +163,7 @@ export const outlineHookCases = [
     target: "outline-document-copy",
   },
   {
-    abstentionReason: "async-command-origin-unresolved",
-    assumption: { ifConfirmed: "use-observable" },
+    abstentionReason: "callback-timing-unresolved",
     action: "use-observable",
     enforced: false,
     file: "DocumentCopy.tsx",
@@ -172,7 +171,7 @@ export const outlineHookCases = [
     line: 27,
     name: "copying",
     rationale:
-      "Manually audited DocumentCopy: copying is never read by a deferred callback. The copy command reaches DocumentExplorer.onSubmit and a Button.onClick adapter; the unresolved fact is those event origins, not captured-value timing. Its exact async lifecycle renders only the Copy button disabled prop and conditional label; preserve the try/finally interval and owner lifetime when isolating that leaf.",
+      "The exact async copying lifecycle renders only the stable Copy button's disabled prop and conditional label, so one leaf subscription removes duplicate-workflow renders without changing command timing.",
     target: "outline-document-copy",
   },
   {

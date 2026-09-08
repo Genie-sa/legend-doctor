@@ -2,38 +2,6 @@ import type { GoldPracticeCase } from "../contracts.js";
 
 export const legendMusicPracticeCases = [
   {
-    action: "move-use-value-down",
-    file: "visualizer/VisualizerWindow.tsx",
-    line: 12,
-    rationale:
-      "Track is consumed only by the memoized subtitle and title in the stable metadata View (three of nineteen JSX elements). Extract that complete View and its useMemo into a module-level child subscribed to currentTrack; the memo and conditional subtitle retain their lifetimes. The closed memo projection mutates only its own string array and has complete dependencies.",
-    target: "legend-music",
-  },
-  {
-    action: "move-use-value-down",
-    file: "visualizer/VisualizerWindow.tsx",
-    line: 15,
-    rationale:
-      "The subscribed storedBinCount feeds only binCount = storedBinCount ?? 64, consumed by PresetComponent and String(binCount) in Select. Two stable module-level children can subscribe and derive their own bin count, with PresetComponent identity, options, and callbacks passed from the parent. Moving both reads eliminates the nineteen-element owner subscription; two JSX elements consume updates. The source-resolved VisualizerPreferences interface proves binCount is numeric, and String is unshadowed. The independent trackSubtitle render derives from its own subscription through a closed memo with complete [track] dependencies; this does not justify treating arbitrary useMemo calls as tracked reads.",
-    target: "legend-music",
-  },
-  {
-    action: "move-use-value-down",
-    file: "settings/GeneralSettings.tsx",
-    line: 16,
-    rationale:
-      "The hotkey error is read only by HotkeyCapture's border prop and the conditional error Text within the five-element control View. SettingsRow renders that control unchanged. The owner has no effects, JSX refs, or imperative render snapshots whose behavior depends on these renders. A module-level child can own the error subscription and that complete View, receiving hotkey inputs and the command callback as props, so error updates do not rebuild the twenty-element settings owner.",
-    target: "legend-music",
-  },
-  {
-    action: "move-use-value-down",
-    file: "settings/OverlaySettings.tsx",
-    line: 28,
-    rationale:
-      "The enabled flag is read only by the two unkeyed Select disabled props at lines 79 and 87. Separate module-level child components can subscribe to the same owner path while receiving each Select's other inputs as props; moving both reads removes the page subscription without moving durationText ownership or changing either Select's mount identity.",
-    target: "legend-music",
-  },
-  {
     action: "replace-legacy-use-value",
     file: "legend-kit/react-native/windowDimensions.tsx",
     line: 40,

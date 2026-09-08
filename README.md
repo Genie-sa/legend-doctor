@@ -220,6 +220,27 @@ These rules follow the [Legend State React API](https://legendapp.com/open-sourc
 [reactivity guide](https://legendapp.com/open-source/state/v3/usage/reactivity/), and the
 [Legend State best-practices skill](https://github.com/LegendApp/legend-skills/tree/main/legend-state-best-practices).
 
+### Plan subscription changes together
+
+The JSON report includes `subscriptionAnalysis.version: 1`: an inventory of recognized `useValue` calls,
+explicit unresolved reasons, and coordinated plans for each owner. Plans follow safe aliases, defaults,
+and memo projections, merge overlapping child boundaries, and preserve observable ownership and effect
+lifecycles. New boundaries use ordinary module-level child components.
+
+Static JSX impact and supplied runtime render counts are reported separately. See
+[the report contract and measurement format](REPORT.md#coordinated-subscriptions-version-1).
+
+### Workspace implementation context
+
+Directory scans can follow imports into declared monorepo member packages without reporting hooks
+from those dependency files. Workspace discovery uses `@manypkg/get-packages`; TypeScript resolves
+package exports, export conditions, and project aliases. In an uninstalled workspace, only an
+unambiguous same-name `workspace:*` dependency gets an in-memory package link. Existing installed
+packages take precedence. Other workspace ranges and aliases require real installed links; the tool
+does not guess registry-version compatibility. Declaration exports do not count as implementation
+proofs, and files with parser errors cannot supply cross-file contracts. Missing or unsupported source
+keeps the affected opportunity in review.
+
 ## Develop
 
 ```bash
@@ -232,25 +253,3 @@ Read [evals/README.md](evals/README.md) before changing corpus targets, labels, 
 the analysis pipeline on a checkout you point it at.
 
 MIT licensed.
-
-### Plan subscription changes together
-
-The JSON report includes `subscriptionAnalysis.version: 1`: an inventory of recognized `useValue` calls,
-explicit unresolved reasons, and coordinated plans for each owner. Plans follow safe aliases, defaults,
-and memo projections, merge overlapping child boundaries, and preserve observable ownership and effect
-lifecycles. New boundaries use ordinary module-level child components.
-
-Static JSX impact and supplied runtime render counts are reported separately. See
-[the report contract and measurement format](REPORT.md#coordinated-subscriptions-version-1) and
-[the implementation validation](evals/reports/integrated-subscriptions.md).
-
-### Workspace implementation context
-
-Directory scans can follow imports into declared monorepo member packages without reporting hooks
-from those dependency files. Workspace discovery uses `@manypkg/get-packages`; TypeScript resolves
-package exports, export conditions, and project aliases. In an uninstalled workspace, only an
-unambiguous same-name `workspace:*` dependency gets an in-memory package link. Existing installed
-packages take precedence. Other workspace ranges and aliases require real installed links; the tool
-does not guess registry-version compatibility. Declaration exports do not count as implementation
-proofs, and files with parser errors cannot supply cross-file contracts. Missing or unsupported source
-keeps the affected opportunity in review.

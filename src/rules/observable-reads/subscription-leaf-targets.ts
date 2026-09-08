@@ -1,4 +1,4 @@
-import type { JsxSubtree, ObservableReadScan, UseValueDeclaration } from "./model.js";
+import type { JsxSubtree, ObservableReadScan } from "./model.js";
 import {
   hasUnstableSubtreeLifetime,
   jsxElementCount,
@@ -28,9 +28,9 @@ export interface MoveDownTarget {
 
 export function moveDownTargets(
   references: readonly ts.Identifier[],
-  use: UseValueDeclaration,
   { scan, flow }: { scan: ObservableReadScan; flow: SubscriptionFlow },
 ): readonly MoveDownTarget[] {
+  const { use } = flow;
   const { owner } = use;
   if (hasUnprovenOwnerWork(owner, scan)) {
     return [];

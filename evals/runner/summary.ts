@@ -1,7 +1,6 @@
-import type { ActionScore, Evaluation, HookScore, PracticeScore, Tally } from "./model.js";
+import type { ActionScore, Evaluation, HookScore, Tally } from "./model.js";
 import { abstentionSummaryLines } from "./abstentions.js";
 import { hookCoverageSummaryLines } from "./hook-coverage.js";
-import { reviewWorkloadSummaryLines } from "./review-workload.js";
 
 function percentage(ratio: number): string {
   return (ratio * 100).toFixed(1);
@@ -20,7 +19,7 @@ function formatActionLines(byAction: ReadonlyMap<string, ActionScore>): string[]
 export function summaryLines(
   run: Evaluation,
   hooks: HookScore,
-  tallies: { groups: Tally; practices: PracticeScore },
+  tallies: { groups: Tally; practices: Tally },
 ): string[] {
   const { groups, practices } = tallies;
   const precision =
@@ -28,7 +27,6 @@ export function summaryLines(
   const recall =
     hooks.expectedActionable === 0 ? 1 : hooks.correctActionable / hooks.expectedActionable;
   const hitRate = practices.predictions === 0 ? 1 : practices.matches / practices.predictions;
-  const practiceRecall = practices.labels === 0 ? 1 : practices.matches / practices.labels;
   return [
     `Inventoried ${run.hooks} hooks across ${run.targets.size} targets.`,
     `Matched ${hooks.matched}/${hooks.labeled} manually labeled hooks.`,
@@ -36,12 +34,9 @@ export function summaryLines(
     `Matched ${hooks.assumptions.matched}/${hooks.assumptions.labeled} review questions.`,
     ...abstentionSummaryLines(run),
     ...hookCoverageSummaryLines(run),
-    ...reviewWorkloadSummaryLines(run),
     `Matched ${groups.matches}/${groups.labels} grouped agent instructions.`,
     `Matched ${practices.matches}/${practices.labels} Legend practice findings.`,
     `Legend practice precision: ${percentage(hitRate)}% (${practices.matches}/${practices.predictions}).`,
-    `Legend practice recall on labeled opportunities: ${percentage(practiceRecall)}% (${practices.matches}/${practices.labels}).`,
-    `Known labeled Legend practice misses: ${practices.knownMisses}.`,
     `Actionable precision on labeled hooks: ${percentage(precision)}% (${hooks.correctActionable}/${hooks.actualActionable}).`,
     `Actionable recall on labeled hooks: ${percentage(recall)}% (${hooks.correctActionable}/${hooks.expectedActionable}).`,
     ...formatActionLines(hooks.byAction),

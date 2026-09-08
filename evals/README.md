@@ -12,20 +12,10 @@ whatever it currently prints.
 - **Grouped instructions.** State-cluster labels verify exact cluster membership.
 - **Legend practice labels.** Every practice finding on a labeled target must match a label; an unlabeled practice
   finding is a failure, so practice precision is measured over everything the tool prints.
-  Manually audited opportunities the detector cannot yet prove can be added with `enforced: false`. They count
-  against labeled practice recall and are reported as known misses. Existing labels stay enforced by default,
-  and an unexpected emitted action still fails. Labeled recall is not coverage of all Legend State opportunities.
-  Once a detector implements an audited opportunity, remove `enforced: false` to make it a regression requirement.
 
 The primary metric is precision among non-review recommendations. Recall is reported globally and per action so
 abstention cannot masquerade as accuracy. The runner also prints a deterministic abstention-reason histogram globally
 and per application root.
-
-The summary also separates review findings from distinct open question versions, dependent findings,
-answered/stale findings, and findings without a question. Group outcomes show which members would
-convert if confirmed and which remain blocked or retained. These are descriptive workload metrics,
-not additional approvals, an exhaustive blocker ledger, or changes to precision/recall scoring.
-Question identity includes its target, id, and source fingerprint.
 
 ## Corpus
 
