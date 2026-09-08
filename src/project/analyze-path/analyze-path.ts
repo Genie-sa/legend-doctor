@@ -17,6 +17,8 @@ import type { AnalysisReport } from "../../core/types.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import { DEFAULT_MATERIALITY } from "../../analysis/constants.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
+import type { SubscriptionMeasurement } from "../../core/subscriptions.js";
+import { attachSubscriptionMeasurements } from "../subscription-measurements.js";
 import path from "node:path";
 import { stat } from "node:fs/promises";
 
@@ -29,6 +31,7 @@ export interface DetailedAnalysisResult {
 }
 
 export interface AnalyzePathOptions {
+  readonly subscriptionMeasurements?: readonly (SubscriptionMeasurement | null)[];
   /** Answered review questions to honour; a confirmed id converts its review finding. */
   readonly confirmations?: ConfirmationSet | null;
   /**
@@ -73,13 +76,13 @@ async function analyzePathInternal(
     fileFilter,
     materiality = DEFAULT_MATERIALITY,
     sharedContext,
+    subscriptionMeasurements,
   }: AnalyzePathOptions,
   includeDetails: boolean,
 ): Promise<AnalysisReport | DetailedAnalysisResult> {
   const target = await resolveAnalysisTarget(targetPath);
   const context = sharedContext ?? (await createTargetContext(target));
-  const analyzedFiles = fileFilter ? target.files.filter(fileFilter) : target.files;
-  const entries = analysisFileEntries(analyzedFiles, {
+  const entries = analysisFileEntries(fileFilter ? target.files.filter(fileFilter) : target.files, {
     analysisRoot: target.analysisRoot,
     context,
     includeDetails,
@@ -94,10 +97,11 @@ async function analyzePathInternal(
     materiality,
   });
   const report = analysisReport(
-    analyzedFiles.length,
+    entries.length,
     pass,
     fileFilter ? { contextFiles: target.files.length } : null,
   );
+  await attachSubscriptionMeasurements(report, target.analysisRoot, subscriptionMeasurements);
   if (!coverage) {
     return report;
   }

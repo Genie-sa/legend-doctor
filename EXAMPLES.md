@@ -234,6 +234,37 @@ function Avatar({ url$ }: { url$: Observable<string> }) {
 This also shows `move-use-value-down` and `move-use-value-into-child`: the parent passes observable references, not
 rendered values.
 
+### Move one subscription into several children
+
+When one observable feeds separate small parts of a large owner, `move-use-value-down` can name several
+boundaries in one instruction. Move every named read together so the parent no longer subscribes.
+
+```tsx
+function Settings({ enabled$ }: { enabled$: Observable<boolean> }) {
+  return (
+    <main>
+      <UnrelatedSettings />
+      <section>
+        <EnabledInput enabled$={enabled$} label="Vertical" />
+      </section>
+      <aside>
+        <EnabledInput enabled$={enabled$} label="Horizontal" />
+      </aside>
+    </main>
+  );
+}
+
+function EnabledInput({ enabled$, label }: { enabled$: Observable<boolean>; label: string }) {
+  const enabled = useValue(enabled$);
+  return <input aria-label={label} disabled={!enabled} />;
+}
+```
+
+Define the children outside the parent, keep observable ownership unchanged, and pass other inputs as ordinary
+props. Keep the evaluation of those inputs in the parent. If a named boundary contains a conditional, keep the
+whole condition inside its always-mounted child. Prefer one cohesive child when it already isolates the reads;
+separate subscriptions add overhead and are justified only when their combined render work stays small.
+
 ### Remove selector work and legacy names
 
 Use `pass-observable-to-use-value` for a direct value and `replace-legacy-use-value` for old APIs.

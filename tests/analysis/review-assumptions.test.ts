@@ -107,10 +107,7 @@ test("group questions point at every member's declaration and write sites", () =
     requireValue(research[2]).check,
     /`error` is declared here .*stays under review for render-cut-unproven/u,
   );
-  assert.match(
-    requireValue(research[1]).check,
-    /a render could never observe one member updated without the others/u,
-  );
+  assert.match(requireValue(research[1]).check, /preserve its branch, await, and exception phase/u);
 });
 
 test("a co-written group asks one question, naming what a yes converts and what it leaves blocked", () => {

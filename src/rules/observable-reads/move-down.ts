@@ -14,31 +14,24 @@ import {
 } from "./observable-paths.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import {
-  hasUnstableSubtreeLifetime,
   isSafeJsxProjectionReference,
   jsxElementCount,
-  jsxElementCountIn,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "../state-proofs/jsx-subtrees.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
+import type { MoveDownTarget } from "./subscription-leaf-targets.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import type { SubscriptionFlow } from "./subscription-flow.js";
 import { directUseValueInput } from "./use-value-inputs.js";
-import { stableConditionalJsxSlot } from "./conditional-jsx-slots.js";
+import { isInsideOwnerReturn } from "./conditional-jsx-slots.js";
+import { moveDownTargets } from "./subscription-leaf-targets.js";
+import { subscriptionCut } from "./subscription-cut.js";
+import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
 
-const MAX_LEAF_OWNER_SHARE = 0.4;
-
 const MIN_LEAF_OWNER_ELEMENTS = 12;
-
-interface MoveDownTarget {
-  readonly leaf: JsxSubtree | null;
-  readonly node: ts.Node;
-  readonly leafElements: number;
-  readonly ownerElements: number;
-  readonly references: readonly ts.Identifier[];
-}
 
 export function moveUseValueDownFinding(
   declaration: ts.VariableDeclaration,
@@ -53,12 +46,52 @@ export function moveUseValueDownFinding(
   ) {
     return null;
   }
-  const references = projectedValueReferences(use);
+  return flowFinding(use, scan);
+}
+
+function flowFinding(
+  use: UseValueDeclaration,
+  scan: ObservableReadScan,
+): LegendPracticeFinding | null {
+  const flow = subscriptionFlow(use, scan);
+  const directReferences = projectedValueReferences(use);
+  const references =
+    directReferences ??
+    (flow.blockers.size === 0 && flow.derivations.length > 0 ? flow.renderReads : null);
   if (references === null) {
     return null;
   }
-  const target = moveDownTarget(references, use.owner, scan);
-  return target ? moveDownFinding(use, target, scan) : null;
+  const targets = moveDownTargets(references, { scan, flow });
+  if (
+    targets.length === 0 ||
+    (targets.length > 1 && flow.derivations.some((derivation) => derivation.kind === "useMemo"))
+  ) {
+    return null;
+  }
+  return annotateFlowFinding(flow, targets, scan);
+}
+
+function annotateFlowFinding(
+  flow: SubscriptionFlow,
+  targets: readonly MoveDownTarget[],
+  scan: ObservableReadScan,
+): LegendPracticeFinding {
+  const { use } = flow;
+  const finding =
+    targets.length === 1
+      ? moveDownFinding(use, targets[0]!, scan)
+      : multipleLeavesFinding(use, targets, scan);
+  finding.subscription = subscriptionCut(flow, targets, scan);
+  if (flow.derivations.length > 0) {
+    const declarations = flow.derivations
+      .map((item) => `${item.declaration.name.getText()} (${item.kind})`)
+      .join(", ");
+    return {
+      ...finding,
+      message: `${finding.message} Move the complete derivation chain with the subscription: ${declarations}. Preserve useMemo dependencies and keep memo ownership in the single stable child. Remove these derived bindings from the parent; every consumer is covered.`,
+    };
+  }
+  return finding;
 }
 
 function projectedValueReferences(use: UseValueDeclaration): readonly ts.Identifier[] | null {
@@ -71,7 +104,7 @@ function projectedValueReferences(use: UseValueDeclaration): readonly ts.Identif
     if (
       isDeclarationName(node) ||
       !isWholeValueProjection(node) ||
-      !isSafeJsxProjectionReference(node, use.owner) ||
+      !isRenderProjection(node, use.owner) ||
       nearestRepeatedRenderCall(node, use.owner)
     ) {
       unsafe = true;
@@ -82,31 +115,16 @@ function projectedValueReferences(use: UseValueDeclaration): readonly ts.Identif
   return unsafe || references.length === 0 ? null : references;
 }
 
-function stableJsxLeaf(
-  references: readonly ts.Identifier[],
-  owner: RuntimeFunctionLike,
-): JsxSubtree | null {
-  const leaf = lowestCommonJsxSubtree(references, owner);
-  return leaf && !hasUnstableSubtreeLifetime(leaf, owner) ? leaf : null;
-}
-
-function moveDownTarget(
-  references: readonly ts.Identifier[],
-  owner: RuntimeFunctionLike,
-  scan: ObservableReadScan,
-): MoveDownTarget | null {
-  const conditionalSlot = stableConditionalJsxSlot(references, owner, scan.imports);
-  const leaf = conditionalSlot ? null : stableJsxLeaf(references, owner);
-  const node = leaf ?? conditionalSlot;
-  if (!node) {
-    return null;
+function isRenderProjection(reference: ts.Identifier, owner: RuntimeFunctionLike): boolean {
+  if (
+    findAncestor(reference, isRuntimeFunctionLike) !== owner ||
+    !isInsideOwnerReturn(reference, owner)
+  ) {
+    return false;
   }
-  const ownerElements = jsxElementCount(owner);
-  const leafElements = jsxElementCountIn(node);
-  if (leafElements / ownerElements > MAX_LEAF_OWNER_SHARE) {
-    return null;
-  }
-  return { leaf, leafElements, node, ownerElements, references };
+  // Stop at the nearest element: an enclosing JSX-valued prop may contain unrelated event commands.
+  const boundary = lowestCommonJsxSubtree([reference], owner);
+  return boundary !== null && isSafeJsxProjectionReference(reference, boundary);
 }
 
 function jsxLeafLabel(leaf: JsxSubtree, sourceFile: ts.SourceFile): string {
@@ -142,8 +160,31 @@ function moveDownFinding(
     disposition: "change",
     evidence: [readEvidence, lifetimeEvidence],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `Move \`useValue(${observable})\` for \`${use.localName}\` into ${target.leaf ? "a stable wrapper around" : "an always-mounted wrapper for"} the ${leafLabel} at line ${leafLine}; keep observable ownership where it is and pass ${target.leaf ? "the leaf's other inputs" : "non-observable gate values"} as ordinary props so updates rerender ${target.leafElements} JSX element${target.leafElements === 1 ? "" : "s"} instead of the ${target.ownerElements}-element owner.`,
+    message: `Move \`useValue(${observable})\` for \`${use.localName}\` into ${target.leaf ? "a stable wrapper around" : "an always-mounted wrapper for"} the ${leafLabel} at line ${leafLine}; keep observable ownership where it is and pass ${target.leaf ? "the leaf's other inputs" : "non-observable gate values"} as ordinary props so updates rerender ${target.leafElements} JSX element${target.leafElements === 1 ? "" : "s"} instead of the ${target.ownerElements}-element owner. Define the wrapper as a child component outside this owner and keep other input expressions evaluated in the parent.`,
     practice: "reactivity",
+  };
+}
+
+function multipleLeavesFinding(
+  use: UseValueDeclaration,
+  targets: readonly MoveDownTarget[],
+  scan: ObservableReadScan,
+): LegendPracticeFinding {
+  const first = moveDownFinding(use, targets[0]!, scan);
+  const locations = targets.map((target) => {
+    const line = scan.sourceFile.getLineAndCharacterOfPosition(target.node.getStart()).line + 1;
+    return `${target.leaf ? jsxLeafLabel(target.leaf, scan.sourceFile) : "complete conditional JSX slot"} at line ${line}`;
+  });
+  const elements = targets.reduce((total, target) => total + target.leafElements, 0);
+  const observable = use.observable.getText(scan.sourceFile);
+  return {
+    ...first,
+    evidence: [
+      `all render reads of ${use.localName} are covered by ${targets.length} disjoint stable boundaries: ${locations.join(", ")}`,
+      `together the boundaries contain ${elements} of the owner's ${targets[0]!.ownerElements} JSX elements`,
+      "no reference remains in the owner, a callback, or an effect; every conditional slot keeps an always-mounted subscription boundary",
+    ],
+    message: `Extract ${locations.join("; ")} into ${targets.length} separate child components defined outside this owner. Move all reads of \`${use.localName}\` together: remove the owner's \`useValue(${observable})\` and subscribe inside each child to the same observable. Keep observable ownership here, pass the observable handle and each child's other inputs as ordinary props, and keep their evaluation in the parent. Keep each child always-mounted in its original slot, with conditional rendering inside it. Updates then rerender ${elements} JSX elements instead of the ${targets[0]!.ownerElements}-element owner.`,
   };
 }
 

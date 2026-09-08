@@ -19,6 +19,7 @@ import { UsageError } from "./cli/usage-error.js";
 import { agentFindings } from "./report/format.js";
 import { analyzerIdentity } from "./cli/analyzer-identity.js";
 import { discoverConfig } from "./cli/config.js";
+import { filterSubscriptionAnalysis } from "./report/subscription-plans.js";
 import { isSupportedAnalysisFile } from "./project/analysis-project.js";
 import { materialityFor } from "./analysis/constants.js";
 import { parseConfirmations } from "./analysis/assumptions/confirmations.js";
@@ -315,6 +316,12 @@ function filterReport(report: AnalysisReport, filter: ReportFilter): FilteredRep
   const agentOnly = filter.actionableOnly ? agentFindings(report.findings) : report.findings;
   const findings = agentOnly.filter((finding) => shown(finding));
   const practices = report.practices.filter((practice) => shown(practice));
+  if (report.subscriptionAnalysis) {
+    report.subscriptionAnalysis = filterSubscriptionAnalysis(
+      report.subscriptionAnalysis,
+      practices,
+    );
+  }
   return {
     hidden: {
       findings: report.findings.length - findings.length,

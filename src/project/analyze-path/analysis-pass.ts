@@ -23,7 +23,9 @@ import type { MaterialityPolicy } from "../../analysis/constants.js";
 import { ReactCompilerResolver } from "../react-compiler-package.js";
 import { SCHEMA_VERSION } from "../../core/types.js";
 import { StateFlowIndex } from "../state-flow/state-flow.js";
+import type { SubscriptionInventory } from "../../core/subscriptions.js";
 import { analyzeLegendPracticesFile } from "../../practices/analyze-legend-practices.js";
+import { buildSubscriptionAnalysis } from "../../report/subscription-plans.js";
 import { createChildContractResolver } from "./child-contracts.js";
 import { disabledEffectRules } from "../../rules/effects/browser-storage-persistence.js";
 import { disabledPracticeRules } from "../../practices/practice-rules.js";
@@ -59,6 +61,7 @@ interface AnalysisPassOptions {
 }
 
 interface AnalysisAccumulator {
+  subscriptions: SubscriptionInventory[];
   diagnostics: AnalysisDiagnostic[];
   disabledRules: Map<string, DisabledRule>;
   findings: HookFinding[];
@@ -113,7 +116,13 @@ export async function runAnalysisPass(
   ]);
   const pass: AnalysisPass = {
     ...options,
-    accumulator: { diagnostics: [], disabledRules: new Map(), findings: [], practices: [] },
+    accumulator: {
+      diagnostics: [],
+      disabledRules: new Map(),
+      findings: [],
+      practices: [],
+      subscriptions: [],
+    },
     compiledFiles,
     rootCompiles,
   };
@@ -237,6 +246,7 @@ function legendPracticeFindings(
     recordDisabledRules(pass.accumulator.disabledRules, disabledPracticeRules(capabilities));
   }
   return analyzeLegendPracticesFile({
+    subscriptionInventory: pass.accumulator.subscriptions,
     capabilities,
     file: entry.analysisFile,
     reportFileName: entry.reportFileName,
@@ -244,6 +254,7 @@ function legendPracticeFindings(
     importedObservableFactories,
     includeFindings,
     importedObservableArrayPaths: sourceIndex.observableArrayPathsFor(entry.file),
+    importedObservablePrimitivePaths: sourceIndex.observablePrimitivePathsFor(entry.file),
     importedObservableKeys: sourceIndex.observableKeysFor(entry.file),
     childContracts,
   });
@@ -299,6 +310,7 @@ export function analysisReport(
   const states = findings.filter((finding) => finding.hook === "useState").length;
   const effects = findings.filter((finding) => finding.hook === "useEffect").length;
   const report: AnalysisReport = {
+    subscriptionAnalysis: buildSubscriptionAnalysis(practices, pass.accumulator.subscriptions),
     files: fileCount,
     findings,
     hooks: { effects, states, total: states + effects },
@@ -354,6 +366,7 @@ function isLegendPracticeEligible(
 function mayContainLegendPractice(file: AnalysisFile): boolean {
   const sourceText = file.sourceFile.text;
   return (
+    sourceText.includes("@legendapp/state") ||
     /\.(?:get|set)\s*\(/u.test(sourceText) ||
     /\b(?:useValue|useSelector|use\$)\s*\(/u.test(sourceText)
   );

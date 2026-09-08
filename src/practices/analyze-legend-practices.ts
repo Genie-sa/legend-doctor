@@ -8,6 +8,7 @@ import type { InstalledLegendState } from "../project/legend-state-package.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import type { LegendPracticesRequest } from "./model.js";
 import { NO_CAPABILITIES } from "../project/capabilities.js";
+import type { SubscriptionInventory } from "../core/subscriptions.js";
 import { collectHookImports } from "../core/imports.js";
 import { enabledPracticeRules } from "./practice-rules.js";
 import { isObservableFactoryCall } from "./observable-paths.js";
@@ -54,6 +55,8 @@ export function analyzeLegendPractices({
 }
 
 export interface LegendPracticesFileRequest {
+  readonly subscriptionInventory?: SubscriptionInventory[] | undefined;
+  readonly importedObservablePrimitivePaths?: ReadonlySet<string>;
   readonly capabilities?: FileCapabilities;
   readonly childContracts?: ChildContractResolver | null;
   readonly file: AnalysisFile;
@@ -66,6 +69,8 @@ export interface LegendPracticesFileRequest {
 }
 
 export function analyzeLegendPracticesFile({
+  subscriptionInventory,
+  importedObservablePrimitivePaths = new Set(),
   capabilities = NO_CAPABILITIES,
   childContracts = null,
   file,
@@ -77,6 +82,8 @@ export function analyzeLegendPracticesFile({
   reportFileName,
 }: LegendPracticesFileRequest): LegendPracticeFinding[] {
   const findings = analyzeParsedLegendPractices({
+    subscriptionInventory,
+    importedObservablePrimitivePaths,
     capabilities,
     childContracts,
     fileName: reportFileName,

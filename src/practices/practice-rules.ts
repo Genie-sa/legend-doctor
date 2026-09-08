@@ -104,9 +104,11 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
   },
   {
     id: "observable-reads",
-    needsObservableBindings: true,
+    needsObservableBindings: false,
     run: ({ imports, observableBindings, observableKeys, request }) =>
       findObservableReadPractices({
+        inventory: request.subscriptionInventory,
+        primitivePaths: request.importedObservablePrimitivePaths ?? new Set(),
         childContracts: request.childContracts,
         fileName: request.fileName,
         imports,

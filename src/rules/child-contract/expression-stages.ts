@@ -14,6 +14,7 @@ import {
   returnedCallbackPath,
 } from "./hook-boundary-paths.js";
 import { findAncestorUntil, nearestNestedFunction, nodeWithin } from "../../core/ast.js";
+import { baseUiRenderEventStage } from "./base-ui-render-events.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
 import { contextPropertyConsumersAreDeferred } from "./context-consumers.js";
 import { deeperTrace } from "./model.js";
@@ -258,6 +259,7 @@ const CALLBACK_EXPRESSION_STAGES: readonly ((probe: CallbackExpressionProbe) => 
     arrayPublicationStage,
     contextPublicationStage,
     nestedCallbackStage,
+    baseUiRenderEventStage,
     forwardedObjectStage,
     directCallStage,
   ];

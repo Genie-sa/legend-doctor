@@ -143,6 +143,12 @@ Confirmations
   assumption recorded in its evidence; "no" keeps it under review and stops
   the question. Work through report.questions in rank order.
 
+Subscription plans
+  report.subscriptionAnalysis (version 1) inventories useValue calls and groups
+  proven child cuts by owner. Static JSX impact is separate from runtime data.
+  Optional evidence: <root>/.legend-doctor/subscription-measurements.json.
+  See REPORT.md for the measurement format and source fingerprint contract.
+
 Suppression
   Precede a deliberate React effect with \`// legend-doctor keep-react-effect\`
   to suppress its review-effect finding.

@@ -66,9 +66,21 @@ function proveCoexecution(
   const lowering: Lowering = { breakable: false, left, right };
   const initial: ExecutionPath = { awaitEpoch: 0, events: [], termination: null };
   const result = ts.isBlock(fn.body)
-    ? lowerStatements(fn.body.statements, [initial], lowering)
+    ? lowerStatements(relevantStatements(fn.body, left, right), [initial], lowering)
     : lowerExpression(fn.body, [initial], lowering);
   return coexecutionProof(result, lowering, surface);
+}
+
+/** Later statements cannot undo earlier calls. Keep the entire prefix and the containing
+ * statement, including its catch/finally: this is an ordering proof, not dead-code removal. */
+function relevantStatements(
+  body: ts.Block,
+  left: ts.CallExpression,
+  right: ts.CallExpression,
+): readonly ts.Statement[] {
+  const last = Math.max(left.end, right.end);
+  const index = body.statements.findIndex((statement) => statement.end >= last);
+  return index === -1 ? body.statements : body.statements.slice(0, index + 1);
 }
 
 function incompatibleControlSurfaces(controls: Controls): FlowProof | null {

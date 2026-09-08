@@ -1,6 +1,7 @@
 import type { ChildContractResolver } from "../rules/child-contract/model.js";
 import type { FileCapabilities } from "../project/capabilities.js";
 import type { HookImports } from "../core/imports.js";
+import type { SubscriptionInventory } from "../core/subscriptions.js";
 import type ts from "typescript";
 
 export interface ObservableWrite {
@@ -13,6 +14,8 @@ export interface ObservableWrite {
 }
 
 export interface LegendPracticesRequest {
+  subscriptionInventory?: SubscriptionInventory[] | undefined;
+  importedObservablePrimitivePaths?: ReadonlySet<string>;
   capabilities: FileCapabilities;
   childContracts: ChildContractResolver | null;
   fileName: string;
