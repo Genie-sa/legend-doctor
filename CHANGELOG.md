@@ -1,5 +1,11 @@
 # legend-doctor
 
+## 0.3.0
+
+### Minor Changes
+
+- 035ffe0: Add coordinated subscription plans, workspace-aware callback analysis, and actionable transition review guidance. Preserve render snapshots, lifecycle timing, and atomic updates when recommending optimizations.
+
 ## 0.2.0
 
 ### Minor Changes
