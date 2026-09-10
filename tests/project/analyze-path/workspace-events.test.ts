@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { analyzePath } from "../../../src/project/analyze-path/analyze-path.js";
+import { analyzePathDetailed } from "../../../src/project/analyze-path/analyze-path.js";
 import assert from "node:assert/strict";
 import { createAnalysisContext } from "../../../src/project/analyze-path/analysis-context.js";
 import os from "node:os";
@@ -236,7 +236,26 @@ for (const scenario of CASES) {
       sharedContext.project.files.every((file) => !file.identityPath.endsWith(".d.ts")),
       "declarations cannot enter implementation proofs",
     );
-    const report = await analyzePath(target, { sharedContext });
+    const detailed = await analyzePathDetailed(target, { sharedContext });
+    const { report } = detailed;
+    const unavailable = detailed.coverage.sourceContext
+      ?.find((entry) => entry.file === "Screen.tsx")
+      ?.unavailable.filter((edge) => edge.specifier === "@fixture/ui/button");
+    const expectedReason = new Map([
+      ["private source", "module-unresolved"],
+      ["registry version", "module-unresolved"],
+      ["declaration-only export", "declaration-only"],
+      ["types condition wins", "declaration-only"],
+      ["null export", "module-unresolved"],
+      ["duplicate package identity", "module-unresolved"],
+      ["undeclared dependency", "module-unresolved"],
+      ["existing installed dependency", "source-not-indexed"],
+      ["malformed implementation", "source-not-indexed"],
+    ]).get(scenario.name);
+    assert.deepEqual(
+      unavailable?.map((edge) => edge.reason),
+      expectedReason ? [expectedReason] : [],
+    );
     assert.equal(report.findings.length, 1, "dependency files must not become scan targets");
     assert.equal(report.findings[0]?.action, scenario.action);
   });

@@ -1,6 +1,6 @@
 # Actions
 
-Every action removes one specific cost. The finding carries the exact edit. Each link shows the before and after in
+A `change` finding carries a proven edit; a `style` finding offers an equivalent form without a proven render or lifecycle saving. The finding carries the exact edit. Each link shows the before and after in
 [EXAMPLES.md](EXAMPLES.md).
 
 ### React state
@@ -28,24 +28,24 @@ Every action removes one specific cost. The finding carries the exact edit. Each
 
 ### Legend reads
 
-| Action                                                                                   | Removes                                               |
-| ---------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)               | Updates from unread sibling fields                    |
-| [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                           | One broad subscription across unrelated leaves        |
-| [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                              | An observable update rendering a broad parent         |
-| [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                        | A parent render used only to pass one value           |
-| [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)      | Redundant selector work                               |
-| [`derive-computed-observable`](EXAMPLES.md#compute-a-derived-primitive-as-an-observable) | Renders for input changes that leave a memo unchanged |
-| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)          | Deprecated `useSelector` or `use$` usage              |
-| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                       | Tracking in a proven non-tracking command             |
+| Action                                                                                   | Removes                                                                       |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)               | Updates from unread sibling fields                                            |
+| [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                           | One broad subscription across unrelated leaves                                |
+| [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                              | An observable update rendering a broad parent                                 |
+| [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                        | A parent render used only to pass one value                                   |
+| [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)      | Missing tracking or redundant hooks for eager reads; selector syntax is style |
+| [`derive-computed-observable`](EXAMPLES.md#compute-a-derived-primitive-as-an-observable) | Renders for input changes that leave a memo unchanged                         |
+| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)          | Deprecated `useSelector` or `use$` usage                                      |
+| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                       | Tracking in a proven non-tracking command                                     |
 
 ### Legend tracking
 
-| Action                                                                                     | Removes                                                 |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
-| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                      | A render read that never subscribes                     |
-| [`pass-observable-to-reactive-input`](EXAMPLES.md#pass-the-observable-to-a-reactive-input) | A snapshot frozen in an input that tracks on its own    |
-| [`split-use-value-result`](EXAMPLES.md#split-a-selector-that-only-builds-a-literal)        | A fresh object identity from a selector that only reads |
+| Action                                                                                     | Removes                                                      |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                      | A render read that never subscribes                          |
+| [`pass-observable-to-reactive-input`](EXAMPLES.md#pass-the-observable-to-a-reactive-input) | A snapshot frozen in an input that tracks on its own         |
+| [`split-use-value-result`](EXAMPLES.md#split-a-selector-that-only-builds-a-literal)        | Aggregate result allocation (style; no proven render saving) |
 
 ### Legend writes
 
@@ -62,3 +62,7 @@ Every action removes one specific cost. The finding carries the exact edit. Each
 | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
 | [`reuse-observable-reference`](EXAMPLES.md#reuse-the-observable-you-already-have)                      | A wrapper node identical to its source observable    |
 | [`snapshot-computed-initializer`](EXAMPLES.md#snapshot-an-initial-value-instead-of-writing-a-computed) | Writes that a computed initializer silently replaces |
+
+`review-helper-tracking` is a candidate review, not an optimization instruction. It names extra
+observable dependencies reached through one synchronous local helper. Establish intended triggers
+and selector execution cost before changing snapshot boundaries.

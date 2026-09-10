@@ -28,10 +28,9 @@ interface SplitResult {
 }
 
 /**
- * `const { a, b } = useValue(() => ({ a: a$.get(), b: total }))` builds a new object on every
- * tracked change, so every destructured consumer sees a fresh identity. When each destructured
- * member is a direct observable read or an evaluation-inert expression, one `useValue` per
- * read subscribes to exactly the same paths and returns values that compare by content.
+ * A fully retained literal result can be written as direct subscriptions. Removing the
+ * aggregate allocation is style: destructuring does not make each member a fresh value,
+ * and source alone does not prove fewer owner renders or lower total subscription cost.
  */
 export function splitUseValueResultFinding(
   call: ts.CallExpression,
@@ -44,7 +43,12 @@ export function splitUseValueResultFinding(
 function splitResult(call: ts.CallExpression, scan: ObservableReadScan): SplitResult | null {
   const result = conciseSelectorResult(call, scan);
   const declaration = outermostTransparentParent(call).parent;
-  if (!result || !ts.isVariableDeclaration(declaration)) {
+  if (
+    !result ||
+    !ts.isVariableDeclaration(declaration) ||
+    !ts.isVariableDeclarationList(declaration.parent) ||
+    (declaration.parent.flags & ts.NodeFlags.Const) === 0
+  ) {
     return null;
   }
   return literalSplit(result, declaration, scan.observableBindings);
@@ -76,6 +80,7 @@ function conciseSelectorResult(
   const selector = unwrapTransparentExpression(call.arguments[0]!);
   if (
     (!ts.isArrowFunction(selector) && !ts.isFunctionExpression(selector)) ||
+    selector.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     selector.parameters.length > 0 ||
     ts.isBlock(selector.body)
   ) {
@@ -93,9 +98,26 @@ function objectBindings(
   if (!members) {
     return null;
   }
+  if (!retainsMemberEvaluation(pattern, members)) {
+    return null;
+  }
   const bindings = pattern.elements.map((element) => objectBinding(element, members));
   const resolved = bindings.filter((binding) => binding !== null);
   return resolved.length === bindings.length && hasObservableRead(resolved) ? resolved : null;
+}
+
+function retainsMemberEvaluation(
+  pattern: ts.ObjectBindingPattern,
+  members: ReadonlyMap<string, ResultMember>,
+): boolean {
+  const keys = pattern.elements.map(destructuredKey);
+  const retained = new Set(keys);
+  const evaluationOrder = [...members.keys()].filter((key) => retained.has(key));
+  return (
+    retained.size === keys.length &&
+    keys.every((key, index) => key === evaluationOrder[index]) &&
+    [...members].every(([key, member]) => member.kind !== "read" || retained.has(key))
+  );
 }
 
 function objectBinding(
@@ -114,7 +136,7 @@ function objectMembers(
   const members = new Map<string, ResultMember>();
   for (const property of literal.properties) {
     const entry = objectMember(property, observableBindings);
-    if (!entry) {
+    if (!entry || members.has(entry[0])) {
       return null;
     }
     members.set(entry[0], entry[1]);
@@ -133,7 +155,8 @@ function objectMember(
   }
   if (
     !ts.isPropertyAssignment(property) ||
-    (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name))
+    (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name)) ||
+    property.name.text === "__proto__"
   ) {
     return null;
   }
@@ -159,7 +182,10 @@ function arrayBindings(
   pattern: ts.ArrayBindingPattern,
   observableBindings: ReadonlySet<string>,
 ): readonly SplitBinding[] | null {
-  if (pattern.elements.length > literal.elements.length) {
+  if (
+    pattern.elements.length > literal.elements.length ||
+    !arrayReadsRetained(literal, pattern, observableBindings)
+  ) {
     return null;
   }
   const kept = pattern.elements
@@ -170,6 +196,22 @@ function arrayBindings(
   );
   const resolved = bindings.filter((binding) => binding !== null);
   return resolved.length === bindings.length && hasObservableRead(resolved) ? resolved : null;
+}
+
+function arrayReadsRetained(
+  literal: ts.ArrayLiteralExpression,
+  pattern: ts.ArrayBindingPattern,
+  observableBindings: ReadonlySet<string>,
+): boolean {
+  // Unbound slots still execute inside the original selector and may establish dependencies.
+  return literal.elements.every((expression, index) => {
+    const member = resultMember(expression, observableBindings);
+    const binding = pattern.elements[index];
+    return (
+      member !== null &&
+      (member.kind === "inert" || (binding !== undefined && !ts.isOmittedExpression(binding)))
+    );
+  });
 }
 
 function arrayBinding(
@@ -238,13 +280,15 @@ function splitFinding(
   return {
     action: "split-use-value-result",
     confidence: "certain",
-    disposition: "change",
+    disposition: "style",
     evidence: [
       `${reads} destructured member${reads === 1 ? "" : "s"} of the selector result ${reads === 1 ? "is" : "are"} a direct observable read`,
-      `the selector only builds the ${split.literal} literal, so per-path subscriptions track exactly the same observables`,
+      `every observable read in the ${split.literal} literal is retained by a destructured binding`,
+      "removes the aggregate result allocation but does not prove fewer renders or lower total subscription cost",
+      "direct inputs inside observer can change subscription ownership; identical selector execution is not claimed",
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `Replace \`${declarationText(split.declaration, sourceFile)}\` with \`${replacement}\`; the selector returns a new ${split.literal} on every tracked change, so each destructured consumer sees a fresh identity, while per-path subscriptions render on the same changes and compare by value.`,
+    message: `Replace \`${declarationText(split.declaration, sourceFile)}\` with \`${replacement}\`; the selector returns a new ${split.literal} on every tracked change. Direct subscriptions remove that aggregate allocation; no render or lifecycle saving is proven.`,
     practice: "reactivity",
   };
 }

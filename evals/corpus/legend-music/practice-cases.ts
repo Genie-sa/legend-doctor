@@ -216,18 +216,20 @@ export const legendMusicPracticeCases = [
   },
   {
     action: "pass-observable-to-use-value",
+    disposition: "style",
     file: "components/TrackItem.tsx",
     line: 62,
     rationale:
-      "The selector only unwraps one proven accent-color observable, so the observable can be passed directly.",
+      "At the pinned source, this synchronous selector without options returns only themeState$.customColors.dark.accent.primary.get(). Direct input selects the same value; subscription ownership can depend on observer context. No independent render or lifecycle saving is proven, so this is style.",
     target: "legend-music",
   },
   {
     action: "pass-observable-to-use-value",
+    disposition: "style",
     file: "components/MediaLibrary/TrackList.tsx",
     line: 438,
     rationale:
-      "The selector only unwraps one proven accent-color observable, so the observable can be passed directly.",
+      "At the pinned source, this synchronous selector without options returns only themeState$.customColors.dark.accent.primary.get(). Direct input selects the same value; subscription ownership can depend on observer context. No independent render or lifecycle saving is proven, so this is style.",
     target: "legend-music",
   },
   {

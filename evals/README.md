@@ -11,7 +11,9 @@ whatever it currently prints.
   through `assumption: { ifConfirmed }`.
 - **Grouped instructions.** State-cluster labels verify exact cluster membership.
 - **Legend practice labels.** Every practice finding on a labeled target must match a label; an unlabeled practice
-  finding is a failure, so practice precision is measured over everything the tool prints.
+  finding is a failure, so practice precision is measured over everything the tool prints. A manually audited optional
+  `disposition` label also rejects the right action with an incorrect cost classification; omitted dispositions retain
+  action-only matching.
 
 The primary metric is precision among non-review recommendations. Recall is reported globally and per action so
 abstention cannot masquerade as accuracy. The runner also prints a deterministic abstention-reason histogram globally
@@ -67,3 +69,9 @@ memoized snapshot identity, with and without StrictMode. They also run in `npm t
 Read `AGENTS.md` first. When a detector changes, add a minimal adversarial fixture test and a manually audited label
 from a pinned application. Keep uncertain opportunities as explicit `enforced: false` labels rather than weakening a
 proof. Report action deltas for every application after each detector phase, including zero-change applications.
+
+Candidate Legend practices are source reviews rather than optimization predictions. The runner lists
+every candidate location separately, excludes candidates from practice precision, and does not let a
+candidate satisfy an enforced optimization label. Unlabeled `change` and `style` practices still fail.
+`evals/research/helper-tracking.json` contains manually audited, pinned, non-enforced research labels;
+these are not loaded into scored corpus totals and do not claim imported-helper support.

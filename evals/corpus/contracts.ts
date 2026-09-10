@@ -1,4 +1,9 @@
-import type { AbstentionReason, HookAction, LegendPracticeAction } from "../../src/core/types.js";
+import type {
+  AbstentionReason,
+  HookAction,
+  LegendPracticeAction,
+  LegendPracticeFinding,
+} from "../../src/core/types.js";
 
 export interface CorpusTarget {
   application?: string;
@@ -41,6 +46,8 @@ export interface GoldStateGroupCase {
 }
 
 export interface GoldPracticeCase {
+  /** Assert cost classification when manually audited; omitted labels retain action-only matching. */
+  disposition?: Exclude<LegendPracticeFinding["disposition"], "candidate">;
   action: LegendPracticeAction;
   file: string;
   line: number;

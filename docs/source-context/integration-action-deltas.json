@@ -1,0 +1,109 @@
+{
+  "baseline": "c7864f639104823f1c868c2da4b529cbce3d9bb0",
+  "targets": 237,
+  "unchangedBaselineFailures": 7,
+  "targetsWithActionChanges": ["legend-music"],
+  "applications": {
+    "legend-music": {
+      "before": 102,
+      "after": 102,
+      "actionDispositionDeltas": {
+        "assign-observable-fields:change": 0,
+        "batch-observable-writes:change": 0,
+        "keep-effect:keep": 0,
+        "keep-state:keep": 0,
+        "move-use-value-down:change": 0,
+        "narrow-use-value-subscription:change": 0,
+        "pass-observable-to-use-value:change": -2,
+        "pass-observable-to-use-value:style": 2,
+        "replace-legacy-use-value:change": 0,
+        "review-effect:candidate": 0,
+        "review-state:candidate": 0,
+        "split-use-value-leaves:change": 0,
+        "use-observable:change": 0,
+        "use-peek-for-snapshot:change": 0,
+        "use-ref:change": 0,
+        "use-value:change": 0
+      }
+    },
+    "excalidraw": {
+      "before": 186,
+      "after": 186,
+      "actionDispositionDeltas": {
+        "keep-effect:keep": 0,
+        "keep-state:keep": 0,
+        "review-effect:candidate": 0,
+        "review-state:candidate": 0,
+        "use-observable:change": 0,
+        "use-unmount:candidate": 0
+      }
+    },
+    "expensify": {
+      "before": 345,
+      "after": 345,
+      "actionDispositionDeltas": {
+        "keep-effect:keep": 0,
+        "keep-state:keep": 0,
+        "review-effect:candidate": 0,
+        "review-state:candidate": 0,
+        "use-mount:candidate": 0,
+        "use-observable:change": 0,
+        "use-ref:change": 0,
+        "use-unmount:candidate": 0
+      }
+    },
+    "formbricks": {
+      "before": 422,
+      "after": 422,
+      "actionDispositionDeltas": {
+        "keep-effect:keep": 0,
+        "keep-state:keep": 0,
+        "move-state-down:change": 0,
+        "review-effect:candidate": 0,
+        "review-state:candidate": 0,
+        "use-observable:change": 0
+      }
+    },
+    "outline": {
+      "before": 150,
+      "after": 150,
+      "actionDispositionDeltas": {
+        "keep-effect:keep": 0,
+        "keep-state:keep": 0,
+        "review-effect:candidate": 0,
+        "review-state:candidate": 0,
+        "use-observable:change": 0,
+        "use-ref:change": 0,
+        "use-unmount:candidate": 0
+      }
+    },
+    "open-webui-react-native": {
+      "before": 8,
+      "after": 8,
+      "actionDispositionDeltas": {
+        "batch-observable-writes:change": 0,
+        "keep-effect:keep": 0,
+        "replace-legacy-use-value:change": 0,
+        "review-state:candidate": 0,
+        "use-observable:change": 0
+      }
+    },
+    "hoalu": {
+      "before": 92,
+      "after": 92,
+      "actionDispositionDeltas": {
+        "batch-observable-writes:change": 0,
+        "keep-effect:keep": 0,
+        "keep-state:keep": 0,
+        "move-state-down:change": 0,
+        "move-use-value-into-child:change": 0,
+        "narrow-use-value-subscription:change": 0,
+        "review-effect:candidate": 0,
+        "review-state:candidate": 0,
+        "use-mount:candidate": 0,
+        "use-observable:change": 0,
+        "use-unmount:candidate": 0
+      }
+    }
+  }
+}

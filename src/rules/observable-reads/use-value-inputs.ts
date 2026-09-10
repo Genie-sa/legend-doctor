@@ -17,8 +17,6 @@ import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
 import ts from "typescript";
 
-const MAX_USE_VALUE_ARGUMENTS = 2;
-
 interface DirectUseValueInput {
   kind: "eager-read" | "selector";
   observable: ts.Expression;
@@ -29,11 +27,8 @@ export function directUseValueInput(
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
 ): DirectUseValueInput | null {
-  if (
-    !isUseValueCall(call, imports) ||
-    call.arguments.length === 0 ||
-    call.arguments.length > MAX_USE_VALUE_ARGUMENTS
-  ) {
+  // Direct inputs forward options to get(); eager and callback reads do not inherit them.
+  if (!isUseValueCall(call, imports) || call.arguments.length !== 1) {
     return null;
   }
   const input = call.arguments[0]!;
@@ -51,6 +46,7 @@ export function directObservableSelectorPath(
 ): ts.Expression | null {
   if (
     (!ts.isArrowFunction(selector) && !ts.isFunctionExpression(selector)) ||
+    selector.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     selector.parameters.length > 0 ||
     ts.isBlock(selector.body)
   ) {
@@ -207,15 +203,23 @@ export function directUseValueFinding(
   return {
     action: "pass-observable-to-use-value",
     confidence: "certain",
-    disposition: "change",
+    disposition: eager ? "change" : "style",
     evidence: [
       eager
-        ? "the observable is read with get() before useValue can subscribe"
+        ? "the observable is read with get() before useValue receives its input"
         : "useValue selector only returns one zero-argument get() call",
       `${path} is a proven Legend observable path`,
+      ...(eager
+        ? [
+            "direct input establishes useValue tracking outside observer, or reuses enclosing observer tracking without an empty selector subscription",
+          ]
+        : [
+            "the selected observable value is retained without hook options; no render or lifecycle saving is proven",
+            "inside observer, direct inputs use observer subscription ownership instead of a separate selector hook",
+          ]),
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `Replace \`${current}\` with \`${replacement}\`; the direct observable form ${eager ? "establishes the missing leaf subscription" : "keeps the same subscription with less code"}.`,
+    message: `Replace \`${current}\` with \`${replacement}\`; the direct observable form ${eager ? "provides reactive input directly, reusing observer tracking when present" : "reads the same observable with less code"}.`,
     practice: "reactivity",
   };
 }

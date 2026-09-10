@@ -115,6 +115,7 @@ type EffectAction =
 type HookAction = StateAction | EffectAction;
 
 type LegendPracticeAction =
+  | "review-helper-tracking"
   | "assign-observable-fields"
   | "batch-observable-writes"
   | "derive-computed-observable"
@@ -217,7 +218,7 @@ interface LegendPracticeFinding {
   subscription?: SubscriptionCut;
   action: LegendPracticeAction;
   confidence: Confidence;
-  disposition: "change" | "style";
+  disposition: "change" | "style" | "candidate";
   evidence: readonly string[];
   location: SourceLocation;
   message: string;

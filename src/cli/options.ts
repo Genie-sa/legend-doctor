@@ -42,6 +42,7 @@ const KNOWN_ACTIONS = {
   "snapshot-computed-initializer": true,
   "split-use-value-leaves": true,
   "split-use-value-result": true,
+  "review-helper-tracking": true,
   "toggle-observable": true,
   "use-mount": true,
   "use-observable": true,

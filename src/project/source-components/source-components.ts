@@ -17,14 +17,17 @@ import {
 import { cachedModuleResolutionHost, normalizeFile, resolveModule } from "./module-resolution.js";
 import { contextProviderSitesFor, contextReaderHooksFor } from "./context-readers.js";
 import type { AnalysisFile } from "../analysis-project.js";
+import type { SourceContextCoverage } from "./source-context.js";
 import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js";
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
 import { observablePathsFor } from "./observable-containers.js";
 import { observablePrimitivePathsFor } from "./observable-primitive-paths.js";
+import { sourceContextFor } from "./source-context.js";
 import type ts from "typescript";
 
 export interface SourceIndex {
+  sourceContextFor: (file: string) => SourceContextCoverage;
   componentDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
   componentsFor: (file: string) => ReadonlySet<string>;
   contextProviderSitesFor: (file: string, contextName: string) => number;
@@ -60,6 +63,7 @@ export function buildSourceIndexFromFiles(
 ): SourceIndex {
   const state = createSourceIndexState(root, files, host);
   return {
+    sourceContextFor: (file) => sourceContextFor(state, file),
     componentDeclarationFor: (file, name) => componentDeclarationFor(state, file, name),
     componentsFor: (file) => new Set(resolvedFor(state, file, "component").keys()),
     contextProviderSitesFor: (file, contextName) =>

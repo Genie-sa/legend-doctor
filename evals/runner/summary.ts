@@ -16,6 +16,21 @@ function formatActionLines(byAction: ReadonlyMap<string, ActionScore>): string[]
     });
 }
 
+/** Research reviews stay visible without counting as optimization predictions. */
+export function practiceReviewLines(run: Evaluation): string[] {
+  const reviews = [...run.targets]
+    .flatMap(([target, result]) =>
+      result.report.practices
+        .filter((finding) => finding.disposition === "candidate")
+        .map(
+          (finding) =>
+            `Unscored practice review [${target}/${finding.location.file}:${finding.location.line}]: ${finding.action}`,
+        ),
+    )
+    .toSorted();
+  return [`Candidate Legend practices: ${reviews.length} (not precision-scored).`, ...reviews];
+}
+
 export function summaryLines(
   run: Evaluation,
   hooks: HookScore,
@@ -36,6 +51,7 @@ export function summaryLines(
     ...hookCoverageSummaryLines(run),
     `Matched ${groups.matches}/${groups.labels} grouped agent instructions.`,
     `Matched ${practices.matches}/${practices.labels} Legend practice findings.`,
+    ...practiceReviewLines(run),
     `Legend practice precision: ${percentage(hitRate)}% (${practices.matches}/${practices.predictions}).`,
     `Actionable precision on labeled hooks: ${percentage(precision)}% (${hooks.correctActionable}/${hooks.actualActionable}).`,
     `Actionable recall on labeled hooks: ${percentage(recall)}% (${hooks.correctActionable}/${hooks.expectedActionable}).`,
