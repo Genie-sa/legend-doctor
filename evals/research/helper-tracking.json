@@ -1,0 +1,30 @@
+{
+  "repository": "https://github.com/LegendApp/legend-apps",
+  "commit": "4744fb8b57026a645379e826fe8ab34861f43017",
+  "scored": false,
+  "labels": [
+    {
+      "id": "LA-03",
+      "enforced": false,
+      "action": "review-helper-tracking",
+      "file": "apps/music/src/overlay/CurrentSongOverlayController.tsx",
+      "line": 25,
+      "rationale": "Manually audited: presentCurrentSongOverlay reads and writes presentationId synchronously inside batch at CurrentSongOverlayState.ts:58-59. Duration is read through a nested helper default parameter. The pinned beta.47 probe recorded extra selector executions, not React renders. Intended triggers and shared helper snapshot intent are unresolved. Imported helpers and default parameters remain outside this bounded local phase."
+    },
+    {
+      "id": "M-POST-AWAIT",
+      "enforced": false,
+      "file": "apps/music/src/media-library/MediaLibraryWindowManager.tsx",
+      "line": 57,
+      "rationale": "Continuation-time libraryWindowSize.get after await does not inherit the original selector tracking interval. Preserve timing; no peek rewrite or render benefit follows."
+    },
+    {
+      "id": "LA-03-CONDITIONAL-REACHABILITY",
+      "enforced": false,
+      "action": "review-helper-tracking",
+      "file": "apps/music/src/overlay/CurrentSongOverlayController.tsx",
+      "line": 23,
+      "rationale": "Manually re-audited at the pin: lines 23-26 conditionally invoke presentCurrentSongOverlay; lines 19-21 also contain optional access and short-circuit operations. State.ts:50-53 returns before the presentationId read at 58 when disabled. This local-only phase must abstain on unresolved conditional execution, abrupt completion, and unproven const initialization; no blanket dependency claim is justified by lexical containment. The direct-child/helper-parent distinction is covered by structural fixtures and the installed Legend runtime, not inferred from this app. This is a non-enforced boundary label, not imported-helper support."
+    }
+  ]
+}

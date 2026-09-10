@@ -39,6 +39,21 @@ export function resolveSourceModule(
   importer: string,
   specifier: string,
 ): string | null {
+  const result = sourceModuleResolution(context, importer, specifier);
+  return result.reason === null ? result.resolvedFile : null;
+}
+
+export interface SourceModuleResolution {
+  reason: "module-unresolved" | "declaration-only" | null;
+  resolvedFile: string | null;
+}
+
+/** Keep TypeScript's selected export, including declarations; never retry a different package. */
+export function sourceModuleResolution(
+  context: SourceResolutionContext,
+  importer: string,
+  specifier: string,
+): SourceModuleResolution {
   const { cache, options } = compilerContextFor(importer, context.root, context);
   const resolution = ts.resolveModuleName(
     specifier,
@@ -49,11 +64,14 @@ export function resolveSourceModule(
     undefined,
     resolutionModeFor(importer, options, context.moduleResolutionHost),
   ).resolvedModule;
-  // A declaration describes a type contract, never the callback's execution timing.
-  if (!resolution || /\.d\.(?:ts|mts|cts)$/u.test(resolution.resolvedFileName)) {
-    return null;
+  if (!resolution) {
+    return { reason: "module-unresolved", resolvedFile: null };
   }
-  return resolution.resolvedFileName;
+  // A declaration describes a type contract, never the callback's execution timing.
+  return {
+    reason: /\.d\.(?:ts|mts|cts)$/u.test(resolution.resolvedFileName) ? "declaration-only" : null,
+    resolvedFile: resolution.resolvedFileName,
+  };
 }
 
 function resolutionModeFor(

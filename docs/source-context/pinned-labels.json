@@ -1,0 +1,24 @@
+{
+  "scope": "Manually audited source coverage evidence; outside action scoring",
+  "labels": [
+    {
+      "id": "LA-05-storage-factory-source",
+      "enforced": false,
+      "repository": "LegendApp/legend-apps",
+      "commit": "4744fb8b57026a645379e826fe8ab34861f43017",
+      "importer": "apps/music/src/systems/Settings.ts",
+      "line": 1,
+      "specifier": "@legend-apps/storage",
+      "binding": "createObservableFile",
+      "condition": "No installed storage package link; app declares exact version 0.0.0, not workspace:*",
+      "expectedSourceReason": "module-unresolved",
+      "potentiallyBlockedProof": "observable-factory",
+      "evidence": [
+        "apps/music/package.json:34 declares the dependency",
+        "apps/music/src/systems/Settings.ts:188 calls the imported factory",
+        "packages/storage/src/index.ts:385 annotates Observable<T>; lines 405-424 allocate and return the observable"
+      ],
+      "control": "An installed compatible source link makes this edge available; no action count or runtime savings asserted"
+    }
+  ]
+}

@@ -277,7 +277,12 @@ useSelector(profile$.name); // Before
 useValue(profile$.name); // After
 ```
 
-Keep `useValue(() => ...)` when the selector derives a value from one or more observables.
+The same-node synchronous selector rewrite without options is `style`: it selects the same value, with no proven
+render or lifecycle saving. Inside `observer`, direct input can use the enclosing observer's tracking instead of a
+separate selector hook. Async selectors and calls with options remain unchanged because their Promise or tracking
+contracts can differ. An eager `useValue(profile$.name.get())` is still `change`: direct input establishes tracking in
+an ordinary component or avoids redundant selector hooks inside `observer`. Keep `useValue(() => ...)` when the
+selector derives a value from one or more observables, including boolean projections and formatted computed values.
 
 ### Compute a derived primitive as an observable
 
@@ -508,7 +513,7 @@ receives, so a raw array breaks it. `useValue(x$.get())` stays with `pass-observ
 
 ### Split a selector that only builds a literal
 
-`split-use-value-result` changes a destructured selector whose members are direct reads or inert expressions.
+`split-use-value-result` offers a `style` rewrite for a const destructured selector whose members are direct reads or inert expressions.
 
 ```tsx
 const { a, b } = useValue(() => ({ a: state$.a.get(), b: state$.b.get() })); // Before
@@ -516,9 +521,12 @@ const a = useValue(state$.a); // After
 const b = useValue(state$.b);
 ```
 
-The selector returns a new object on every tracked change, so each destructured consumer sees a fresh identity.
-Per-path subscriptions render on exactly the same changes and compare by value. Results used whole, block bodies,
-spreads, defaults, rest elements, computed members, and calls stay as they are.
+The aggregate object is fresh; its destructured values retain their own identities. This rewrite removes the result
+allocation and adds per-path subscriptions. It does not prove fewer owner renders, lower CPU cost, or less native
+work. Every observable read must remain represented, including reads in otherwise unused fields: they may invalidate
+ref-backed render snapshots. Omitted effects, duplicate properties, mutable declarations, results used whole, block
+bodies, async selectors, prototype-setting properties, reordered reads, spreads, defaults, rest elements, computed
+members, and calls stay as they are.
 
 ## Keep effect timing correct
 

@@ -1,3 +1,5 @@
+import type { SourceContextCoverage } from "./source-components/source-context.js";
+
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public coverage protocol version.
 const COVERAGE_SCHEMA_VERSION = 2 as const;
 
@@ -42,6 +44,8 @@ export interface AnalysisCoverageEntry {
 }
 
 export interface AnalysisCoverageReport {
+  /** File-level requested proofs and unavailable source edges, not missed finding claims. */
+  readonly sourceContext?: readonly SourceContextCoverage[];
   readonly schemaVersion: typeof COVERAGE_SCHEMA_VERSION;
   /** An empty list means that no targets were registered, never unknown coverage. */
   readonly entries: readonly AnalysisCoverageEntry[];

@@ -203,3 +203,42 @@ props can prove that an independent effect will not rerun on subscription-only u
 or unresolved dependencies, callback snapshots, refs, overlapping parent subscriptions, repeated render
 callbacks, and unsupported expressions remain conservative blockers. General selector relocation is not
 implied by inventory coverage.
+
+### Imported source coverage
+
+With `--coverage`, `coverage.sourceContext` lists each target file's `requestedProofs` and
+`unavailable` runtime import/re-export edges reachable through indexed source. Each edge names the
+`importer`, `specifier`, selected `resolvedFile` when present, and one reason:
+
+- `module-unresolved`: TypeScript did not select a module under the current installation/configuration.
+- `declaration-only`: TypeScript selected a declaration file, which cannot supply implementation behavior.
+- `source-not-indexed`: the selected implementation is outside the source index or was rejected after parser recovery.
+
+Paths are relative to the scan root. Installed dependencies and package export conditions retain their
+normal precedence; this diagnostic never substitutes a same-named workspace implementation.
+`requestedProofs` names file-level source-symbol queries used by current consumers (such as observable,
+observable-factory, component, and callback contracts). An unavailable edge can block these proofs;
+it does not establish that any particular recommendation was missed. Known framework API contracts
+may still work without implementation source. Detector stage `analyzed` describes execution, not
+complete imported semantics. Empty `unavailable` does not prove export compatibility or successful
+symbol proofs. Type-only, side-effect-only, dynamic imports and CommonJS require edges are outside
+this static symbol-edge inventory. Ordinary reports and action scoring are unchanged.
+
+## Helper tracking reviews
+
+`review-helper-tracking` practices have `disposition: candidate`. They identify a direct local helper
+called from an imported `useValue`, `useObserve`, `useObserveEffect`, or `observe` selector. The
+selector must have independent direct reads. A direct parent read already covers a helper's child
+read; a helper's broader parent read can introduce sibling dependencies beyond a direct child read.
+Evidence lists helper reads, writes, and synchronous `batch` boundaries.
+Additional dependencies can repeat selector work; the review does not establish React render savings,
+a measured execution count, or permission to replace shared helper reads with `peek`.
+
+This first phase abstains on imported helpers, call chains, recursion, mutable or shadowed dispatch,
+async/generator functions, parameter defaults, conditional or abrupt control flow, unproven helper
+initialization, and unresolved calls. Nested
+callback bodies do not inherit tracking merely by lexical containment. Separate reaction arguments
+remain separate. These limits can miss opportunities; absence of a review is not proof of no tracking.
+
+Use `--disposition candidate` to inspect these reviews. `--actionable` hides them and counts them under
+`hidden.practices`. They are listed separately from optimization precision in corpus output.

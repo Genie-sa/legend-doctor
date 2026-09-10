@@ -19,7 +19,7 @@ legend-doctor <absolute root> --actionable
 Use `npx legend-doctor` when it is not installed in the project.
 
 Scan the smallest complete root that contains the relevant components, hooks, imports, re-exports, and observables; a
-single-file scan can hide the proof a safe result needs. The report root carries `schemaVersion` (currently `3`) and
+single-file scan can hide the proof a safe result needs. The report root carries `schemaVersion` and
 `analyzer: { version, build }`; record `build` with any saved scan and compare scans only when it matches.
 
 Filters: `--disposition change` (proven edits only), `--disposition candidate` (needs review), `--actionable` for
@@ -50,6 +50,15 @@ clean file.
 | `candidate` | Inspect the named source. Edit only when it proves the missing timing, ownership, or type fact. |
 | `keep`      | Preserve the current React or lifecycle boundary.                                               |
 | `style`     | Apply only when the installed Legend API supports the equivalent form.                          |
+
+For `review-helper-tracking`, establish the intended trigger set and measure selector executions before choosing a
+call-site snapshot boundary. Preserve shared helper behavior. Candidate practices are visible with
+`--disposition candidate` and hidden by `--actionable`; they are outside optimization precision scoring.
+
+When an imported implementation is unavailable, inspect `--coverage` and the `sourceContext` reasons documented in
+`REPORT.md`. Resolve the selected package source before extending a proof. An empty unavailable list alone does not
+establish factory ownership or compatible exports. For selector rewrites, distinguish allocation removal from a
+proven render or lifecycle saving; read the matching example in `EXAMPLES.md`.
 
 Keep a deliberate React effect by preceding it with `// legend-doctor keep-react-effect`; that suppresses its
 `review-effect` finding.

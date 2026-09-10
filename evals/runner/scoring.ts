@@ -191,15 +191,24 @@ function scorePracticeCase(run: Evaluation, gold: GoldPracticeCase, score: Tally
   }
   score.labels += 1;
   const finding = target.report.practices.find(
-    (candidate) => isAt(candidate.location, gold) && candidate.action === gold.action,
+    (candidate) =>
+      isAt(candidate.location, gold) &&
+      candidate.action === gold.action &&
+      candidate.disposition !== "candidate",
   );
-  score.matches += finding ? 1 : 0;
-  if (finding) {
-    return;
+  const agrees =
+    finding !== undefined &&
+    (gold.disposition === undefined || finding.disposition === gold.disposition);
+  if (agrees) {
+    score.matches += 1;
+  } else {
+    const detail = finding
+      ? ` disposition ${gold.disposition}, received ${finding.disposition}`
+      : "";
+    run.failures.push(
+      `${gold.target}/${gold.file}:${gold.line}: expected ${gold.action}${detail} (${gold.rationale})`,
+    );
   }
-  run.failures.push(
-    `${gold.target}/${gold.file}:${gold.line}: expected ${gold.action} (${gold.rationale})`,
-  );
 }
 
 function recordUnexpectedPractices(
@@ -209,6 +218,9 @@ function recordUnexpectedPractices(
 ): void {
   for (const [targetId, target] of run.targets) {
     for (const finding of target.report.practices) {
+      if (finding.disposition === "candidate") {
+        continue;
+      }
       score.predictions += 1;
       const { file, line } = finding.location;
       if (labeled.has(practiceKey(targetId, finding.location, finding.action))) {

@@ -18,6 +18,7 @@ test("passes a proven observable directly to useValue", () => {
   });
   assert.equal(requireValue(finding).action, "pass-observable-to-use-value");
   assert.equal(requireValue(finding).confidence, "certain");
+  assert.equal(requireValue(finding).disposition, "style");
   assert.match(requireValue(finding).message ?? "", /useValue\(theme\$\.accent\)/u);
 });
 
@@ -37,6 +38,7 @@ test("passes a dynamically keyed observable directly only for one stable primiti
     positive.map((finding) => finding.action),
     ["pass-observable-to-use-value"],
   );
+  assert.equal(requireValue(positive[0]).disposition, "style");
   assert.match(requireValue(positive[0]).message ?? "", /useValue\(ratings\$\[key\]\)/u);
 
   for (const [parameter, setup, key] of [
@@ -72,7 +74,7 @@ test("passes an eagerly read observable directly to useValue", () => {
     const profile$ = observable({ name: "Ada", avatar: Promise.resolve("ada.png") });
     export function Profile() {
       const name = read(profile$.name.get());
-      const avatar = read(profile$.avatar.get(), { suspense: true });
+      const avatar = read(profile$.avatar.get());
       return <span>{name}{avatar}</span>;
     }
   `,
@@ -82,18 +84,21 @@ test("passes an eagerly read observable directly to useValue", () => {
     findings.map((finding) => finding.action),
     ["pass-observable-to-use-value", "pass-observable-to-use-value"],
   );
-  assert.match(requireValue(findings[0]).message ?? "", /read\(profile\$\.name\)/u);
-  assert.match(
-    requireValue(findings[1]).message ?? "",
-    /read\(profile\$\.avatar, \{ suspense: true \}\)/u,
+  assert.deepEqual(
+    findings.map(({ disposition }) => disposition),
+    ["change", "change"],
   );
+  assert.match(requireValue(findings[0]).message ?? "", /read\(profile\$\.name\)/u);
+  assert.match(requireValue(findings[1]).message ?? "", /read\(profile\$\.avatar\)/u);
   assert.match(
     requireValue(findings[0]).evidence.join(" ") ?? "",
-    /before useValue can subscribe/u,
+    /before useValue receives its input/u,
   );
+  assert.match(requireValue(findings[0]).evidence.join(" "), /outside observer/u);
+  assert.doesNotMatch(requireValue(findings[0]).message, /missing.*subscription/u);
 });
 
-test("preserves useValue types and options when simplifying one direct get selector", () => {
+test("preserves useValue types when simplifying one direct get selector without options", () => {
   const [finding] = analyzeLegendPractices({
     sourceText: `
     import { observable } from "@legendapp/state";
@@ -101,8 +106,7 @@ test("preserves useValue types and options when simplifying one direct get selec
     const profile$ = observable({ avatar: Promise.resolve("ada.png") });
     export function Profile() {
       return LegendReact.useValue<Promise<string>>(
-        () => profile$.avatar.get(),
-        { suspense: true }
+        () => profile$.avatar.get()
       );
     }
   `,
@@ -111,8 +115,53 @@ test("preserves useValue types and options when simplifying one direct get selec
   assert.equal(requireValue(finding).action, "pass-observable-to-use-value");
   assert.match(
     requireValue(finding).message ?? "",
-    /LegendReact\.useValue<Promise<string>>\(profile\$\.avatar, \{ suspense: true \}\)/u,
+    /LegendReact\.useValue<Promise<string>>\(profile\$\.avatar\)/u,
   );
+});
+
+test("keeps async selectors and options whose read forwarding is not equivalent", () => {
+  for (const input of [
+    "profile$.name.get(), { shallow: true }",
+    "profile$.name.get(), options",
+    "profile$.name.get(), { suspense: true }",
+    "async () => profile$.name.get()",
+    "() => profile$.name.get(), { shallow: true }",
+    "() => profile$.name.get(), options",
+    "() => profile$.name.get(), { suspense: true }",
+  ]) {
+    const findings = analyzeLegendPractices({
+      sourceText: `
+        import { observable } from "@legendapp/state";
+        import { useValue } from "@legendapp/state/react";
+        const profile$ = observable({ name: "Ada" });
+        export function Profile() { return useValue(${input}); }
+      `,
+      fileName: "fixture.tsx",
+    });
+    assert.equal(
+      findings.some((finding) => finding.action === "pass-observable-to-use-value"),
+      false,
+      input,
+    );
+  }
+});
+
+test("does not promise identical subscription ownership inside observer", () => {
+  const findings = analyzeLegendPractices({
+    sourceText: `
+      import { observable } from "@legendapp/state";
+      import { observer, useValue } from "@legendapp/state/react";
+      const state$ = observable({ value: 1 });
+      export const View = observer(() => <span>{useValue(() => state$.value.get())}</span>);
+    `,
+    fileName: "fixture.tsx",
+  });
+  const finding = requireValue(
+    findings.find((candidate) => candidate.action === "pass-observable-to-use-value"),
+  );
+  assert.equal(finding.disposition, "style");
+  assert.match(finding.evidence.join(" "), /observer.*subscription ownership/u);
+  assert.doesNotMatch(finding.message, /same subscription/u);
 });
 
 test("keeps eager useValue inputs that are not one proven static get", () => {

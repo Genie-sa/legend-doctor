@@ -1,0 +1,78 @@
+{
+  "allTargetReportsIdentical": true,
+  "targets": 237,
+  "deltas": {
+    "legend-music": {
+      "review-state:candidate": 0,
+      "keep-effect:keep": 0,
+      "use-observable:change": 0,
+      "review-effect:candidate": 0,
+      "use-value:change": 0,
+      "keep-state:keep": 0,
+      "use-ref:change": 0,
+      "use-peek-for-snapshot:change": 0,
+      "batch-observable-writes:change": 0,
+      "split-use-value-leaves:change": 0,
+      "assign-observable-fields:change": 0,
+      "pass-observable-to-use-value:change": 0,
+      "narrow-use-value-subscription:change": 0,
+      "replace-legacy-use-value:change": 0,
+      "move-use-value-down:change": 0
+    },
+    "excalidraw": {
+      "review-state:candidate": 0,
+      "keep-effect:keep": 0,
+      "review-effect:candidate": 0,
+      "keep-state:keep": 0,
+      "use-unmount:candidate": 0,
+      "use-observable:change": 0
+    },
+    "expensify": {
+      "use-observable:change": 0,
+      "review-effect:candidate": 0,
+      "review-state:candidate": 0,
+      "keep-effect:keep": 0,
+      "use-unmount:candidate": 0,
+      "keep-state:keep": 0,
+      "use-mount:candidate": 0,
+      "use-ref:change": 0
+    },
+    "formbricks": {
+      "use-observable:change": 0,
+      "review-state:candidate": 0,
+      "review-effect:candidate": 0,
+      "keep-effect:keep": 0,
+      "keep-state:keep": 0,
+      "move-state-down:change": 0
+    },
+    "outline": {
+      "keep-effect:keep": 0,
+      "use-observable:change": 0,
+      "review-effect:candidate": 0,
+      "review-state:candidate": 0,
+      "keep-state:keep": 0,
+      "use-unmount:candidate": 0,
+      "use-ref:change": 0
+    },
+    "open-webui-react-native": {
+      "batch-observable-writes:change": 0,
+      "use-observable:change": 0,
+      "keep-effect:keep": 0,
+      "review-state:candidate": 0,
+      "replace-legacy-use-value:change": 0
+    },
+    "hoalu": {
+      "review-state:candidate": 0,
+      "keep-effect:keep": 0,
+      "review-effect:candidate": 0,
+      "keep-state:keep": 0,
+      "use-unmount:candidate": 0,
+      "use-observable:change": 0,
+      "move-state-down:change": 0,
+      "use-mount:candidate": 0,
+      "batch-observable-writes:change": 0,
+      "narrow-use-value-subscription:change": 0,
+      "move-use-value-into-child:change": 0
+    }
+  }
+}

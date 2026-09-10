@@ -21,6 +21,7 @@ import type { SubscriptionMeasurement } from "../../core/subscriptions.js";
 import { attachSubscriptionMeasurements } from "../subscription-measurements.js";
 import path from "node:path";
 import { stat } from "node:fs/promises";
+import ts from "typescript";
 
 export interface DetailedAnalysisResult {
   coverage: AnalysisCoverageReport;
@@ -106,11 +107,35 @@ async function analyzePathInternal(
     return report;
   }
   return {
-    coverage: coverage.report(),
+    coverage: sourceCoverageReport(coverage, entries, { context, root: target.analysisRoot }),
     diagnostics: {
       parser: pass.accumulator.diagnostics,
     },
     report,
+  };
+}
+
+function sourceCoverageReport(
+  coverage: AnalysisCoverageLedger,
+  entries: readonly { file: string; reportFileName: string }[],
+  { context, root }: { context: AnalysisContext; root: string },
+): AnalysisCoverageReport {
+  const relative = (file: string): string =>
+    path.relative(ts.sys.realpath?.(root) ?? root, ts.sys.realpath?.(file) ?? file);
+  return {
+    ...coverage.report(),
+    sourceContext: entries.map((entry) => {
+      const source = context.sourceIndex.sourceContextFor(entry.file);
+      return {
+        ...source,
+        file: entry.reportFileName,
+        unavailable: source.unavailable.map((edge) => ({
+          ...edge,
+          importer: relative(edge.importer),
+          resolvedFile: edge.resolvedFile === null ? null : relative(edge.resolvedFile),
+        })),
+      };
+    }),
   };
 }
 

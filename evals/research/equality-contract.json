@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/LegendApp/legend-music",
+  "commit": "59d02afc11d6b27bc53ddecf1a69501626f8487f",
+  "scored": false,
+  "labels": [
+    {
+      "id": "EQUALITY-DIRECT-CONTRACT",
+      "enforced": false,
+      "file": "src/components/TrackItem.tsx",
+      "line": 62,
+      "action": "pass-observable-to-use-value",
+      "disposition": "style",
+      "rationale": "Manually audited pinned source: synchronous zero-parameter arrow, no options, one themeState$.customColors.dark.accent.primary.get() read. This supports the bounded direct-input style case. It does not support async selectors, option forwarding, or claims that observer uses the same subscription ownership. Those exclusions are protected by synthetic adversarial fixtures; no such app defect is claimed."
+    },
+    {
+      "id": "EQUALITY-PROJECTION-CONTROL",
+      "enforced": false,
+      "file": "src/components/MediaLibrary/TrackList.tsx",
+      "line": 433,
+      "rationale": "Manually audited selectedIndices$.get().has(index) boolean projection must retain its result filtering. This is not a direct get or literal-only selector. Async wrappers and prototype-setting literals are separately excluded by adversarial fixtures; the pinned app is not asserted to contain them."
+    }
+  ]
+}
