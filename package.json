@@ -1,6 +1,6 @@
 {
   "name": "legend-doctor",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Read-only React analyzer that proves which useState and useEffect hooks waste renders, and the exact Legend State edit that cuts them.",
   "keywords": [
     "cli",
