@@ -4,6 +4,11 @@ A read-only analyzer for React and Legend State in TypeScript and JavaScript.
 It reports suggested render and effect optimizations, unresolved opportunities, and code to keep.
 Results are JSON; source files are never modified.
 
+Watch Jay Meistrich’s **How to Build the Fastest Apps: Break the Rules** for a look at the state and rendering
+optimizations behind Legend State.
+
+[![Watch Jay Meistrich: How to Build the Fastest Apps](https://img.youtube.com/vi/K3flMIHS-cI/hqdefault.jpg)](https://youtu.be/K3flMIHS-cI?si=oT3-45ExhhodlIc1)
+
 ## Quick start
 
 Requires Node.js 22 or newer.
@@ -58,7 +63,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: Genie-sa/legend-doctor@v0.3.0
+      - uses: Genie-sa/legend-doctor@v0.4.0
         with:
           directory: src
 ```
