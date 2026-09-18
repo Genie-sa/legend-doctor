@@ -354,10 +354,28 @@ export const legendMusicPracticeCases = [
   },
   {
     action: "move-use-value-down",
+    disposition: "change",
+    file: "settings/GeneralSettings.tsx",
+    line: 16,
+    rationale:
+      "The error subscription is read only by HotkeyCapture.className and its adjacent conditional error Text inside the stable View at line 58. One wrapper retains all reads and ordinary hotkey inputs while skipping the other settings sections; there are no event or effect consumers.",
+    target: "legend-music",
+  },
+  {
+    action: "move-use-value-down",
     file: "visualizer/VisualizerWindow.tsx",
     line: 13,
     rationale:
       "Playback state controls only the two-element stopped overlay, so an always-mounted wrapper can subscribe without rebuilding the visualizer and control panel.",
+    target: "legend-music",
+  },
+  {
+    action: "move-use-value-down",
+    disposition: "change",
+    file: "visualizer/VisualizerWindow.tsx",
+    line: 15,
+    rationale:
+      "The numeric bin-count subscription has only the pure nullish-default derivation at line 16, consumed by PresetComponent.binCountOverride and Select.value. Two stable call-site wrappers cover every read, keep the dynamic preset component as a parent prop, and avoid rerendering track metadata and preset controls; callbacks write through the observable handle.",
     target: "legend-music",
   },
   {

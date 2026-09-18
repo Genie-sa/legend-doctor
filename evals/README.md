@@ -75,7 +75,7 @@ nonempty corpus passed; exit code 1 means invalid input, checkout/analysis failu
 The `Complete pinned public corpus` CI job fetches the exact commits from `corpus/**/repository.ts`, caches source
 checkouts by those manifests, and runs `--complete`. Application dependencies and scripts are never installed or run.
 The cache is saved before evaluation so existing detector failures do not force repeated cold downloads. No mismatch
-is waived: see [the September 19 audit ledger](audit-2026-09-19.md) for the seven existing failures and 31 unscored
+is waived: see [the September 19 audit ledger](audit-2026-09-19.md) for the original seven failures, two source-audited label corrections, five remaining blockers, and 31 unscored
 changes. A red corpus job remains a real gate; unit-suite success does not override it.
 
 `npm run eval:runtime` runs the executable migration contracts under jsdom with pinned React and Legend State: form
