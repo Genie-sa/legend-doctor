@@ -17,6 +17,8 @@ export interface ContextConsumerSource {
 }
 
 export interface CallbackContractSourceResolver {
+  sourceFiles?: () => readonly ts.SourceFile[];
+  callbackPackageVersion?: (file: string, specifier: string) => string | null;
   contextReaderHooks: (
     file: string,
     contextName: string,

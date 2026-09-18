@@ -18,6 +18,7 @@ import { cachedModuleResolutionHost, normalizeFile, resolveModule } from "./modu
 import { contextProviderSitesFor, contextReaderHooksFor } from "./context-readers.js";
 import type { AnalysisFile } from "../analysis-project.js";
 import type { SourceContextCoverage } from "./source-context.js";
+import { callbackPackageVersion } from "./callback-package-version.js";
 import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js";
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
@@ -27,6 +28,7 @@ import { sourceContextFor } from "./source-context.js";
 import type ts from "typescript";
 
 export interface SourceIndex {
+  callbackPackageVersionFor: (file: string, specifier: string) => string | null;
   sourceContextFor: (file: string) => SourceContextCoverage;
   componentDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
   componentsFor: (file: string) => ReadonlySet<string>;
@@ -63,6 +65,7 @@ export function buildSourceIndexFromFiles(
 ): SourceIndex {
   const state = createSourceIndexState(root, files, host);
   return {
+    callbackPackageVersionFor: (file, specifier) => callbackPackageVersion(state, file, specifier),
     sourceContextFor: (file) => sourceContextFor(state, file),
     componentDeclarationFor: (file, name) => componentDeclarationFor(state, file, name),
     componentsFor: (file) => new Set(resolvedFor(state, file, "component").keys()),
