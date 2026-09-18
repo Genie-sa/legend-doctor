@@ -3,6 +3,7 @@ import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import { derivedMemoDeclaration } from "./derived-memos.js";
 import { isProvablyPrimitive } from "./primitive-results.js";
+import { migrationProofGap } from "./migration-proof.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
@@ -44,6 +45,18 @@ function derivedObservableFinding(
     memo.call.getStart(sourceFile),
   );
   const name = memo.derivedName;
+  const gap = migrationProofGap(memo, scan.imports);
+  if (gap) {
+    return {
+      action: "derive-computed-observable",
+      confidence: "probable",
+      disposition: "candidate",
+      evidence: [inputEvidence(memo.inputs, sourceFile), gap],
+      location: { column: character + 1, file: scan.fileName, line: line + 1 },
+      message: `Keep \`${name}\` as a React memo pending source review: ${gap}. Do not move this callback into a tracking context without that proof.`,
+      practice: "reactivity",
+    };
+  }
   const dependencyList = memo.inputs.map((input) => input.localName).join(", ");
   const subscriptions = joinNames(
     memo.inputs.map((input) => `\`useValue(${input.observable.getText(sourceFile)})\``),
@@ -59,8 +72,8 @@ function derivedObservableFinding(
     disposition: "change",
     evidence: [
       inputEvidence(memo.inputs, sourceFile),
-      "every memo dependency is one of those subscriptions, so a computed observable tracks exactly the declared inputs",
-      "the memo returns only primitive expressions, so an unchanged result skips the rerender useMemo could not",
+      "a total strict comparison reads only the single input from a stable module observable; no helper, coercion, or property read adds dependencies or effects",
+      "the broad string or number domain contains distinct values unequal to the comparison literal; transitions between those values keep the boolean equal and skip the owner render",
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
     message:
@@ -68,7 +81,7 @@ function derivedObservableFinding(
       `subscription${memo.inputs.length === 1 ? "" : "s"} it depends on with ` +
       `\`const ${name}$ = useObservable(() => …)\` reading ${substitutions}, then ` +
       `\`const ${name} = useValue(${name}$)\`; the computed reruns only when those observables ` +
-      "change and the component rerenders only when the primitive result changes.",
+      "change; input transitions with an unchanged boolean result avoid an owner render. Parent-driven renders remain possible.",
     practice: "reactivity",
   };
 }

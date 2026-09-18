@@ -9,7 +9,7 @@ const derived = (source: string): LegendPracticeFinding[] =>
     (finding) => finding.action === "derive-computed-observable",
   );
 
-test("computes a primitive memo over confined useValue inputs as one observable", () => {
+test("reviews multi-input conditional projections without a complete migration proof", () => {
   const [finding] = derived(`
     import { useMemo } from "react";
     import { observable } from "@legendapp/state";
@@ -26,17 +26,15 @@ test("computes a primitive memo over confined useValue inputs as one observable"
     }
   `);
   const found = requireValue(finding);
-  assert.equal(found.confidence, "certain");
-  assert.equal(found.disposition, "change");
+  assert.equal(found.confidence, "probable");
+  assert.equal(found.disposition, "candidate");
   assert.equal(found.practice, "reactivity");
   assert.equal(found.location.line, 9);
-  assert.match(found.message, /const title\$ = useObservable\(\(\) => …\)/u);
-  assert.match(found.message, /`library\$\.selectedView\.get\(\)` for `selectedView`/u);
-  assert.match(found.message, /const title = useValue\(title\$\)/u);
+  assert.match(found.message, /Keep `title` as a React memo pending source review/u);
   assert.match(found.evidence.join(" "), /read only inside this memo/u);
 });
 
-test("proves primitive results through callback-local counters and namespace hooks", () => {
+test("reviews callback-local counters because primitive results do not prove snapshot safety", () => {
   const [finding] = derived(`
     import React from "react";
     import type { Observable } from "@legendapp/state";
@@ -54,8 +52,8 @@ test("proves primitive results through callback-local counters and namespace hoo
     }
   `);
   const found = requireValue(finding);
-  assert.match(found.message, /`useValue\(filters\$\)` subscription it depends on/u);
-  assert.match(found.message, /`filters\$\.get\(\)` for `filters`/u);
+  assert.equal(found.disposition, "candidate");
+  assert.match(found.evidence.join(" "), /property reads/u);
 });
 
 test("keeps memos whose inputs, dependencies, body, or result are not proven", () => {
@@ -95,7 +93,7 @@ test("keeps memos whose inputs, dependencies, body, or result are not proven", (
   }
 });
 
-test("treats a fall-through memo body as returning the primitive undefined", () => {
+test("reviews fall-through callbacks rather than inferring savings from undefined", () => {
   const findings = derived(`
     import { useMemo } from "react";
     import { observable } from "@legendapp/state";
@@ -112,6 +110,7 @@ test("treats a fall-through memo body as returning the primitive undefined", () 
     }
   `);
   assert.equal(findings.length, 1);
+  assert.equal(requireValue(findings[0]).disposition, "candidate");
 });
 
 test("keeps memos over useValue calls with options or selector inputs", () => {
@@ -132,7 +131,7 @@ test("keeps memos over useValue calls with options or selector inputs", () => {
   );
 });
 
-test("accepts a bare return alongside primitive results", () => {
+test("reviews mixed bare returns and global calls", () => {
   const findings = derived(`
     import { useMemo } from "react";
     import { observable } from "@legendapp/state";
@@ -151,8 +150,5 @@ test("accepts a bare return alongside primitive results", () => {
     }
   `);
   assert.equal(findings.length, 1);
-  assert.match(
-    requireValue(findings[0]).message,
-    /`state\$\.total\.get\(\)` for `total` and `state\$\.pending\.get\(\)` for `pending`/u,
-  );
+  assert.equal(requireValue(findings[0]).disposition, "candidate");
 });
