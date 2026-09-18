@@ -53,15 +53,17 @@ function compareImpact(left: SubscriptionPlan, right: SubscriptionPlan): number 
   const rightMeasurement = right.impact.measurement;
   if (leftMeasurement && rightMeasurement) {
     return (
-      savedRenders(rightMeasurement) - savedRenders(leftMeasurement) ||
-      left.id.localeCompare(right.id)
+      Number(
+        savedRenders(rightMeasurement) * BigInt(leftMeasurement.samples) -
+          savedRenders(leftMeasurement) * BigInt(rightMeasurement.samples),
+      ) || left.id.localeCompare(right.id)
     );
   }
   if (leftMeasurement) {
-    return savedRenders(leftMeasurement) > 0 ? -1 : 1;
+    return savedRenders(leftMeasurement) > 0n ? -1 : 1;
   }
   if (rightMeasurement) {
-    return savedRenders(rightMeasurement) > 0 ? 1 : -1;
+    return savedRenders(rightMeasurement) > 0n ? 1 : -1;
   }
   return compareStaticImpact(left, right);
 }
@@ -70,13 +72,13 @@ function staticCut(plan: SubscriptionPlan): number {
   return plan.impact.ownerJsxElements - plan.impact.affectedJsxElements;
 }
 
-function savedRenders(measurement: SubscriptionMeasurement): number {
+function savedRenders(measurement: SubscriptionMeasurement): bigint {
+  // Individual counts are safe integers, but their sums and per-sample cross-products may not be.
   return (
-    (measurement.before.ownerRenders +
-      measurement.before.siblingRenders -
-      measurement.after.ownerRenders -
-      measurement.after.siblingRenders) /
-    measurement.samples
+    BigInt(measurement.before.ownerRenders) +
+    BigInt(measurement.before.siblingRenders) -
+    BigInt(measurement.after.ownerRenders) -
+    BigInt(measurement.after.siblingRenders)
   );
 }
 

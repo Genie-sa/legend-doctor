@@ -222,12 +222,13 @@ inputs, update sequence and sample definition in `scenario`. Record native archi
 when applicable. This is caller-supplied provenance, not independently verified environment detection.
 Measurements from changed dependencies or configuration must be recollected even if the fingerprint matches.
 
-For legacy render-only measurements, ordering is unchanged: positive savings first, unmeasured static
+Legacy render-only measurements retain the same ranking policy: positive savings first, unmeasured static
 plans next, and zero/negative savings last; measured groups use owner-plus-sibling renders saved per sample.
 With provenance, that ordering applies only if every attached measurement has exactly matching environment
 strings and scenario. Mixed legacy/provenance or incompatible environments/scenarios retain their evidence
 but rank the **whole batch** by static JSX cut. `impact.basis` describes attached evidence, not a claim of
-cross-environment comparability. Selector counts and milliseconds never enter the render-ranking score.
+cross-environment comparability. Selector counts and milliseconds never enter the render-ranking score. Render-count sums and
+per-sample comparisons use exact integer arithmetic, including near the safe-integer input boundary.
 
 `npm run eval:runtime` includes a 100-row selector contract probe. It records actual callback executions
 and monotonic-clock durations, excluding mount, and checks visible selection under normal and StrictMode

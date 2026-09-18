@@ -1,10 +1,10 @@
 import { act, createElement as jsx } from "react";
+import { batch, observable } from "@legendapp/state";
 import { count, mountDom } from "../../src/runtime/dom.js";
 import type { Observable } from "@legendapp/state";
 import type { ReactElement } from "react";
 import type { SubscriptionCosts } from "../../src/core/subscriptions.js";
 import assert from "node:assert/strict";
-import { observable } from "@legendapp/state";
 import { performance } from "node:perf_hooks";
 import test from "node:test";
 import { useValue } from "@legendapp/state/react";
@@ -68,9 +68,37 @@ for (const strict of [false, true]) {
       assert.equal(ui.element('[data-id="1"]').textContent, "true");
       assert.ok(Number.isFinite(costs.scenarioDurationMs) && costs.scenarioDurationMs >= 0);
       assert.ok(Number.isFinite(costs.selectorDurationMs) && costs.selectorDurationMs >= 0);
-      observations.push(costs);
+      observations.push({ ...costs });
       markup.push(ui.html());
+      const host = ui.element('[data-id="1"]');
+      renders.clear();
+      costs.selectorExecutions = 0;
+      await act(() => active$.set(1));
+      assert.equal(renders.size, 0, "equal writes do not produce update renders");
+      assert.equal(costs.selectorExecutions, 0, "equal writes do not execute selectors");
+      await act(() =>
+        batch(() => {
+          active$.set(2);
+          active$.set(3);
+        }),
+      );
+      assert.equal(ui.element('[data-id="2"]').textContent, "false");
+      assert.equal(ui.element('[data-id="3"]').textContent, "true");
+      assert.equal(ui.element('[data-id="1"]'), host, "updates preserve host identity");
+      const renderMultiplier = strict ? 2 : 1;
+      const changedRows = Component === RawRow ? 100 : 2;
+      assert.equal(
+        [...renders.values()].reduce((sum, value) => sum + value, 0),
+        changedRows * renderMultiplier,
+      );
+      const selectedExecutions = strict ? 104 : 102;
+      assert.equal(costs.selectorExecutions, Component === RawRow ? 0 : selectedExecutions);
       await ui.render(null);
+      renders.clear();
+      costs.selectorExecutions = 0;
+      await act(() => active$.set(4));
+      assert.equal(renders.size, 0, "unmounted rows cannot render");
+      assert.equal(costs.selectorExecutions, 0, "unmount releases selector subscriptions");
     }
     assert.equal(markup[0], markup[1]);
     const [before, after] = observations;
