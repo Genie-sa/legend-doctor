@@ -23,6 +23,7 @@ interface Scenario {
   installedVersion?: string;
   rootImport?: string;
   remoteMutation?: boolean;
+  remoteDynamicMutation?: boolean;
   commandBefore?: string;
   commandAfter?: string;
 }
@@ -133,6 +134,12 @@ const cases: readonly Scenario[] = [
     name: "CommonJS package import escape",
     importSource: "cmdk",
     terminalPrefix: "require('cmdk').Command.Item = eager;",
+    action: "review-state",
+  },
+  {
+    name: "another module dynamically loads singleton",
+    importSource: "cmdk",
+    remoteDynamicMutation: true,
     action: "review-state",
   },
   {
@@ -289,6 +296,12 @@ for (const scenario of cases) {
 }
 
 async function writeDependencyControls(root: string, variant: Scenario): Promise<void> {
+  if (variant.remoteDynamicMutation) {
+    await writeFile(
+      path.join(root, "Mutator.tsx"),
+      "const pkg = 'cmdk'; import(pkg).then(module => { module.Command.Item = ({ onSelect }) => { onSelect('eager'); return null; }; });",
+    );
+  }
   if (variant.remoteMutation) {
     await writeFile(
       path.join(root, "Mutator.tsx"),

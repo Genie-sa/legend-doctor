@@ -1,6 +1,8 @@
 # Pinned command-item selection proof
 
-This bounded extension resolves Formbricks `SingleTag.isMergingTags`. It does not extend async
+This bounded extension proves source-wrapped cmdk item selection in controlled source contexts.
+Formbricks `SingleTag.isMergingTags` remains unresolved because loaded source contains unknown
+dynamic package loaders, preventing proof of the imported singleton’s identity. It does not extend async
 segment recognition or weaken atomic-transition, callback-capture, or mount-identity requirements.
 
 ## Before and after
@@ -16,15 +18,18 @@ The same emitted `source-forwarded item selection` fixture runs against both bui
 | Observation                                              | Tested base                                                     | This change                                                                      |
 | -------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Minimal source wrapper ending at `Command.Item.onSelect` | `review-state` / `candidate`, `async-command-origin-unresolved` | `use-observable` / `change`                                                      |
-| Pinned Formbricks `single-tag.tsx:45`, `isMergingTags`   | Same unresolved event ownership                                 | Proven event ownership; original async interval and gate retained                |
-| Existing unit/runtime suite                              | 978 tests pass                                                  | 1026 tests pass (36 structural controls and 12 real-library runtime cases added) |
-| Full pinned corpus                                       | 508/523 hook labels, 231/246 actionable recall                  | 509/523 hook labels, 232/246 actionable recall                                   |
-| Labeled actionable precision                             | 231/231                                                         | 232/232                                                                          |
+| Pinned Formbricks `single-tag.tsx:45`, `isMergingTags`   | Same unresolved event ownership                                 | Still unresolved; unknown package loaders prevent identity proof                 |
+| Existing unit/runtime suite                              | 978 tests pass                                                  | 1027 tests pass (37 structural controls and 12 real-library runtime cases added) |
+| Full pinned corpus                                       | 508/523 hook labels, 231/246 actionable recall                  | 508/523 hook labels, 231/246 actionable recall                                   |
+| Labeled actionable precision                             | 231/231                                                         | 231/231                                                                          |
 | Corpus exit                                              | 1, seven existing failures                                      | 1, same seven failures                                                           |
 
 The positive fixture fails on the tested base and passes with this change. Its expectation was
-written before editing the detector. The Formbricks label was manually audited and made enforced
-before the detector edit; no repository pin, target, or scoring policy changed.
+written before editing the detector. The Formbricks opportunity was manually audited before the
+detector edit and remains explicitly non-enforced. An intermediate implementation promoted it,
+but cross-file adversarial review exposed an incomplete import-identity check. The final proof
+rejects unknown loaders consistently across all loaded files, superseding that temporary recall
+gain. No repository pin, target, or scoring policy changed.
 
 ## Audited boundary and assumptions
 
@@ -44,7 +49,8 @@ owning-package dependency pin, and agreement with installed package metadata whe
 available. Resolved application path aliases, absent/ranged/unknown versions, other exports,
 shadowing, mutable/escaped imports, and unproven prop transports are rejected. All loaded source
 files are checked for alternate imports and static package reexports/imports that could expose
-or replace the same terminal. `asChild` must be absent or false through source-visible spreads.
+or replace the same terminal. Unknown dynamic import/require arguments in any loaded source file
+also block the proof; this conservatively includes unrelated scripts and tests. `asChild` must be absent or false through source-visible spreads.
 The tracked callback must survive attribute ordering, not be overwritten by a later prop/spread.
 
 As with the existing framework adapters, package identity is a trust boundary: the contract assumes
@@ -55,17 +61,17 @@ provenance evidence; the analyzer does not claim whole-program JavaScript equiva
 
 ## Risk and test ledger
 
-| Risk                        | Protected contract and test oracle                                                                                                                                                                                                      | Coverage                                                                                 |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Wrong terminal or timing    | Lookalike package, wrong export/member/property, eager wrapper, and unknown scheduler stay candidates                                                                                                                                   | Structural end-to-end fixtures                                                           |
-| Mutable import identity     | Member overwrite, export alias with remote mutator, second named/namespace import, another loaded source module, reexport, quoted/template dynamic import, require, and unknown loader arguments in the terminal module stay candidates | Structural fixtures; disabling import stability makes seven controls fail                |
-| Unknown package version     | Missing/ranged/unknown pin, malformed JSON, installed mismatch, and local path override cannot establish the audited contract; matching installed version is accepted                                                                   | Metadata plus structural fixtures; disabling version validation makes five controls fail |
-| Prop overwrite/polymorphism | Later callback override, unknown spread, and `asChild` stay candidates; explicit false remains supported                                                                                                                                | Structural fixtures; disabling the host/override guard makes three controls fail         |
-| Atomic start epoch          | Companion writes before/after pending start retain a grouped instruction and ordered synchronous batching                                                                                                                               | Exact group-member and instruction assertions                                            |
-| Async completion/capture    | Click/keyboard, success/rejection, child selection/open writes, owner prop changes before selection and during pending, normal/StrictMode preserve event traces and captured values                                                     | Real cmdk + React + Legend runtime comparisons                                           |
-| Mount identity/exception    | Stable section and independent input retain identity; picker gate lifecycle matches; synchronous throw before suspension does not remount the picker                                                                                    | Runtime identity and effect trace assertions                                             |
-| Overbroad library contract  | Root value callback can run before user input; disabled Item never selects                                                                                                                                                              | Executed real-library counterexamples                                                    |
-| Removed render work         | Pending start and completion stop invalidating the owner; selector executions are counted separately                                                                                                                                    | Runtime measurements below                                                               |
+| Risk                        | Protected contract and test oracle                                                                                                                                                                                                                        | Coverage                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Wrong terminal or timing    | Lookalike package, wrong export/member/property, eager wrapper, and unknown scheduler stay candidates                                                                                                                                                     | Structural end-to-end fixtures                                                           |
+| Mutable import identity     | Member overwrite, export alias with remote mutator, second named/namespace import, another loaded source module, reexport, quoted/template dynamic import, require, and unknown loader arguments in the terminal or another loaded module stay candidates | Structural fixtures; disabling import stability makes seven controls fail                |
+| Unknown package version     | Missing/ranged/unknown pin, malformed JSON, installed mismatch, and local path override cannot establish the audited contract; matching installed version is accepted                                                                                     | Metadata plus structural fixtures; disabling version validation makes five controls fail |
+| Prop overwrite/polymorphism | Later callback override, unknown spread, and `asChild` stay candidates; explicit false remains supported                                                                                                                                                  | Structural fixtures; disabling the host/override guard makes three controls fail         |
+| Atomic start epoch          | Companion writes before/after pending start retain a grouped instruction and ordered synchronous batching                                                                                                                                                 | Exact group-member and instruction assertions                                            |
+| Async completion/capture    | Click/keyboard, success/rejection, child selection/open writes, owner prop changes before selection and during pending, normal/StrictMode preserve event traces and captured values                                                                       | Real cmdk + React + Legend runtime comparisons                                           |
+| Mount identity/exception    | Stable section and independent input retain identity; picker gate lifecycle matches; synchronous throw before suspension does not remount the picker                                                                                                      | Runtime identity and effect trace assertions                                             |
+| Overbroad library contract  | Root value callback can run before user input; disabled Item never selects                                                                                                                                                                                | Executed real-library counterexamples                                                    |
+| Removed render work         | Pending start and completion stop invalidating the owner; selector executions are counted separately                                                                                                                                                      | Runtime measurements below                                                               |
 
 ## Measured scenario
 
@@ -91,7 +97,7 @@ Each target's complete finding inventory was compared by hook, source location, 
 | Legend Music            |                           0 |                            0 | unchanged                  |
 | Excalidraw              |                           0 |                            0 | unchanged                  |
 | Expensify               |                           0 |                            0 | unchanged                  |
-| Formbricks              |                          +1 |                           -1 | unchanged                  |
+| Formbricks              |                           0 |                            0 | unchanged                  |
 | Outline                 |                           0 |                            0 | unchanged                  |
 | Open WebUI React Native |                           0 |                            0 | unchanged                  |
 | Hoalu                   |                           0 |                            0 | unchanged                  |

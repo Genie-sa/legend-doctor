@@ -36,7 +36,6 @@ export function commandItemEventIsDeferred(
   return (
     bindingDeclarationCount(source.owner, tag.expression.text) === 0 &&
     isCommandImport(source.owner.getSourceFile(), tag.expression.text) &&
-    !hasUntrackedPackageTransport(source.owner.getSourceFile(), true) &&
     loadedCommandImportsAreStable(source, resolver) &&
     resolver.callbackPackageVersion(source.file, "cmdk") === "1.1.1"
   );
@@ -175,7 +174,7 @@ function sourceCommandImportsAreStable(source: ts.SourceFile): boolean {
   return safe;
 }
 
-function hasUntrackedPackageTransport(source: ts.SourceFile, rejectUnknown = false): boolean {
+function hasUntrackedPackageTransport(source: ts.SourceFile): boolean {
   let untracked = false;
   visit(source, (node) => {
     if (
@@ -200,7 +199,7 @@ function hasUntrackedPackageTransport(source: ts.SourceFile, rejectUnknown = fal
     if (
       ts.isCallExpression(node) &&
       isPackageLoader(node.expression) &&
-      loaderCouldLoadCommand(node, rejectUnknown)
+      loaderCouldLoadCommand(node)
     ) {
       untracked = true;
     }
@@ -216,7 +215,7 @@ function isPackageLoader(expression: ts.Expression): boolean {
   );
 }
 
-function loaderCouldLoadCommand(call: ts.CallExpression, rejectUnknown: boolean): boolean {
+function loaderCouldLoadCommand(call: ts.CallExpression): boolean {
   const [specifier] = call.arguments;
-  return specifier && ts.isStringLiteralLike(specifier) ? specifier.text === "cmdk" : rejectUnknown;
+  return specifier && ts.isStringLiteralLike(specifier) ? specifier.text === "cmdk" : true;
 }
