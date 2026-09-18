@@ -41,14 +41,6 @@ export const hoaluPracticeCases = [
       "The review dialog reads only the optional scan job id, so unrelated dialog metadata should not invalidate its editor and queries.",
     target: "hoalu-app",
   },
-  {
-    action: "move-use-value-down",
-    file: "components/expenses/expense-filter-dropdown.tsx",
-    line: 67,
-    rationale:
-      "The transaction kind is rendered only by the category panel's conditional child slot, so an always-mounted wrapper can retain the subscription while preventing kind changes from rebuilding the full filter dropdown.",
-    target: "hoalu-app",
-  },
   ...[
     ["components/expenses/expense-actions.tsx", 70, "expense deletion"],
     ["components/incomes/income-actions.tsx", 64, "income deletion"],

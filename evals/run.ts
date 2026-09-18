@@ -1,4 +1,5 @@
 import { inspectRepository, mapSequentially } from "./runner/repository-inspection.js";
+import { parseSelection, selectionLines, validateSelection } from "./runner/selection.js";
 import { scoreHookCases, scorePractices, scoreStateGroups } from "./runner/scoring.js";
 import type { CorpusSlice } from "./corpus/private-corpus.js";
 import type { Evaluation } from "./runner/model.js";
@@ -6,37 +7,9 @@ import { goldCases } from "./corpus/hook-cases.js";
 import { goldPracticeCases } from "./corpus/practice-cases.js";
 import { goldStateGroups } from "./corpus/state-groups.js";
 import { loadPrivateCorpus } from "./corpus/private-corpus.js";
-import path from "node:path";
 import process from "node:process";
 import { repositories } from "./corpus/repositories.js";
 import { summaryLines } from "./runner/summary.js";
-
-const USAGE =
-  "Provide checked-out repositories as --repo <name>=/path for each pinned corpus repository " +
-  "(see evals/README.md); repositories without a path are reported and skipped.";
-
-function addRepositoryRoot(roots: Map<string, string>, assignment: string | undefined): void {
-  if (!assignment) {
-    throw new Error("--repo requires name=/absolute/path");
-  }
-  const separator = assignment.indexOf("=");
-  if (separator <= 0) {
-    throw new Error(`Invalid repository assignment: ${assignment}`);
-  }
-  roots.set(assignment.slice(0, separator), path.resolve(assignment.slice(separator + 1)));
-}
-
-function parseRepositoryRoots(args: readonly string[]): Map<string, string> {
-  const roots = new Map<string, string>();
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] !== "--repo") {
-      continue;
-    }
-    addRepositoryRoot(roots, args[index + 1]);
-    index += 1;
-  }
-  return roots;
-}
 
 function mergeCorpus(privateCorpus: CorpusSlice | null): CorpusSlice {
   return {
@@ -65,18 +38,26 @@ function reportFailures(failures: readonly string[]): void {
 }
 
 async function evaluate(): Promise<void> {
-  const repositoryRoots = parseRepositoryRoots(process.argv.slice(2));
-  if (repositoryRoots.size === 0) {
-    throw new Error(USAGE);
-  }
   const privateCorpus = await loadPrivateCorpus();
   const corpus = mergeCorpus(privateCorpus);
+  const selection = parseSelection(process.argv.slice(2), corpus.repositories);
+  process.stdout.write(
+    `${privateCorpus ? "Private corpus loaded." : "Public corpus only."}\n${selectionLines(selection, corpus.repositories).join("\n")}\n`,
+  );
+  validateSelection(selection, corpus.repositories);
   const run: Evaluation = { failures: [], hooks: 0, targets: new Map() };
   await mapSequentially(corpus.repositories, (repository) =>
-    inspectRepository(run, repository, repositoryRoots),
+    inspectRepository(run, repository, selection.roots),
   );
-  const header = privateCorpus ? "Private corpus loaded." : "Public corpus only.";
-  process.stdout.write(`${header}\n${scoreCorpus(run, corpus).join("\n")}\n`);
+  reportEvaluation(run, corpus);
+}
+
+function reportEvaluation(run: Evaluation, corpus: CorpusSlice): void {
+  if (run.targets.size === 0) {
+    run.failures.push("No targets were evaluated; refusing to report empty precision/recall.");
+  } else {
+    process.stdout.write(`${scoreCorpus(run, corpus).join("\n")}\n`);
+  }
   reportFailures(run.failures);
 }
 

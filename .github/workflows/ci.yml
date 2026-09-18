@@ -64,3 +64,65 @@ jobs:
 
       - name: Build and test
         run: npm run build && node --test --test-timeout=60000 "dist/tests/**/*.test.js"
+
+  public-corpus:
+    name: Complete pinned public corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Build
+        run: npm run build
+
+      - name: Restore pinned source checkouts
+        id: corpus-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/legend-doctor-corpus
+          key: public-corpus-v1-${{ runner.os }}-${{ hashFiles('evals/corpus/**/repository.ts', 'evals/corpus/repositories.ts') }}
+
+      - name: Fetch exact public pins
+        env:
+          CORPUS_DIRECTORY: ${{ runner.temp }}/legend-doctor-corpus
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { mkdirSync } from 'node:fs';
+          import path from 'node:path';
+          import { repositories } from './dist/evals/corpus/repositories.js';
+          for (const repository of repositories) {
+            const root = path.join(process.env.CORPUS_DIRECTORY, repository.name);
+            mkdirSync(root, { recursive: true });
+            execFileSync('git', ['init', '--quiet', root]);
+            const git = (args) => execFileSync('git', ['-C', root, ...args], { stdio: 'inherit' });
+            git(['fetch', '--depth=1', '--no-tags', repository.url, repository.commit]);
+            git(['checkout', '--detach', repository.commit]);
+          }
+          NODE
+
+      # Save source downloads before scoring: known detector gaps must not cause repeated cold fetches.
+      - name: Save pinned source checkouts
+        if: steps.corpus-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/legend-doctor-corpus
+          key: ${{ steps.corpus-cache.outputs.cache-primary-key }}
+
+      - name: Evaluate every public repository
+        env:
+          CORPUS_DIRECTORY: ${{ runner.temp }}/legend-doctor-corpus
+        run: |
+          node --input-type=module <<'NODE'
+          import { spawnSync } from 'node:child_process';
+          import path from 'node:path';
+          import { repositories } from './dist/evals/corpus/repositories.js';
+          const args = repositories.flatMap(({ name }) => ['--repo', `${name}=${path.join(process.env.CORPUS_DIRECTORY, name)}`]);
+          const result = spawnSync(process.execPath, ['dist/evals/run.js', '--complete', ...args], { stdio: 'inherit' });
+          if (result.error) throw result.error;
+          process.exitCode = result.status ?? 1;
+          NODE
