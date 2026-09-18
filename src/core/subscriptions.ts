@@ -36,13 +36,31 @@ export interface SubscriptionInventory {
   derivations: SubscriptionCut["derivations"];
 }
 
+export interface SubscriptionCosts {
+  ownerRenders: number;
+  siblingRenders: number;
+  selectorExecutions?: number;
+  selectorDurationMs?: number;
+  scenarioDurationMs?: number;
+}
+
+export interface SubscriptionEnvironment {
+  /** Engine/harness and React/Legend versions. */
+  runtime: string;
+  /** OS and device, or explicitly jsdom. */
+  platform: string;
+  /** Build mode, StrictMode, instrumentation, and scenario completion boundary. */
+  configuration: string;
+}
+
 export interface SubscriptionMeasurement {
   planId: string;
   fingerprint: string;
   scenario: string;
   samples: number;
-  before: { ownerRenders: number; siblingRenders: number };
-  after: { ownerRenders: number; siblingRenders: number };
+  before: SubscriptionCosts;
+  after: SubscriptionCosts;
+  environment?: SubscriptionEnvironment;
   behaviorEquivalent: true;
 }
 

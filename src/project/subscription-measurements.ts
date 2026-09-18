@@ -1,5 +1,5 @@
+import type { SubscriptionEnvironment, SubscriptionMeasurement } from "../core/subscriptions.js";
 import type { AnalysisReport } from "../core/types.js";
-import type { SubscriptionMeasurement } from "../core/subscriptions.js";
 import { applySubscriptionMeasurements } from "../report/subscription-measurements.js";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
@@ -56,11 +56,47 @@ function isString(value: JsonValue | undefined): value is string {
 function isCount(value: JsonValue | undefined): value is number {
   return value?.constructor === Number && Number.isSafeInteger(value) && Number(value) >= 0;
 }
+const costKeys = ["selectorExecutions", "selectorDurationMs", "scenarioDurationMs"] as const;
+
+function isDuration(value: JsonValue | undefined): value is number {
+  return value?.constructor === Number && Number.isFinite(value) && Number(value) >= 0;
+}
+
 function parseCounts(value: JsonValue | undefined): SubscriptionMeasurement["before"] | null {
-  return isObject(value) && isCount(value.ownerRenders) && isCount(value.siblingRenders)
-    ? { ownerRenders: value.ownerRenders, siblingRenders: value.siblingRenders }
+  if (!isObject(value) || !isCount(value.ownerRenders) || !isCount(value.siblingRenders)) {
+    return null;
+  }
+  const counts: SubscriptionMeasurement["before"] = {
+    ownerRenders: value.ownerRenders,
+    siblingRenders: value.siblingRenders,
+  };
+  for (const key of costKeys) {
+    if (value[key] !== undefined) {
+      const valid = key === "selectorExecutions" ? isCount(value[key]) : isDuration(value[key]);
+      if (!valid) {
+        return null;
+      }
+      counts[key] = Number(value[key]);
+    }
+  }
+  return counts;
+}
+
+function parseEnvironment(value: JsonValue | undefined): SubscriptionEnvironment | null {
+  if (!isObject(value)) {
+    return null;
+  }
+  const { runtime, platform, configuration } = value;
+  return isString(runtime) &&
+    runtime.trim() &&
+    isString(platform) &&
+    platform.trim() &&
+    isString(configuration) &&
+    configuration.trim()
+    ? { runtime, platform, configuration }
     : null;
 }
+
 function parseMeasurement(
   value: JsonValue | SubscriptionMeasurement,
 ): SubscriptionMeasurement | null {
@@ -78,15 +114,35 @@ function parseMeasurement(
   }
   const before = parseCounts(value.before);
   const after = parseCounts(value.after);
-  return before && after
-    ? {
-        planId: value.planId,
-        fingerprint: value.fingerprint,
-        scenario: value.scenario,
-        samples: value.samples,
-        behaviorEquivalent: true,
-        before,
-        after,
-      }
-    : null;
+  if (
+    !before ||
+    !after ||
+    costKeys.some((key) => (before[key] === undefined) !== (after[key] === undefined))
+  ) {
+    return null;
+  }
+  const measurement: SubscriptionMeasurement = {
+    planId: value.planId,
+    fingerprint: value.fingerprint,
+    scenario: value.scenario,
+    samples: value.samples,
+    behaviorEquivalent: true,
+    before,
+    after,
+  };
+  return attachEnvironment(measurement, value.environment);
+}
+
+function attachEnvironment(
+  measurement: SubscriptionMeasurement,
+  value: JsonValue | undefined,
+): SubscriptionMeasurement | null {
+  if (value !== undefined || costKeys.some((key) => measurement.before[key] !== undefined)) {
+    const environment = parseEnvironment(value);
+    if (!environment) {
+      return null;
+    }
+    measurement.environment = environment;
+  }
+  return measurement;
 }
