@@ -20,7 +20,9 @@ import {
   propObjectCallbackIsDeferred,
 } from "../../rules/child-contract/child-contract.js";
 import type { AnalysisContext } from "./analysis-context.js";
+import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceIndex } from "../source-components/source-components.js";
+import { componentPropDataPath } from "./component-prop-data.js";
 import { importedHookConsumers } from "./hook-consumer-index.js";
 import { keyedCursorConsumerResult } from "../../rules/hook-keyed-cursor-contract/hook-keyed-cursor-contract.js";
 import { sourceHookDefersCallback } from "../../rules/source-callback-contract/source-callback-contract.js";
@@ -39,6 +41,7 @@ function cached(cache: Map<string, boolean>, key: string, compute: () => boolean
 const PLATFORM_VARIANTS = ["", ".native", ".ios", ".android", ".web"] as const;
 
 class ChildContracts implements ChildContractResolver {
+  private readonly componentPropDataContracts = new Map<string, boolean>();
   private readonly arrayItemCallbackContracts = new Map<string, boolean>();
   private readonly callbackContracts = new Map<string, boolean>();
   private readonly componentCallbackContracts = new Map<string, boolean>();
@@ -286,6 +289,12 @@ class ChildContracts implements ChildContractResolver {
 
   public pureProjectionBindings(): ReadonlySet<string> {
     return this.context.sourceIndex.pureProjectionsFor(this.importerFile);
+  }
+
+  public componentPropDataPath(owner: RuntimeFunctionLike, path: readonly string[]): boolean {
+    return cached(this.componentPropDataContracts, `${owner.pos}\0${path.join(".")}`, () =>
+      componentPropDataPath(this.context, owner, path),
+    );
   }
 
   public resolveComponent(name: string): ChildComponentSource | null {

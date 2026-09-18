@@ -1,3 +1,4 @@
+import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
 
 export interface ChildComponentSource {
@@ -48,6 +49,8 @@ export interface HookPresentationConsumer {
 }
 
 export interface ChildContractResolver {
+  /** Every source-visible caller supplies plain data at this nested prop path; no getter inference from types. */
+  componentPropDataPath?: (owner: RuntimeFunctionLike, path: readonly string[]) => boolean;
   componentArrayItemCallbackIsDeferred: (
     componentName: string,
     propName: string,

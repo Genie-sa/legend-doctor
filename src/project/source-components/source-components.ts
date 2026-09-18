@@ -28,6 +28,7 @@ import { sourceContextFor } from "./source-context.js";
 import type ts from "typescript";
 
 export interface SourceIndex {
+  moduleFileFor: (file: string, specifier: string) => string | null;
   callbackPackageVersionFor: (file: string, specifier: string) => string | null;
   sourceContextFor: (file: string) => SourceContextCoverage;
   componentDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
@@ -65,6 +66,7 @@ export function buildSourceIndexFromFiles(
 ): SourceIndex {
   const state = createSourceIndexState(root, files, host);
   return {
+    moduleFileFor: (file, specifier) => resolveModule(state, file, specifier),
     callbackPackageVersionFor: (file, specifier) => callbackPackageVersion(state, file, specifier),
     sourceContextFor: (file) => sourceContextFor(state, file),
     componentDeclarationFor: (file, name) => componentDeclarationFor(state, file, name),

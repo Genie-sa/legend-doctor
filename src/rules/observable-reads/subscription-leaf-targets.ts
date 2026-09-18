@@ -5,15 +5,23 @@ import {
   jsxElementCountIn,
   lowestCommonJsxSubtree,
 } from "../state-proofs/jsx-subtrees.js";
+import {
+  identifiedUseValueDeclaration,
+  isUseValueCall,
+  provenObservablePath,
+} from "./observable-paths.js";
 import { isInsideOwnerReturn, stableConditionalJsxSlot } from "./conditional-jsx-slots.js";
-import { isUseValueCall, provenObservablePath } from "./observable-paths.js";
 import { nodeWithin, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SubscriptionFlow } from "./subscription-flow.js";
+import { hasPlainOwnerParameters } from "./owner-parameter-work.js";
+import { hasStableIndependentBindings } from "./independent-subscription-bindings.js";
 import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
 import { isImportedHookCall } from "../../core/imports.js";
+import { ownerClassProjectionCalls } from "./owner-class-projections.js";
 import { ownerHasMutableRenderRead } from "../state-proofs/render-purpose.js";
 import { pureFlowExpression } from "./flow-expressions.js";
+import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
 
 const MAX_LEAF_OWNER_SHARE = 0.4;
@@ -35,7 +43,12 @@ export function moveDownTargets(
   if (hasUnprovenOwnerWork(owner, scan)) {
     return [];
   }
-  if (ownerHasMutableRenderRead(owner, use.call, trackedCalls(owner, scan, flow))) {
+  if (
+    ownerHasMutableRenderRead(owner, use.call, {
+      trackedSources: trackedCalls(owner, scan, flow),
+      pureCalls: ownerClassProjectionCalls(owner, scan),
+    })
+  ) {
     return [];
   }
   const common = moveDownTarget(references, owner, scan);
@@ -50,7 +63,13 @@ function trackedCalls(
   scan: ObservableReadScan,
   flow: SubscriptionFlow,
 ): ReadonlySet<ts.Node> {
-  const scope = { names: flow.names, primitives: flow.primitives, sourceFile: scan.sourceFile };
+  if (!owner.body) {
+    return new Set();
+  }
+  const names = new Set(flow.names);
+  const primitives = new Set(flow.primitives);
+  mergeIndependentFlows(owner, scan, { names, primitives });
+  const scope = { names, primitives, sourceFile: scan.sourceFile };
   const trackedSources = new Set<ts.Node>();
   if (owner.body) {
     visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
@@ -74,6 +93,41 @@ function trackedCalls(
     });
   }
   return trackedSources;
+}
+
+function mergeIndependentFlows(
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+  scope: { names: Set<string>; primitives: Set<string> },
+): void {
+  if (!owner.body || !hasPlainOwnerParameters(owner)) {
+    return;
+  }
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (!ts.isVariableDeclaration(node) || !(node.parent.flags & ts.NodeFlags.Const)) {
+      return;
+    }
+    const use = identifiedUseValueDeclaration(node, scan);
+    if (!use || use.owner !== owner || !hasStableIndependentBindings(use)) {
+      return;
+    }
+    mergeIndependentScope(subscriptionFlow(use, scan), scope);
+  });
+}
+
+function mergeIndependentScope(
+  flow: SubscriptionFlow,
+  scope: { names: Set<string>; primitives: Set<string> },
+): void {
+  if (flow.blockers.has("shadowed-or-reassigned-binding")) {
+    return;
+  }
+  for (const name of flow.names) {
+    scope.names.add(name);
+  }
+  for (const name of flow.primitives) {
+    scope.primitives.add(name);
+  }
 }
 
 function separateTargets(

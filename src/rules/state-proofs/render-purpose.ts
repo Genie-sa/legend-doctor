@@ -7,7 +7,7 @@ import ts from "typescript";
 export function ownerHasMutableRenderRead(
   owner: RuntimeFunctionLike,
   trackedRead: ts.CallExpression | null = null,
-  trackedSources: ReadonlySet<ts.Node> = new Set(),
+  { trackedSources = new Set(), pureCalls = new Set() }: RenderReadOptions = {},
 ): boolean {
   const seen = new Set<ts.Node>();
   function inspect(node: ts.Node): boolean {
@@ -26,16 +26,18 @@ export function ownerHasMutableRenderRead(
     if (ts.isCallExpression(node) && calledHelperReadsRef(node)) {
       return true;
     }
-    // Subscription cuts also preserve prop snapshots. Command-only state retains
-    // Its separate callback proof rather than treating callback factories as snapshots.
+    // Subscription cuts preserve prop snapshots; command-only state has a separate callback proof.
     if (
       (ts.isJsxExpression(node) || ts.isJsxSpreadAttribute(node)) &&
       node.expression &&
       (trackedRead !== null || (ts.isJsxExpression(node) && !ts.isJsxAttribute(node.parent)))
     ) {
       return (
-        hasImperativeRead(node.expression, { owner, trackedRead, trackedSources }, new Set()) ||
-        Boolean(node.forEachChild(inspect))
+        hasImperativeRead(
+          node.expression,
+          { owner, trackedRead, trackedSources, pureCalls },
+          new Set(),
+        ) || Boolean(node.forEachChild(inspect))
       );
     }
     return Boolean(node.forEachChild(inspect));
@@ -53,7 +55,13 @@ export function ownerHasMutableRenderRead(
   return owner.body !== undefined && inspect(owner.body);
 }
 
+interface RenderReadOptions {
+  readonly trackedSources?: ReadonlySet<ts.Node>;
+  readonly pureCalls?: ReadonlySet<ts.Node>;
+}
+
 interface ImperativeReadScope {
+  readonly pureCalls: ReadonlySet<ts.Node>;
   readonly trackedSources: ReadonlySet<ts.Node>;
   readonly owner: RuntimeFunctionLike;
   readonly trackedRead: ts.CallExpression | null;
@@ -73,7 +81,7 @@ function hasImperativeRead(node: ts.Node, scope: ImperativeReadScope, seen: Set<
     }
   }
   return (
-    ts.isCallExpression(node) ||
+    (ts.isCallExpression(node) && !scope.pureCalls.has(node)) ||
     ts.isNewExpression(node) ||
     Boolean(node.forEachChild((child) => hasImperativeRead(child, scope, seen)))
   );

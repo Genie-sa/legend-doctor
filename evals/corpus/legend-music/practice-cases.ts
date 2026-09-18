@@ -325,7 +325,7 @@ export const legendMusicPracticeCases = [
     file: "components/PlaybackArea.tsx",
     line: 29,
     rationale:
-      "Playback toggles update only the one-icon play surface; subscribing there avoids rerendering the twelve-element playback owner.",
+      "Playback toggles update only the one-icon play surface. Independent class projections call the source-visible cn wrapper, which only composes clsx/twMerge with primitive literal/conditional arguments; argument reads remain subject to snapshot checks. Render-count instrumentation measures the removed work rather than owning UI state.",
     target: "legend-music",
   },
   {
@@ -333,7 +333,7 @@ export const legendMusicPracticeCases = [
     file: "components/PlaybackArea.tsx",
     line: 31,
     rationale:
-      "Thumbnail invalidation is consumed only by AlbumArt, so its leaf wrapper can update without rerendering playback controls and metadata.",
+      "Thumbnail invalidation is consumed only by AlbumArt. The independent cn wrapper is source-proven class composition with primitive arguments, not an arbitrary helper exemption; all argument reads and other owner snapshots still need validation.",
     target: "legend-music",
   },
   {
@@ -366,7 +366,7 @@ export const legendMusicPracticeCases = [
     file: "visualizer/VisualizerWindow.tsx",
     line: 13,
     rationale:
-      "Playback state controls only the two-element stopped overlay, so an always-mounted wrapper can subscribe without rebuilding the visualizer and control panel.",
+      "Playback state controls only the two-element stopped overlay. The independent bin-count subscription has a source-proven numeric domain and a nullish-default derivation; its unshadowed String conversion cannot invoke object coercion. Moving playback into an always-mounted wrapper preserves that independent input and the control panel.",
     target: "legend-music",
   },
   {
