@@ -160,7 +160,7 @@ work but does not reread or reparse files.
   mount slots. Keep observable creation and atomic writes in their existing owner.
 - `impact.basis: "static-jsx"` ranks by owner JSX elements outside the proposed children. These are source
   counts, not render counts, elapsed time, or a promised speedup. `rank` starts at 1.
-- `impact.basis: "provided-runtime-measurement"` identifies externally supplied before/after render counts.
+- `impact.basis: "provided-runtime-measurement"` identifies externally supplied before/after costs.
   Measurements do not bypass detector proofs or create findings.
 - `rejectedMeasurements` reports malformed, stale, duplicate, or unmatched measurement entries.
 
@@ -193,9 +193,72 @@ so a scan of the edited owner rejects it as stale. External modules and runtime 
 in that fingerprint; repeat measurements when either changes. Programmatic `analyzePath` callers may pass
 `subscriptionMeasurements` instead of creating the file.
 
-Measured positive savings rank first, unmeasured static plans next, and measured zero/negative savings last.
-Within measured groups, ranking uses total owner-plus-sibling renders saved per sample. This ordering is a
-triage aid; scenario frequency and render duration still require application profiling.
+Optional cost fields extend each `before` / `after` object without changing version 1:
+
+| Field                | Unit and scope                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `selectorExecutions` | Total callback selector invocations, including invocations during renders                                  |
+| `selectorDurationMs` | Summed elapsed milliseconds inside those callbacks                                                         |
+| `scenarioDurationMs` | Total elapsed milliseconds for the complete interaction sequence, through the recorded completion boundary |
+
+Counts must be nonnegative safe integers. Durations must be finite nonnegative numbers. Each optional
+field must appear on **both** sides; zero is a measurement, absence means unmeasured. Values are totals
+across `samples`, not averages. Scenario time already includes selector work: do not add these durations.
+Selector timing adds instrumentation overhead; use identical instrumentation before and after. A render
+reduction can coexist with more selector work or a slower scenario, so none is a total-benefit score.
+
+Any new cost field requires an `environment` object alongside `scenario`:
+
+```json
+{
+  "runtime": "exact JS engine/harness, React and Legend State versions",
+  "platform": "OS/version and device model, or jsdom and host details",
+  "configuration": "build mode, StrictMode, instrumentation, warmup, and completion boundary"
+}
+```
+
+All three strings must be nonblank. Record the same configuration for both runs, including identical
+inputs, update sequence and sample definition in `scenario`. Record native architecture and renderer
+when applicable. This is caller-supplied provenance, not independently verified environment detection.
+Measurements from changed dependencies or configuration must be recollected even if the fingerprint matches.
+
+For legacy render-only measurements, ordering is unchanged: positive savings first, unmeasured static
+plans next, and zero/negative savings last; measured groups use owner-plus-sibling renders saved per sample.
+With provenance, that ordering applies only if every attached measurement has exactly matching environment
+strings and scenario. Mixed legacy/provenance or incompatible environments/scenarios retain their evidence
+but rank the **whole batch** by static JSX cut. `impact.basis` describes attached evidence, not a claim of
+cross-environment comparability. Selector counts and milliseconds never enter the render-ranking score.
+
+`npm run eval:runtime` includes a 100-row selector contract probe. It records actual callback executions
+and monotonic-clock durations, excluding mount, and checks visible selection under normal and StrictMode
+rendering. The pinned normal-mode contract is 100 raw row renders versus 2 selected row renders, with 102
+selector executions in the selected version. These jsdom durations are diagnostics, not benchmark thresholds.
+Existing keyed-selection contracts additionally check controlled drafts and host identity through reorder.
+
+### Native validation setup and remaining limitation
+
+This repository has no React Native application, native build configuration, device runner, or React Native
+dependency. jsdom cannot validate native focus, host prop delivery, layout, keyboard behavior, or device
+performance. No native harness was executed and no native recommendation is justified by these measurements.
+Use an existing native application's device test setup for this bounded contract before extending native rules:
+
+1. Pin and record the application's React Native, React, Legend State, Hermes/JSC, architecture and renderer
+   versions. Add an isolated screen with two routes: the original owner-controlled host props, and the proposed
+   stable module-scope reactive leaf. Use the installed `@legendapp/state/react-native` `$TextInput` and `$View`
+   exports only after checking that version's API. beta.48 maps `$TextInput`'s `$value` to `onChangeText`.
+2. Give both routes the same initial state and keyed rows. Include a controlled text input, a toggled host prop
+   such as `editable`, a layout-changing view, an unrelated sibling, and a reorder control. Expose test IDs,
+   mount/unmount counters, current text, focus/blur events, ref identity, and `onLayout`/`measure` results.
+3. Run on iOS and Android with the application's device runner (for example its existing Detox or Maestro
+   configuration): focus and type a draft; toggle the reactive prop; change layout; reorder rows; type again;
+   remove and remount the row. Assert text, editability, focus, keyboard continuity, callback snapshots and
+   layout agree between routes. Assert no unintended mount/ref changes, and exactly the expected cleanup on
+   removal. Native `measure` must complete before recording the layout assertion; do not substitute jsdom.
+4. First establish behavior in a development contract run with StrictMode on and off. Then collect repeated
+   production/profile-device scenarios with equal warmup and instrumentation, recording selector work and
+   total scenario duration separately. Define completion explicitly (including native commit/layout where
+   measured); a JS `act` return alone is not a native completion signal. Record native profiler data separately
+   if frame, commit, layout or UI-thread claims are needed. Never infer those costs from JS selector timing.
 
 Closed `const` aliases/defaults and supported `useMemo` projections move with their subscriptions. Memo
 identity and dependencies remain intact. Literal primitive effect dependencies and explicitly typed primitive

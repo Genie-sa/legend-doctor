@@ -13,7 +13,8 @@ export function applySubscriptionMeasurements(
     impact: { ...plan.impact, basis: "static-jsx" as const, measurement: null },
   }));
   const rejectedMeasurements = attachMeasurements(plans, measurements);
-  plans.sort(compareImpact);
+  // Choose one ordering for the whole batch: pairwise fallback can produce comparator cycles.
+  plans.sort(comparableMeasurements(plans) ? compareImpact : compareStaticImpact);
   return {
     ...analysis,
     rejectedMeasurements,
@@ -62,7 +63,7 @@ function compareImpact(left: SubscriptionPlan, right: SubscriptionPlan): number 
   if (rightMeasurement) {
     return savedRenders(rightMeasurement) > 0 ? 1 : -1;
   }
-  return staticCut(right) - staticCut(left) || left.id.localeCompare(right.id);
+  return compareStaticImpact(left, right);
 }
 
 function staticCut(plan: SubscriptionPlan): number {
@@ -76,5 +77,29 @@ function savedRenders(measurement: SubscriptionMeasurement): number {
       measurement.after.ownerRenders -
       measurement.after.siblingRenders) /
     measurement.samples
+  );
+}
+
+function compareStaticImpact(left: SubscriptionPlan, right: SubscriptionPlan): number {
+  return staticCut(right) - staticCut(left) || left.id.localeCompare(right.id);
+}
+
+function comparableMeasurements(plans: readonly SubscriptionPlan[]): boolean {
+  const measurements = plans.flatMap((plan) =>
+    plan.impact.measurement ? [plan.impact.measurement] : [],
+  );
+  if (measurements.every((measurement) => !measurement.environment)) {
+    // Preserve legacy render-only ranking.
+    return true;
+  }
+  const [first] = measurements;
+  return measurements.every(
+    (measurement) =>
+      measurement.environment !== undefined &&
+      first?.environment !== undefined &&
+      measurement.scenario === first.scenario &&
+      measurement.environment.runtime === first.environment.runtime &&
+      measurement.environment.platform === first.environment.platform &&
+      measurement.environment.configuration === first.environment.configuration,
   );
 }
