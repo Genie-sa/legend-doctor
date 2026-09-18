@@ -18,8 +18,10 @@ it is neither a purity summary nor evidence of equality suppression.
   literal initializer/static object property or an explicit root `string`/`number` type
   argument. Assertions, narrow unions, aliases, imported roots, mutable roots, owner-local
   factories, props, accessors, spreads, and prototype-setting object literals are not proofs.
-- The owner is a module-local function component used only through JSX in the same source.
-  It has no parameters, exports, wrapper/alias escapes, effects, ref work, extra declarations,
+- The owner is a capitalized module-local function component with an actual JSX use and
+  no non-JSX references in the same source. Lowercase intrinsic tags are not component calls.
+  Files containing explicit JSX factory/runtime/import-source/fragment directives stay candidates.
+  The owner has no parameters, exports, wrapper/alias escapes, effects, ref work, extra declarations,
   or render statements. It returns intrinsic JSX with literal/derived-value expressions;
   custom children, refs, customized built-ins, spreads, and function-valued props need review.
 
@@ -59,7 +61,7 @@ the pinned Legend Music commit. Sidebar's inputs have other consumers; TrackItem
 selects booleans. Neither is misrepresented as the synthetic helper defect or as an
 implemented optimization. Scored labels and pins are unchanged.
 
-## Validation
+## Initial phase validation
 
 - `npm run check` passed: lint, formatting, typecheck, build, all 996 tests (including runtime
   tests), and package dry run. The final focused suite passed all 24 tests.
@@ -90,3 +92,42 @@ work and were not relabeled or repaired here.
 
 Execution logs are retained at
 `/Users/alialdhamen/.codex/artifacts/derived-migration-proofs-2026-09-19/`.
+
+## Review follow-up: render and configuration boundaries
+
+The first review found that comparison purity cannot establish owner commit equivalence;
+that counterexample is covered by effect/layout-effect and ref-snapshot runtime controls.
+The next review found two accepted cases without a proven React render boundary: lowercase
+`<row />` syntax does not call a `row` function, and an explicit custom JSX factory can
+perform arbitrary work. Both detector tests failed against the first commit before the
+additional gates were added. Unused functions already remain candidates.
+
+The deep test matrix enumerates the supported boundary rather than claiming exhaustive
+proof of every TypeScript or React program:
+
+| Boundary             | Accepted controls                                                                             | Rejected/unknown controls                                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hook provenance      | Aliases and namespaces for React/Legend imports                                               | Legacy `useSelector`/`use$`, foreign hooks, selector inputs, subscription options                                                            |
+| Callback contract    | Expression, single-return block/function, reversed strict comparison, parentheses             | Helpers, scheduling, throws, coercion, constructors, globals, multiple statements, async/generator/parameterized callbacks                   |
+| Dependency ownership | One confined direct subscription                                                              | Missing/duplicate dependency, extra memo arguments, event snapshots, mutable memo binding                                                    |
+| Input domain         | Inferred and explicit broad strings/numbers, static child paths                               | Booleans, narrow unions, unknown generics, assertions, annotated/aliased/imported roots, accessors, spreads, prototype setters               |
+| Equality benefit     | `===`/`!==` against a same-domain literal, normal and special numeric values                  | Injective suffix/arithmetic, self-comparison, unsupported truthiness projection                                                              |
+| Render boundary      | Capitalized local component used through real JSX, pure intrinsic output                      | Lowercase/unused function, export/wrapper/alias escape, custom children, custom built-ins, refs, spreads, calls in JSX, explicit JSX pragmas |
+| Lifecycle            | Same host node on supported updates; disposal stops computations; remount reads current value | Prop-observable swap reproduces retained original computed identity                                                                          |
+
+Disposal/remount, prop identity, hidden-helper dependency, equality, and commit/ref tests run
+with and without StrictMode. Legacy entry-point tests establish abstention, not cross-version
+runtime compatibility. Only the installed React 19.2.8 / Legend State beta.48 combination is
+executed. Other dependency versions, React Compiler transformations, concurrent scheduling,
+and alternate JSX factories configured solely outside the source file are residual integration
+limits; this source-local rule assumes the standard React JSX transform. Native custom children
+are outside the enforced owner grammar. No universal speedup or exhaustive runtime proof is
+claimed.
+
+Follow-up validation also passed `npm run check` (1,004 tests) and all 32 focused tests.
+Doctor completed before/after the follow-up. The second full seven-app corpus output is
+byte-for-byte identical to the initial baseline, so the per-app table above and all seven
+known failures remain unchanged. The real PR base is
+`57c8020e70d718eabe57472f1dc9e618d0901f6a`; its only change since the audited starting
+commit is `README.md`, verified with Git. The PR includes a separate concise before/after
+evidence document and exact head SHA in its description.

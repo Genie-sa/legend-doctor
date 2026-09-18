@@ -17,6 +17,13 @@
       "file": "src/components/TrackItem.tsx",
       "line": 67,
       "rationale": "Manually audited at the pin: isPlaying already selects a boolean inside useValue and captures row props; lines 72-82 choose queue-entry or track identity. Preserve this existing selector. The boolean can stay false across other track changes, whereas the JSX primitive category alone would not establish that benefit. Do not infer support for moving arbitrary helpers, object access, or prop closures into useObservable."
+    },
+    {
+      "id": "DERIVED-OWNER-RENDER-CONTRACT",
+      "enforced": false,
+      "file": "src/components/TrackItem.tsx",
+      "line": 47,
+      "rationale": "Re-audited pinned source: TrackItem is an exported arrow component, uses custom React Native children, consumes props, and calls perfCount at line 60. This owner has neither a closed local JSX caller set nor a pure intrinsic render body. It remains outside the enforced computed-memo migration boundary. Custom JSX factory directives and lowercase intrinsic tags are synthetic negative controls, not defects claimed in this pinned app."
     }
   ]
 }

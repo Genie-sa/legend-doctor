@@ -9,7 +9,9 @@ export function hasPureRenderOwner(memo: DerivedMemo): boolean {
   if (
     !ts.isFunctionDeclaration(owner) ||
     !owner.name ||
+    !/^[A-Z]/u.test(owner.name.text) ||
     !ts.isSourceFile(owner.parent) ||
+    /@jsx(?:ImportSource|Runtime|Frag)?\b/u.test(owner.getSourceFile().text) ||
     owner.parameters.length > 0 ||
     !owner.body ||
     owner.modifiers?.some(

@@ -44,6 +44,7 @@ for (const strict of [false, true]) {
       const active$ = observable("a");
       let beforeRenders = 0;
       let afterRenders = 0;
+      let computations = 0;
       const Before = (): ReactElement => {
         beforeRenders += 1;
         const id = useValue(active$);
@@ -52,9 +53,10 @@ for (const strict of [false, true]) {
       };
       const After = (): ReactElement => {
         afterRenders += 1;
-        const result$ = useObservable(() =>
-          projection === "suffix" ? `${active$.get()}!` : active$.get() === "a",
-        );
+        const result$ = useObservable(() => {
+          computations += 1;
+          return projection === "suffix" ? `${active$.get()}!` : active$.get() === "a";
+        });
         const result = useValue(result$);
         return createElement("output", { id: "after" }, String(result));
       };
@@ -73,6 +75,20 @@ for (const strict of [false, true]) {
       }
       assert.equal(beforeRenders, strict ? 6 : 3);
       assert.equal(afterRenders, (projection === "suffix" ? 3 : 1) * (strict ? 2 : 1));
+      await ui.render(null);
+      const computationsAtUnmount = computations;
+      beforeRenders = 0;
+      afterRenders = 0;
+      await act(() => active$.set("detached"));
+      assert.equal(beforeRenders, 0);
+      assert.equal(afterRenders, 0);
+      assert.equal(computations, computationsAtUnmount);
+      await ui.render(createElement("main", null, createElement(Before), createElement(After)));
+      assert.equal(
+        ui.element("#before").textContent,
+        projection === "suffix" ? "detached!" : "false",
+      );
+      assert.equal(ui.element("#after").textContent, ui.element("#before").textContent);
       await ui.render(null);
     }
   });
@@ -153,5 +169,39 @@ for (const strict of [false, true]) {
       assert.equal(ui.element("#before").textContent, expected);
       assert.equal(ui.element("#after").textContent, expected);
     }
+  });
+}
+
+for (const strict of [false, true]) {
+  test(`a prop observable swap exposes mount-time computed identity (strict=${strict})`, async (context) => {
+    const ui = mountDom(context, strict);
+    const old$ = observable("other");
+    const next$ = observable("selected");
+    interface Props {
+      source$: typeof old$;
+    }
+    const Before = ({ source$ }: Props): ReactElement => {
+      const id = useValue(source$);
+      const selected = useMemo(() => id === "selected", [id]);
+      return createElement("output", { id: "before" }, String(selected));
+    };
+    const After = ({ source$ }: Props): ReactElement => {
+      const selected$ = useObservable(() => source$.get() === "selected");
+      const selected = useValue(selected$);
+      return createElement("output", { id: "after" }, String(selected));
+    };
+    const render = (source$: typeof old$): ReactElement =>
+      createElement(
+        "main",
+        null,
+        createElement(Before, { source$ }),
+        createElement(After, { source$ }),
+      );
+    await ui.render(render(old$));
+    assert.equal(ui.element("#before").textContent, "false");
+    assert.equal(ui.element("#after").textContent, "false");
+    await ui.render(render(next$));
+    assert.equal(ui.element("#before").textContent, "true");
+    assert.equal(ui.element("#after").textContent, "false");
   });
 }
