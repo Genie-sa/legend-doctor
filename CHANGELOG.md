@@ -1,5 +1,21 @@
 # legend-doctor
 
+## 0.5.0
+
+### Minor Changes
+
+- d0fa33d: Add `select-primitive-projection` for confined scalar equality projections in source-proven private React components. Preserve imported hook aliases and live prop captures, and reject effects, event snapshots, ownership escapes, and unsupported render boundaries. Record render savings and selector execution costs separately in runtime evidence.
+- d0fa33d: Preserve paired selector execution counts, selector durations, and scenario durations with explicit runtime provenance in subscription measurements. Avoid comparing incompatible scenarios, retain legacy render-only inputs, and use exact integer arithmetic to rank normalized render savings without precision loss.
+
+### Patch Changes
+
+- d0fa33d: Recognize source-visible callback forwarding to the audited `cmdk` 1.1.1 `Command.Item.onSelect` contract. Require exact package provenance and reject mutable imports, unknown package loaders, prop overrides, and unproven polymorphic hosts. Add real-library lifecycle and async-transition tests; unresolved pinned-app opportunities remain non-enforced.
+- d0fa33d: Reject invalid and empty corpus evaluations, distinguish partial coverage from complete runs, and add an exact-pin full-corpus CI gate. Preserve special characters in evaluator entry paths.
+
+  Fix subscription relocation proofs for independent primitive conversions and source-proven primitive class projections without skipping their argument evaluation. Correct source-audited diagnostic and unsafe relocation expectations, with counterexamples for hidden reads, object coercion, and stale sibling render clocks.
+
+- d0fa33d: Require separate purity, observable identity, owner-lifecycle, and equality-benefit proofs before recommending computed memo migrations. Keep helper reads, injective projections, effect/ref owners, and unproven JSX boundaries as review candidates. Add adversarial and runtime before/after coverage.
+
 ## 0.4.0
 
 ### Minor Changes
