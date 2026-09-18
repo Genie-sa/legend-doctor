@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/quanphm/hoalu",
+  "commit": "65a93432254c255a2be75a829b7316874a3aa22f",
+  "scored": false,
+  "labels": [
+    {
+      "id": "HOALU-FILTER-SIBLING-RENDER-CLOCK",
+      "action": "move-use-value-down",
+      "file": "apps/app/src/components/expenses/expense-filter-dropdown.tsx",
+      "line": 67,
+      "enforced": false,
+      "expected": "no-actionable-relocation",
+      "rationale": "Manually re-audited at the pin: kindFilter is consumed only in the category slot (260-267), but the original owner also refreshes DateFilterView in the date slot (278-296). DateFilterView reads new Date() at 717 and derives Calendar.endMonth at 743. A kind-only update after a year boundary refreshes the original calendar's permitted end year; moving the subscription into the category slot leaves the mounted date panel stale. This disproves the former positive practice label. The fresh dateRange allocation at 70, created by packages/datetime/src/datetime.ts:75-94, also invalidates the independent memo dependencies on every original owner render. Retain the existing owner-work guard rather than treating independent memo inputs as stable. Removing the invalid positive label leaves any future emitted change at this location subject to ordinary unlabeled-practice precision failure."
+    }
+  ]
+}
