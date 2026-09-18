@@ -43,11 +43,11 @@ the summary's first line says which corpus ran.
 
 ## Running
 
-Build, then pass a checkout for each repository you have:
+Build, then require the complete corpus by passing every checkout:
 
 ```bash
 npm run build
-node dist/evals/run.js \
+node dist/evals/run.js --complete \
   --repo legend-music=/path/to/legend-music \
   --repo excalidraw=/path/to/excalidraw \
   --repo expensify=/path/to/App \
@@ -57,8 +57,26 @@ node dist/evals/run.js \
   --repo hoalu=/path/to/hoalu
 ```
 
-Repositories without a path are reported and skipped. A checkout that is not at its pinned commit is reported as an
-off-pin failure so drift is visible instead of silently changing the numbers.
+`--complete` requires every repository in the loaded corpus, including an optional private slice. Missing paths fail
+before analysis, and each omitted repository is named. Unknown repository names, duplicate assignments, empty paths,
+unknown arguments, and combining `--complete` with `--partial` are errors.
+
+For intentional research on a subset, use `--partial` (also the default for existing commands):
+
+```bash
+node dist/evals/run.js --partial --repo legend-music=/path/to/legend-music
+```
+
+Partial runs visibly report their mode, supplied repository count, and every omitted repository. Their metrics cover
+only evaluated targets and cannot establish complete-corpus success. Any off-pin checkout fails even in partial mode.
+A run that evaluates zero targets fails without printing precision/recall percentages. Exit code 0 means the selected
+nonempty corpus passed; exit code 1 means invalid input, checkout/analysis failure, or scored mismatches.
+
+The `Complete pinned public corpus` CI job fetches the exact commits from `corpus/**/repository.ts`, caches source
+checkouts by those manifests, and runs `--complete`. Application dependencies and scripts are never installed or run.
+The cache is saved before evaluation so existing detector failures do not force repeated cold downloads. No mismatch
+is waived: see [the September 19 audit ledger](audit-2026-09-19.md) for the seven existing failures and 31 unscored
+changes. A red corpus job remains a real gate; unit-suite success does not override it.
 
 `npm run eval:runtime` runs the executable migration contracts under jsdom with pinned React and Legend State: form
 submission snapshots, keyed selection and draft identity, independent hook lifetimes, atomic dialog publication, and
