@@ -10,8 +10,10 @@ import { findObservableOwnershipPractices } from "../rules/observable-ownership/
 import { findObservableReadPractices } from "../rules/observable-reads/observable-reads.js";
 import { findObservableTogglePractices } from "../rules/observable-toggle.js";
 import { findObservableTrackingPractices } from "../rules/observable-tracking/observable-tracking.js";
+import { findPlainPrimitiveProjections } from "../rules/plain-primitive-projection.js";
 
 export type PracticeRuleId =
+  | "plain-primitive-projection"
   | "derived-use-value"
   | "legacy-use-value"
   | "observable-clone-writes"
@@ -77,6 +79,22 @@ function isLegendBeforeV3(capabilities: FileCapabilities): boolean {
 }
 
 export const PRACTICE_RULES: readonly PracticeRule[] = [
+  {
+    disabledWhen: (capabilities) => {
+      if (isLegendBeforeV3(capabilities)) {
+        return LEGEND_V2_TRACKING_GATE;
+      }
+      return capabilities.legendState?.useValueExport === "missing" ? USE_VALUE_MISSING_GATE : null;
+    },
+    id: "plain-primitive-projection",
+    needsObservableBindings: true,
+    run: ({ imports, request }) =>
+      findPlainPrimitiveProjections({
+        imports,
+        sourceFile: request.sourceFile,
+        fileName: request.fileName,
+      }),
+  },
   {
     disabledWhen: (capabilities) =>
       capabilities.legendState?.useValueExport === "missing" ? USE_VALUE_MISSING_GATE : null,

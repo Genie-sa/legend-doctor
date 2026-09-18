@@ -72,6 +72,7 @@ test("rule gates read the installed Legend State export shape and the React Comp
       rule,
     })),
     [
+      { reason: "legend-v2-tracking", rule: "plain-primitive-projection" },
       { reason: "use-value-export-missing", rule: "legacy-use-value" },
       { reason: "react-compiler", rule: "observable-clone-writes" },
       { reason: "legend-v2-tracking", rule: "observable-tracking" },
@@ -80,6 +81,7 @@ test("rule gates read the installed Legend State export shape and the React Comp
   assert.deepEqual(
     enabledPracticeRules({ legendState: null, reactCompiler: false }).map((rule) => rule.id),
     [
+      "plain-primitive-projection",
       "legacy-use-value",
       "observable-transactions",
       "observable-reads",
@@ -99,7 +101,10 @@ test("the tracking rule is switched off under Legend State 2.x, where auto track
       reactCompiler: false,
     }).map(({ reason, rule }) => `${rule}:${reason}`);
 
-  assert.deepEqual(gates("2.1.15"), ["observable-tracking:legend-v2-tracking"]);
+  assert.deepEqual(gates("2.1.15"), [
+    "plain-primitive-projection:legend-v2-tracking",
+    "observable-tracking:legend-v2-tracking",
+  ]);
   assert.deepEqual(gates("3.0.0-beta.48"), []);
   assert.deepEqual(gates("next"), []);
 });
