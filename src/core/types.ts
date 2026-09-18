@@ -115,6 +115,7 @@ type EffectAction =
 type HookAction = StateAction | EffectAction;
 
 type LegendPracticeAction =
+  | "select-primitive-projection"
   | "review-helper-tracking"
   | "assign-observable-fields"
   | "batch-observable-writes"
