@@ -24,6 +24,7 @@ const KNOWN_ACTIONS = {
   "delete-effect": true,
   "delete-unused-state": true,
   "derive-computed-observable": true,
+  "select-primitive-projection": true,
   "keep-effect": true,
   "keep-state": true,
   "move-state-down": true,

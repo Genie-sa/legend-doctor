@@ -16,6 +16,7 @@ import {
 import { findAncestorUntil, nearestNestedFunction, nodeWithin } from "../../core/ast.js";
 import { baseUiRenderEventStage } from "./base-ui-render-events.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
+import { commandItemEventIsDeferred } from "./command-item-events.js";
 import { contextPropertyConsumersAreDeferred } from "./context-consumers.js";
 import { deeperTrace } from "./model.js";
 import { deferredArrayItemCallbackPublication } from "./array-item-callbacks.js";
@@ -55,11 +56,13 @@ function returnTargetStage(probe: CallbackExpressionProbe): boolean | null {
 
 function jsxAttributeIsDeferredEvent(
   attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
-  source: ChildComponentSource,
-  trace: CallbackTrace,
+  prop: string,
+  context: { source: ChildComponentSource; trace: CallbackTrace },
 ): boolean {
+  const { source, trace } = context;
   const target = jsxOwnerTarget(attribute);
   return (
+    commandItemEventIsDeferred(attribute, prop, { source, resolver: trace.resolver }) ||
     jsxOwnerIsDeferredEventTarget(attribute, source) ||
     (target !== null && trace.resolver.frameworkEventComponent(source.file, target))
   );
@@ -99,7 +102,7 @@ function jsxAttributeStage(probe: CallbackExpressionProbe): boolean | null {
   if (
     path.length === 0 &&
     /^on[A-Z]/u.test(prop) &&
-    jsxAttributeIsDeferredEvent(attribute, source, trace)
+    jsxAttributeIsDeferredEvent(attribute, prop, { source, trace })
   ) {
     return true;
   }
@@ -120,7 +123,7 @@ function jsxSpreadStage(probe: CallbackExpressionProbe): boolean | null {
     jsxOwnerTarget(spread) !== null &&
     path.length === 1 &&
     /^on[A-Z]/u.test(path[0] ?? "") &&
-    jsxAttributeIsDeferredEvent(spread, source, trace)
+    jsxAttributeIsDeferredEvent(spread, path[0] ?? "", { source, trace })
   ) {
     return true;
   }

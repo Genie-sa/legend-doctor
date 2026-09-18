@@ -1,0 +1,22 @@
+{
+  "repository": "https://github.com/LegendApp/legend-music",
+  "commit": "59d02afc11d6b27bc53ddecf1a69501626f8487f",
+  "scored": false,
+  "labels": [
+    {
+      "id": "PLAIN-PROJECTION-PLAYLIST-SNAPSHOT",
+      "file": "src/components/Playlist.tsx",
+      "line": 83,
+      "action": "select-primitive-projection",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: libraryPaths is projected at line 90 as length > 0, but hasConfiguredLibrary enters the callback body at 698 and 703 and its dependency array at 731. Array length and callback lifetime/snapshot analysis are outside the strict scalar-equality subset. This is research, not a safe migration claim."
+    },
+    {
+      "id": "PLAIN-PROJECTION-TRACK-CONTROLS",
+      "file": "src/components/TrackItem.tsx",
+      "line": 67,
+      "enforced": false,
+      "rationale": "Manually audited selectors at lines 67 and 85 already return booleans for playing and selected state. They are negative controls for a new projection recommendation; their helper/property/optional branches are not evidence for widening the supported expression subset."
+    }
+  ]
+}

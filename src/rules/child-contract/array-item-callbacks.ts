@@ -26,6 +26,7 @@ import { climbTransparentExpression, constArrayBinding } from "./carried-values.
 import { findAncestorUntil, nearestNestedFunction, visit } from "../../core/ast.js";
 import { callbackInvocationIsDeferred } from "./invocation-trace.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
+import { commandItemEventIsDeferred } from "./command-item-events.js";
 import ts from "typescript";
 
 /**
@@ -176,6 +177,7 @@ function jsxAttributeForwardsArrayItemCallback(
     return false;
   }
   if (
+    commandItemEventIsDeferred(attribute, prop, { source, resolver }) ||
     jsxOwnerIsDeferredEventTarget(attribute, source) ||
     resolver.frameworkEventComponent(source.file, target)
   ) {

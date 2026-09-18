@@ -28,16 +28,17 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend reads
 
-| Action                                                                                   | Removes                                                                       |
-| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)               | Updates from unread sibling fields                                            |
-| [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                           | One broad subscription across unrelated leaves                                |
-| [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                              | An observable update rendering a broad parent                                 |
-| [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                        | A parent render used only to pass one value                                   |
-| [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)      | Missing tracking or redundant hooks for eager reads; selector syntax is style |
-| [`derive-computed-observable`](EXAMPLES.md#compute-a-derived-primitive-as-an-observable) | Renders for input changes that leave a memo unchanged                         |
-| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)          | Deprecated `useSelector` or `use$` usage                                      |
-| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                       | Tracking in a proven non-tracking command                                     |
+| Action                                                                                   | Removes                                                                           |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)               | Updates from unread sibling fields                                                |
+| [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                           | One broad subscription across unrelated leaves                                    |
+| [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                              | An observable update rendering a broad parent                                     |
+| [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                        | A parent render used only to pass one value                                       |
+| [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)      | Missing tracking or redundant hooks for eager reads; selector syntax is style     |
+| [`select-primitive-projection`](docs/plain-primitive-projection.md)                      | Renders for raw scalar changes that preserve a confined strict boolean projection |
+| [`derive-computed-observable`](EXAMPLES.md#compute-a-derived-primitive-as-an-observable) | Renders for input changes that leave a memo unchanged                             |
+| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)          | Deprecated `useSelector` or `use$` usage                                          |
+| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                       | Tracking in a proven non-tracking command                                         |
 
 ### Legend tracking
 

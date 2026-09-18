@@ -25,6 +25,7 @@ import {
 import { MAX_CALLBACK_PATH_DEPTH } from "./model.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
 import { climbTransparentExpression } from "./carried-values.js";
+import { commandItemEventIsDeferred } from "./command-item-events.js";
 import { higherOrderCallDefersCallback } from "./higher-order-factories.js";
 import { isBindingName } from "./prop-bindings.js";
 import { isNonValueIdentifier } from "../../core/analysis-ast.js";
@@ -54,6 +55,7 @@ function jsxReferenceIsDeferred(node: ts.Identifier, probe: CallbackInvocationPr
   }
   const target = jsxOwnerTarget(attribute);
   if (
+    commandItemEventIsDeferred(attribute, attribute.name.getText(), { source, resolver }) ||
     jsxOwnerIsDeferredEventTarget(attribute, source) ||
     (source !== undefined &&
       resolver !== undefined &&
