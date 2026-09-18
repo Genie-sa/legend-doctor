@@ -290,13 +290,12 @@ export const formbricksHookCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "single-tag.tsx",
     hook: "useState",
     line: 45,
     name: "isMergingTags",
     rationale:
-      "Async tag commands update one input presentation or merge-control gate without invalidating the rest of the row.",
+      "Audited at the pinned source: handleMergeTags sets only this flag before its unconditional await and resets it after completion; MergeTagsCombobox forwards selection through the local CommandItem wrapper to cmdk 1.1.1 Command.Item.onSelect. Keep the existing conditional mount and callback captures inside one stable leaf subscriber so independent tag input and count content does not rerender.",
     target: "formbricks-single-tag",
   },
   ...[

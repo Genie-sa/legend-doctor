@@ -87,7 +87,7 @@ function jsxBooleanAttributeValue(
   return booleanLiteral(unwrapTransparentExpression(attribute.initializer.expression));
 }
 
-function booleanPropValueAtInvocation(
+export function booleanPropValueAtInvocation(
   source: ChildComponentSource,
   propName: string,
 ): boolean | "absent" | null {

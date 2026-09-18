@@ -64,6 +64,9 @@ class ChildContracts implements ChildContractResolver {
   };
 
   private readonly callbackSources: CallbackContractSourceResolver = {
+    sourceFiles: () => this.context.project.files.map((file) => file.sourceFile),
+    callbackPackageVersion: (file, specifier) =>
+      this.context.sourceIndex.callbackPackageVersionFor(file, specifier),
     contextReaderHooks: (file, contextName) =>
       this.context.sourceIndex.contextReaderHooksFor(file, contextName),
     deferredCallbackHooks: (file) => this.context.sourceIndex.deferredCallbackHooksFor(file),

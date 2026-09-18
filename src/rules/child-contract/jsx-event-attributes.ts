@@ -6,6 +6,7 @@ import {
   jsxOwnerTarget,
 } from "./jsx-owner.js";
 import { climbTransparentExpression } from "./carried-values.js";
+import { commandItemEventIsDeferred } from "./command-item-events.js";
 import { deeperTrace } from "./model.js";
 import ts from "typescript";
 
@@ -29,7 +30,10 @@ export function jsxEventAttributeIsDeferred(
   trace: CallbackTrace,
 ): boolean {
   const { resolver } = trace;
-  if (jsxOwnerIsDeferredEventTarget(attribute, source)) {
+  if (
+    commandItemEventIsDeferred(attribute, attribute.name.getText(), { source, resolver }) ||
+    jsxOwnerIsDeferredEventTarget(attribute, source)
+  ) {
     return true;
   }
   const target = jsxOwnerTarget(attribute);
