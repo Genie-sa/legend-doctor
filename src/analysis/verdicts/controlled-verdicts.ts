@@ -15,6 +15,7 @@ import type { ClassifiedState } from "../model.js";
 import { EMPTY_NODES } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { controlledStateReadsAreEventOnly } from "./transport-verdicts.js";
+import { hasUnstableSubtreeLifetime } from "../../rules/state-proofs/jsx-subtrees.js";
 import { isCustomHookOwner } from "../ast-helpers.js";
 import { isExactControlledArrayMembershipToggle } from "../membership-toggle.js";
 import ts from "typescript";
@@ -43,10 +44,13 @@ export function controlledLeafVerdict(context: StateClassificationContext): Clas
     controlledLeafRenderCut(state, usage, { localComponents, sourceComponents });
   if (controlledLeafCut) {
     const target = [...usage.valueTargets][0] ?? "the controlled child";
-    const controlledSubtree: ts.Node = ts.isJsxOpeningElement(controlledLeafCut.opening)
+    const controlledSubtree = ts.isJsxOpeningElement(controlledLeafCut.opening)
       ? controlledLeafCut.opening.parent
       : controlledLeafCut.opening;
-    if (stateReferencesConfinedTo(state, controlledSubtree)) {
+    if (
+      stateReferencesConfinedTo(state, controlledSubtree) &&
+      !hasUnstableSubtreeLifetime(controlledSubtree, state.owner)
+    ) {
       return {
         action: "move-state-down",
         confidence: "probable",

@@ -466,7 +466,9 @@ const send = () => socketRef.current?.send("ping");
 
 ### Use a non-tracking snapshot
 
-`use-peek-for-snapshot` changes a proven command read.
+`use-peek-for-snapshot` marks a read that needs a snapshot, not a dependency. Handlers, effects, and `onChange`
+listeners run outside any tracker, where `get()` already reads without subscribing, so there the finding is style. It is
+a change only for a `useState` initializer inside an `observer` render, where `get()` would subscribe the component.
 
 ```tsx
 const save = () => persist(settings$.theme.get()); // Before

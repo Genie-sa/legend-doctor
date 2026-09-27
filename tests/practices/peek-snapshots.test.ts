@@ -227,3 +227,31 @@ test("uses cross-file observable provenance for event snapshots", () => {
     ["use-peek-for-snapshot"],
   );
 });
+
+test("reports peek as a change only where get() would subscribe", () => {
+  const peek = (wrap: (body: string) => string) =>
+    analyzeLegendPractices({
+      sourceText: `
+      import { observable } from "@legendapp/state";
+      import { observer } from "@legendapp/state/react";
+      import { useEffect, useState } from "react";
+      const settings$ = observable({ name: "Ada", open: false });
+      ${wrap(`function () {
+        const [initial] = useState(() => settings$.name.get());
+        useEffect(() => { report(settings$.open.get()); }, []);
+        return <button onClick={() => save(settings$.name.get())}>{initial}</button>;
+      }`)}
+    `,
+      fileName: "fixture.tsx",
+    })
+      .filter((finding) => finding.action === "use-peek-for-snapshot")
+      .map((finding) => finding.disposition);
+  assert.deepEqual(
+    peek((body) => `export const Profile = ${body};`),
+    ["style", "style", "style"],
+  );
+  assert.deepEqual(
+    peek((body) => `export const Profile = observer(${body});`),
+    ["change", "style", "style"],
+  );
+});
