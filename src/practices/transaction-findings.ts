@@ -46,7 +46,7 @@ function concurrentRootReview(finding: LegendPracticeFinding): LegendPracticeFin
     ...finding,
     disposition: "candidate",
     evidence: [...finding.evidence, CONCURRENT_ROOT_EVIDENCE],
-    message: `Review only: React already renders these writes once. ${finding.message} Apply it only when a non-React observer (\`observe\`, a computed, \`onChange\`, or persistence) reads several of these paths.`,
+    message: `Review only: React already renders these writes once. ${finding.message} Apply it only when a non-React observer (\`observe\`, a computed, or an \`onChange\` listener) reads several of these paths; persistence already saves them together.`,
   };
 }
 

@@ -408,8 +408,8 @@ The render saving depends on the renderer. A legacy root (React Native's old arc
 each write made outside a React event separately, so both actions are changes there. When every React renderer in the
 workspace can only create concurrent roots (React Native 0.82 or later, React DOM 19 or later, including published
 packages' peer ranges), React already commits the writes in one render. The finding is then a review: only a non-React
-observer that reads several of the written paths, such as `observe`, a computed, `onChange`, or persistence, still sees
-them apart. The report's `capabilities.concurrentRoot` records that proof for the analysis root.
+observer that reads several of the written paths, such as `observe`, a computed, or an `onChange` listener, still sees
+them apart. `syncObservable` persistence queues changes until a microtask, so it saves them together either way. The report's `capabilities.concurrentRoot` records that proof for the analysis root.
 
 ### Preserve a conditional child's mount behavior
 

@@ -1,11 +1,14 @@
+import type { Change, Observable } from "@legendapp/state";
 import { batch, observable, observe } from "@legendapp/state";
 import { count, mountDom } from "../../src/runtime/dom.js";
 import { createElement as jsx, useLayoutEffect } from "react";
-import type { Observable } from "@legendapp/state";
+import { JSDOM } from "jsdom";
+import { ObservablePersistLocalStorageBase } from "@legendapp/state/persist-plugins/local-storage";
 import type { ReactElement } from "react";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
+import { syncObservable } from "@legendapp/state/sync";
 import test from "node:test";
 import { useValue } from "@legendapp/state/react";
 
@@ -24,6 +27,22 @@ interface TransactionOutcome {
   commits: readonly string[];
   observed: readonly string[];
   renders: number;
+}
+
+type Transaction = (write: () => void) => void;
+
+/** Legend's storage-backed persistence plugin, recording each save it receives. */
+class RecordingPersistence extends ObservablePersistLocalStorageBase {
+  public readonly saves: string[][] = [];
+
+  public constructor(storage: Storage) {
+    super(storage);
+  }
+
+  public override set(table: string, changes: Change[]): void {
+    this.saves.push(changes.map((change) => change.path.join(".")).toSorted());
+    super.set(table, changes);
+  }
 }
 
 function PlayerView({ commits, player$, renders }: PlayerViewProps): ReactElement {
@@ -63,7 +82,7 @@ function setActEnvironment(enabled: boolean): void {
 async function transactionOutcome(
   context: TestContext,
   strict: boolean,
-  [mode, transaction]: readonly [string, (write: () => void) => void],
+  [mode, transaction]: readonly [string, Transaction],
 ): Promise<TransactionOutcome> {
   let outcome: TransactionOutcome = { commits: [], observed: [], renders: 0 };
   await context.test(mode, async (subtest) => {
@@ -107,3 +126,42 @@ for (const strict of [false, true]) {
     assert.deepEqual(batched.observed, ["1/true"]);
   });
 }
+
+test("persistence saves separate writes together; a parent onChange listener still sees them apart", async (context) => {
+  const outcomes = new Map<string, { notifications: string[][]; saves: string[][] }>();
+  for (const [mode, transaction] of [
+    ["separate", unbatched],
+    ["batched", batch],
+  ] as const satisfies readonly (readonly [string, Transaction])[]) {
+    const player$ = observable<Player>({ index: 0, playing: false });
+    const { window } = new JSDOM("", { url: "http://localhost/" });
+    context.after(() => window.close());
+    const persistence = new RecordingPersistence(window.localStorage);
+    const notifications: string[][] = [];
+    context.after(
+      player$.onChange(({ changes }) => {
+        notifications.push(changes.map((change) => change.path.join(".")));
+      }),
+    );
+    syncObservable(player$, { persist: { name: `player-${mode}`, plugin: persistence } });
+    await delay(0);
+    persistence.saves.length = 0;
+
+    transaction(() => {
+      player$.index.set(1);
+      player$.playing.set(true);
+    });
+    await delay(0);
+
+    outcomes.set(mode, { notifications, saves: persistence.saves });
+  }
+
+  assert.deepEqual(outcomes.get("separate"), {
+    notifications: [["index"], ["playing"]],
+    saves: [["index", "playing"]],
+  });
+  assert.deepEqual(outcomes.get("batched"), {
+    notifications: [["index", "playing"]],
+    saves: [["index", "playing"]],
+  });
+});
