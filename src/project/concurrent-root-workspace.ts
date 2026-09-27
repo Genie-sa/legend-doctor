@@ -1,11 +1,16 @@
 import type { Package } from "@manypkg/get-packages";
 import { getPackages } from "@manypkg/get-packages";
+import { hostRunsNewArchitecture } from "./native-architecture.js";
 import { parse as parseYaml } from "yaml";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 
 /** React Native 0.82 removed the legacy architecture, so every root it creates is concurrent. */
 const FIRST_CONCURRENT_ONLY_NATIVE: Version = { major: 0, minor: 82 };
+/** From React Native 0.74 the New Architecture creates concurrent roots without a separate flag. */
+const FIRST_CONCURRENT_NEW_ARCHITECTURE: Version = { major: 0, minor: 74 };
+/** Expo SDK 53 enables the New Architecture unless the app config turns it off. */
+const FIRST_NEW_ARCHITECTURE_EXPO: Version = { major: 53, minor: 0 };
 /** React DOM 19 removed `render` and `hydrate`, so every root it creates is concurrent. */
 const FIRST_CONCURRENT_ONLY_DOM: Version = { major: 19, minor: 0 };
 const RENDERER_FLOORS: ReadonlyMap<string, Version> = new Map([
@@ -33,7 +38,17 @@ interface JsonObject {
 
 type JsonValue = boolean | number | string | null | readonly JsonValue[] | JsonObject;
 type Catalogs = ReadonlyMap<string, ReadonlyMap<string, string>>;
-type RendererVerdict = "concurrent" | "none" | "unproven";
+/** `new-architecture-host`: concurrent only when every app host in the workspace runs the New Architecture. */
+type RendererVerdict = "concurrent" | "new-architecture-host" | "none" | "unproven";
+type DependencyField = (typeof PUBLISHED_FIELDS)[number];
+
+interface RendererDeclaration {
+  readonly catalogs: Catalogs;
+  readonly field: DependencyField;
+  readonly floor: Version;
+  readonly name: string;
+  readonly range: string;
+}
 
 /**
  * Decides whether every React renderer in a file's workspace can only create concurrent roots, where
@@ -95,26 +110,72 @@ async function workspaceOf(directory: string): Promise<Workspace | null> {
 async function workspaceRendersConcurrently(workspace: Workspace): Promise<boolean> {
   const catalogs = await workspaceCatalogs(workspace.rootDir);
   const verdicts = new Set(workspace.packages.map((pkg) => rendererVerdict(pkg, catalogs)));
-  return verdicts.has("concurrent") && !verdicts.has("unproven");
+  if (verdicts.has("unproven") || (verdicts.size === 1 && verdicts.has("none"))) {
+    return false;
+  }
+  return (
+    !verdicts.has("new-architecture-host") || everyHostRunsNewArchitecture(workspace, catalogs)
+  );
+}
+
+async function everyHostRunsNewArchitecture(
+  workspace: Workspace,
+  catalogs: Catalogs,
+): Promise<boolean> {
+  const hosts = await Promise.all(
+    workspace.packages.map((pkg) =>
+      hostRunsNewArchitecture(pkg.dir, {
+        expoDefaultsToNewArchitecture: expoDefaultsToNewArchitecture(pkg, catalogs),
+      }),
+    ),
+  );
+  const proofs = hosts.filter((host) => host !== null);
+  return proofs.length > 0 && proofs.every(Boolean);
 }
 
 /** A published package also runs under its consumers' renderers, so its peer ranges must qualify too. */
 function rendererVerdict(pkg: Package, catalogs: Catalogs): RendererVerdict {
   const fields = pkg.packageJson.private === true ? LOCAL_FIELDS : PUBLISHED_FIELDS;
-  const declarations = fields.flatMap((field) => Object.entries(pkg.packageJson[field] ?? {}));
-  const renderers = declarations.flatMap(([name, range]) => {
-    const floor = RENDERER_FLOORS.get(name);
-    return floor ? [{ floor, name, range }] : [];
-  });
-  if (renderers.length === 0) {
+  const verdicts = new Set(
+    fields.flatMap((field) =>
+      Object.entries(pkg.packageJson[field] ?? {}).flatMap(([name, range]) => {
+        const floor = RENDERER_FLOORS.get(name);
+        return floor ? [declarationVerdict({ catalogs, field, floor, name, range })] : [];
+      }),
+    ),
+  );
+  if (verdicts.size === 0) {
     return "none";
   }
-  return renderers.every(({ floor, name, range }) => {
-    const minimum = minimumVersion(resolveRange(name, range, catalogs));
-    return minimum !== null && compareVersions(minimum, floor) >= 0;
-  })
-    ? "concurrent"
+  if (verdicts.has("unproven")) {
+    return "unproven";
+  }
+  return verdicts.has("new-architecture-host") ? "new-architecture-host" : "concurrent";
+}
+
+/** Below the floor, a locally installed native renderer still creates concurrent roots on the New Architecture. */
+function declarationVerdict(declaration: RendererDeclaration): RendererVerdict {
+  const minimum = minimumVersion(
+    resolveRange(declaration.name, declaration.range, declaration.catalogs),
+  );
+  if (minimum !== null && compareVersions(minimum, declaration.floor) >= 0) {
+    return "concurrent";
+  }
+  return declaration.floor === FIRST_CONCURRENT_ONLY_NATIVE &&
+    declaration.field !== "peerDependencies" &&
+    minimum !== null &&
+    compareVersions(minimum, FIRST_CONCURRENT_NEW_ARCHITECTURE) >= 0
+    ? "new-architecture-host"
     : "unproven";
+}
+
+function expoDefaultsToNewArchitecture(pkg: Package, catalogs: Catalogs): boolean {
+  const range = LOCAL_FIELDS.map((field) => pkg.packageJson[field]?.["expo"]).find(
+    (declared) => declared !== undefined,
+  );
+  const minimum =
+    range === undefined ? null : minimumVersion(resolveRange("expo", range, catalogs));
+  return minimum !== null && compareVersions(minimum, FIRST_NEW_ARCHITECTURE_EXPO) >= 0;
 }
 
 function resolveRange(name: string, range: string, catalogs: Catalogs): string | null {
