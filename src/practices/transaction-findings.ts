@@ -29,7 +29,28 @@ function writeLocation(
   return { column: character + 1, file: scan.fileName, line: line + 1 };
 }
 
+const CONCURRENT_ROOT_EVIDENCE =
+  "every React renderer in this workspace creates only concurrent roots, which already commit these writes in one render";
+
 export function transactionFinding(
+  run: TransactionRun,
+  scan: TransactionScan,
+): LegendPracticeFinding | null {
+  const finding = renderTransactionFinding(run, scan);
+  return finding && scan.concurrentRoot ? concurrentRootReview(finding) : finding;
+}
+
+/** Only a non-React tracker spanning several of the paths still observes the separate writes. */
+function concurrentRootReview(finding: LegendPracticeFinding): LegendPracticeFinding {
+  return {
+    ...finding,
+    disposition: "candidate",
+    evidence: [...finding.evidence, CONCURRENT_ROOT_EVIDENCE],
+    message: `Review only: React already renders these writes once. ${finding.message} Apply it only when a non-React observer (\`observe\`, a computed, \`onChange\`, or persistence) reads several of these paths.`,
+  };
+}
+
+function renderTransactionFinding(
   run: TransactionRun,
   scan: TransactionScan,
 ): LegendPracticeFinding | null {

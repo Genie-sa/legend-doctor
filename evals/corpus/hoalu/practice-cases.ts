@@ -2,14 +2,6 @@ import type { GoldPracticeCase } from "../contracts.js";
 
 export const hoaluPracticeCases = [
   {
-    action: "batch-observable-writes",
-    file: "atoms/filters.ts",
-    line: 94,
-    rationale:
-      "The selected date-range mode and its custom range form one computed snapshot and must publish as one transaction.",
-    target: "hoalu-app",
-  },
-  {
     action: "narrow-use-value-subscription",
     file: "components/categories/category-actions.tsx",
     line: 136,
@@ -62,14 +54,6 @@ export const hoaluPracticeCases = [
     line: 147,
     rationale:
       "The edit dialog uses only the optional event id to select its record, so unrelated dialog data should not invalidate its query owner.",
-    target: "hoalu-app",
-  },
-  {
-    action: "batch-observable-writes",
-    file: "hooks/use-auth.ts",
-    line: 31,
-    rationale:
-      "Sign-out resets the expense and income drafts as one user-visible transition before navigation.",
     target: "hoalu-app",
   },
   {

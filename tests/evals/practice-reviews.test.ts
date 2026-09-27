@@ -22,7 +22,12 @@ function evaluation(practices: LegendPracticeFinding[]): Evaluation {
             hooks: { total: 0, states: 0, effects: 0 },
             findings: [],
             practices,
-            capabilities: { disabledRules: [], legendState: null, reactCompiler: false },
+            capabilities: {
+              concurrentRoot: false,
+              disabledRules: [],
+              legendState: null,
+              reactCompiler: false,
+            },
           },
         },
       ],

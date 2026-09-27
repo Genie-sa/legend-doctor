@@ -16,6 +16,7 @@ import {
 } from "./coverage-stages.js";
 import type { AnalysisContext } from "./analysis-context.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
+import { ConcurrentRootResolver } from "../concurrent-root-workspace.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import type { FileCapabilities } from "../capabilities.js";
 import type { FunctionCoverageEntry } from "./coverage-stages.js";
@@ -71,7 +72,9 @@ interface AnalysisAccumulator {
 interface AnalysisPass extends AnalysisPassOptions {
   accumulator: AnalysisAccumulator;
   compiledFiles: ReadonlySet<string>;
+  concurrentFiles: ReadonlySet<string>;
   rootCompiles: boolean;
+  rootRendersConcurrently: boolean;
 }
 
 export function analysisFileEntries(
@@ -110,10 +113,16 @@ export async function runAnalysisPass(
   options: AnalysisPassOptions,
 ): Promise<AnalysisPass> {
   const reactCompiler = new ReactCompilerResolver();
-  const [compiledFiles, rootCompiles] = await Promise.all([
-    reactCompiledFiles(reactCompiler, entries, options.includeDetails),
-    reactCompiler.compilesDirectory(options.context.root),
-  ]);
+  const concurrentRoots = new ConcurrentRootResolver();
+  const practiceFiles = legendPracticeFiles(entries, options.includeDetails);
+  const [compiledFiles, rootCompiles, concurrentFiles, rootRendersConcurrently] = await Promise.all(
+    [
+      filesWhere(practiceFiles, (file) => reactCompiler.packageCompilesFile(file)),
+      reactCompiler.compilesDirectory(options.context.root),
+      filesWhere(practiceFiles, (file) => concurrentRoots.rendersFileConcurrently(file)),
+      concurrentRoots.rendersDirectoryConcurrently(options.context.root),
+    ],
+  );
   const pass: AnalysisPass = {
     ...options,
     accumulator: {
@@ -124,7 +133,9 @@ export async function runAnalysisPass(
       subscriptions: [],
     },
     compiledFiles,
+    concurrentFiles,
     rootCompiles,
+    rootRendersConcurrently,
   };
   for (const entry of entries) {
     analyzeFileEntry(entry, pass);
@@ -132,23 +143,27 @@ export async function runAnalysisPass(
   return pass;
 }
 
-async function reactCompiledFiles(
-  reactCompiler: ReactCompilerResolver,
+function legendPracticeFiles(
   entries: readonly AnalysisFileEntry[],
   includeDetails: boolean,
+): readonly string[] {
+  return entries
+    .filter(
+      (entry) =>
+        entry.analysisFile !== null &&
+        (includeDetails || mayContainLegendPractice(entry.analysisFile)),
+    )
+    .map((entry) => entry.file);
+}
+
+async function filesWhere(
+  files: readonly string[],
+  predicate: (file: string) => Promise<boolean>,
 ): Promise<ReadonlySet<string>> {
-  const candidates = entries.filter(
-    (entry) =>
-      entry.analysisFile !== null &&
-      (includeDetails || mayContainLegendPractice(entry.analysisFile)),
+  const verdicts = await Promise.all(
+    files.map(async (file) => ({ file, holds: await predicate(file) })),
   );
-  const compiled = await Promise.all(
-    candidates.map(async (entry) => ({
-      compiles: await reactCompiler.packageCompilesFile(entry.file),
-      file: entry.file,
-    })),
-  );
-  return new Set(compiled.filter((entry) => entry.compiles).map((entry) => entry.file));
+  return new Set(verdicts.filter((verdict) => verdict.holds).map((verdict) => verdict.file));
 }
 
 function analyzeFileEntry(entry: AnalysisFileEntry, pass: AnalysisPass): void {
@@ -220,6 +235,7 @@ function hookFindings(
 
 function fileCapabilities(entry: SupportedAnalysisFileEntry, pass: AnalysisPass): FileCapabilities {
   return {
+    concurrentRoot: pass.concurrentFiles.has(entry.file),
     legendState: pass.context.installedLegendState,
     reactCompiler: pass.compiledFiles.has(entry.file),
   };
@@ -317,6 +333,7 @@ export function analysisReport(
     hooks: { effects, states, total: states + effects },
     practices,
     capabilities: {
+      concurrentRoot: pass.rootRendersConcurrently,
       disabledRules: [...disabledRules.values()].toSorted((left, right) =>
         left.rule.localeCompare(right.rule),
       ),

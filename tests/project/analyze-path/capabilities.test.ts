@@ -34,6 +34,7 @@ test("a root without gates reports every practice rule as active", async (testCo
   const report = await analyzePath(root);
 
   assert.deepEqual(report.capabilities, {
+    concurrentRoot: false,
     disabledRules: [],
     legendState: null,
     reactCompiler: false,
@@ -59,6 +60,7 @@ test("a file filter narrows analysis while the context keeps every target file",
 
 test("rule gates read the installed Legend State export shape and the React Compiler flag", () => {
   const missingUseValue = {
+    concurrentRoot: false,
     legendState: {
       syncExport: "missing" as const,
       useValueExport: "missing" as const,
@@ -79,7 +81,9 @@ test("rule gates read the installed Legend State export shape and the React Comp
     ],
   );
   assert.deepEqual(
-    enabledPracticeRules({ legendState: null, reactCompiler: false }).map((rule) => rule.id),
+    enabledPracticeRules({ concurrentRoot: false, legendState: null, reactCompiler: false }).map(
+      (rule) => rule.id,
+    ),
     [
       "plain-primitive-projection",
       "legacy-use-value",
@@ -97,6 +101,7 @@ test("rule gates read the installed Legend State export shape and the React Comp
 test("the tracking rule is switched off under Legend State 2.x, where auto tracking may be enabled app-wide", () => {
   const gates = (version: string): readonly string[] =>
     disabledPracticeRules({
+      concurrentRoot: false,
       legendState: { syncExport: "available", useValueExport: "alias", version },
       reactCompiler: false,
     }).map(({ reason, rule }) => `${rule}:${reason}`);

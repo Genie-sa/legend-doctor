@@ -114,6 +114,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
     needsObservableBindings: true,
     run: ({ imports, observableBindings, request }) =>
       collectTransactionFindings({
+        concurrentRoot: request.capabilities.concurrentRoot,
         fileName: request.fileName,
         imports,
         observableBindings,
