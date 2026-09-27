@@ -1,5 +1,6 @@
 import type { ObservableReadScan, RawValueReadScan } from "./model.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
+import { identifiedUseValueDeclaration } from "./observable-paths.js";
 import { isNonValueIdentifier } from "../../core/analysis-ast.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
@@ -28,23 +29,53 @@ function distinctLeafPaths(reads: readonly (readonly string[])[]): readonly (rea
   );
 }
 
-function hasProposedNameCollision(
-  reads: RawValueReadScan,
-  proposedNames: ReadonlySet<string>,
-): boolean {
-  let collision = false;
+interface OwnerNames {
+  /** Identifiers the owner already reads; reusing one would shadow or redeclare it. */
+  readonly bound: ReadonlySet<string>;
+  /** Leaf names another `useValue` binding in the owner reads, which its own split would declare. */
+  readonly siblingLeaves: ReadonlySet<string>;
+}
+
+function ownerNames(reads: RawValueReadScan, scan: ObservableReadScan): OwnerNames {
+  const siblings = new Set<string>();
   visit(reads.owner.body, (node) => {
-    if (
-      !collision &&
-      ts.isIdentifier(node) &&
-      node !== reads.candidate.declaration.name &&
-      !isNonValueIdentifier(node) &&
-      proposedNames.has(node.text)
-    ) {
-      collision = true;
+    if (ts.isVariableDeclaration(node) && node !== reads.candidate.declaration) {
+      const sibling = identifiedUseValueDeclaration(node, scan);
+      if (sibling) {
+        siblings.add(sibling.localName);
+      }
     }
   });
-  return collision;
+  const bound = new Set<string>();
+  const siblingLeaves = new Set<string>();
+  visit(reads.owner.body, (node) => {
+    if (
+      ts.isIdentifier(node) &&
+      node !== reads.candidate.declaration.name &&
+      !isNonValueIdentifier(node)
+    ) {
+      bound.add(node.text);
+    }
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      siblings.has(node.expression.text)
+    ) {
+      siblingLeaves.add(node.name.text);
+    }
+  });
+  return { bound, siblingLeaves };
+}
+
+function leafSubscriptions(
+  leaves: readonly (readonly string[])[],
+  prefix: readonly string[],
+): readonly LeafSubscription[] {
+  return leaves.map((path) => ({ name: camelName([...prefix, ...path]), path }));
+}
+
+function avoids(leafNames: readonly LeafSubscription[], names: ReadonlySet<string>): boolean {
+  return leafNames.every((leaf) => !names.has(leaf.name));
 }
 
 export function splitLeavesFinding(
@@ -55,12 +86,16 @@ export function splitLeavesFinding(
   if (leaves.length < MIN_SPLIT_LEAVES) {
     return null;
   }
-  const leafNames: readonly LeafSubscription[] = leaves.map((path) => ({
-    name: leafSubscriptionName(path),
-    path,
-  }));
-  const proposedNames = new Set(leafNames.map((leaf) => leaf.name));
-  if (proposedNames.size !== leafNames.length || hasProposedNameCollision(reads, proposedNames)) {
+  const { bound, siblingLeaves } = ownerNames(reads, scan);
+  const plain = leafSubscriptions(leaves, []);
+  const leafNames = avoids(plain, siblingLeaves)
+    ? plain
+    : leafSubscriptions(leaves, [reads.localName]);
+  if (
+    new Set(leafNames.map((leaf) => leaf.name)).size !== leafNames.length ||
+    !avoids(plain, bound) ||
+    !avoids(leafNames, bound)
+  ) {
     return null;
   }
   return splitLeavesMessage(reads, leafNames, scan);
@@ -92,8 +127,8 @@ function splitLeavesMessage(
   };
 }
 
-function leafSubscriptionName(path: readonly string[]): string {
-  return path
+function camelName(segments: readonly string[]): string {
+  return segments
     .map((segment, index) =>
       index === 0 ? segment : segment.charAt(0).toUpperCase() + segment.slice(1),
     )

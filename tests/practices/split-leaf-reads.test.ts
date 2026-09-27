@@ -91,7 +91,7 @@ test("abstains from the split when a proposed leaf name already binds in the own
     sourceText: `
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
-    const state$ = observable({ tracks: [], ready: true });
+    const state$ = observable({ tracks: [], ready: true, scanProgress: 0 });
     export function Screen() {
       const state = useValue(state$);
       const tracks = [1, 2, 3];
@@ -101,6 +101,35 @@ test("abstains from the split when a proposed leaf name already binds in the own
     fileName: "fixture.tsx",
   });
   assert.equal(finding, undefined);
+});
+
+test("sibling splits in one owner never propose the same leaf names", () => {
+  const messages = analyzeLegendPractices({
+    sourceText: `
+    import { observable } from "@legendapp/state";
+    import { useValue } from "@legendapp/state/react";
+    const spotify$ = observable({ enabled: false, authenticated: false, detail: "" });
+    const appleMusic$ = observable({ enabled: false, authenticated: false, detail: "" });
+    export function Sources() {
+      const spotify = useValue(spotify$);
+      const appleMusic = useValue(appleMusic$);
+      return <span>{String(spotify.enabled && spotify.authenticated)}{String(appleMusic.enabled && appleMusic.authenticated)}</span>;
+    }
+  `,
+    fileName: "fixture.tsx",
+  })
+    .filter((finding) => finding.action === "split-use-value-leaves")
+    .map((finding) => finding.message);
+  assert.equal(messages.length, 2);
+  const declared = messages.flatMap((message) =>
+    [...message.matchAll(/const (?<name>\w+) = useValue/gu)].map((match) => match.groups?.["name"]),
+  );
+  assert.deepEqual(declared.toSorted(), [
+    "appleMusicAuthenticated",
+    "appleMusicEnabled",
+    "spotifyAuthenticated",
+    "spotifyEnabled",
+  ]);
 });
 
 test("splits divergent static leaf reads instead of keeping the broad subscription", () => {
