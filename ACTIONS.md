@@ -31,6 +31,7 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 | Action                                                                                   | Removes                                                                           |
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)               | Updates from unread sibling fields                                                |
+| [`peek-unrendered-use-value`](EXAMPLES.md#drop-a-subscription-no-render-reads)           | Renders for a value that only initializers or event commands read                 |
 | [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                           | One broad subscription across unrelated leaves                                    |
 | [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                              | An observable update rendering a broad parent                                     |
 | [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                        | A parent render used only to pass one value                                       |

@@ -16,6 +16,10 @@ import {
 } from "./symbol-resolution.js";
 import { cachedModuleResolutionHost, normalizeFile, resolveModule } from "./module-resolution.js";
 import { contextProviderSitesFor, contextReaderHooksFor } from "./context-readers.js";
+import {
+  observableDeclarationPathsFor,
+  observablePrimitivePathsFor,
+} from "./observable-primitive-paths.js";
 import type { AnalysisFile } from "../analysis-project.js";
 import type { SourceContextCoverage } from "./source-context.js";
 import { callbackPackageVersion } from "./callback-package-version.js";
@@ -23,7 +27,7 @@ import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
 import { observablePathsFor } from "./observable-containers.js";
-import { observablePrimitivePathsFor } from "./observable-primitive-paths.js";
+import { plainSeedPaths } from "../../rules/observable-reads/plain-seed-paths.js";
 import { sourceContextFor } from "./source-context.js";
 import type ts from "typescript";
 
@@ -47,6 +51,8 @@ export interface SourceIndex {
   legendValueBridgesFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observableArrayPathsFor: (file: string) => ReadonlySet<string>;
   observablePrimitivePathsFor: (file: string) => ReadonlySet<string>;
+  /** Paths seeded with plain data, so subscribing to them never activates a lazy source. */
+  observablePlainSeedPathsFor: (file: string) => ReadonlySet<string>;
   observableFactoriesFor: (file: string) => ReadonlySet<string>;
   observableKeysFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observablePathsFor: (file: string) => ReadonlySet<string>;
@@ -81,6 +87,8 @@ export function buildSourceIndexFromFiles(
     legendValueBridgesFor: (file) => legendValueBridgesFor(state, file),
     observableArrayPathsFor: (file) => observableArrayPathsFor(state, file),
     observablePrimitivePathsFor: (file) => observablePrimitivePathsFor(state, file),
+    observablePlainSeedPathsFor: (file) =>
+      observableDeclarationPathsFor(state, file, plainSeedPaths),
     observableFactoriesFor: (file) =>
       new Set(resolvedFor(state, file, "observable-factory").keys()),
     observableKeysFor: (file) => observableKeysFor(state, file),

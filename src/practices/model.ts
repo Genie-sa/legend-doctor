@@ -16,6 +16,7 @@ export interface ObservableWrite {
 export interface LegendPracticesRequest {
   subscriptionInventory?: SubscriptionInventory[] | undefined;
   importedObservablePrimitivePaths?: ReadonlySet<string>;
+  importedObservablePlainSeedPaths?: ReadonlySet<string>;
   capabilities: FileCapabilities;
   childContracts: ChildContractResolver | null;
   fileName: string;

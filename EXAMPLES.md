@@ -208,6 +208,27 @@ For a derived primitive, keep the comparison inside the selector:
 const selected = useValue(() => selectedId$.get() === id);
 ```
 
+### Drop a subscription no render reads
+
+Use `peek-unrendered-use-value` when a `useValue` result feeds only a hook initial value or a synchronous event
+handler. The subscription reruns the component on every update for a value its output never shows.
+
+```tsx
+// Before: every play or pause renders the whole playlist
+const isPlaying = useValue(player$.isPlaying);
+const wasPlayingRef = useRef(isPlaying);
+const toggle = useCallback(() => setPlaying(!isPlaying), [isPlaying]);
+
+// After: reads take a snapshot when they run
+const wasPlayingRef = useRef(player$.isPlaying.peek());
+const toggle = useCallback(() => setPlaying(!player$.isPlaying.peek()), []);
+```
+
+The path must be seeded with plain data, so dropping the subscription never delays a lazy `synced` or computed
+source. The action abstains when a render reads a ref, `peek()`, or an untracked `get()` that could depend on the
+forced rerender, and when a read is awaited, deferred, or captured by a callback that omits the value from its
+dependencies.
+
 ### Split unrelated leaves
 
 `split-use-value-leaves` gives each leaf its own field subscription.
