@@ -57,6 +57,7 @@ export function analyzeLegendPractices({
 export interface LegendPracticesFileRequest {
   readonly subscriptionInventory?: SubscriptionInventory[] | undefined;
   readonly importedObservablePrimitivePaths?: ReadonlySet<string>;
+  readonly importedObservablePlainSeedPaths?: ReadonlySet<string>;
   readonly capabilities?: FileCapabilities;
   readonly childContracts?: ChildContractResolver | null;
   readonly file: AnalysisFile;
@@ -71,6 +72,7 @@ export interface LegendPracticesFileRequest {
 export function analyzeLegendPracticesFile({
   subscriptionInventory,
   importedObservablePrimitivePaths = new Set(),
+  importedObservablePlainSeedPaths = new Set(),
   capabilities = NO_CAPABILITIES,
   childContracts = null,
   file,
@@ -84,6 +86,7 @@ export function analyzeLegendPracticesFile({
   const findings = analyzeParsedLegendPractices({
     subscriptionInventory,
     importedObservablePrimitivePaths,
+    importedObservablePlainSeedPaths,
     capabilities,
     childContracts,
     fileName: reportFileName,

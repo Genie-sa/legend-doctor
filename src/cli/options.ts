@@ -35,6 +35,7 @@ const KNOWN_ACTIONS = {
   "narrow-use-value-subscription": true,
   "pass-observable-to-reactive-input": true,
   "pass-observable-to-use-value": true,
+  "peek-unrendered-use-value": true,
   "persist-observable": true,
   "replace-legacy-use-value": true,
   "reuse-observable-reference": true,

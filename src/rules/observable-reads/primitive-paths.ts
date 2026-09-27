@@ -138,6 +138,17 @@ export function localPrimitivePaths(
   sourceFile: ts.SourceFile,
   bindings: ReadonlySet<string>,
 ): ReadonlySet<string> {
+  return localDeclarationPaths(sourceFile, bindings, (declaration) =>
+    primitiveDeclarationPaths(declaration),
+  );
+}
+
+/** Paths that `pathsOf` proves for each observable binding declared exactly once in the file. */
+export function localDeclarationPaths(
+  sourceFile: ts.SourceFile,
+  bindings: ReadonlySet<string>,
+  pathsOf: (declaration: ts.VariableDeclaration) => ReadonlySet<string>,
+): ReadonlySet<string> {
   const paths = new Set<string>();
   const declarations: ts.VariableDeclaration[] = [];
   visit(sourceFile, (node) => {
@@ -154,7 +165,7 @@ export function localPrimitivePaths(
     ) {
       return;
     }
-    for (const suffix of primitiveDeclarationPaths(node)) {
+    for (const suffix of pathsOf(node)) {
       paths.add(suffix ? `${node.name.text}.${suffix}` : node.name.text);
     }
   });

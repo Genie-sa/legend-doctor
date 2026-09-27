@@ -126,6 +126,7 @@ type LegendPracticeAction =
   | "narrow-use-value-subscription"
   | "pass-observable-to-reactive-input"
   | "pass-observable-to-use-value"
+  | "peek-unrendered-use-value"
   | "replace-legacy-use-value"
   | "reuse-observable-reference"
   | "snapshot-computed-initializer"

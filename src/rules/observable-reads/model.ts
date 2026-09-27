@@ -9,6 +9,8 @@ export type HookCallback = ts.ArrowFunction | ts.FunctionDeclaration | ts.Functi
 
 export interface ObservableReadScan {
   readonly primitivePaths?: ReadonlySet<string>;
+  /** Primitive leaves seeded by a literal, so a read never activates a lazy source. */
+  readonly plainSeedPaths?: ReadonlySet<string>;
   readonly imports: HookImports;
   readonly observableBindings: ReadonlySet<string>;
   readonly observableKeys: ReadonlyMap<string, ReadonlySet<string>>;

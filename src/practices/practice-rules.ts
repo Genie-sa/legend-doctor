@@ -127,6 +127,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
       findObservableReadPractices({
         inventory: request.subscriptionInventory,
         primitivePaths: request.importedObservablePrimitivePaths ?? new Set(),
+        plainSeedPaths: request.importedObservablePlainSeedPaths ?? new Set(),
         childContracts: request.childContracts,
         fileName: request.fileName,
         imports,

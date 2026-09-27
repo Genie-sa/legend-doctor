@@ -394,4 +394,12 @@ export const legendMusicPracticeCases = [
       "Scan progress fields update at a different cadence than tracks and isScanning, and every read is a static leaf path.",
     target: "legend-music",
   },
+  {
+    action: "peek-unrendered-use-value",
+    file: "components/Playlist.tsx",
+    line: 87,
+    rationale:
+      "isPlayerActive only seeds wasPlayingRef, which an observe effect refreshes later, so every play or pause rerenders the queue for a value no render reads.",
+    target: "legend-music",
+  },
 ] as const satisfies readonly GoldPracticeCase[];

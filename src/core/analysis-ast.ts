@@ -271,6 +271,7 @@ export function isNonValueIdentifier(node: ts.Identifier): boolean {
     (ts.isMethodDeclaration(parent) && parent.name === node) ||
     (ts.isPropertyDeclaration(parent) && parent.name === node) ||
     (ts.isPropertySignature(parent) && parent.name === node) ||
+    (ts.isBindingElement(parent) && parent.propertyName === node) ||
     (ts.isImportSpecifier(parent) && parent.propertyName === node) ||
     (ts.isExportSpecifier(parent) && parent.propertyName === node)
   );
