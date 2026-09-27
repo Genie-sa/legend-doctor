@@ -30,6 +30,7 @@ Pinned public repositories, each at a fixed commit with focused source roots whe
 - `outline/outline`
 - `RonasIT/open-webui-react-native`
 - `quanphm/hoalu`
+- `LegendApp/legend-photos`
 
 Repository source is never copied into this project. Each corpus entry pins a commit and a source location, and the
 runner scans local checkouts. A label enters the corpus only after manual review of the source it points at.
@@ -54,7 +55,8 @@ node dist/evals/run.js --complete \
   --repo formbricks=/path/to/formbricks \
   --repo outline=/path/to/outline \
   --repo open-webui-react-native=/path/to/open-webui-react-native \
-  --repo hoalu=/path/to/hoalu
+  --repo hoalu=/path/to/hoalu \
+  --repo legend-photos=/path/to/legend-photos
 ```
 
 `--complete` requires every repository in the loaded corpus, including an optional private slice. Missing paths fail

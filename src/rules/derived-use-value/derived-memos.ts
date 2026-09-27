@@ -6,7 +6,7 @@ import {
 } from "../../core/analysis-ast.js";
 import { findAncestor, isRuntimeFunctionLike, nodeWithin, visit } from "../../core/ast.js";
 import {
-  isUseValueCall,
+  isCanonicalUseValueCall,
   isValueReferenceTo,
   provenObservablePath,
 } from "../observable-reads/observable-paths.js";
@@ -176,7 +176,7 @@ function useValueDeclarationInput(
     call.arguments.length !== 1 ||
     !ts.isIdentifier(declaration.name) ||
     !isConst(declaration) ||
-    !isUseValueCall(call, scan.imports) ||
+    !isCanonicalUseValueCall(call, scan.imports) ||
     findAncestor(declaration, isRuntimeFunctionLike) !== owner
   ) {
     return null;

@@ -7,7 +7,7 @@ import {
 } from "./observable-paths.js";
 import type { HookImports } from "../core/imports.js";
 import type { LegendPracticesRequest } from "./model.js";
-import { isImportedHookCall } from "../core/imports.js";
+import { isUseValueCall } from "../rules/observable-reads/observable-paths.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../core/analysis-ast.js";
 import { visit } from "../core/ast.js";
@@ -87,12 +87,7 @@ function recordBindingNode(node: ts.Node, scan: BindingScan): void {
 function recordUseValueInput(node: ts.Node, scan: BindingScan): void {
   if (
     !ts.isCallExpression(node) ||
-    !isImportedHookCall({
-      call: node,
-      localNames: scan.imports.useValue,
-      namespaceNames: scan.imports.legendReactNamespaces,
-      canonicalName: "useValue",
-    }) ||
+    !isUseValueCall(node, scan.imports) ||
     node.arguments.length === 0
   ) {
     return;

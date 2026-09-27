@@ -318,7 +318,9 @@ export interface HookCallQuery {
     | "useRef"
     | "useState"
     | "useUnmount"
-    | "useValue";
+    | "useValue"
+    | "use$"
+    | "useSelector";
   readonly localNames: ReadonlySet<string>;
   readonly namespaceNames: ReadonlySet<string>;
 }
