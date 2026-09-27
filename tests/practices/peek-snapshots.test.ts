@@ -1,3 +1,4 @@
+import type { LegendPracticeFinding } from "../../src/core/types.js";
 import { analyzeLegendPractices } from "../../src/practices/analyze-legend-practices.js";
 import assert from "node:assert/strict";
 import { requireValue } from "./harness.js";
@@ -229,7 +230,7 @@ test("uses cross-file observable provenance for event snapshots", () => {
 });
 
 test("reports peek as a change only where get() would subscribe", () => {
-  const peek = (wrap: (body: string) => string) =>
+  const peek = (wrap: (body: string) => string): LegendPracticeFinding["disposition"][] =>
     analyzeLegendPractices({
       sourceText: `
       import { observable } from "@legendapp/state";
