@@ -101,8 +101,7 @@ export const legendPhotosPracticeCases = [
     action: "batch-observable-writes",
     file: "features/FullscreenPhoto.tsx",
     line: 118,
-    rationale:
-      "Setting open and open-or-closing together is one fullscreen opening transition.",
+    rationale: "Setting open and open-or-closing together is one fullscreen opening transition.",
     target: "legend-photos",
   },
   {
@@ -349,8 +348,7 @@ export const legendPhotosPracticeCases = [
     action: "use-peek-for-snapshot",
     file: "settings/HotkeySettings.tsx",
     line: 103,
-    rationale:
-      "The press handler checks the editing flag once before entering edit mode.",
+    rationale: "The press handler checks the editing flag once before entering edit mode.",
     target: "legend-photos",
   },
   {
