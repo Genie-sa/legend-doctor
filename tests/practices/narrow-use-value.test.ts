@@ -282,3 +282,56 @@ test("keeps multi-property, defaulted, and rest useValue destructures", () => {
     assert.deepEqual(source(binding), [], binding);
   }
 });
+
+test("narrows the legacy useSelector and use$ aliases like useValue", () => {
+  const narrowed = (importLine: string, call: string): LegendPracticeFinding | undefined =>
+    analyzeLegendPractices({
+      sourceText: `
+    import { observable } from "@legendapp/state";
+    ${importLine}
+    const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function Profile() {
+      const profile = ${call}(profile$);
+      return <h1>{profile.name}</h1>;
+    }
+  `,
+      fileName: "fixture.tsx",
+    }).find((finding) => finding.action === "narrow-use-value-subscription");
+  for (const [importLine, call] of [
+    [`import { useSelector } from "@legendapp/state/react";`, "useSelector"],
+    [`import { use$ } from "@legendapp/state/react";`, "use$"],
+    [`import { useSelector as select } from "@legendapp/state/react";`, "select"],
+    [`import * as Legend from "@legendapp/state/react";`, "Legend.use$"],
+  ] as const) {
+    assert.match(
+      requireValue(narrowed(importLine, call)).message ?? "",
+      /useValue\(profile\$\.name\)/u,
+      call,
+    );
+  }
+});
+
+test("keeps same-named selector hooks that are not Legend State aliases", () => {
+  const findings = (importLine: string, prelude = ""): LegendPracticeFinding[] =>
+    analyzeLegendPractices({
+      sourceText: `
+    import { observable } from "@legendapp/state";
+    ${importLine}
+    const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function Profile() {
+      ${prelude}
+      const profile = useSelector(profile$);
+      return <h1>{profile.name}</h1>;
+    }
+  `,
+      fileName: "fixture.tsx",
+    }).filter((finding) => finding.action === "narrow-use-value-subscription");
+  assert.deepEqual(findings(`import { useSelector } from "react-redux";`), []);
+  assert.deepEqual(
+    findings(
+      `import { useSelector as legendSelector } from "@legendapp/state/react";`,
+      "const useSelector = legendSelector;",
+    ),
+    [],
+  );
+});

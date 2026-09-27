@@ -101,7 +101,8 @@ export function directGetReceiver(expression: ts.Expression): ts.Expression | nu
   return unwrapTransparentExpression(read.expression.expression);
 }
 
-const LEGACY_TRACKING_HOOKS = new Set(["use$", "useSelector"]);
+const LEGACY_TRACKING_HOOK_NAMES = ["use$", "useSelector"] as const;
+const LEGACY_TRACKING_HOOKS = new Set<string>(LEGACY_TRACKING_HOOK_NAMES);
 
 /** `useValue` or one of its deprecated aliases, each of which tracks the observables its selector reads. */
 export function isTrackingHookCall(call: ts.CallExpression, imports: HookImports): boolean {
@@ -120,20 +121,41 @@ export function isTrackingHookCall(call: ts.CallExpression, imports: HookImports
   );
 }
 
+/**
+ * `useValue` or a deprecated alias. `use$` and `useSelector` are the same export at runtime, so a
+ * subscription proof holds for all three names.
+ */
 export function isUseValueCall(call: ts.CallExpression, imports: HookImports): boolean {
-  if (
-    !isImportedHookCall({
+  return (
+    (isCanonicalUseValueCall(call, imports) ||
+      LEGACY_TRACKING_HOOK_NAMES.some((name) =>
+        isImportedHookCall({
+          call,
+          localNames: imports.legacyUseValue,
+          namespaceNames: imports.legendReactNamespaces,
+          canonicalName: name,
+        }),
+      )) &&
+    !isShadowedHookBinding(call)
+  );
+}
+
+/** Only the `useValue` name, for rewrites whose runtime contract was tested under that export. */
+export function isCanonicalUseValueCall(call: ts.CallExpression, imports: HookImports): boolean {
+  return (
+    isImportedHookCall({
       call,
       localNames: imports.useValue,
       namespaceNames: imports.legendReactNamespaces,
       canonicalName: "useValue",
-    })
-  ) {
-    return false;
-  }
+    }) && !isShadowedHookBinding(call)
+  );
+}
+
+function isShadowedHookBinding(call: ts.CallExpression): boolean {
   const binding = rootIdentifier(call.expression);
   const owner = findAncestor(call, isRuntimeFunctionLike);
-  return !binding || !owner || bindingDeclarationCount(owner, binding.text) === 0;
+  return Boolean(binding && owner && bindingDeclarationCount(owner, binding.text) > 0);
 }
 
 export function provenObservablePath(

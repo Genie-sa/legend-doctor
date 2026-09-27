@@ -2,7 +2,7 @@ import {
   RESERVED_OBSERVABLE_MEMBERS,
   directGetReceiver,
   directObservableReadPath,
-  isUseValueCall,
+  isCanonicalUseValueCall,
   provenObservablePath,
 } from "./observable-paths.js";
 import {
@@ -28,7 +28,7 @@ export function directUseValueInput(
   observableBindings: ReadonlySet<string>,
 ): DirectUseValueInput | null {
   // Direct inputs forward options to get(); eager and callback reads do not inherit them.
-  if (!isUseValueCall(call, imports) || call.arguments.length !== 1) {
+  if (!isCanonicalUseValueCall(call, imports) || call.arguments.length !== 1) {
     return null;
   }
   const input = call.arguments[0]!;

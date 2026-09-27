@@ -4,6 +4,7 @@ import { expensifyRepository } from "./expensify/repository.js";
 import { formbricksRepository } from "./formbricks/repository.js";
 import { hoaluRepository } from "./hoalu/repository.js";
 import { legendMusicRepository } from "./legend-music/repository.js";
+import { legendPhotosRepository } from "./legend-photos/repository.js";
 import { openWebuiReactNativeRepository } from "./open-webui-react-native/repository.js";
 import { outlineRepository } from "./outline/repository.js";
 
@@ -16,4 +17,5 @@ export const repositories: readonly CorpusRepository[] = [
   outlineRepository,
   openWebuiReactNativeRepository,
   hoaluRepository,
+  legendPhotosRepository,
 ];
