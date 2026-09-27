@@ -39,7 +39,7 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 | [`select-primitive-projection`](docs/plain-primitive-projection.md)                      | Renders for raw scalar changes that preserve a confined strict boolean projection |
 | [`derive-computed-observable`](EXAMPLES.md#compute-a-derived-primitive-as-an-observable) | Renders for input changes that leave a memo unchanged                             |
 | [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)          | Deprecated `useSelector` or `use$` usage                                          |
-| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                       | Tracking in a proven non-tracking command                                         |
+| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                       | An `observer` render dependency from a `useState` initializer; elsewhere style    |
 
 ### Legend tracking
 

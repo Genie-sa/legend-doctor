@@ -28,10 +28,11 @@ export function findObservableTogglePractices(
     findings.push({
       action: "toggle-observable",
       confidence: "certain",
-      disposition: "change",
+      disposition: "style",
       evidence: [
         `${path} is a proven static Legend observable path`,
         "the set argument is exactly the negation of the same observable value without a tracked get() read",
+        "toggle() publishes the same single write, so no render or lifecycle cost changes",
       ],
       location: { column: character + 1, file: fileName, line: line + 1 },
       message: `Replace this exact boolean flip with \`${path}.toggle()\`; the direct observable operation preserves the update with less code.`,

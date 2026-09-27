@@ -88,3 +88,16 @@ test("does not infer toggle support through a shadowed observable root", () => {
     [],
   );
 });
+
+test("reports toggle as style because the single write is unchanged", () => {
+  const [finding] = analyzeLegendPractices({
+    sourceText: `
+    import { observable } from "@legendapp/state";
+    const menu$ = observable({ open: false });
+    export function flip() { menu$.open.set((value) => !value); }
+  `,
+    fileName: "fixture.ts",
+  });
+  assert.equal(requireValue(finding).action, "toggle-observable");
+  assert.equal(requireValue(finding).disposition, "style");
+});

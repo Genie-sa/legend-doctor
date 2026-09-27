@@ -249,3 +249,28 @@ test("does not split one controlled value across alternate return branches", () 
   );
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
+
+test("keeps a controlled draft above a leaf that an early return can unmount", () => {
+  const source = (guard: string): string => `
+    import { useState } from "react";
+    function SearchBar(_props: unknown) { return null; }
+    function Loading() { return null; }
+    export function Folders({ pending }: { pending: boolean }) {
+      const [query, setQuery] = useState("");
+      ${guard}
+      return <main>
+        <Header /><Summary /><Filters /><Actions /><Help /><Status />
+        <SearchBar
+          value={query}
+          onChangeText={setQuery}
+          onSubmitEditing={() => { setQuery(""); open(query); }}
+        />
+        <Footer /><Aside /><Preview /><Details /><Metrics />
+      </main>;
+    }
+  `;
+  const [stable] = analyzeSource(source(""), "fixture.tsx");
+  assert.equal(requireValue(stable).action, "move-state-down");
+  const [guarded] = analyzeSource(source("if (pending) return <Loading />;"), "fixture.tsx");
+  assert.equal(requireValue(guarded).action, "use-observable");
+});

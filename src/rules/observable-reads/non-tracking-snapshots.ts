@@ -1,17 +1,20 @@
 import type { HookCallback, ObservableReadScan } from "./model.js";
+import { callbackIsEventRooted, isPlainFunction } from "../state-proofs/event-roots.js";
 import { findAncestor, isRuntimeFunctionLike } from "../../core/ast.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { callbackIsEventRooted } from "../state-proofs/event-roots.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import { provenObservablePath } from "./observable-paths.js";
+import { renderOwnerOf } from "../observable-tracking/render-owners.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 interface NonTrackingSnapshot {
   observable: ts.Expression;
+  /** A `useState` initializer in an `observer` render, where `get()` subscribes the component. */
+  observerRender: boolean;
   source: "observable-listener" | "react-or-event" | "source-proven-effect";
 }
 
@@ -35,7 +38,17 @@ export function nonTrackingSnapshotObservable(
     return null;
   }
   const source = provenNonTrackingCallbackSource(callback, scan);
-  return source ? { observable, source } : null;
+  return source
+    ? { observable, observerRender: isObserverStateInitializer(callback, scan.imports), source }
+    : null;
+}
+
+function isObserverStateInitializer(callback: RuntimeFunctionLike, imports: HookImports): boolean {
+  return (
+    isPlainFunction(callback) &&
+    isDirectHookCallback(callback, imports, "useState") &&
+    renderOwnerOf(callback.parent, imports)?.tracked === true
+  );
 }
 
 function isReactSnapshotCallback(callback: HookCallback, imports: HookImports): boolean {
@@ -196,10 +209,12 @@ export function nonTrackingSnapshotFinding(
   return {
     action: "use-peek-for-snapshot",
     confidence: "probable",
-    disposition: "change",
+    disposition: snapshot.observerRender ? "change" : "style",
     evidence: [
       `${path}.get() reads a proven Legend observable path`,
-      snapshotSourceEvidence(snapshot.source),
+      snapshot.observerRender
+        ? "the useState initializer runs during an observer render, so get() subscribes the component to this path"
+        : `${snapshotSourceEvidence(snapshot.source)}; get() already reads without subscribing there, so peek() only states the intent`,
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
     message: `Replace \`${path}.get()\` with \`${path}.peek()\`; this code path needs a snapshot, not a reactive dependency.`,
