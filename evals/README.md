@@ -78,7 +78,8 @@ The `Complete pinned public corpus` CI job fetches the exact commits from `corpu
 checkouts by those manifests, and runs `--complete`. Application dependencies and scripts are never installed or run.
 The cache is saved before evaluation so existing detector failures do not force repeated cold downloads. No mismatch
 is waived: see [the September 19 audit ledger](audit-2026-09-19.md) for the original seven failures, the follow-up source audits and detector repairs, and 31 unscored
-changes. A red corpus job remains a real gate; unit-suite success does not override it.
+changes. The [September 28 audit](audit-2026-09-28.md) records the renderer proof behind concurrent-root transaction
+reviews and the three batch labels it retired. A red corpus job remains a real gate; unit-suite success does not override it.
 
 `npm run eval:runtime` runs the executable migration contracts under jsdom with pinned React and Legend State: form
 submission snapshots, keyed selection and draft identity, independent hook lifetimes, atomic dialog publication, and

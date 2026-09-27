@@ -80,10 +80,12 @@ JSON contract (schemaVersion 4)
     files, hooks    scan size; under a scope flag, files counts the analyzed
                     subset and scope { mode, ref?, contextFiles } names the
                     flag and how many files loaded for cross-file proofs
-    capabilities    { legendState, reactCompiler, disabledRules }: the
-                    installed @legendapp/state (version, useValue export, and
-                    sync export) or null, whether the root enables the React
-                    Compiler, and the rules those facts switched off, each
+    capabilities    { legendState, reactCompiler, concurrentRoot,
+                    disabledRules }: the installed @legendapp/state (version,
+                    useValue export, and sync export) or null, whether the
+                    root enables the React Compiler, whether every React
+                    renderer in the root's workspace creates only concurrent
+                    roots, and the rules those facts switched off, each
                     with a stable reason and the number of files that skipped
                     it
     findings        useState and useEffect findings; every review-state and

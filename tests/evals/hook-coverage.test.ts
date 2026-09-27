@@ -35,7 +35,12 @@ function evaluation(findings: HookFinding[]): Evaluation {
             findings,
             hooks: { states: findings.length, effects: 0, total: findings.length },
             practices: [],
-            capabilities: { disabledRules: [], legendState: null, reactCompiler: false },
+            capabilities: {
+              concurrentRoot: false,
+              disabledRules: [],
+              legendState: null,
+              reactCompiler: false,
+            },
             schemaVersion: 4,
           },
         },

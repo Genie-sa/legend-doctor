@@ -281,6 +281,8 @@ interface DisabledRule {
 }
 
 interface ReportCapabilities {
+  /** Every React renderer in the analysis root's workspace creates only concurrent roots. */
+  concurrentRoot: boolean;
   disabledRules: DisabledRule[];
   legendState: InstalledLegendState | null;
   /** The analysis root's package or bundler config enables the React Compiler. */

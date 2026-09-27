@@ -49,7 +49,12 @@ function report(findings: HookFinding[]): AnalysisReport {
   const states = findings.length - effects;
   return {
     files: 1,
-    capabilities: { disabledRules: [], legendState: null, reactCompiler: false },
+    capabilities: {
+      concurrentRoot: false,
+      disabledRules: [],
+      legendState: null,
+      reactCompiler: false,
+    },
     findings,
     hooks: { effects, states, total: findings.length },
     practices: [],

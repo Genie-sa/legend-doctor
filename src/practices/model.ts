@@ -29,6 +29,8 @@ export interface LegendPracticesRequest {
 }
 
 export interface TransactionScan {
+  /** React already coalesces the writes into one render, so batching changes only non-React observers. */
+  concurrentRoot: boolean;
   fileName: string;
   imports: HookImports;
   observableBindings: ReadonlySet<string>;

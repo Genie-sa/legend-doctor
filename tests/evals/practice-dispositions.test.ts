@@ -8,7 +8,12 @@ import test from "node:test";
 function evaluation(disposition: LegendPracticeFinding["disposition"]): Evaluation {
   const report: AnalysisReport = {
     files: 1,
-    capabilities: { disabledRules: [], legendState: null, reactCompiler: false },
+    capabilities: {
+      concurrentRoot: false,
+      disabledRules: [],
+      legendState: null,
+      reactCompiler: false,
+    },
     findings: [],
     hooks: { effects: 0, states: 0, total: 0 },
     practices: [

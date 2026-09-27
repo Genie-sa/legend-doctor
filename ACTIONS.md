@@ -51,12 +51,12 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend writes
 
-| Action                                                               | Removes                                          |
-| -------------------------------------------------------------------- | ------------------------------------------------ |
-| [`narrow-observable-write`](EXAMPLES.md#write-the-changed-path)      | A parent clone and broad publication             |
-| [`toggle-observable`](EXAMPLES.md#toggle-directly)                   | Boolean updater ceremony                         |
-| [`assign-observable-fields`](EXAMPLES.md#publish-one-logical-update) | Separate publications to sibling fields          |
-| [`batch-observable-writes`](EXAMPLES.md#publish-one-logical-update)  | Separate publications across related observables |
+| Action                                                               | Removes                                                                          |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [`narrow-observable-write`](EXAMPLES.md#write-the-changed-path)      | A parent clone and broad publication                                             |
+| [`toggle-observable`](EXAMPLES.md#toggle-directly)                   | Boolean updater ceremony                                                         |
+| [`assign-observable-fields`](EXAMPLES.md#publish-one-logical-update) | Separate sibling-field renders on a legacy root; a review on concurrent roots    |
+| [`batch-observable-writes`](EXAMPLES.md#publish-one-logical-update)  | Separate cross-observable renders on a legacy root; a review on concurrent roots |
 
 ### Legend ownership
 
