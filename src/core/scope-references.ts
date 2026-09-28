@@ -8,14 +8,29 @@ export function ownerLevelReferences(
   owner: RuntimeFunctionLike,
   declarationName: ts.Identifier,
 ): ts.Identifier[] {
+  return owner.body ? scopedReferences(owner.body, declarationName) : [];
+}
+
+/** References that resolve to a `const` or `let` declaration, wherever its block sits. */
+export function blockScopedReferences(
+  declaration: ts.VariableDeclaration & { readonly name: ts.Identifier },
+): ts.Identifier[] {
+  const holder = declaration.parent.parent;
+  return scopedReferences(
+    ts.isVariableStatement(holder) ? holder.parent : holder,
+    declaration.name,
+  );
+}
+
+function scopedReferences(scope: ts.Node, declarationName: ts.Identifier): ts.Identifier[] {
   const references: ts.Identifier[] = [];
-  visit(owner.body, (node) => {
+  visit(scope, (node) => {
     if (
       ts.isIdentifier(node) &&
       node.text === declarationName.text &&
       node !== declarationName &&
       !isNonValueIdentifier(node) &&
-      !isShadowedBetween(node, owner, declarationName.text)
+      !isShadowedBetween(node, scope, declarationName.text)
     ) {
       references.push(node);
     }
@@ -23,14 +38,10 @@ export function ownerLevelReferences(
   return references;
 }
 
-function isShadowedBetween(
-  reference: ts.Identifier,
-  owner: RuntimeFunctionLike,
-  name: string,
-): boolean {
+function isShadowedBetween(reference: ts.Identifier, boundary: ts.Node, name: string): boolean {
   for (
     let scope: ts.Node | undefined = reference.parent;
-    scope && scope !== owner.body;
+    scope && scope !== boundary;
     scope = scope.parent
   ) {
     if (scopeDeclares(scope, name)) {

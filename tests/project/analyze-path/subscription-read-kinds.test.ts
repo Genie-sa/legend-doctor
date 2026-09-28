@@ -12,7 +12,7 @@ async function inventoryOf(
   context: test.TestContext,
   source: string,
   binding = "selected",
-): Promise<{ entry: SubscriptionInventory; actions: string[] }> {
+): Promise<{ entry: SubscriptionInventory; entries: SubscriptionInventory[]; actions: string[] }> {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-read-kinds-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(
@@ -23,16 +23,17 @@ async function inventoryOf(
     ${source}`,
   );
   const report = await analyzePath(root);
-  const entry = report.subscriptionAnalysis?.inventory.find((item) => item.binding === binding);
+  const entries = report.subscriptionAnalysis?.inventory ?? [];
+  const entry = entries.find((item) => item.binding === binding);
   assert.ok(entry);
-  return { entry, actions: report.practices.map((finding) => finding.action) };
+  return { entry, entries, actions: report.practices.map((finding) => finding.action) };
 }
 
 function inventory(
   context: test.TestContext,
   setup: string,
   content: string,
-): Promise<{ entry: SubscriptionInventory; actions: string[] }> {
+): Promise<{ entry: SubscriptionInventory; entries: SubscriptionInventory[]; actions: string[] }> {
   return inventoryOf(
     context,
     `export function Screen({ items }: { items: string[] }) {
@@ -183,4 +184,31 @@ test("templates and comparisons are pure only when no operand can run conversion
     );
     assert.deepEqual(kinds(entry), [expected], content);
   }
+});
+
+test("nested redeclarations are not reads, but still block name-keyed flow facts", async (context) => {
+  const { entry } = await inventory(
+    context,
+    `const label = selected;
+    const describe = () => { const selected = "x"; const label = selected; return label; };`,
+    `<p>{label}</p><ul>{items.map((selected) => <li key={selected}>{selected}</li>)}</ul>`,
+  );
+  assert.deepEqual(kinds(entry), ["derivation", "render"]);
+  assert.deepEqual(
+    entry.derivations.map((derivation) => derivation.name),
+    ["label"],
+  );
+  assert.ok(entry.reasons.includes("shadowed-or-reassigned-binding"));
+  assert.ok(!entry.reasons.includes("no-render-consumer"));
+});
+
+test("a reassignable subscription binding stays unresolved", async (context) => {
+  const { entries } = await inventory(
+    context,
+    `let chosen = useValue(state$.selected);
+    if (items.length === 0) chosen = "";`,
+    "<p>{chosen}</p>",
+  );
+  const chosen = entries.find((item) => item.binding === "chosen");
+  assert.ok(chosen?.reasons.includes("shadowed-or-reassigned-binding"));
 });
