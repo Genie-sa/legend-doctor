@@ -3,8 +3,10 @@ import type { InstalledLegendState } from "../project/legend-state-package.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import { collectBindingNames } from "../core/analysis-ast.js";
 import { directObservableSelectorPath } from "./observable-reads/use-value-inputs.js";
+import { legacyUseValueEdits } from "./legacy-use-value-edits.js";
 import ts from "typescript";
 import { visit } from "../core/ast.js";
+import { withEdits } from "../core/text-edits.js";
 
 const LEGACY_HOOKS = new Set(["useSelector", "use$"]);
 
@@ -27,22 +29,29 @@ export function findLegacyUseValuePractices({
     return [];
   }
   const shadowed = localBindingNames(sourceFile);
-  const findings: LegendPracticeFinding[] = [];
+  const calls: ts.CallExpression[] = [];
   visit(sourceFile, (node) => {
-    if (!ts.isCallExpression(node) || !isLegacyHookCall(node, imports, shadowed)) {
-      return;
+    if (ts.isCallExpression(node) && isLegacyHookCall(node, imports, shadowed)) {
+      calls.push(node);
     }
-    findings.push(
+  });
+  const edits = legacyUseValueEdits({
+    calls,
+    observableBindings,
+    source: { fileName, sourceFile },
+  });
+  return calls.map((call) =>
+    withEdits(
       legacyUseValueFinding({
-        call: node,
+        call,
         fileName,
         installedLegendState,
         observableBindings,
         sourceFile,
       }),
-    );
-  });
-  return findings;
+      edits.get(call) ?? null,
+    ),
+  );
 }
 
 interface LegacyUseValueCall {

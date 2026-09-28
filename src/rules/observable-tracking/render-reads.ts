@@ -15,8 +15,10 @@ import type { RenderOwner } from "./render-owners.js";
 import type { TrackingScan } from "./model.js";
 import { eagerReactiveInput } from "./reactive-inputs.js";
 import { hasCoveringSubscription } from "./subscription-coverage.js";
+import { renderInitializerEdits } from "./render-read-edits.js";
 import { renderOwnerOf } from "./render-owners.js";
 import ts from "typescript";
+import { withEdits } from "../../core/text-edits.js";
 
 interface RenderRead {
   readonly call: ts.CallExpression;
@@ -90,7 +92,7 @@ function isAliasedReactHook(name: string, imports: HookImports): boolean {
   );
 }
 
-function isDirectRenderInitializer(read: RenderRead): boolean {
+function directRenderInitializer(read: RenderRead): ts.VariableStatement | null {
   const declaration = outermostTransparentParent(read.call).parent;
   if (
     read.owner.hops > 0 ||
@@ -99,9 +101,10 @@ function isDirectRenderInitializer(read: RenderRead): boolean {
     !ts.isVariableDeclarationList(declaration.parent) ||
     !ts.isVariableStatement(declaration.parent.parent)
   ) {
-    return false;
+    return null;
   }
-  return declaration.parent.parent.parent === read.owner.owner.body;
+  const statement = declaration.parent.parent;
+  return statement.parent === read.owner.owner.body ? statement : null;
 }
 
 function suggestedBindingName(read: RenderRead): string {
@@ -120,22 +123,26 @@ function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPractic
   const subject =
     owner.kind === "component" ? `\`${owner.name}\`` : `components calling \`${owner.name}\``;
   const consequence = `the read runs in \`${owner.name}\` outside a tracking context (useValue, observer, or a reactive component), so ${subject} never re-render${owner.kind === "component" ? "s" : ""} when \`${path}\` changes`;
-  const instruction = isDirectRenderInitializer(read)
+  const initializer = directRenderInitializer(read);
+  const instruction = initializer
     ? `Replace \`${path}.get()\` with \`useValue(${path})\``
     : `Subscribe with \`const ${suggestedBindingName(read)} = useValue(${path})\` at the top of \`${owner.name}\` and read \`${suggestedBindingName(read)}\` here`;
-  return {
-    action: "use-value-for-render-read",
-    confidence: "certain",
-    disposition: "change",
-    evidence: [
-      `${path}.get() reads a proven Legend observable path`,
-      owner.hops === 0
-        ? `the call executes directly in the render body of ${owner.kind} \`${owner.name}\``
-        : `the call executes in a synchronous iteration callback of ${owner.kind} \`${owner.name}\`'s render`,
-      `no useValue in \`${owner.name}\` subscribes to \`${path}\` or a parent path, and the component is not wrapped in observer`,
-    ],
-    location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `${instruction}; ${consequence}.`,
-    practice: "reactivity",
-  };
+  return withEdits(
+    {
+      action: "use-value-for-render-read",
+      confidence: "certain",
+      disposition: "change",
+      evidence: [
+        `${path}.get() reads a proven Legend observable path`,
+        owner.hops === 0
+          ? `the call executes directly in the render body of ${owner.kind} \`${owner.name}\``
+          : `the call executes in a synchronous iteration callback of ${owner.kind} \`${owner.name}\`'s render`,
+        `no useValue in \`${owner.name}\` subscribes to \`${path}\` or a parent path, and the component is not wrapped in observer`,
+      ],
+      location: { column: character + 1, file: scan.fileName, line: line + 1 },
+      message: `${instruction}; ${consequence}.`,
+      practice: "reactivity",
+    },
+    initializer && renderInitializerEdits(call, initializer, scan),
+  );
 }

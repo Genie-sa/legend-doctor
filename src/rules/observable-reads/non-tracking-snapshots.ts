@@ -1,6 +1,7 @@
 import type { HookCallback, ObservableReadScan } from "./model.js";
 import { callbackIsEventRooted, isPlainFunction } from "../state-proofs/event-roots.js";
 import { findAncestor, isRuntimeFunctionLike } from "../../core/ast.js";
+import { replaceNode, withEdits } from "../../core/text-edits.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
@@ -206,18 +207,22 @@ export function nonTrackingSnapshotFinding(
     call.getStart(scan.sourceFile),
   );
   const path = snapshot.observable.getText(scan.sourceFile);
-  return {
-    action: "use-peek-for-snapshot",
-    confidence: "probable",
-    disposition: snapshot.observerRender ? "change" : "style",
-    evidence: [
-      `${path}.get() reads a proven Legend observable path`,
-      snapshot.observerRender
-        ? "the useState initializer runs during an observer render, so get() subscribes the component to this path"
-        : `${snapshotSourceEvidence(snapshot.source)}; get() already reads without subscribing there, so peek() only states the intent`,
-    ],
-    location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `Replace \`${path}.get()\` with \`${path}.peek()\`; this code path needs a snapshot, not a reactive dependency.`,
-    practice: "reactivity",
-  };
+  const method = ts.isPropertyAccessExpression(call.expression) ? call.expression.name : null;
+  return withEdits(
+    {
+      action: "use-peek-for-snapshot",
+      confidence: "probable",
+      disposition: snapshot.observerRender ? "change" : "style",
+      evidence: [
+        `${path}.get() reads a proven Legend observable path`,
+        snapshot.observerRender
+          ? "the useState initializer runs during an observer render, so get() subscribes the component to this path"
+          : `${snapshotSourceEvidence(snapshot.source)}; get() already reads without subscribing there, so peek() only states the intent`,
+      ],
+      location: { column: character + 1, file: scan.fileName, line: line + 1 },
+      message: `Replace \`${path}.get()\` with \`${path}.peek()\`; this code path needs a snapshot, not a reactive dependency.`,
+      practice: "reactivity",
+    },
+    method ? [replaceNode(scan, method, "peek")] : null,
+  );
 }

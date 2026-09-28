@@ -1,3 +1,4 @@
+import type { LegendPracticeFinding, TextEdit } from "../../core/types.js";
 import type { NarrowCandidate, ObservableReadScan, RawValueReadScan } from "./model.js";
 import {
   RESERVED_OBSERVABLE_MEMBERS,
@@ -13,7 +14,7 @@ import {
   staticRawValuePath,
 } from "./raw-value-paths.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
-import type { LegendPracticeFinding } from "../../core/types.js";
+import { replaceCommentFreeNode, replaceNode, withEdits } from "../../core/text-edits.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { splitLeavesFinding } from "./split-leaves.js";
 import ts from "typescript";
@@ -191,17 +192,49 @@ function narrowObjectBindingFinding(
   if (RESERVED_OBSERVABLE_MEMBERS.has(property)) {
     return null;
   }
-  return narrowFinding(
-    {
-      declaration: candidate.declaration,
-      destructured: true,
-      localName: element.name.text,
-      observable: candidate.observable,
-      property,
-      reads: 1,
-    },
-    scan,
+  const localName = element.name.text;
+  return withEdits(
+    narrowFinding(
+      {
+        declaration: candidate.declaration,
+        destructured: true,
+        localName,
+        observable: candidate.observable,
+        property,
+        reads: 1,
+      },
+      scan,
+    ),
+    destructuredNarrowEdits({ binding, candidate, localName, property }, scan),
   );
+}
+
+interface DestructuredNarrow {
+  readonly binding: ts.ObjectBindingPattern;
+  readonly candidate: NarrowCandidate;
+  readonly localName: string;
+  readonly property: string;
+}
+
+/** `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)` when no annotation, type argument, or comment ties the shapes. */
+function destructuredNarrowEdits(
+  narrow: DestructuredNarrow,
+  scan: ObservableReadScan,
+): readonly TextEdit[] | null {
+  const { declaration, observable } = narrow.candidate;
+  const call = declaration.initializer;
+  if (
+    declaration.type ||
+    !call ||
+    !ts.isCallExpression(call) ||
+    call.typeArguments ||
+    call.arguments[0] !== observable
+  ) {
+    return null;
+  }
+  const binding = replaceCommentFreeNode(scan, narrow.binding, narrow.localName);
+  const path = `${observable.getText(scan.sourceFile)}.${narrow.property}`;
+  return binding ? [binding, replaceNode(scan, observable, path)] : null;
 }
 
 function narrowFinding(

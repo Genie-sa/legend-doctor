@@ -176,6 +176,41 @@ and lists ids no finding produced.
 Failures are also valid JSON. They include `status: "error"`, a stable `reason`, a useful `message`, and
 sometimes a `next` command.
 
+## Machine-applicable edits
+
+A practice finding carries `edits` when syntax alone determines its instruction. The field is additive in schema 4
+and absent otherwise; `message` describes the same change and stays authoritative.
+
+| Field          | Meaning                                                                                      |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| `file`         | The finding's `location.file`, relative to `root`                                            |
+| `start`, `end` | 1-based `line` and `column` in UTF-16 code units; `end` is exclusive, equal positions insert |
+| `newText`      | The replacement text                                                                         |
+
+Positions refer to the scanned source. Collect the edits you intend to apply to one file, drop exact duplicates,
+and apply them from the end of the file backwards, or rescan between findings. Edits never overlap. Each
+finding's edits stand alone, and findings that share an import rewrite carry identical copies of it. Every
+named-import `replace-legacy-use-value` finding in a file carries the whole file's migration, because renaming
+the shared binding for one call would strand the others.
+
+| Edited action                   | Edit                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `pass-observable-to-use-value`  | `useValue(() => x$.get())` or `useValue(x$.get())` becomes `useValue(x$)`                  |
+| `use-peek-for-snapshot`         | `x$.get()` becomes `x$.peek()`                                                             |
+| `use-value-for-render-read`     | A direct render initializer `x$.get()` becomes `useValue(x$)`                              |
+| `narrow-use-value-subscription` | `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)`                         |
+| `replace-legacy-use-value`      | Callees become `useValue`, a direct selector collapses, legacy specifiers leave the import |
+
+When `useValue` is not imported, the edit adds it beside a retained `@legendapp/state/react` specifier. The field
+is omitted when the edit would drop a comment or a type assertion, when a render read follows an early return or
+sits in JSX, a branch, or an iteration callback, when only a new import declaration would bring `useValue` into
+scope, when a destructure is annotated or its call has type arguments, and when a legacy binding is referenced
+other than by a reported call. Hoisting instructions, `move-*`, `split-*`, and batching stay prose.
+
+The unit suite applies each supported edit and typechecks the result against the installed `@legendapp/state`
+and React types. The corpus eval applies every emitted edit in memory, per finding and per file, and fails when a
+result does not parse.
+
 ## Compact provenance
 
 `materiality: "compact"` means compact mode changed the finding's action or made a new conversion confirmable.

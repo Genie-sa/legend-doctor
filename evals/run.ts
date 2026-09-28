@@ -3,7 +3,7 @@ import { parseSelection, selectionLines, validateSelection } from "./runner/sele
 import { scoreHookCases, scorePractices, scoreStateGroups } from "./runner/scoring.js";
 import type { CorpusSlice } from "./corpus/private-corpus.js";
 import type { Evaluation } from "./runner/model.js";
-import type { ReplayOutcome } from "./runner/replay-scoring.js";
+import { editApplicationLines } from "./runner/edit-application.js";
 import { goldCases } from "./corpus/hook-cases.js";
 import { goldPracticeCases } from "./corpus/practice-cases.js";
 import { goldStateGroups } from "./corpus/state-groups.js";
@@ -54,18 +54,19 @@ async function evaluate(): Promise<void> {
     inspectRepository(run, repository, selection.roots),
   );
   const replays = await replayExpertCommits(replayCommits, selection.roots, run.failures);
-  reportEvaluation(run, corpus, replays);
+  const editLines = await editApplicationLines(run);
+  reportEvaluation(run, corpus, [...replaySummaryLines(replays), ...editLines]);
 }
 
 function reportEvaluation(
   run: Evaluation,
   corpus: CorpusSlice,
-  replays: readonly ReplayOutcome[],
+  sectionLines: readonly string[],
 ): void {
   if (run.targets.size === 0) {
     run.failures.push("No targets were evaluated; refusing to report empty precision/recall.");
   } else {
-    const lines = [...scoreCorpus(run, corpus), ...replaySummaryLines(replays)];
+    const lines = [...scoreCorpus(run, corpus), ...sectionLines];
     process.stdout.write(`${lines.join("\n")}\n`);
   }
   reportFailures(run.failures);
