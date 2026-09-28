@@ -1,11 +1,15 @@
 import type { ResolvedSymbol, SourceIndexState } from "./model.js";
 import { isDeclarationName, unwrapTransparentExpression } from "../../core/analysis-ast.js";
+import { localReachResolver, projectReachResolver } from "./reach-resolvers.js";
 import type { ExecutionUnit } from "../../core/execution-units.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "../../rules/observable-reads/observable-paths.js";
+import type { WriteUnit } from "./write-units.js";
 import { executionUnit } from "../../core/execution-units.js";
+import { fileReach } from "./synchronous-reach.js";
 import { moduleRecord } from "./module-record.js";
 import { normalizeFile } from "./module-resolution.js";
 import path from "node:path";
+import { programReach } from "./write-units.js";
 import { resolvedFor } from "./symbol-resolution.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
@@ -20,8 +24,11 @@ export interface InPlaceObservableWrite {
   readonly method: string;
   /** The changed member below the observable root; `*` is a key known only at runtime. */
   readonly path: readonly string[];
-  /** Writes of one file with the same unit key run in one synchronous stretch, so one render sees them all. */
-  readonly unit: ExecutionUnit;
+  /**
+   * The synchronous stretches that run this write, directly or through functions they call. Writes
+   * sharing a unit key land in one render; module-load stretches are left out.
+   */
+  readonly units: readonly WriteUnit[];
 }
 
 /** In-place writes that can reach each observable a file can name, keyed by its local name. */
@@ -30,6 +37,12 @@ export type ObservableInPlaceWrites = ReadonlyMap<string, readonly InPlaceObserv
 interface RootedWrite {
   readonly root: string;
   readonly write: InPlaceObservableWrite;
+}
+
+interface CollectedWrite {
+  readonly root: string;
+  readonly site: Omit<InPlaceObservableWrite, "units">;
+  readonly unit: ExecutionUnit;
 }
 
 export const ANY_MEMBER = "*";
@@ -87,10 +100,11 @@ export function relativeInPlaceWrites(
 export function localObservableInPlaceWrites(sourceFile: ts.SourceFile): ObservableInPlaceWrites {
   const declared = moduleRecord(sourceFile).observableDeclarations;
   const counts = declarationCounts(sourceFile);
+  const reach = programReach([fileReach(sourceFile, localReachResolver)]);
   const result = new Map<string, InPlaceObservableWrite[]>();
-  for (const { root, write } of collectInPlaceWrites(sourceFile)) {
+  for (const { root, site, unit } of collectInPlaceWrites(sourceFile)) {
     if (declared.has(root) && counts.get(root) === 1) {
-      result.set(root, [...(result.get(root) ?? []), write]);
+      result.set(root, [...(result.get(root) ?? []), { ...site, units: reach.writeUnits(unit) }]);
     }
   }
   return result;
@@ -116,13 +130,23 @@ function indexedWrites(state: SourceIndexState): ReadonlyMap<string, RootedWrite
   if (cached) {
     return cached;
   }
+  const index = projectWrites(state);
+  writesBySymbolByIndex.set(state, index);
+  return index;
+}
+
+function projectWrites(state: SourceIndexState): ReadonlyMap<string, RootedWrite[]> {
+  const resolver = projectReachResolver(state, visibleObservables);
+  const reach = programReach(
+    [...state.sourceFiles.values()].map((sourceFile) => fileReach(sourceFile, resolver)),
+  );
   const index = new Map<string, RootedWrite[]>();
   for (const [file, sourceFile] of state.sourceFiles) {
-    for (const [key, entry] of keyedFileWrites(state, file, sourceFile)) {
-      index.set(key, [...(index.get(key) ?? []), entry]);
+    for (const [key, { root, site, unit }] of keyedFileWrites(state, file, sourceFile)) {
+      const write = { ...site, units: reach.writeUnits(unit) };
+      index.set(key, [...(index.get(key) ?? []), { root, write }]);
     }
   }
-  writesBySymbolByIndex.set(state, index);
   return index;
 }
 
@@ -131,14 +155,14 @@ function keyedFileWrites(
   state: SourceIndexState,
   file: string,
   sourceFile: ts.SourceFile,
-): [string, RootedWrite][] {
+): [string, CollectedWrite][] {
   const writes = collectInPlaceWrites(sourceFile);
   if (writes.length === 0) {
     return [];
   }
   const visible = visibleObservables(state, file);
   const counts = declarationCounts(sourceFile);
-  return writes.flatMap((entry): [string, RootedWrite][] => {
+  return writes.flatMap((entry): [string, CollectedWrite][] => {
     const symbol = visible.get(entry.root);
     return symbol && (symbol.file === file || !counts.has(entry.root))
       ? [[symbolKey(symbol), entry]]
@@ -160,8 +184,8 @@ function declarationCounts(sourceFile: ts.SourceFile): ReadonlyMap<string, numbe
   return counts;
 }
 
-function collectInPlaceWrites(sourceFile: ts.SourceFile): RootedWrite[] {
-  const writes: RootedWrite[] = [];
+function collectInPlaceWrites(sourceFile: ts.SourceFile): CollectedWrite[] {
+  const writes: CollectedWrite[] = [];
   visit(sourceFile, (node) => {
     if (ts.isCallExpression(node)) {
       writes.push(...inPlaceWrites(node));
@@ -170,7 +194,7 @@ function collectInPlaceWrites(sourceFile: ts.SourceFile): RootedWrite[] {
   return writes;
 }
 
-function inPlaceWrites(call: ts.CallExpression): RootedWrite[] {
+function inPlaceWrites(call: ts.CallExpression): CollectedWrite[] {
   const callee = call.expression;
   const receiver = ts.isPropertyAccessExpression(callee)
     ? observableChain(callee.expression)
@@ -184,7 +208,8 @@ function inPlaceWrites(call: ts.CallExpression): RootedWrite[] {
   const unit = executionUnit(call);
   return changedPaths(call, method, receiver.members).map((changed) => ({
     root: receiver.root,
-    write: { file: sourceFile.fileName, line, method, path: changed, unit },
+    site: { file: sourceFile.fileName, line, method, path: changed },
+    unit,
   }));
 }
 

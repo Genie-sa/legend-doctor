@@ -7,15 +7,15 @@ import type ts from "typescript";
 export interface SiblingWrite {
   /** The written observable path, rooted at the parent's local binding. */
   readonly path: string;
-  /** `file:line` of the writing line. */
+  /** `file:line` of the proving stretch's first write. */
   readonly site: string;
 }
 
 /**
  * Narrowing `useValue(parent$)` to `useValue(parent$.leaf)` removes a render only when something
- * under the parent can change while the leaf does not. Every write on the proving line must miss
- * the leaf, so a line that also rewrites the leaf, its ancestors, or a runtime-keyed member proves
- * nothing.
+ * under the parent can change while the leaf does not. Every write of the proving stretch must miss
+ * the leaf, so a stretch that also rewrites the leaf, its ancestors, or a runtime-keyed member, or
+ * that calls code out of view, proves nothing.
  */
 export function independentSiblingWrite(
   parent: ts.Expression,
@@ -27,7 +27,8 @@ export function independentSiblingWrite(
     return null;
   }
   const target = [...members, ...leaf];
-  for (const group of scan.observableFields.writes.get(root) ?? []) {
+  const provable = (scan.observableFields.writes.get(root) ?? []).filter((group) => !group.opaque);
+  for (const group of provable) {
     const sibling = group.paths.find(
       (path) => isBelow(path, members) && !pathsOverlap(path, target),
     );

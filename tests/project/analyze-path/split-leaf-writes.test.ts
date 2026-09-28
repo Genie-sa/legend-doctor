@@ -70,3 +70,71 @@ test("ignores sibling writes that only a test makes", async () => {
     [],
   );
 });
+
+async function splitCount(files: Readonly<Record<string, string>>): Promise<number> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-split-helper-writes-"));
+  try {
+    await mkdir(path.join(root, "state"), { recursive: true });
+    await writeFile(path.join(root, "state", "status.ts"), STORE, "utf8");
+    await writeFile(path.join(root, "source-badge.tsx"), COMPONENT, "utf8");
+    for (const [file, text] of Object.entries(files)) {
+      await writeFile(path.join(root, file), text, "utf8");
+    }
+    const report = await analyzePath(root);
+    return report.practices.filter((finding) => finding.action === "split-use-value-leaves").length;
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+test("follows an imported helper into the stretch that calls it", async () => {
+  const loading = `
+    import { status$ } from "./status";
+    export function markLoading() {
+      status$.isLoading.set(true);
+    }
+  `;
+  assert.equal(
+    await splitCount({
+      "state/connect.ts": `
+        import { markLoading } from "./index";
+        import { status$ } from "./status";
+        export function connect() {
+          status$.authenticated.set(false);
+          markLoading();
+        }
+      `,
+      "state/index.ts": `export { markLoading } from "./loading";`,
+      "state/loading.ts": loading,
+    }),
+    0,
+  );
+  assert.equal(
+    await splitCount({
+      "state/connect.ts": `
+        import { markLoading } from "./loading";
+        export function connect() {
+          markLoading();
+        }
+      `,
+      "state/loading.ts": loading,
+    }),
+    1,
+  );
+});
+
+test("abstains when the writing stretch calls a relative module outside the project", async () => {
+  assert.equal(
+    await splitCount({
+      "state/connect.ts": `
+        import { status$ } from "./status";
+        import { track } from "./generated/analytics";
+        export function connect() {
+          status$.isLoading.set(true);
+          track();
+        }
+      `,
+    }),
+    0,
+  );
+});
