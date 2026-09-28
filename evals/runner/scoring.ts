@@ -7,6 +7,7 @@ import type {
   Tally,
 } from "./model.js";
 import type { GoldHookCase, GoldPracticeCase, GoldStateGroupCase } from "../corpus/contracts.js";
+import type { LegendPracticeFinding } from "../../src/core/types.js";
 import { goldCases } from "../corpus/hook-cases.js";
 import { goldPracticeCases } from "../corpus/practice-cases.js";
 import { goldStateGroups } from "../corpus/state-groups.js";
@@ -233,13 +234,55 @@ function recordUnexpectedPractices(
   }
 }
 
+function emittedDisposition(
+  run: Evaluation,
+  gold: GoldPracticeCase,
+): LegendPracticeFinding["disposition"] | undefined {
+  return run.targets
+    .get(gold.target)
+    ?.report.practices.find(
+      (finding) =>
+        isAt(finding.location, gold) &&
+        finding.action === gold.action &&
+        finding.disposition !== "candidate",
+    )?.disposition;
+}
+
+function fixedKnownFalseLine(run: Evaluation, gold: GoldPracticeCase): string | null {
+  const disposition = emittedDisposition(run, gold);
+  const where = `[${gold.target}/${gold.file}:${gold.line}]: ${gold.action}`;
+  if (disposition === undefined) {
+    return `Known false positive no longer emitted ${where}; delete its label.`;
+  }
+  if (disposition === gold.disposition) {
+    return `Known false positive now emitted as ${disposition} ${where}; enforce its label.`;
+  }
+  return null;
+}
+
+/**
+ * Audited false positives awaiting a fix. A label with a `disposition` names the correct one; without it
+ * the finding should not be emitted. A fixed one is listed so its PR enforces or deletes the label.
+ */
+export function knownFalsePracticeLines(
+  run: Evaluation,
+  cases: readonly GoldPracticeCase[] = goldPracticeCases,
+): string[] {
+  const known = cases.filter((gold) => gold.enforced === false && run.targets.has(gold.target));
+  const fixed = known.map((gold) => fixedKnownFalseLine(run, gold)).filter((line) => line !== null);
+  return [
+    `Known false-positive Legend practices still emitted: ${known.length - fixed.length}/${known.length}.`,
+    ...fixed,
+  ];
+}
+
 export function scorePractices(
   run: Evaluation,
   cases: readonly GoldPracticeCase[] = goldPracticeCases,
 ): Tally {
   const score: Tally = { labels: 0, matches: 0, predictions: 0 };
   const labeled = new Set(cases.map((gold) => practiceKey(gold.target, gold, gold.action)));
-  for (const gold of cases) {
+  for (const gold of cases.filter((known) => known.enforced !== false)) {
     scorePracticeCase(run, gold, score);
   }
   recordUnexpectedPractices(run, labeled, score);

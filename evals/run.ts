@@ -1,6 +1,11 @@
 import { inspectRepository, mapSequentially } from "./runner/repository-inspection.js";
+import {
+  knownFalsePracticeLines,
+  scoreHookCases,
+  scorePractices,
+  scoreStateGroups,
+} from "./runner/scoring.js";
 import { parseSelection, selectionLines, validateSelection } from "./runner/selection.js";
-import { scoreHookCases, scorePractices, scoreStateGroups } from "./runner/scoring.js";
 import type { CorpusSlice } from "./corpus/private-corpus.js";
 import type { Evaluation } from "./runner/model.js";
 import { editApplicationLines } from "./runner/edit-application.js";
@@ -30,7 +35,10 @@ function scoreCorpus(run: Evaluation, corpus: CorpusSlice): readonly string[] {
     groups: scoreStateGroups(run, corpus.stateGroups),
     practices: scorePractices(run, corpus.practiceCases),
   };
-  return summaryLines(run, hooks, tallies);
+  return [
+    ...summaryLines(run, hooks, tallies),
+    ...knownFalsePracticeLines(run, corpus.practiceCases),
+  ];
 }
 
 function reportFailures(failures: readonly string[]): void {

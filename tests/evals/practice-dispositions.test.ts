@@ -1,8 +1,8 @@
 import type { AnalysisReport, LegendPracticeFinding } from "../../src/core/types.js";
+import { knownFalsePracticeLines, scorePractices } from "../../evals/runner/scoring.js";
 import type { Evaluation } from "../../evals/runner/model.js";
 import type { GoldPracticeCase } from "../../evals/corpus/contracts.js";
 import assert from "node:assert/strict";
-import { scorePractices } from "../../evals/runner/scoring.js";
 import test from "node:test";
 
 function evaluation(disposition: LegendPracticeFinding["disposition"]): Evaluation {
@@ -85,4 +85,39 @@ test("candidate exclusion composes with an audited disposition at the same actio
     predictions: 1,
   });
   assert.deepEqual(run.failures, []);
+});
+
+test("a known false-positive practice label neither fails nor matches while the finding is emitted", () => {
+  const run = evaluation("change");
+  const known = { ...gold, enforced: false };
+  assert.deepEqual(scorePractices(run, [known]), { labels: 0, matches: 0, predictions: 1 });
+  assert.deepEqual(run.failures, []);
+  assert.deepEqual(knownFalsePracticeLines(run, [known]), [
+    "Known false-positive Legend practices still emitted: 1/1.",
+  ]);
+});
+
+test("a fixed known false positive is listed for deletion without failing the run", () => {
+  const run = evaluation("candidate");
+  const known = { ...gold, enforced: false };
+  assert.deepEqual(scorePractices(run, [known]), { labels: 0, matches: 0, predictions: 0 });
+  assert.deepEqual(run.failures, []);
+  assert.deepEqual(knownFalsePracticeLines(run, [known]), [
+    "Known false-positive Legend practices still emitted: 0/1.",
+    "Known false positive no longer emitted [app/row.tsx:7]: pass-observable-to-use-value; delete its label.",
+  ]);
+});
+
+test("a known false positive with a corrected disposition asks to be enforced once it is emitted that way", () => {
+  const known = { ...gold, disposition: "style" as const, enforced: false };
+  const overstated = evaluation("change");
+  assert.deepEqual(scorePractices(overstated, [known]), { labels: 0, matches: 0, predictions: 1 });
+  assert.deepEqual(overstated.failures, []);
+  assert.deepEqual(knownFalsePracticeLines(overstated, [known]), [
+    "Known false-positive Legend practices still emitted: 1/1.",
+  ]);
+  assert.deepEqual(knownFalsePracticeLines(evaluation("style"), [known]), [
+    "Known false-positive Legend practices still emitted: 0/1.",
+    "Known false positive now emitted as style [app/row.tsx:7]: pass-observable-to-use-value; enforce its label.",
+  ]);
 });
