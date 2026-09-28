@@ -4,10 +4,10 @@ import { findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
 import { isNonValueIdentifier, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import {
   jsxElementCount,
-  jsxElementCountIn,
   nearestRepeatedRenderCall,
 } from "../../rules/state-proofs/jsx-subtrees.js";
 import type { ClusterAnalysisContext } from "../clusters/observable-clusters.js";
+import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
 import { isDirectTruthyStateCondition } from "../clusters/gated-feedback-cluster.js";
 import { isJsxNode } from "../../rules/state-proofs/callback-sites.js";
 import { jsxTargetName } from "../ast-helpers.js";
@@ -110,8 +110,9 @@ function boundedDialogGate(
       !ts.isJsxSelfClosingElement(trueBranch) &&
       !ts.isJsxFragment(trueBranch)) ||
     nearestRepeatedRenderCall(gate, state.owner) ||
-    jsxElementCountIn(trueBranch) > BROAD_OWNER_JSX_ELEMENTS ||
-    jsxElementCountIn(trueBranch) / jsxElementCount(state.owner) > MAX_LEAF_SUBTREE_RATIO ||
+    extractedJsxElementCount(trueBranch, state.owner) > BROAD_OWNER_JSX_ELEMENTS ||
+    extractedJsxElementCount(trueBranch, state.owner) / jsxElementCount(state.owner) >
+      MAX_LEAF_SUBTREE_RATIO ||
     !stateUsage.directRenderNodes.every((read) => nodeWithin(read, gate))
   ) {
     return null;

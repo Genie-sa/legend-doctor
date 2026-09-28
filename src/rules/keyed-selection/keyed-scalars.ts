@@ -12,11 +12,11 @@ import { isRepeatedScalarKeyProjection, isSelectedItemLookup } from "./scalar-ke
 import {
   isSafeJsxProjectionReference,
   jsxElementCount,
-  jsxElementCountIn,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "../state-proofs/jsx-subtrees.js";
 import { expressionDependsOnBinding } from "../state-proofs/binding-lookup.js";
+import { extractedJsxElementCount } from "../../analysis/subtree/extracted-render-work.js";
 import { hasSupportedKeyedSelectionInitializer } from "./state-value-shapes.js";
 import { isPureExpression } from "../../core/analysis-ast.js";
 import { isRenderGateReference } from "../deferred-reveal/render-gates.js";
@@ -210,7 +210,8 @@ function consumerIsBoundedSibling(
     : null;
   return (
     consumer !== null &&
-    jsxElementCountIn(consumer) / jsxElementCount(state.owner) <= MAX_CONSUMER_JSX_SHARE &&
+    extractedJsxElementCount(consumer, state.owner) / jsxElementCount(state.owner) <=
+      MAX_CONSUMER_JSX_SHARE &&
     producerReturn !== null &&
     producerReturn === consumerReturn &&
     !nodeWithin(producer, consumer) &&

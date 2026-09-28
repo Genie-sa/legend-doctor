@@ -11,14 +11,11 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../../core/ast.js";
-import {
-  isSafeJsxProjectionReference,
-  jsxElementCount,
-  jsxElementCountIn,
-} from "../state-proofs/jsx-subtrees.js";
+import { isSafeJsxProjectionReference, jsxElementCount } from "../state-proofs/jsx-subtrees.js";
 import type { ObjectDraftProofs } from "./object-draft.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { extractedJsxElementCount } from "../../analysis/subtree/extracted-render-work.js";
 import { hasIndependentRenderCutWitness } from "../state-proofs/render-cut-witness.js";
 import { isRenderGateReference } from "../deferred-reveal/render-gates.js";
 import ts from "typescript";
@@ -57,7 +54,7 @@ function collectLeafSinks(
   );
   for (const reference of references) {
     const subtree = nearestJsxElement(reference, state.owner);
-    if (!subtree || jsxElementCountIn(subtree) > maximumLeafSize) {
+    if (!subtree || extractedJsxElementCount(subtree, state.owner) > maximumLeafSize) {
       return false;
     }
     if (!sinks.includes(subtree)) {

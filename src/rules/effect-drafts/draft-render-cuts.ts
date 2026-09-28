@@ -3,7 +3,6 @@ import type { StateCandidate, StateUsage } from "../../analysis/model.js";
 import {
   isSafeJsxProjectionReference,
   jsxElementCount,
-  jsxElementCountIn,
   lowestCommonJsxSubtree,
 } from "../state-proofs/jsx-subtrees.js";
 import {
@@ -12,6 +11,7 @@ import {
   visitSkippingNestedRuntimeFunctions,
 } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { extractedJsxElementCount } from "../../analysis/subtree/extracted-render-work.js";
 import { hasDirectJsxEventSetter } from "./draft-mutations.js";
 import ts from "typescript";
 
@@ -84,7 +84,7 @@ function memberRenderCut(
     return null;
   }
   const cut = lowestCommonJsxSubtree(usage.directRenderNodes, draft.owner);
-  return cut && jsxElementCountIn(cut) / ownerJsx <= MAX_CUT_SHARE ? cut : null;
+  return cut && extractedJsxElementCount(cut, draft.owner) / ownerJsx <= MAX_CUT_SHARE ? cut : null;
 }
 
 function memberRenderReadsAreDirect(
@@ -167,7 +167,7 @@ function draftValueTransportsAreBounded(
       }
       target = ts.isJsxOpeningElement(node) ? node.parent : node;
     });
-    if (!target || jsxElementCountIn(target) / ownerJsx > MAX_CUT_SHARE) {
+    if (!target || extractedJsxElementCount(target, owner) / ownerJsx > MAX_CUT_SHARE) {
       return false;
     }
   }

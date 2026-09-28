@@ -253,12 +253,9 @@ function boundedDirectSubtree(
   }
   if (
     ownerJsx < materiality.broadOwnerJsx ||
-    jsxElementCountIn(direct) < MIN_LEAF_SUBTREE_ELEMENTS
+    jsxElementCountIn(direct) < MIN_LEAF_SUBTREE_ELEMENTS ||
+    extractedJsxElementCount(direct, state.owner) / ownerJsx > MAX_LEAF_SUBTREE_RATIO
   ) {
-    return null;
-  }
-  const extractedJsx = extractedJsxElementCount(direct, state.owner);
-  if (extractedJsx === null || extractedJsx / ownerJsx > MAX_LEAF_SUBTREE_RATIO) {
     return null;
   }
   return stateSubtreeResult("direct", direct, { movedDeclarations, renderNodes: nodes, state });

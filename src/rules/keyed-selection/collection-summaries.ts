@@ -15,7 +15,6 @@ import { isMembershipMountGate, membershipUsesCallbackKey } from "./rendered-lis
 import {
   isSafeJsxProjectionReference,
   jsxElementCount,
-  jsxElementCountIn,
   nearestRepeatedRenderCall,
 } from "../state-proofs/jsx-subtrees.js";
 import type { JsxSubtreeNode } from "../deferred-reveal/jsx-subtrees.js";
@@ -24,6 +23,7 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
 import { bindingReferencesIn } from "./array-set-aliases.js";
 import { commonRenderGateSubtree } from "../deferred-reveal/render-gates.js";
+import { extractedJsxElementCount } from "../../analysis/subtree/extracted-render-work.js";
 import { isJsxNode } from "../state-proofs/callback-sites.js";
 import { isSafeProjectionExpression } from "../deferred-reveal/safe-projections.js";
 import { repeatedRenderHasStableItemKey } from "../state-proofs/unique-repeated-selection.js";
@@ -92,7 +92,8 @@ function boundedRenderGate(
     }),
   );
   const gate = gates.size === 1 ? [...gates][0]! : null;
-  return gate && jsxElementCountIn(gate) / jsxElementCount(owner) <= MAX_CONSUMER_JSX_SHARE
+  return gate &&
+    extractedJsxElementCount(gate, owner) / jsxElementCount(owner) <= MAX_CONSUMER_JSX_SHARE
     ? gate
     : null;
 }

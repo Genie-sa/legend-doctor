@@ -16,11 +16,12 @@ import {
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
-import { jsxElementCount, jsxElementCountIn } from "../../rules/state-proofs/jsx-subtrees.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { ExactStringFilter } from "./string-filter.js";
 import type { MaterialityPolicy } from "../constants.js";
 import { exactStringFilter } from "./string-filter.js";
+import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
+import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { jsxTargetName } from "../ast-helpers.js";
 import ts from "typescript";
 
@@ -135,7 +136,9 @@ function repeatedProducerRenderCut(
       ? directReturnedJsxSlot(producerReferences[0]!, state.owner)
       : null;
   const ownerElements = jsxElementCount(state.owner);
-  const producerElements = repeated ? jsxElementCountIn(repeated) : ownerElements;
+  const producerElements = repeated
+    ? extractedJsxElementCount(repeated, state.owner)
+    : ownerElements;
   if (
     !repeated ||
     !producer ||

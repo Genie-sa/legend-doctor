@@ -8,11 +8,11 @@ import {
 import {
   isSafeJsxProjectionReference,
   jsxElementCount,
-  jsxElementCountIn,
   nearestRepeatedRenderCall,
 } from "../state-proofs/jsx-subtrees.js";
 import type { EventOwnedScalarOptions } from "./event-owned-scalars.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { extractedJsxElementCount } from "../../analysis/subtree/extracted-render-work.js";
 import { hasIndependentRenderCutWitness } from "../state-proofs/render-cut-witness.js";
 import { isEventOwnedNumericState } from "./event-owned-scalars.js";
 import { isSafeProjectionExpression } from "../deferred-reveal/safe-projections.js";
@@ -121,7 +121,7 @@ function leafSurface(
     return null;
   }
   const surface = ts.isJsxOpeningElement(opening) ? opening.parent : opening;
-  return jsxElementCountIn(surface) > MAX_LEAF_ELEMENTS ? null : surface;
+  return extractedJsxElementCount(surface, state.owner) > MAX_LEAF_ELEMENTS ? null : surface;
 }
 
 function isIndependentLeafCut(
@@ -130,7 +130,10 @@ function isIndependentLeafCut(
   options: EventScalarLeafOptions,
 ): boolean {
   const leaves = [...collected.surfaces.values()];
-  const leafElements = leaves.reduce((sum, surface) => sum + jsxElementCountIn(surface), 0);
+  const leafElements = leaves.reduce(
+    (sum, surface) => sum + extractedJsxElementCount(surface, state.owner),
+    0,
+  );
   return (
     leaves.length >= MIN_LEAF_SURFACES &&
     leaves.length <= MAX_LEAF_SURFACES &&
