@@ -52,6 +52,6 @@ The full seven-app pinned corpus ran before and after. Both runs inventoried 1,2
 
 The new action has no real-corpus enforced migration in this bounded phase. Its actionable evidence is the structural fixture suite and pinned runtime contract; the real-app labels preserve research boundaries.
 
-The emitted replacement preserves the resolved named hook alias (for example `useSelected`), including when a different module binding is named `useValue`.
+The emitted replacement preserves the callee the source calls: a named alias (for example `useSelected`), `use$`, `useSelector`, or a namespace call, including when a different module binding is named `useValue`.
 
 See [the test risk ledger](plain-projection-test-ledger.md) for covered failure modes, counterfactual evidence, and residual limitations.

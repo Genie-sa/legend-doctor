@@ -10,7 +10,7 @@ function findingsFor(body: string): LegendPracticeFinding[] {
     fileName: "fixture.tsx",
     sourceText: `
       import { batch, observable } from "@legendapp/state";
-      import { useObserve, useObserveEffect, useValue } from "@legendapp/state/react";
+      import { use$, useObserve, useObserveEffect, useSelector, useValue } from "@legendapp/state/react";
       const state$ = observable({ trigger: 0, hidden: 0, published: 0 });
       ${body}
     `,
@@ -22,7 +22,7 @@ function candidatesFor(body: string): LegendPracticeFinding[] {
 }
 
 test("reviews inherited helper dependencies without prescribing a snapshot rewrite", () => {
-  for (const hook of ["useObserve", "useObserveEffect", "useValue"]) {
+  for (const hook of ["useObserve", "useObserveEffect", "useValue", "use$", "useSelector"]) {
     const findings = findingsFor(`
       const publish = () => {
         batch(() => {

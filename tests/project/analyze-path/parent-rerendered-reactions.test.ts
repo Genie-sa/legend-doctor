@@ -170,6 +170,44 @@ test("reviews the effect when the parent subscribes to only one of two dependenc
   );
 });
 
+test("proves a parent subscription through every Legend subscription hook it imports", async () => {
+  const buildSite = "<Child key={id} build={build} />";
+  const legendParent = (importClause: string, subscription: string): string =>
+    parent(
+      `const codec = ${subscription}(settings$.codec); const build = () => codec;`,
+      buildSite,
+    ).replace("{ useValue }", importClause);
+  const verdicts = await Promise.all(
+    [
+      legendParent("{ use$ }", "use$"),
+      legendParent("{ useSelector as select }", "select"),
+      legendParent("* as Legend", "Legend.useSelector"),
+    ].map((source) =>
+      effectVerdict({ "settings.ts": SETTINGS, "Child.tsx": BARE_CHILD, "Parent.tsx": source }),
+    ),
+  );
+  assert.deepEqual(
+    verdicts,
+    Array.from({ length: 3 }, () => ["keep-effect", null]),
+  );
+
+  const reduxParent = parent(
+    "const codec = useSelector(settings$.codec); const build = () => codec;",
+    buildSite,
+  ).replace(
+    'import { useValue } from "@legendapp/state/react";',
+    'import { useSelector } from "react-redux";',
+  );
+  assert.notDeepEqual(
+    await effectVerdict({
+      "settings.ts": SETTINGS,
+      "Child.tsx": BARE_CHILD,
+      "Parent.tsx": reduxParent,
+    }),
+    ["keep-effect", null],
+  );
+});
+
 test("keeps the effect when a same-file parent subscribes to every dependency leaf", async () => {
   const source = `
     import { useEffect } from "react";

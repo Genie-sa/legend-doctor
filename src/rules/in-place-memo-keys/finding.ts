@@ -19,7 +19,7 @@ export function inPlaceMemoKeyFinding(
     confidence: proven ? "certain" : "probable",
     disposition: proven ? "change" : "candidate",
     evidence: [
-      `${binding.sourceText} is written in place at ${describeWrites(writes)}; Legend keeps the object that holds the changed member, so useValue rerenders with the same reference`,
+      `${binding.sourceText} is written in place at ${describeWrites(writes)}; Legend keeps the object that holds the changed member, so \`${binding.call.expression.getText(scan.sourceFile)}\` rerenders with the same reference`,
       ...memos.map((memo) => memoEvidence(memo, binding, scan)),
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },

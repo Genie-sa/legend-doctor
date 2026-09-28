@@ -1,5 +1,6 @@
 import {
   RESERVED_OBSERVABLE_MEMBERS,
+  isUseValueCall,
   outermostTransparentParent,
 } from "../../rules/observable-reads/observable-paths.js";
 import {
@@ -190,9 +191,7 @@ function subscribedPaths(
     if (
       !ts.isCallExpression(node) ||
       node.arguments.length !== 1 ||
-      !ts.isIdentifier(node.expression) ||
-      (!imports.useValue.has(node.expression.text) &&
-        !imports.legacyUseValue.has(node.expression.text)) ||
+      !isUseValueCall(node, imports) ||
       findAncestor(node, isRuntimeFunctionLike) !== owner
     ) {
       return;

@@ -41,6 +41,39 @@ test("splits divergent leaf reads into per-leaf subscriptions", () => {
   );
 });
 
+test("splits a legacy whole-object subscription with the hook the source calls", () => {
+  const [finding] = analyzeLegendPractices({
+    installedLegendState: {
+      source: "lockfile",
+      syncExport: "available",
+      useValueExport: "missing",
+      version: "3.0.0-beta.30",
+    },
+    sourceText: `
+    import { observable } from "@legendapp/state";
+    import { use$ } from "@legendapp/state/react";
+    const player$ = observable({ currentIndex: -1, currentTime: 0, isPlaying: false });
+    export function tick(time: number) {
+      player$.currentTime.set(time);
+    }
+    export function Playlist({ tracks }: { tracks: string[] }) {
+      const player = use$(player$);
+      const rows = tracks.map((track, index) => index === player.currentIndex && player.isPlaying);
+      return <ul>{rows.map((playing) => <li>{String(playing)}</li>)}</ul>;
+    }
+  `,
+    fileName: "fixture.tsx",
+  });
+  assert.equal(requireValue(finding).action, "split-use-value-leaves");
+  assert.ok(
+    requireValue(finding).message.startsWith(
+      "Split `player` from `use$(player$)` into per-leaf subscriptions: " +
+        "`const currentIndex = use$(player$.currentIndex)`, `const isPlaying = use$(player$.isPlaying)`",
+    ),
+    requireValue(finding).message,
+  );
+});
+
 test("abstains from the split when the whole value escapes as a bare read", () => {
   for (const escape of [
     `track(state);`,

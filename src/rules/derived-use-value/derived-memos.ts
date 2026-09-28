@@ -7,18 +7,23 @@ import {
 import { findAncestor, isRuntimeFunctionLike, nodeWithin, visit } from "../../core/ast.js";
 import {
   isCanonicalUseValueCall,
+  isUseValueCall,
   isValueReferenceTo,
   provenObservablePath,
 } from "../observable-reads/observable-paths.js";
 import type { HookImports } from "../../core/imports.js";
+import type { InstalledLegendState } from "../../core/types.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isImportedHookCall } from "../../core/imports.js";
+import { isLegendStateV3 } from "../../project/legend-state-versions.js";
 import ts from "typescript";
 
 export type MemoCallback = ts.ArrowFunction | ts.FunctionExpression;
 
 export interface ObservableMemoInput {
   readonly declaration: ts.VariableDeclaration;
+  /** The subscription callee as the source spells it. */
+  readonly hook: string;
   readonly localName: string;
   readonly observable: ts.Expression;
 }
@@ -35,6 +40,8 @@ export interface DerivedMemo {
 
 export interface DerivedMemoScan {
   readonly imports: HookImports;
+  /** Null when no installed or locked Legend State version was resolved. */
+  readonly installedLegendState: InstalledLegendState | null;
   readonly observableBindings: ReadonlySet<string>;
 }
 
@@ -49,7 +56,7 @@ interface MemoCandidate {
 const USE_MEMO_ARGUMENTS = 2;
 
 /**
- * A `const derived = useMemo(callback, deps)` whose every dependency is a `useValue` subscription
+ * A `const derived = useMemo(callback, deps)` whose every dependency is a subscription hook result
  * read nowhere else, so the memo can become one computed observable.
  */
 export function derivedMemoDeclaration(
@@ -176,13 +183,32 @@ function useValueDeclarationInput(
     call.arguments.length !== 1 ||
     !ts.isIdentifier(declaration.name) ||
     !isConst(declaration) ||
-    !isCanonicalUseValueCall(call, scan.imports) ||
+    !isComputedMemoSubscription(call, scan) ||
     findAncestor(declaration, isRuntimeFunctionLike) !== owner
   ) {
     return null;
   }
   const observable = provenObservablePath(call.arguments[0]!, scan.observableBindings);
-  return observable ? { declaration, localName: declaration.name.text, observable } : null;
+  return observable
+    ? {
+        declaration,
+        hook: call.expression.getText(declaration.getSourceFile()),
+        localName: declaration.name.text,
+        observable,
+      }
+    : null;
+}
+
+/**
+ * The migration relies on `useObservable(() => …)` building a computed observable, which only
+ * Legend State 3 does; 2.x calls the function once as an initial value. `useValue` exists only in 3,
+ * while `use$` and `useSelector` need the resolved version to prove it.
+ */
+function isComputedMemoSubscription(call: ts.CallExpression, scan: DerivedMemoScan): boolean {
+  return (
+    isCanonicalUseValueCall(call, scan.imports) ||
+    (isUseValueCall(call, scan.imports) && isLegendStateV3(scan.installedLegendState))
+  );
 }
 
 function inputsConfinedToCallback(

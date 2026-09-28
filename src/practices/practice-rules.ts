@@ -135,6 +135,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
         childContracts: request.childContracts,
         fileName: request.fileName,
         imports,
+        installedLegendState: request.capabilities.legendState,
         observableBindings,
         observableFields,
         sourceFile: request.sourceFile,
@@ -180,6 +181,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
       findDerivedUseValuePractices({
         fileName: request.fileName,
         imports,
+        installedLegendState: request.capabilities.legendState,
         observableBindings,
         sourceFile: request.sourceFile,
       }),

@@ -1,5 +1,5 @@
+import type { InstalledLegendState, TextEdit } from "./types.js";
 import type { EditSource } from "./text-edits.js";
-import type { TextEdit } from "./types.js";
 import { identifiersNamed } from "./ast.js";
 import { isDeclarationName } from "./analysis-ast.js";
 import { replaceNode } from "./text-edits.js";
@@ -7,7 +7,10 @@ import ts from "typescript";
 
 const LEGEND_REACT_MODULE = "@legendapp/state/react";
 const USE_VALUE = "useValue";
-const LEGACY_EXPORTS: ReadonlySet<string> = new Set(["use$", "useSelector"]);
+const USE_SELECTOR = "useSelector";
+const LEGACY_EXPORTS: ReadonlySet<string> = new Set(["use$", USE_SELECTOR]);
+/** One function in Legend State 3; the order is the preference for a new subscription's callee. */
+const SUBSCRIPTION_EXPORTS = [USE_VALUE, "use$", USE_SELECTOR] as const;
 
 /** How edited code calls `useValue`, and the import edits that make that callee resolve. */
 export interface UseValueReference {
@@ -113,5 +116,102 @@ export function useValueReference(source: EditSource): UseValueReference | null 
   return {
     callee: USE_VALUE,
     edits: [replaceNode(source, anchor, `${anchor.getText(source.sourceFile)}, ${USE_VALUE}`)],
+  };
+}
+
+/** How a new subscription calls its hook, and whether that callee is a legacy binding. */
+export interface SubscriptionHookReference extends UseValueReference {
+  readonly legacy: boolean;
+}
+
+/** The export a new subscription names when the file imports none: `useValue`, unless the package lacks it. */
+function exportedSubscriptionHook(legendState: InstalledLegendState | null): string {
+  return legendState?.useValueExport === "missing" ? USE_SELECTOR : USE_VALUE;
+}
+
+function namedSubscriptionHook(
+  sourceFile: ts.SourceFile,
+  clauses: readonly ts.ImportClause[],
+): SubscriptionHookReference | null {
+  for (const exported of SUBSCRIPTION_EXPORTS) {
+    for (const clause of clauses) {
+      const specifier = namedImportElements(clause).find(
+        (element) => !element.isTypeOnly && importedName(element) === exported,
+      );
+      if (specifier && isBoundOnlyByImport(sourceFile, specifier.name.text)) {
+        return { callee: specifier.name.text, edits: [], legacy: exported !== USE_VALUE };
+      }
+    }
+  }
+  return null;
+}
+
+function namespaceSubscriptionHook(
+  sourceFile: ts.SourceFile,
+  clauses: readonly ts.ImportClause[],
+  legendState: InstalledLegendState | null,
+): SubscriptionHookReference | null {
+  const namespace = clauses
+    .map((clause) => clause.namedBindings)
+    .find(
+      (bindings): bindings is ts.NamespaceImport =>
+        bindings !== undefined &&
+        ts.isNamespaceImport(bindings) &&
+        isBoundOnlyByImport(sourceFile, bindings.name.text),
+    );
+  const exported = exportedSubscriptionHook(legendState);
+  return namespace
+    ? { callee: `${namespace.name.text}.${exported}`, edits: [], legacy: exported !== USE_VALUE }
+    : null;
+}
+
+function importedSubscriptionHook(
+  sourceFile: ts.SourceFile,
+  clauses: readonly ts.ImportClause[],
+  legendState: InstalledLegendState | null,
+): SubscriptionHookReference | null {
+  return (
+    namedSubscriptionHook(sourceFile, clauses) ??
+    namespaceSubscriptionHook(sourceFile, clauses, legendState)
+  );
+}
+
+/**
+ * The callee an instruction for a new subscription names: the subscription hook the file already
+ * imports from `@legendapp/state/react`, else the export the resolved package provides.
+ */
+export function subscriptionHookCallee(
+  sourceFile: ts.SourceFile,
+  legendState: InstalledLegendState | null,
+): string {
+  return (
+    importedSubscriptionHook(sourceFile, legendReactImports(sourceFile), legendState)?.callee ??
+    exportedSubscriptionHook(legendState)
+  );
+}
+
+/**
+ * Resolves the callee of {@link subscriptionHookCallee} for an edit, adding a specifier beside a
+ * retained one when the file imports no subscription hook. Null when only a new import declaration
+ * would do.
+ */
+export function subscriptionHookReference(
+  source: EditSource,
+  legendState: InstalledLegendState | null,
+): SubscriptionHookReference | null {
+  const clauses = legendReactImports(source.sourceFile);
+  const imported = importedSubscriptionHook(source.sourceFile, clauses, legendState);
+  if (imported) {
+    return imported;
+  }
+  const exported = exportedSubscriptionHook(legendState);
+  const anchor = retainedImportAnchor(clauses);
+  if (!anchor || !isUnusedName(source.sourceFile, exported)) {
+    return null;
+  }
+  return {
+    callee: exported,
+    edits: [replaceNode(source, anchor, `${anchor.getText(source.sourceFile)}, ${exported}`)],
+    legacy: exported !== USE_VALUE,
   };
 }

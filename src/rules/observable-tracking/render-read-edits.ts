@@ -1,8 +1,8 @@
 import { rangeHasComment, replaceNode } from "../../core/text-edits.js";
 import type { TextEdit } from "../../core/types.js";
 import type { TrackingScan } from "./model.js";
+import { subscriptionHookReference } from "../../core/use-value-import.js";
 import ts from "typescript";
-import { useValueReference } from "../../core/use-value-import.js";
 import { visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 
 function canExitEarly(statement: ts.Statement): boolean {
@@ -24,9 +24,10 @@ function runsOnEveryRender(statement: ts.Statement): boolean {
 }
 
 /**
- * Rewrites the render-body initializer `x$.get()` to `useValue(x$)`. Abstains when an earlier
- * return would make the new hook conditional, when a comment sits between the path and the call,
- * when the installed Legend State has no `useValue`, or when importing it needs a new declaration.
+ * Rewrites the render-body initializer `x$.get()` to a subscription such as `useValue(x$)`.
+ * Abstains when an earlier return would make the new hook conditional, when a comment sits between
+ * the path and the call, when importing the hook needs a new declaration, and when the callee is a
+ * legacy binding that the file's `replace-legacy-use-value` edits would retire.
  */
 export function renderInitializerEdits(
   call: ts.CallExpression,
@@ -35,14 +36,16 @@ export function renderInitializerEdits(
 ): readonly TextEdit[] | null {
   const method = call.expression;
   if (
-    scan.installedLegendState?.useValueExport === "missing" ||
     !ts.isPropertyAccessExpression(method) ||
     !runsOnEveryRender(statement) ||
     rangeHasComment(scan.sourceFile, { end: call.getEnd(), pos: method.expression.getEnd() })
   ) {
     return null;
   }
-  const reference = useValueReference(scan);
+  const reference = subscriptionHookReference(scan, scan.installedLegendState);
+  if (!reference || (reference.legacy && scan.installedLegendState?.useValueExport !== "missing")) {
+    return null;
+  }
   const path = method.expression.getText(scan.sourceFile);
-  return reference && [...reference.edits, replaceNode(scan, call, `${reference.callee}(${path})`)];
+  return [...reference.edits, replaceNode(scan, call, `${reference.callee}(${path})`)];
 }

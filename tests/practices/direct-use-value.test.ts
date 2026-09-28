@@ -92,7 +92,7 @@ test("passes an eagerly read observable directly to useValue", () => {
   assert.match(requireValue(findings[1]).message ?? "", /read\(profile\$\.avatar\)/u);
   assert.match(
     requireValue(findings[0]).evidence.join(" ") ?? "",
-    /before useValue receives its input/u,
+    /before `read` receives its input/u,
   );
   assert.match(requireValue(findings[0]).evidence.join(" "), /outside observer/u);
   assert.doesNotMatch(requireValue(findings[0]).message, /missing.*subscription/u);

@@ -93,6 +93,25 @@ test("moves a subscription only into one stable isolated JSX leaf", () => {
   );
 });
 
+test("names the legacy hook it moves into the leaf", () => {
+  const finding = analyzeLegendPractices({
+    sourceText: `
+    import { useObservable, useSelector as select } from "@legendapp/state/react";
+    export function Screen() {
+      const open$ = useObservable(false);
+      const open = select(open$);
+      return <main>
+        <Header /><Toolbar /><Summary /><Filters /><List /><Footer />
+        <Aside /><Help /><Status /><Actions /><Search />
+        <Dialog open={open} />
+      </main>;
+    }
+  `,
+    fileName: "fixture.tsx",
+  }).find((entry) => entry.action === "move-use-value-down");
+  assert.ok(requireValue(finding).message.startsWith("Move `select(open$)` for `open`"));
+});
+
 test("moves a subscription behind a complete conditional JSX slot without changing its lifetime", () => {
   const positive = analyzeLegendPractices({
     sourceText: `

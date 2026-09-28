@@ -13,6 +13,7 @@ interface ReviewedHelper {
 function selectorNames(scan: TrackingScan): ReadonlySet<string> {
   return new Set([
     ...scan.imports.useValue,
+    ...scan.imports.legacyUseValue,
     ...[...scan.imports.legendReactions]
       .filter(
         ([, name]) => name === "useObserve" || name === "useObserveEffect" || name === "observe",

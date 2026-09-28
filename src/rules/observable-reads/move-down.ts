@@ -153,14 +153,14 @@ function moveDownFinding(
   const lifetimeEvidence = target.leaf
     ? `that leaf contains ${target.leafElements} of the owner's ${target.ownerElements} JSX elements and is not conditional, keyed, repeated, or split across returns`
     : `replacing the complete conditional JSX slot with one always-mounted wrapper preserves the subscription lifetime and the conditional child's mount behavior`;
-  const observable = use.call.arguments[0]!.getText(scan.sourceFile);
+  const subscription = `${use.call.expression.getText(scan.sourceFile)}(${use.call.arguments[0]!.getText(scan.sourceFile)})`;
   return {
     action: "move-use-value-down",
     confidence: "certain",
     disposition: "change",
     evidence: [readEvidence, lifetimeEvidence],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `Move \`useValue(${observable})\` for \`${use.localName}\` into ${target.leaf ? "a stable wrapper around" : "an always-mounted wrapper for"} the ${leafLabel} at line ${leafLine}; keep observable ownership where it is and pass ${target.leaf ? "the leaf's other inputs" : "non-observable gate values"} as ordinary props so updates rerender ${target.leafElements} JSX element${target.leafElements === 1 ? "" : "s"} instead of the ${target.ownerElements}-element owner. Define the wrapper as a child component outside this owner and keep other input expressions evaluated in the parent.`,
+    message: `Move \`${subscription}\` for \`${use.localName}\` into ${target.leaf ? "a stable wrapper around" : "an always-mounted wrapper for"} the ${leafLabel} at line ${leafLine}; keep observable ownership where it is and pass ${target.leaf ? "the leaf's other inputs" : "non-observable gate values"} as ordinary props so updates rerender ${target.leafElements} JSX element${target.leafElements === 1 ? "" : "s"} instead of the ${target.ownerElements}-element owner. Define the wrapper as a child component outside this owner and keep other input expressions evaluated in the parent.`,
     practice: "reactivity",
   };
 }
@@ -176,7 +176,7 @@ function multipleLeavesFinding(
     return `${target.leaf ? jsxLeafLabel(target.leaf, scan.sourceFile) : "complete conditional JSX slot"} at line ${line}`;
   });
   const elements = targets.reduce((total, target) => total + target.leafElements, 0);
-  const observable = use.observable.getText(scan.sourceFile);
+  const subscription = `${use.call.expression.getText(scan.sourceFile)}(${use.observable.getText(scan.sourceFile)})`;
   return {
     ...first,
     evidence: [
@@ -184,7 +184,7 @@ function multipleLeavesFinding(
       `together the boundaries contain ${elements} of the owner's ${targets[0]!.ownerElements} JSX elements`,
       "no reference remains in the owner, a callback, or an effect; every conditional slot keeps an always-mounted subscription boundary",
     ],
-    message: `Extract ${locations.join("; ")} into ${targets.length} separate child components defined outside this owner. Move all reads of \`${use.localName}\` together: remove the owner's \`useValue(${observable})\` and subscribe inside each child to the same observable. Keep observable ownership here, pass the observable handle and each child's other inputs as ordinary props, and keep their evaluation in the parent. Keep each child always-mounted in its original slot, with conditional rendering inside it. Updates then rerender ${elements} JSX elements instead of the ${targets[0]!.ownerElements}-element owner.`,
+    message: `Extract ${locations.join("; ")} into ${targets.length} separate child components defined outside this owner. Move all reads of \`${use.localName}\` together: remove the owner's \`${subscription}\` and subscribe inside each child to the same observable. Keep observable ownership here, pass the observable handle and each child's other inputs as ordinary props, and keep their evaluation in the parent. Keep each child always-mounted in its original slot, with conditional rendering inside it. Updates then rerender ${elements} JSX elements instead of the ${targets[0]!.ownerElements}-element owner.`,
   };
 }
 

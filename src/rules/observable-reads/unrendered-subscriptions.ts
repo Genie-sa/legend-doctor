@@ -1,12 +1,16 @@
 import { callbackIsEventRooted, isPlainFunction } from "../state-proofs/event-roots.js";
 import {
+  directObservableReadPath,
+  isUseValueCall,
+  provenObservablePath,
+} from "./observable-paths.js";
+import {
   findAncestor,
   isRuntimeFunctionLike,
   nearestNestedFunction,
   visit,
 } from "../../core/ast.js";
 import { isInlineJsxEventHandler, runsOutsideRender } from "./render-exclusion.js";
-import { isUseValueCall, provenObservablePath } from "./observable-paths.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
@@ -22,15 +26,20 @@ type UnrenderedRead =
   | { readonly kind: "command"; readonly node: ts.Identifier }
   | { readonly kind: "callback-dependency"; readonly node: ts.Identifier };
 
-interface UnrenderedSubscription {
-  readonly localName: string;
+interface PlainSeedSubscription {
+  /** The callee as the source spells it: `useValue`, `use$`, `useSelector`, or an alias. */
+  readonly hook: string;
   readonly observable: string;
+}
+
+interface UnrenderedSubscription extends PlainSeedSubscription {
+  readonly localName: string;
   readonly owner: RuntimeFunctionLike;
   readonly reads: readonly UnrenderedRead[];
 }
 
 /**
- * A `useValue` binding that no render reads: every update rerenders the owner for nothing. The
+ * A subscription binding that no render reads: every update rerenders the owner for nothing. The
  * subscription goes away, and each command or initializer read takes a `peek()` snapshot instead.
  */
 export function unrenderedUseValueFinding(
@@ -46,22 +55,22 @@ function unrenderedSubscription(
   scan: ObservableReadScan,
 ): UnrenderedSubscription | null {
   const owner = topLevelOwner(declaration);
-  const path = plainSeedSubscriptionPath(declaration, scan);
-  if (!owner || !path || !ts.isIdentifier(declaration.name)) {
+  const subscription = plainSeedSubscription(declaration, scan);
+  if (!owner || !subscription || !ts.isIdentifier(declaration.name)) {
     return null;
   }
   const reads = unrenderedReads(owner, declaration.name, scan.imports);
-  if (!reads || renderMayReadUntrackedState(owner, scan.imports)) {
+  if (!reads || renderMayReadUntrackedState(owner, scan)) {
     return null;
   }
-  return { localName: declaration.name.text, observable: path, owner, reads };
+  return { ...subscription, localName: declaration.name.text, owner, reads };
 }
 
 /** A plain-data seed proves the subscription activates no lazy source that `peek()` would defer. */
-function plainSeedSubscriptionPath(
+function plainSeedSubscription(
   declaration: ts.VariableDeclaration,
   scan: ObservableReadScan,
-): string | null {
+): PlainSeedSubscription | null {
   const call = declaration.initializer;
   if (
     !call ||
@@ -74,7 +83,9 @@ function plainSeedSubscriptionPath(
   const path = provenObservablePath(call.arguments[0]!, scan.observableBindings)?.getText(
     scan.sourceFile,
   );
-  return path && scan.plainSeedPaths?.has(path) ? path : null;
+  return path && scan.plainSeedPaths?.has(path)
+    ? { hook: call.expression.getText(scan.sourceFile), observable: path }
+    : null;
 }
 
 function unrenderedReads(
@@ -245,25 +256,54 @@ function isOwnerLevelCallback(
  * A render that reads a ref, `peek()`, or an untracked `get()` may depend on the rerender this
  * subscription forces, so removing it could leave that output stale.
  */
-function renderMayReadUntrackedState(owner: RuntimeFunctionLike, imports: HookImports): boolean {
+function renderMayReadUntrackedState(
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+): boolean {
   let untracked = false;
   visit(owner.body, (node) => {
-    if (!untracked && isUntrackedRead(node)) {
-      untracked = !runsOutsideRender(node, owner, imports);
+    if (!untracked && isUntrackedRead(node, owner, scan)) {
+      untracked = !runsOutsideRender(node, owner, scan.imports);
     }
   });
   return untracked;
 }
 
-function isUntrackedRead(node: ts.Node): boolean {
+function isUntrackedRead(
+  node: ts.Node,
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+): boolean {
   if (ts.isPropertyAccessExpression(node) && node.name.text === "current") {
     return true;
   }
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) {
+    return false;
+  }
+  const method = node.expression.name.text;
   return (
-    ts.isCallExpression(node) &&
-    ts.isPropertyAccessExpression(node.expression) &&
-    (node.expression.name.text === "peek" ||
-      (node.expression.name.text === "get" && node.arguments.length === 0))
+    method === "peek" ||
+    (method === "get" && node.arguments.length === 0 && !isTrackedSelectorRead(node, owner, scan))
+  );
+}
+
+/**
+ * A proven observable's `get()` directly in the inline selector of a `useValue`, `use$`, or
+ * `useSelector` call: that hook tracks the read and rerenders the owner itself when it changes.
+ */
+function isTrackedSelectorRead(
+  read: ts.CallExpression,
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+): boolean {
+  const selector = nearestNestedFunction(read, owner);
+  const call = selector?.parent;
+  return Boolean(
+    call &&
+    ts.isCallExpression(call) &&
+    call.arguments[0] === selector &&
+    isUseValueCall(call, scan.imports) &&
+    directObservableReadPath(read, scan.observableBindings),
   );
 }
 
@@ -275,7 +315,7 @@ function unrenderedFinding(
   const { line, character } = scan.sourceFile.getLineAndCharacterOfPosition(
     declaration.getStart(scan.sourceFile),
   );
-  const { localName, observable, reads } = subscription;
+  const { hook, localName, observable, reads } = subscription;
   const owner = ownerName(subscription.owner);
   const lineOf = (node: ts.Node): number =>
     scan.sourceFile.getLineAndCharacterOfPosition(node.getStart(scan.sourceFile)).line + 1;
@@ -283,8 +323,8 @@ function unrenderedFinding(
   const dependencies = reads.filter((read) => read.kind === "callback-dependency");
   const rewrite =
     snapshots.length === 0
-      ? `Delete \`const ${localName} = useValue(${observable})\`; nothing reads \`${localName}\``
-      : `Remove \`const ${localName} = useValue(${observable})\` and replace its ${snapshots.length} non-render read${snapshots.length === 1 ? "" : "s"} (line ${snapshots.map((read) => lineOf(read.node)).join(", ")}) with \`${observable}.peek()\``;
+      ? `Delete \`const ${localName} = ${hook}(${observable})\`; nothing reads \`${localName}\``
+      : `Remove \`const ${localName} = ${hook}(${observable})\` and replace its ${snapshots.length} non-render read${snapshots.length === 1 ? "" : "s"} (line ${snapshots.map((read) => lineOf(read.node)).join(", ")}) with \`${observable}.peek()\``;
   const dropped =
     dependencies.length === 0
       ? ""

@@ -17,6 +17,7 @@ import { eagerReactiveInput } from "./reactive-inputs.js";
 import { hasCoveringSubscription } from "./subscription-coverage.js";
 import { renderInitializerEdits } from "./render-read-edits.js";
 import { renderOwnerOf } from "./render-owners.js";
+import { subscriptionHookCallee } from "../../core/use-value-import.js";
 import ts from "typescript";
 import { withEdits } from "../../core/text-edits.js";
 
@@ -122,11 +123,12 @@ function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPractic
   const path = observable.getText(scan.sourceFile);
   const subject =
     owner.kind === "component" ? `\`${owner.name}\`` : `components calling \`${owner.name}\``;
-  const consequence = `the read runs in \`${owner.name}\` outside a tracking context (useValue, observer, or a reactive component), so ${subject} never re-render${owner.kind === "component" ? "s" : ""} when \`${path}\` changes`;
+  const consequence = `the read runs in \`${owner.name}\` outside a tracking context (a subscription hook, observer, or a reactive component), so ${subject} never re-render${owner.kind === "component" ? "s" : ""} when \`${path}\` changes`;
   const initializer = directRenderInitializer(read);
+  const hook = subscriptionHookCallee(scan.sourceFile, scan.installedLegendState);
   const instruction = initializer
-    ? `Replace \`${path}.get()\` with \`useValue(${path})\``
-    : `Subscribe with \`const ${suggestedBindingName(read)} = useValue(${path})\` at the top of \`${owner.name}\` and read \`${suggestedBindingName(read)}\` here`;
+    ? `Replace \`${path}.get()\` with \`${hook}(${path})\``
+    : `Subscribe with \`const ${suggestedBindingName(read)} = ${hook}(${path})\` at the top of \`${owner.name}\` and read \`${suggestedBindingName(read)}\` here`;
   return withEdits(
     {
       action: "use-value-for-render-read",
@@ -137,7 +139,7 @@ function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPractic
         owner.hops === 0
           ? `the call executes directly in the render body of ${owner.kind} \`${owner.name}\``
           : `the call executes in a synchronous iteration callback of ${owner.kind} \`${owner.name}\`'s render`,
-        `no useValue in \`${owner.name}\` subscribes to \`${path}\` or a parent path, and the component is not wrapped in observer`,
+        `no useValue, use$, or useSelector call in \`${owner.name}\` subscribes to \`${path}\` or a parent path, and the component is not wrapped in observer`,
       ],
       location: { column: character + 1, file: scan.fileName, line: line + 1 },
       message: `${instruction}; ${consequence}.`,

@@ -53,7 +53,7 @@ export const legendPhotosPracticeCases = [
     file: "plugins/PluginRating.tsx",
     line: 20,
     rationale:
-      "RatingComponent is created without observer and reads photoMetadata$.rating.get() in render, so it never subscribes. Today PluginRenderer rerenders it only because shouldRender calls use$ inside a filter callback, a conditional hook; subscribing in the component keeps the same value and output.",
+      "RatingComponent is created without observer and reads photoMetadata$.rating.get() in render, so it never subscribes. Today PluginRenderer rerenders it only because shouldRender calls use$ inside a filter callback, a conditional hook; subscribing in the component keeps the same value and output. The pinned Legend State beta exports no useValue, so the instruction names the use$ the file already imports.",
     target: "legend-photos",
   },
   {
