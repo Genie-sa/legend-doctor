@@ -52,7 +52,9 @@ export type {
   ReportCapabilities,
   ReportScope,
   ReviewGuidance,
+  SourcePosition,
   StateAction,
   SyncExport,
+  TextEdit,
   UseValueExport,
 } from "./core/types.js";

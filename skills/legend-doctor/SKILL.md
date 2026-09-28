@@ -66,7 +66,10 @@ Keep a deliberate React effect by preceding it with `// legend-doctor keep-react
 ## Loop
 
 1. Scan before editing.
-2. Apply one group of `change` findings.
+2. Apply one group of `change` findings. When a practice finding carries `edits`, apply those exact edits instead of
+   rewriting from the message: collect them per file, drop exact duplicates (findings that share an import rewrite
+   repeat it), and apply from the end of the file backwards, since positions refer to the scanned source. The field
+   is present only when syntax fully determines the edit; findings without it stay prose. See `REPORT.md`.
 3. Read every `candidate`. Edit only when the named source proves the missing fact.
    For a `review-state` finding with an `assumption`, follow "Answer review questions" below instead of guessing.
 4. Preserve lifecycle, mount identity, state ownership, command timing, keys, and atomic transitions.
