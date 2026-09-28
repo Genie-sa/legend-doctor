@@ -35,7 +35,7 @@ import { keyedCursorConsumerResult } from "../../rules/hook-keyed-cursor-contrac
 import { sourceHookDefersCallback } from "../../rules/source-callback-contract/source-callback-contract.js";
 import type ts from "typescript";
 
-function cached(cache: Map<string, boolean>, key: string, compute: () => boolean): boolean {
+function cached<Value>(cache: Map<string, Value>, key: string, compute: () => Value): Value {
   const hit = cache.get(key);
   if (hit !== undefined) {
     return hit;
@@ -287,18 +287,14 @@ class ChildContracts implements ChildContractResolver {
   }
 
   public hookStateUnreadMemberCalls(hookName: string, member: HookReturnMember): number | null {
-    const key = `${hookName}\0${JSON.stringify(member)}`;
-    if (this.unreadMemberContracts.has(key)) {
-      return this.unreadMemberContracts.get(key) ?? null;
-    }
-    const calls = unreadHookMemberCalls({
-      context: this.context,
-      hookName,
-      importerFile: this.importerFile,
-      member,
-    });
-    this.unreadMemberContracts.set(key, calls);
-    return calls;
+    return cached(this.unreadMemberContracts, `${hookName}\0${JSON.stringify(member)}`, () =>
+      unreadHookMemberCalls({
+        context: this.context,
+        hookName,
+        importerFile: this.importerFile,
+        member,
+      }),
+    );
   }
 
   public hookStatePresentationConsumer(

@@ -12,6 +12,21 @@ export const expensifyHookCases = [
       "The hook publishes loading without reading it, and both indexed onboarding screens render it only at one stable submit-button site; each screen can subscribe there while the async command stays hook-owned.",
     target: "expensify-complete-onboarding",
   },
+  ...(
+    [
+      [59, "isLoading"],
+      [60, "hasError"],
+    ] as const
+  ).map(([line, name]) => ({
+    action: "review-state" as const,
+    file: "useLazyAsset.ts",
+    hook: "useState" as const,
+    line,
+    name,
+    rationale:
+      "No call site under src binds the returned member, but tests/unit/hooks/useLazyAsset.test.ts outside the context root asserts it, so deleting the state breaks the hook's tested contract.",
+    target: "expensify-lazy-asset",
+  })),
   {
     action: "use-observable",
     file: "ImportSpreadsheet.tsx",
