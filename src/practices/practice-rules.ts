@@ -2,6 +2,7 @@ import type { FileCapabilities } from "../project/capabilities.js";
 import type { HookImports } from "../core/imports.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import type { LegendPracticesRequest } from "./model.js";
+import type { ObservableFieldFacts } from "../rules/observable-reads/field-writes.js";
 import { collectTransactionFindings } from "./transaction-runs.js";
 import { findDerivedUseValuePractices } from "../rules/derived-use-value/derived-use-value.js";
 import { findInPlaceMemoKeyPractices } from "../rules/in-place-memo-keys/in-place-memo-keys.js";
@@ -38,7 +39,7 @@ export interface PracticeRuleGate {
 export interface PracticeRuleInput {
   readonly imports: HookImports;
   readonly observableBindings: ReadonlySet<string>;
-  readonly observableKeys: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly observableFields: ObservableFieldFacts;
   readonly request: LegendPracticesRequest;
 }
 
@@ -126,7 +127,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
   {
     id: "observable-reads",
     needsObservableBindings: false,
-    run: ({ imports, observableBindings, observableKeys, request }) =>
+    run: ({ imports, observableBindings, observableFields, request }) =>
       findObservableReadPractices({
         inventory: request.subscriptionInventory,
         primitivePaths: request.importedObservablePrimitivePaths ?? new Set(),
@@ -135,7 +136,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
         fileName: request.fileName,
         imports,
         observableBindings,
-        observableKeys,
+        observableFields,
         sourceFile: request.sourceFile,
       }),
   },

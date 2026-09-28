@@ -1,5 +1,6 @@
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { HookImports } from "../../core/imports.js";
+import type { ObservableFieldFacts } from "./field-writes.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
 
@@ -13,7 +14,7 @@ export interface ObservableReadScan {
   readonly plainSeedPaths?: ReadonlySet<string>;
   readonly imports: HookImports;
   readonly observableBindings: ReadonlySet<string>;
-  readonly observableKeys: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly observableFields: ObservableFieldFacts;
   readonly childContracts: ChildContractResolver | null;
   readonly sourceFile: ts.SourceFile;
   readonly fileName: string;

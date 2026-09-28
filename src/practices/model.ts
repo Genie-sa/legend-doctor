@@ -23,6 +23,8 @@ export interface LegendPracticesRequest {
   fileName: string;
   /** Dotted paths of imported observables whose initial value is an array literal; a root array is its bare name. */
   importedObservableArrayPaths: ReadonlySet<string>;
+  /** Per imported exact object-literal observable, the top-level keys that hold data rather than functions. */
+  importedObservableDataKeys?: ReadonlyMap<string, ReadonlySet<string>>;
   importedObservableFactories: ReadonlySet<string>;
   importedObservableKeys: ReadonlyMap<string, ReadonlySet<string>>;
   importedObservables: ReadonlySet<string>;

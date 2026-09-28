@@ -7,9 +7,9 @@ import {
   isSemanticComponentName,
   unwrapTransparentExpression,
 } from "./declaration-shapes.js";
+import { dataFieldKeys, exactObjectLiteralKeys } from "../../core/analysis-ast.js";
 import { directObservableMembers, isObservableInitializer } from "./observable-declarations.js";
 import { directReactContextReader, isReactContextInitializer } from "./react-traits.js";
-import { exactObjectLiteralKeys } from "../../core/analysis-ast.js";
 import { styledComponentTarget } from "./framework-event-components.js";
 import ts from "typescript";
 
@@ -293,6 +293,10 @@ function recordObservableInitialValue(
   const keys = initial ? exactObjectLiteralKeys(initial) : null;
   if (keys) {
     draft.observableKeys.set(origin.name, keys);
+  }
+  const dataKeys = initial ? dataFieldKeys(initial) : null;
+  if (dataKeys) {
+    draft.observableDataKeys.set(origin.name, dataKeys);
   }
   recordArrayPaths(origin, draft, signals);
 }

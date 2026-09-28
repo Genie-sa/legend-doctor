@@ -271,6 +271,7 @@ function legendPracticeFindings(
     importedObservableFactories,
     includeFindings,
     importedObservableArrayPaths: sourceIndex.observableArrayPathsFor(entry.file),
+    importedObservableDataKeys: sourceIndex.observableDataKeysFor(entry.file),
     importedObservablePrimitivePaths: sourceIndex.observablePrimitivePathsFor(entry.file),
     importedObservablePlainSeedPaths: sourceIndex.observablePlainSeedPathsFor(entry.file),
     importedObservableKeys: sourceIndex.observableKeysFor(entry.file),
