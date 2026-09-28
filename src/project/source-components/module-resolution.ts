@@ -133,10 +133,24 @@ function cachedFileRead(cache: Map<string, string | undefined>, file: string): s
   return value;
 }
 
-interface CompilerContextCaches {
+export interface CompilerContextCaches {
   compilerContexts: Map<string, CompilerContext>;
   compilerContextsByImporter: Map<string, CompilerContext>;
   configFilesByDirectory: Map<string, string | null>;
+}
+
+/** One scan's resolution environment, shared so every stage reuses TypeScript's resolution cache. */
+export interface SourceResolution {
+  readonly caches: CompilerContextCaches;
+  readonly host: ts.ModuleResolutionHost;
+}
+
+export function createCompilerContextCaches(): CompilerContextCaches {
+  return {
+    compilerContexts: new Map(),
+    compilerContextsByImporter: new Map(),
+    configFilesByDirectory: new Map(),
+  };
 }
 
 function compilerContextFor(

@@ -1,10 +1,14 @@
+import type {
+  SourceResolution,
+  SourceResolutionContext,
+} from "../source-components/module-resolution.js";
 import {
   cachedModuleResolutionHost,
+  createCompilerContextCaches,
   normalizeFile,
   resolveSourceModule,
 } from "../source-components/module-resolution.js";
 import { isWithin, loadWorkspace, workspaceLinks } from "./packages.js";
-import type { SourceResolutionContext } from "../source-components/module-resolution.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
 import path from "node:path";
 import ts from "typescript";
@@ -19,14 +23,16 @@ interface SourceClosureContext extends SourceResolutionContext {
 export async function loadWorkspaceSources(
   root: string,
   sources: Map<string, string>,
-): Promise<ts.ModuleResolutionHost> {
+): Promise<SourceResolution> {
   const workspace = await loadWorkspace(root);
+  const caches = createCompilerContextCaches();
   const base = cachedModuleResolutionHost(new Set(sources.keys()));
   if (workspace === null) {
-    return base;
+    return { caches, host: base };
   }
   const host = workspaceResolutionHost(base, workspaceLinks(workspace));
   const context: SourceClosureContext = {
+    ...caches,
     root,
     sources,
     loaded: new Set([...sources.keys()].map((file) => sourceIdentity(host, file))),
@@ -35,15 +41,12 @@ export async function loadWorkspaceSources(
       ts.sys.realpath?.(pkg.dir) ?? pkg.dir,
     ]),
     moduleResolutionHost: host,
-    compilerContexts: new Map(),
-    compilerContextsByImporter: new Map(),
-    configFilesByDirectory: new Map(),
   };
   // Map iteration visits appended entries and deduplicates cycles before parsing another module.
   for (const [file, source] of sources) {
     loadImports(context, file, source);
   }
-  return host;
+  return { caches, host };
 }
 
 function loadImports(context: SourceClosureContext, file: string, source: string): void {

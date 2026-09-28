@@ -14,7 +14,12 @@ import {
   initialSymbolTrace,
   resolvedFor,
 } from "./symbol-resolution.js";
-import { cachedModuleResolutionHost, normalizeFile, resolveModule } from "./module-resolution.js";
+import {
+  cachedModuleResolutionHost,
+  createCompilerContextCaches,
+  normalizeFile,
+  resolveModule,
+} from "./module-resolution.js";
 import {
   contextProviderSitesFor,
   contextReadIsStableFor,
@@ -29,6 +34,7 @@ import type { AnalysisFile } from "../analysis-project.js";
 import type { ObservableContextReader } from "./observable-contexts.js";
 import type { ObservableInPlaceWrites } from "./observable-in-place-writes.js";
 import type { SourceContextCoverage } from "./source-context.js";
+import type { SourceResolution } from "./module-resolution.js";
 import { callbackPackageVersion } from "./callback-package-version.js";
 import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js";
 import { moduleRecord } from "./module-record.js";
@@ -92,9 +98,9 @@ export function buildSourceIndex(root: string, sources: ReadonlyMap<string, stri
 export function buildSourceIndexFromFiles(
   root: string,
   files: readonly AnalysisFile[],
-  host?: ts.ModuleResolutionHost,
+  resolution?: SourceResolution,
 ): SourceIndex {
-  const state = createSourceIndexState(root, files, host);
+  const state = createSourceIndexState(root, files, resolution);
   return {
     moduleFileFor: (file, specifier) => resolveModule(state, file, specifier),
     callbackPackageVersionFor: (file, specifier) => callbackPackageVersion(state, file, specifier),
@@ -134,7 +140,7 @@ export function buildSourceIndexFromFiles(
 function createSourceIndexState(
   root: string,
   files: readonly AnalysisFile[],
-  host?: ts.ModuleResolutionHost,
+  resolution?: SourceResolution,
 ): SourceIndexState {
   const records = new Map<string, ModuleRecord>();
   const sourceFiles = new Map<string, ts.SourceFile>();
@@ -150,13 +156,11 @@ function createSourceIndexState(
   return {
     ...crossModuleBindings(records),
     availableSymbolKinds: availableSymbolKinds(records),
+    ...(resolution?.caches ?? createCompilerContextCaches()),
     aliasesBySymbol: new Map(),
-    compilerContexts: new Map(),
-    compilerContextsByImporter: new Map(),
-    configFilesByDirectory: new Map(),
     contextReaders: new Map(),
     contextReadersBySymbol: new Map(),
-    moduleResolutionHost: host ?? cachedModuleResolutionHost(new Set(records.keys())),
+    moduleResolutionHost: resolution?.host ?? cachedModuleResolutionHost(new Set(records.keys())),
     records,
     resolvedByKind: new Map(),
     resolvedHooks: new Map(),
