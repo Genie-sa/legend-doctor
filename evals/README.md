@@ -14,6 +14,10 @@ whatever it currently prints.
   finding is a failure, so practice precision is measured over everything the tool prints. A manually audited optional
   `disposition` label also rejects the right action with an incorrect cost classification; omitted dispositions retain
   action-only matching.
+- **Expert replay.** Performance commits by Legend State's author are ground truth for what an expert changes. Each
+  hunk is labeled at its line in the commit's first parent: `enforced` when a sound static proof shows the edit removes
+  a render or lifecycle cost without changing behavior, `non-enforced` when it changes timing or dependencies or rests
+  on an unprovable fact, and `excluded` when it removes no such cost (logging, UX, refactors, bug fixes).
 
 The primary metric is precision among non-review recommendations. Recall is reported globally and per action so
 abstention cannot masquerade as accuracy. The runner also prints a deterministic abstention-reason histogram globally
@@ -31,6 +35,9 @@ Pinned public repositories, each at a fixed commit with focused source roots whe
 - `RonasIT/open-webui-react-native`
 - `quanphm/hoalu`
 - `LegendApp/legend-photos`
+- `LegendApp/legend-apps`
+- `nonbili/NouTube`
+- `nonbili/Nori`
 
 Repository source is never copied into this project. Each corpus entry pins a commit and a source location, and the
 runner scans local checkouts. A label enters the corpus only after manual review of the source it points at.
@@ -56,7 +63,10 @@ node dist/evals/run.js --complete \
   --repo outline=/path/to/outline \
   --repo open-webui-react-native=/path/to/open-webui-react-native \
   --repo hoalu=/path/to/hoalu \
-  --repo legend-photos=/path/to/legend-photos
+  --repo legend-photos=/path/to/legend-photos \
+  --repo legend-apps=/path/to/legend-apps \
+  --repo noutube=/path/to/NouTube \
+  --repo nori=/path/to/Nori
 ```
 
 `--complete` requires every repository in the loaded corpus, including an optional private slice. Missing paths fail
@@ -81,6 +91,23 @@ is waived: see [the September 19 audit ledger](audit-2026-09-19.md) for the orig
 changes. The [September 28 audit](audit-2026-09-28.md) records the renderer proof behind concurrent-root transaction
 reviews and the three batch labels it retired. The [lockfile version audit](audit-2026-09-28-lockfile-versions.md)
 records the Legend State version each checkout pins and the `replace-legacy-use-value` labels it retired. A red corpus job remains a real gate; unit-suite success does not override it.
+
+### Expert replay
+
+`evals/corpus/*/replay-commits.ts` pins each replayed commit and its first parent. For every supplied repository, the
+runner extracts the parent tree from the checkout's object store with `git archive` into a temporary directory, scans
+its source root, and prints `Expert replay recall: x/y`: enforced cases where a proven `change` finding at the labeled
+line carries the expert's action or a listed equivalent. Each miss names what the analyzer reported there, including
+abstention reasons and subscription-inventory blockers. Non-enforced cases are reported separately and list any proven
+change the analyzer makes there, since that contradicts the audit; neither misses nor non-enforced flags fail the run.
+A label whose parent line no longer contains its `source` text fails, as does a parent missing from the checkout. A
+full-history clone contains every parent; for a shallow checkout, fetch each one by SHA:
+
+```bash
+git -C /path/to/legend-music fetch --depth=1 https://github.com/LegendApp/legend-music.git <parent>
+```
+
+CI fetches the parents the same way after the pinned commits, so the cost is one shallow fetch per replayed commit.
 
 `npm run eval:runtime` runs the executable migration contracts under jsdom with pinned React and Legend State: form
 submission snapshots, keyed selection and draft identity, independent hook lifetimes, atomic dialog publication, and
