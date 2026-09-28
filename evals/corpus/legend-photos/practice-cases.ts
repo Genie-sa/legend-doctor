@@ -297,6 +297,14 @@ export const legendPhotosPracticeCases = [
     target: "legend-photos",
   },
   {
+    action: "use-value-for-render-read",
+    file: "plugins/PluginRating.tsx",
+    line: 20,
+    rationale:
+      "RatingComponent is created without observer and reads photoMetadata$.rating.get() in render, so it never subscribes. Today PluginRenderer rerenders it only because shouldRender calls use$ inside a filter callback, a conditional hook; subscribing in the component keeps the same value and output.",
+    target: "legend-photos",
+  },
+  {
     action: "replace-legacy-use-value",
     file: "plugins/PluginRating.tsx",
     line: 75,
