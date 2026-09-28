@@ -15,18 +15,27 @@ import {
   resolvedFor,
 } from "./symbol-resolution.js";
 import { cachedModuleResolutionHost, normalizeFile, resolveModule } from "./module-resolution.js";
-import { contextProviderSitesFor, contextReaderHooksFor } from "./context-readers.js";
+import {
+  contextProviderSitesFor,
+  contextReadIsStableFor,
+  contextReaderHooksFor,
+} from "./context-readers.js";
+import {
+  observableDeclarationsFor,
+  observablePrimitivePathsFor,
+} from "./observable-primitive-paths.js";
 import { observablePlainSeedPathsFor, plainConstantsFor } from "./plain-constants.js";
 import type { AnalysisFile } from "../analysis-project.js";
+import type { ObservableContextReader } from "./observable-contexts.js";
 import type { ObservableInPlaceWrites } from "./observable-in-place-writes.js";
 import type { SourceContextCoverage } from "./source-context.js";
 import { callbackPackageVersion } from "./callback-package-version.js";
 import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js";
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
+import { observableContextReadersFor } from "./observable-contexts.js";
 import { observableInPlaceWritesFor } from "./observable-in-place-writes.js";
 import { observablePathsFor } from "./observable-containers.js";
-import { observablePrimitivePathsFor } from "./observable-primitive-paths.js";
 import { sourceContextFor } from "./source-context.js";
 import type ts from "typescript";
 
@@ -37,6 +46,8 @@ export interface SourceIndex {
   componentDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
   componentsFor: (file: string) => ReadonlySet<string>;
   contextProviderSitesFor: (file: string, contextName: string) => number;
+  /** Reading this context, or calling this context-reader hook, can never render the caller. */
+  contextReadIsStableFor: (file: string, localName: string) => boolean;
   contextReaderHooksFor: (
     file: string,
     contextName: string,
@@ -51,8 +62,12 @@ export interface SourceIndex {
   hookDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
   legendValueBridgesFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observableArrayPathsFor: (file: string) => ReadonlySet<string>;
+  /** Contexts, and hooks returning context values, whose declared value type can hold observables. */
+  observableContextReadersFor: (file: string) => ReadonlyMap<string, ObservableContextReader>;
   /** The declaring module and local name of an observable this file declares or imports. */
   observableDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
+  /** The declaration of each observable this file imports, keyed by local name. */
+  observableDeclarationsFor: (file: string) => ReadonlyMap<string, ts.VariableDeclaration>;
   observablePrimitivePathsFor: (file: string) => ReadonlySet<string>;
   /** Paths seeded with plain data, so subscribing to them never activates a lazy source. */
   observablePlainSeedPathsFor: (file: string) => ReadonlySet<string>;
@@ -88,6 +103,7 @@ export function buildSourceIndexFromFiles(
     componentsFor: (file) => new Set(resolvedFor(state, file, "component").keys()),
     contextProviderSitesFor: (file, contextName) =>
       contextProviderSitesFor(state, file, contextName),
+    contextReadIsStableFor: (file, localName) => contextReadIsStableFor(state, file, localName),
     contextReaderHooksFor: (file, contextName) => contextReaderHooksFor(state, file, contextName),
     contextReadersFor: (file) => new Set(resolvedFor(state, file, "context-reader-hook").keys()),
     deferredCallbackHooksFor: (file) => deferredCallbackHooksFor(state, file),
@@ -96,7 +112,9 @@ export function buildSourceIndexFromFiles(
     hookDeclarationFor: (file, name) => hookDeclarationFor(state, file, name),
     legendValueBridgesFor: (file) => legendValueBridgesFor(state, file),
     observableArrayPathsFor: (file) => observableArrayPathsFor(state, file),
+    observableContextReadersFor: (file) => observableContextReadersFor(state, file),
     observableDeclarationFor: (file, name) => observableDeclarationFor(state, file, name),
+    observableDeclarationsFor: (file) => observableDeclarationsFor(state, file),
     observablePrimitivePathsFor: (file) => observablePrimitivePathsFor(state, file),
     observablePlainSeedPathsFor: (file) => observablePlainSeedPathsFor(state, file),
     plainConstantsFor: (file) => plainConstantsFor(state, file),
@@ -145,6 +163,7 @@ function createSourceIndexState(
     resolvedModules: new Map(),
     root,
     sourceFiles,
+    stableContextValues: new Map(),
     stableObservableContainers: new Map(),
   };
 }

@@ -5,7 +5,14 @@ import {
 import ts from "typescript";
 import { typeNamesObservable } from "./observable-paths.js";
 
-type MemberVerdict = "absent" | "observable" | "other";
+type MemberVerdict =
+  | { readonly kind: "absent" }
+  | { readonly kind: "observable"; readonly type: ts.TypeNode }
+  | { readonly kind: "other" };
+
+const ABSENT: MemberVerdict = { kind: "absent" };
+
+const OTHER: MemberVerdict = { kind: "other" };
 
 interface MemberQuery {
   readonly depth: number;
@@ -28,7 +35,17 @@ export function declaresObservableProp(
   propName: string,
   observableTypes: ReadonlySet<string>,
 ): boolean {
-  return memberVerdict(propsType, { depth: 0, observableTypes, propName }) === "observable";
+  return declaredObservablePropType(propsType, propName, observableTypes) !== null;
+}
+
+/** The declared observable type of `propName`, such as `Observable<string>`, under the same rules. */
+export function declaredObservablePropType(
+  propsType: ts.TypeNode,
+  propName: string,
+  observableTypes: ReadonlySet<string>,
+): ts.TypeNode | null {
+  const verdict = memberVerdict(propsType, { depth: 0, observableTypes, propName });
+  return verdict?.kind === "observable" ? verdict.type : null;
 }
 
 function memberVerdict(type: ts.TypeNode, query: MemberQuery): MemberVerdict | null {
@@ -60,14 +77,14 @@ function literalMemberVerdict(
   );
   const [member] = matches;
   if (!member) {
-    return "absent";
+    return ABSENT;
   }
   return matches.length === 1 &&
     ts.isPropertySignature(member) &&
     member.type &&
     typeNamesObservable(member.type, query.observableTypes)
-    ? "observable"
-    : "other";
+    ? { kind: "observable", type: member.type }
+    : OTHER;
 }
 
 /** An intersection keeps every constituent's member, so one observable declaration proves it. */
@@ -76,13 +93,14 @@ function intersectionVerdict(
   query: MemberQuery,
 ): MemberVerdict | null {
   const verdicts = type.types.map((member) => memberVerdict(member, query));
-  if (verdicts.includes("other")) {
-    return "other";
+  if (verdicts.some((verdict) => verdict?.kind === "other")) {
+    return OTHER;
   }
-  if (verdicts.includes("observable")) {
-    return "observable";
+  const observable = verdicts.find((verdict) => verdict?.kind === "observable");
+  if (observable) {
+    return observable;
   }
-  return verdicts.every((verdict) => verdict === "absent") ? "absent" : null;
+  return verdicts.every((verdict) => verdict?.kind === "absent") ? ABSENT : null;
 }
 
 function referenceVerdict(type: ts.TypeReferenceNode, query: MemberQuery): MemberVerdict | null {
@@ -107,7 +125,7 @@ function declarationVerdict(
     return memberVerdict(declaration.type, query);
   }
   const verdict = literalMemberVerdict(declaration.members, query);
-  return verdict === "absent" && declaration.heritageClauses?.length ? null : verdict;
+  return verdict?.kind === "absent" && declaration.heritageClauses?.length ? null : verdict;
 }
 
 function keyFilterVerdict(type: ts.TypeReferenceNode, query: MemberQuery): MemberVerdict | null {
@@ -117,7 +135,7 @@ function keyFilterVerdict(type: ts.TypeReferenceNode, query: MemberQuery): Membe
     return null;
   }
   const kept = names.has(query.propName) === (type.typeName.getText() === "Pick");
-  return kept ? memberVerdict(source, query) : "absent";
+  return kept ? memberVerdict(source, query) : ABSENT;
 }
 
 function literalKeyNames(type: ts.TypeNode): ReadonlySet<string> | null {

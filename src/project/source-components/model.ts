@@ -23,6 +23,14 @@ export interface IndexedReexportBinding extends ReexportBinding {
 
 export type ComponentFunction = ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression;
 
+/** A React context whose `createContext<T>` type argument declares its value shape. */
+export interface ObservableContextType {
+  /** Local names that `@legendapp/state` observable types have in the declaring module. */
+  readonly observableTypes: ReadonlySet<string>;
+  /** The declared value type without its `null` and `undefined` members. */
+  readonly value: ts.TypeNode;
+}
+
 export interface ModuleRecord {
   componentDeclarations: ReadonlyMap<string, ComponentFunction>;
   contextReaderHooks: ReadonlyMap<string, string>;
@@ -36,6 +44,8 @@ export interface ModuleRecord {
   localExports: ReadonlyMap<string, string>;
   /** Per observable or `container.member$` declaration, the dotted paths whose initial value is an array literal. */
   observableArrayPaths: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Per React context with a declared value type in a module that imports an observable type. */
+  observableContexts: ReadonlyMap<string, ObservableContextType>;
   /** Per exact object-literal observable, the top-level keys whose initial value is data rather than a function. */
   observableDataKeys: ReadonlyMap<string, ReadonlySet<string>>;
   observableDeclarations: ReadonlySet<string>;
@@ -99,6 +109,7 @@ export interface SourceIndexState extends CrossModuleBindings {
   resolvedModules: Map<string, string | null>;
   root: string;
   sourceFiles: ReadonlyMap<string, ts.SourceFile>;
+  stableContextValues: Map<string, boolean>;
   stableObservableContainers: Map<string, boolean>;
 }
 
@@ -142,6 +153,7 @@ export interface ModuleRecordDraft {
   legendValueWriters: Map<string, string>;
   localExports: Map<string, string>;
   observableArrayPaths: Map<string, ReadonlySet<string>>;
+  observableContexts: Map<string, ObservableContextType>;
   observableDataKeys: Map<string, ReadonlySet<string>>;
   observableDeclarations: Set<string>;
   observableFactoryCalls: Map<string, string>;

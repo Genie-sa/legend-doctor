@@ -55,7 +55,7 @@ finding is not a clean file.
 | `legend-v2-tracking`       | `plain-primitive-projection`, `observable-tracking` | `@legendapp/state` 2.x can auto-track render `get()` calls through an app-wide setting the analyzer cannot see |
 | `react-compiler`           | `observable-clone-writes`                           | The React Compiler memoizes by reference, so in-place observable writes would leave memoized consumers stale   |
 | `sync-export-missing`      | `browser-storage-persistence`                       | The resolved package has no `sync` entry point; storage-writing effects stay `keep-effect`                     |
-| `use-value-export-missing` | `plain-primitive-projection`, `legacy-use-value`    | The resolved `@legendapp/state/react` entry point does not export `useValue`                                   |
+| `use-value-export-missing` | `legacy-use-value`                                  | The resolved `@legendapp/state/react` entry point does not export `useValue`                                   |
 
 Every `review-state` and `review-effect` finding has an `abstentionReason`. It names the main fact or safety rule that
 blocked a proven edit.
@@ -193,13 +193,14 @@ finding's edits stand alone, and findings that share an import rewrite carry ide
 named-import `replace-legacy-use-value` finding in a file carries the whole file's migration, because renaming
 the shared binding for one call would strand the others.
 
-| Edited action                   | Edit                                                                                       |
-| ------------------------------- | ------------------------------------------------------------------------------------------ |
-| `pass-observable-to-use-value`  | `useValue(() => x$.get())` or `useValue(x$.get())` becomes `useValue(x$)`                  |
-| `use-peek-for-snapshot`         | `x$.get()` becomes `x$.peek()`                                                             |
-| `use-value-for-render-read`     | A direct render initializer `x$.get()` becomes `useValue(x$)`                              |
-| `narrow-use-value-subscription` | `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)`                         |
-| `replace-legacy-use-value`      | Callees become `useValue`, a direct selector collapses, legacy specifiers leave the import |
+| Edited action                   | Edit                                                                                                                               |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `pass-observable-to-use-value`  | `useValue(() => x$.get())` or `useValue(x$.get())` becomes `useValue(x$)`                                                          |
+| `use-peek-for-snapshot`         | `x$.get()` becomes `x$.peek()`                                                                                                     |
+| `use-value-for-render-read`     | A direct render initializer `x$.get()` becomes `useValue(x$)`                                                                      |
+| `narrow-use-value-subscription` | `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)`                                                                 |
+| `replace-legacy-use-value`      | Callees become `useValue`, a direct selector collapses, legacy specifiers leave the import                                         |
+| `select-primitive-projection`   | `const v = useValue(x$)`, read only as `v === id`, becomes `useValue(() => x$.get() === id)`; the comparisons read the new binding |
 
 `use$`, `useSelector`, their aliases, and namespace calls from `@legendapp/state/react` are subscription hooks
 like `useValue`. Messages and edits keep the callee the source calls, so `use$(x$.get())` becomes `use$(x$)` and

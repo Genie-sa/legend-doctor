@@ -1,7 +1,9 @@
 import type { ModuleRecord, ResolvedSymbol, SourceIndexState } from "./model.js";
+import { contextProviderElements, providerValueIsMountStable } from "./context-value-stability.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import { isDeclarationName, isNonValueIdentifier } from "../../core/analysis-ast.js";
 import { aliasesForSymbol } from "./alias-crawl.js";
+import { collectHookImports } from "../../core/imports.js";
 import { isInsideModuleDeclaration } from "./declaration-shapes.js";
 import { localSymbol } from "./symbol-resolution.js";
 import { normalizeFile } from "./module-resolution.js";
@@ -48,26 +50,84 @@ export function contextProviderSitesFor(
   for (const [candidateFile, aliases] of aliasesForSymbol(state, context, "react-context")) {
     const sourceFile = state.sourceFiles.get(candidateFile);
     if (sourceFile) {
-      sites += providerTagCount(sourceFile, aliases);
+      sites += contextProviderElements(sourceFile, aliases).length;
     }
   }
   return sites;
 }
 
-function providerTagCount(sourceFile: ts.SourceFile, aliases: ReadonlySet<string>): number {
-  let count = 0;
-  visit(sourceFile, (node) => {
-    if (
-      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      ts.isPropertyAccessExpression(node.tagName) &&
-      node.tagName.name.text === "Provider" &&
-      ts.isIdentifier(node.tagName.expression) &&
-      aliases.has(node.tagName.expression.text)
-    ) {
-      count += 1;
-    }
+/**
+ * Whether reading this local name, a context or a hook that returns one, can never render its
+ * caller: the context is only provided, and read through reader hooks, where the index sees it,
+ * and every provider passes a value that keeps its identity after mount.
+ */
+export function contextReadIsStableFor(
+  state: SourceIndexState,
+  file: string,
+  localName: string,
+): boolean {
+  const normalized = normalizeFile(file);
+  const reader = localSymbol(state, {
+    file: normalized,
+    kind: "context-reader-hook",
+    name: localName,
   });
-  return count;
+  const contextName = reader
+    ? state.records.get(reader.file)?.contextReaderHooks.get(reader.localName)
+    : localName;
+  const context =
+    contextName === undefined
+      ? null
+      : localSymbol(state, {
+          file: reader?.file ?? normalized,
+          kind: "react-context",
+          name: contextName,
+        });
+  return context !== null && contextValueIsStable(state, context);
+}
+
+function contextValueIsStable(state: SourceIndexState, context: ResolvedSymbol): boolean {
+  const symbolKey = `${context.file}\0${context.localName}`;
+  const cached = state.stableContextValues.get(symbolKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const contextAliases = aliasesForSymbol(state, context, "react-context");
+  const stable =
+    contextAliasesAreKnown(state, contextAliases) && providersAreMountStable(state, contextAliases);
+  state.stableContextValues.set(symbolKey, stable);
+  return stable;
+}
+
+function providersAreMountStable(
+  state: SourceIndexState,
+  contextAliases: ReadonlyMap<string, ReadonlySet<string>>,
+): boolean {
+  let sites = 0;
+  for (const [candidateFile, aliases] of contextAliases) {
+    const sourceFile = state.sourceFiles.get(candidateFile);
+    const moduleSites = sourceFile ? mountStableProviderCount(sourceFile, aliases) : null;
+    if (moduleSites === null) {
+      return false;
+    }
+    sites += moduleSites;
+  }
+  return sites > 0;
+}
+
+/** How many providers the module renders for these aliases, or null when one passes a changing value. */
+function mountStableProviderCount(
+  sourceFile: ts.SourceFile,
+  aliases: ReadonlySet<string>,
+): number | null {
+  const providers = contextProviderElements(sourceFile, aliases);
+  if (providers.length === 0) {
+    return 0;
+  }
+  const imports = collectHookImports(sourceFile);
+  return providers.every((element) => providerValueIsMountStable(element, imports))
+    ? providers.length
+    : null;
 }
 
 function contextReaderConsumers(

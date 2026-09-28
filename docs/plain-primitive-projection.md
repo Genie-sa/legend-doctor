@@ -1,57 +1,90 @@
-# Plain primitive projection proof
+# Primitive projection proof
 
-`select-primitive-projection` moves a raw `useValue` read and its plain strict equality comparison into one inline selector. It does not introduce `useObservable`, and it does not modify the computed-memo rule.
+`select-primitive-projection` finds a render that subscribes to a whole observable value only to compare it with one
+render-stable operand, and moves the comparison into the subscription:
 
 ```tsx
-const active$ = observable<string>("a");
 function Row({ trackId }: { trackId: string }) {
   const id = useValue(active$);
   const selected = id === trackId;
   return <div data-selected={selected} />;
 }
-export function App() {
-  return <Row trackId="a" />;
+```
+
+becomes
+
+```tsx
+function Row({ trackId }: { trackId: string }) {
+  const selected = useValue(() => active$.get() === trackId);
+  return <div data-selected={selected} />;
 }
 ```
 
-The recommendation replaces the two declarations at the original hook position with:
+`Row` then renders only when the boolean flips instead of on every `active$` change. In a list of rows keyed by
+identity, changing the active id re-renders the two rows whose selection flips; the selector itself still runs once
+per row, so selection work stays linear. The edit keeps the callee the source calls (`useValue`, `use$`,
+`useSelector`, or an alias) and the comparison's operand order.
 
-```tsx
-const selected = useValue(() => active$.get() === trackId);
-```
+When the sole comparison initializes a `const` in the owner body, that `const` becomes the selector's binding and its
+declaration is deleted. Otherwise the selector gets a fresh name (`activeMatches` or `activeDiffers`, and
+`hasItem` or `missingItem` against `null`/`undefined`) and every comparison is replaced with it. A finding keeps its
+instruction but omits edits when the removed range holds a comment, and is withheld when the fresh name is already
+used in the file.
 
-The selector stays inline: each parent render supplies the current primitive prop. A boolean equality result partitions a broad string or number domain; two different unequal inputs leave the result equal. This establishes a possible suppressed render, not a workload frequency or timing estimate.
+## Proof
 
-The first version accepts only a module-level private function referenced exclusively through component JSX tags. Its body contains exactly the raw const, the projected const, and inert host JSX. The observable is a same-file module const created by the imported `observable` factory with a string/number literal initializer and either no generic or a matching broad primitive generic. The comparison is `===` or `!==`, with the raw name on the left and a literal or directly destructured, explicitly typed primitive prop on the right. Raw references are confined to the projection. There are no computed property reads, helper calls, options, assertions, or arbitrary computations.
+Every condition must hold; a missing proof yields no finding.
 
-Exported/wrapped components, observer ownership, imported observable provenance, finite unions, boolean sources, property paths, custom hooks, callback/effect snapshots, render-side operations, and other body statements are outside this phase. Skipping a render can otherwise alter effect timing or refresh a closure differently even when the visible boolean stays equal. Unsupported shapes receive no new finding, rather than an unsafe migration instruction.
+1. **Subscription.** A `const` declares the raw value from a one-argument `useValue`-family call without type
+   arguments or annotation, directly in the body of a synchronous component or hook that no `observer` wraps. The
+   argument is a proven observable path. Bindings are proven per declaration: module and imported observables, a
+   typed props parameter (`({ a$ }: Props)`, `const { a$ } = props`, `const a$ = props.a$` when `props` is never
+   reassigned), and a `const` destructure of a context-reader hook whose `createContext<T>` type argument declares the
+   member as an `Observable`. A `?? fallback`, a `let` binding, a shadowed hook, or an untyped or union-typed member
+   stays unproven.
+2. **Confinement.** Every owner reference to the raw value is one side of the same `===` or `!==` comparison against
+   the same operand. Loose `==`/`!=` is accepted only against `null` or `undefined`.
+3. **Stable operand.** The operand is fixed for the render: a literal, a parameter or prop that is never assigned, a
+   `const` declared before the subscription, or a module constant, optionally through a static property path.
+4. **Domain.** The observable holds objects or at least three primitive values, taken from its declared type or its
+   widened seed. A boolean or a two-member literal union cannot keep the comparison while changing, so it removes no
+   render.
+5. **No other render on the same change.** The owner has no overlapping subscription or observer `get()` on a
+   related path and no dependency-free effect, and no visible parent re-renders it on the same path. Every hook the
+   owner calls is known: React's owner-local hooks, Legend's selector and non-rendering hooks, or a context read
+   (`useContext`, `use`, or a reader hook) whose every `<Context.Provider>` passes a mount-stable value, meaning a
+   ref, an owned observable, a state setter, a module binding, or a `useMemo`/`useCallback` over such values. An
+   unresolved custom hook could subscribe to the same path or run an effect on every render, so it blocks the
+   finding. Single-file analysis sees no provider and proves no context.
+6. **No stale render reads.** Dropped renders are the ones where the raw value changes but the comparison does not.
+   For a primitive, that only happens on the unequal side, so a ref, `peek()`, or untracked `get()` read in render is
+   allowed only under a test of the comparison's equal side (`if (selected)`, `selected && …`, or the true branch
+   of `selected ? … : …`). Object domains allow none, since an in-place change keeps identity.
 
-The separate observer runtime control demonstrates different subscription ownership; it does not authorize a detector recommendation in observer components. Already projected selectors are analyzer negative controls.
+The Legend State 2.x gate (`legend-v2-tracking`) disables the rule, because 2.x can auto-track render `get()` calls.
 
-`evals/research/plain-primitive-projection.json` records manually audited Legend Music evidence at its corpus pin. Playlist's array-length projection enters a callback dependency and remains explicitly non-enforced. TrackItem already selects booleans. These research labels are not loaded into scored totals and assert no safe real-app migration.
+## Runtime evidence
 
-The jsdom runtime contract mounts 500 rows, excludes mount renders, changes the active ID, changes row props while preserving keys/DOM identity, changes the ID again, and verifies cleanup. Normal mode: 500 raw renders versus 2 projected renders with 502 selector executions. StrictMode: 1,000 versus 4 renders with 504 selector executions. Selection still visits all rows. These are pinned React/Legend DOM observations, not native device timing.
+`tests/runtime/plain-primitive-projection.test.ts` mounts 500 keyed rows under React 19.2.8 and Legend State
+3.0.0-beta.48 in jsdom. Changing the active id renders 500 raw rows against 2 projected rows (1,000 against 4 under
+StrictMode). Prop updates stay live through the inline selector and keep mount identity.
 
-JSX ownership assumes the normal React JSX transform, as does the existing React analysis pipeline. Explicit `@jsx`, `@jsxImportSource`, `@jsxRuntime`, and `@jsxFrag` pragmas abstain. Namespace JSX, namespace hook/factory calls, keys, refs, spreads, custom elements, and component children are unsupported. Project-wide custom JSX factory configuration is not represented by the current capability model; this phase does not add that metadata.
+`tests/runtime/context-row-selector.test.ts` runs 200 rows in both modes:
 
-## Validation at the research baseline
+- rows that read the observable from a context with a memoized provider value render 200 raw against 2 projected;
+- a provider that subscribes to the same observable and rebuilds its value keeps all 200 rows rendering even when
+  projected, which is why the rule requires a mount-stable provider value;
+- a `!== null` projection renders no row when one dragged object replaces another;
+- a render write under `if (isSelected)` still tracks the selected row.
 
-Starting commit: `378977306448c0fc3d0326dbc986f0f6e082b622`. Typecheck, lint, formatting, build, package dry run, and all 1,035 unit/runtime tests passed. Doctor ran before editing and after validation; both runs reported zero findings on the analyzer's own source (329 then 330 files).
+## Corpus
 
-The full seven-app pinned corpus ran before and after. Both runs inventoried 1,236 hooks across 237 targets and exited 1 with the identical seven pre-existing mismatches recorded in the research report. No pins, scoring policy, or enforced labels were weakened. A separate starting-commit build and final build produced identical complete hook/practice finding records for every application:
+No pinned application has an enforced projection. `evals/research/plain-primitive-projection.json` records the
+audited research sites at the Legend Music pin. Its `DroppableZone` compares `activeDropZone` and `draggedItem` exactly
+as the reorder-controls package did before the upstream fix. Legend Music's provider, however, subscribes to
+`activeDropZone$` and rebuilds its context value on every render, so every zone renders anyway and the rule abstains.
+In the expert replay, the reorder-controls parent tree memoizes its provider value, and the rule reproduces the
+expert's edit at `DroppableZone.tsx:40`.
 
-| Application             | Findings before → after | Action/disposition deltas |
-| ----------------------- | ----------------------- | ------------------------- |
-| Legend Music            | 102 → 102               | All zero                  |
-| Excalidraw              | 186 → 186               | All zero                  |
-| Expensify               | 345 → 345               | All zero                  |
-| Formbricks              | 422 → 422               | All zero                  |
-| Outline                 | 150 → 150               | All zero                  |
-| Open WebUI React Native | 8 → 8                   | All zero                  |
-| Hoalu                   | 92 → 92                 | All zero                  |
-
-The new action has no real-corpus enforced migration in this bounded phase. Its actionable evidence is the structural fixture suite and pinned runtime contract; the real-app labels preserve research boundaries.
-
-The emitted replacement preserves the callee the source calls: a named alias (for example `useSelected`), `use$`, `useSelector`, or a namespace call, including when a different module binding is named `useValue`.
-
-See [the test risk ledger](plain-projection-test-ledger.md) for covered failure modes, counterfactual evidence, and residual limitations.
+The earlier, narrower phase of this rule is documented in [the before/after evidence](plain-projection-before-after.md)
+and [the test ledger](plain-projection-test-ledger.md).

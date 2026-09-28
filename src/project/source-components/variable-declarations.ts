@@ -10,6 +10,7 @@ import {
 import { dataFieldKeys, exactObjectLiteralKeys } from "../../core/analysis-ast.js";
 import { directObservableMembers, isObservableInitializer } from "./observable-declarations.js";
 import { directReactContextReader, isReactContextInitializer } from "./react-traits.js";
+import { declaredObservableContextType } from "./observable-contexts.js";
 import { isPlainConstantDeclaration } from "../../rules/observable-reads/plain-seed-paths.js";
 import { styledComponentTarget } from "./framework-event-components.js";
 import ts from "typescript";
@@ -86,6 +87,10 @@ function collectReactContextDeclaration(
     return;
   }
   draft.reactContexts.add(name);
+  const observableContext = declaredObservableContextType(initializer, signals.observableTypes);
+  if (observableContext) {
+    draft.observableContexts.set(name, observableContext);
+  }
   if (context.exported) {
     draft.localExports.set(name, name);
   }

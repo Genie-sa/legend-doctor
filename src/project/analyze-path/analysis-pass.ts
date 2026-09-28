@@ -289,14 +289,17 @@ function legendPracticeFindings(
     includeFindings,
     importedObservableArrayPaths: sourceIndex.observableArrayPathsFor(entry.file),
     importedObservableDataKeys: sourceIndex.observableDataKeysFor(entry.file),
+    importedObservableDeclarations: sourceIndex.observableDeclarationsFor(entry.file),
     importedObservablePrimitivePaths: sourceIndex.observablePrimitivePathsFor(entry.file),
     importedObservablePlainSeedPaths: sourceIndex.observablePlainSeedPathsFor(entry.file),
     plainConstants: sourceIndex.plainConstantsFor(entry.file),
     importedObservableKeys: sourceIndex.observableKeysFor(entry.file),
+    observableContextReaders: sourceIndex.observableContextReadersFor(entry.file),
     observableInPlaceWrites: relativeInPlaceWrites(
       sourceIndex.observableInPlaceWritesFor(entry.file),
       pass.analysisRoot,
     ),
+    stableContextRead: (localName) => sourceIndex.contextReadIsStableFor(entry.file, localName),
     childContracts,
   });
 }

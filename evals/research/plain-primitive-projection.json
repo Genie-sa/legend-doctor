@@ -17,6 +17,22 @@
       "line": 67,
       "enforced": false,
       "rationale": "Manually audited selectors at lines 67 and 85 already return booleans for playing and selected state. They are negative controls for a new projection recommendation; their helper/property/optional branches are not evidence for widening the supported expression subset."
+    },
+    {
+      "id": "PLAIN-PROJECTION-DROP-ZONE-CONTEXT",
+      "file": "src/components/dnd/DroppableZone.tsx",
+      "line": 40,
+      "action": "select-primitive-projection",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: activeDropZone is read only in `activeDropZone === id`, the pattern the reorder-controls package fixed upstream. Here DragDropProvider subscribes to activeDropZone$ and builds a fresh context value on every render, so each hover change re-renders every zone through useDragDrop and a boolean selector removes no render. The rule abstains because the context value is not mount-stable; it becomes actionable once the provider stops subscribing and memoizes its value."
+    },
+    {
+      "id": "PLAIN-PROJECTION-DROP-ZONE-DRAGGED",
+      "file": "src/components/dnd/DroppableZone.tsx",
+      "line": 39,
+      "action": "select-primitive-projection",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: draggedItem is read only in `draggedItem !== null`, and a drag-enter replaces one dragged object with another, which re-renders every zone for an unchanged boolean. The same useDragDrop context blocker applies, so the projection stays research until the provider value is mount-stable."
     }
   ]
 }

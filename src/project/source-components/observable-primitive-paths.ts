@@ -12,6 +12,24 @@ export function observablePrimitivePathsFor(
   );
 }
 
+interface ImportedObservableDeclaration {
+  readonly declaration: ts.VariableDeclaration;
+  readonly declaringFile: string;
+  readonly name: string;
+}
+
+/** The sole exported declaration of each observable the file imports, keyed by its local name. */
+export function observableDeclarationsFor(
+  state: SourceIndexState,
+  file: string,
+): ReadonlyMap<string, ts.VariableDeclaration> {
+  const declarations = new Map<string, ts.VariableDeclaration>();
+  for (const { declaration, name } of importedObservableDeclarations(state, file)) {
+    declarations.set(name, declaration);
+  }
+  return declarations;
+}
+
 /** Paths that `pathsOf` proves for each observable the file imports, keyed by its local name. */
 export function observableDeclarationPathsFor(
   state: SourceIndexState,
@@ -19,17 +37,25 @@ export function observableDeclarationPathsFor(
   pathsOf: (declaration: ts.VariableDeclaration, declaringFile: string) => ReadonlySet<string>,
 ): ReadonlySet<string> {
   const paths = new Set<string>();
-  for (const [name, symbol] of resolvedFor(state, file, "observable")) {
-    const source = state.sourceFiles.get(symbol.file);
-    const declaration = source ? exportedDeclaration(source, symbol.localName) : null;
-    if (!declaration) {
-      continue;
-    }
-    for (const suffix of pathsOf(declaration, symbol.file)) {
+  for (const { declaration, declaringFile, name } of importedObservableDeclarations(state, file)) {
+    for (const suffix of pathsOf(declaration, declaringFile)) {
       paths.add(suffix ? `${name}.${suffix}` : name);
     }
   }
   return paths;
+}
+
+function* importedObservableDeclarations(
+  state: SourceIndexState,
+  file: string,
+): Iterable<ImportedObservableDeclaration> {
+  for (const [name, symbol] of resolvedFor(state, file, "observable")) {
+    const source = state.sourceFiles.get(symbol.file);
+    const declaration = source ? exportedDeclaration(source, symbol.localName) : null;
+    if (declaration) {
+      yield { declaration, declaringFile: symbol.file, name };
+    }
+  }
 }
 
 function exportedDeclaration(source: ts.SourceFile, name: string): ts.VariableDeclaration | null {
