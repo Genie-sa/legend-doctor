@@ -938,6 +938,26 @@ stability, or context. `useObservable` also deactivates the node it returns when
 node is the shared source. Nest one observable inside another only as an intentional link whose reads and writes
 forward to the source.
 
+## Keep memoized children memoized
+
+### Stabilize a prop a memoized child compares
+
+```tsx
+const [open, setOpen] = useState(false);
+<Row onPick={() => select(id)} style={{ margin: 4 }} />; // Before
+const pick = useCallback(() => select(id), [id]);
+<Row onPick={pick} style={ROW_STYLE} />; // After, with `const ROW_STYLE = { margin: 4 }` at module scope
+```
+
+`memo` and `observer` skip a render only when every prop keeps its identity. A literal, function, or element built
+during render is new each time, so every `open` write re-renders `Row` although no prop changed. The finding fires
+when the owner has state or a subscription the element never reads, and it is always a `candidate`. Before applying
+it, confirm that `Row` renders only from its props, state, and subscriptions. A child that reads a global or a
+mutable module value depends on these renders: an owner can mutate that value and then force a render, and the
+rebuilt prop is what lets it through. The finding also names any prop whose identity is unproven, and says when every
+write of the unread state also changes something the element reads. Components the React Compiler compiles are
+skipped, since it already memoizes these values.
+
 ## Final check
 
 Before finishing:
