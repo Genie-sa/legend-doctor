@@ -9,6 +9,7 @@ import { EMPTY_RUNTIME_FUNCTIONS } from "../constants.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { collectEffectStateScopes } from "../owner-bindings.js";
 import { findDeferredRevealStates } from "../../rules/deferred-reveal/deferred-reveal.js";
+import { findSplitCommitCompanions } from "../split-commit-companions.js";
 import { findStateCompanionWrites } from "../companion-writes.js";
 import { isCustomHookOwner } from "../ast-helpers.js";
 import { isPropertyLocalObjectDraftState } from "../../rules/object-draft/object-draft.js";
@@ -118,6 +119,7 @@ export function collectOwnershipProofs(
     effectStateScopes,
     observableSelectionOwners,
     propertyLocalObjectDrafts,
+    splitCommitCompanions: findSplitCommitCompanions(analysis),
     statesWithCompanionWrites,
   };
 }

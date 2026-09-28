@@ -210,3 +210,12 @@ function localObservableInitialValue(
       : null;
   return initial ? { initial, name: node.name.text } : null;
 }
+
+export function mayContainLegendPractice(file: AnalysisFile): boolean {
+  const sourceText = file.sourceFile.text;
+  return (
+    sourceText.includes("@legendapp/state") ||
+    /\.(?:get|set)\s*\(/u.test(sourceText) ||
+    /\b(?:useValue|useSelector|use\$)\s*\(/u.test(sourceText)
+  );
+}

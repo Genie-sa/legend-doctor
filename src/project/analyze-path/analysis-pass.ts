@@ -8,6 +8,10 @@ import type {
   LegendPracticeFinding,
   ReportScope,
 } from "../../core/types.js";
+import {
+  analyzeLegendPracticesFile,
+  mayContainLegendPractice,
+} from "../../practices/analyze-legend-practices.js";
 import { analyzeSourceFile, findingHookImports } from "../../analysis/analyze-source.js";
 import {
   analyzedFileCoverage,
@@ -28,7 +32,6 @@ import { ReactCompilerResolver } from "../react-compiler-package.js";
 import { SCHEMA_VERSION } from "../../core/types.js";
 import { StateFlowIndex } from "../state-flow/state-flow.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
-import { analyzeLegendPracticesFile } from "../../practices/analyze-legend-practices.js";
 import { buildSubscriptionAnalysis } from "../../report/subscription-plans.js";
 import { collectHookImports } from "../../core/imports.js";
 import { createChildContractResolver } from "./child-contracts.js";
@@ -65,6 +68,7 @@ interface AnalysisPassOptions {
   coverage: AnalysisCoverageLedger | null;
   includeDetails: boolean;
   materiality: MaterialityPolicy;
+  syncLaneFiles: ReadonlySet<string>;
 }
 
 interface AnalysisAccumulator {
@@ -254,6 +258,7 @@ function hookFindings(
     materiality: pass.materiality,
     confirmations: pass.confirmations,
     analysisRoot: pass.analysisRoot,
+    syncLaneRendersAlone: pass.syncLaneFiles.has(entry.file),
   });
 }
 
@@ -414,14 +419,5 @@ function isLegendPracticeEligible(
     (file.sourceFile.text.includes("@legendapp/state") ||
       importedObservables.size > 0 ||
       importedObservableFactories.size > 0)
-  );
-}
-
-function mayContainLegendPractice(file: AnalysisFile): boolean {
-  const sourceText = file.sourceFile.text;
-  return (
-    sourceText.includes("@legendapp/state") ||
-    /\.(?:get|set)\s*\(/u.test(sourceText) ||
-    /\b(?:useValue|useSelector|use\$)\s*\(/u.test(sourceText)
   );
 }

@@ -11,6 +11,8 @@ export interface WriteUnit {
 }
 
 export interface ProgramReach {
+  /** The unit and every stretch that reaches it through synchronous calls, internal ones included. */
+  readonly callingUnits: (unit: ExecutionUnit) => readonly ExecutionUnit[];
   /** Every stretch that runs a write in `unit` after importers mount; module loading is excluded. */
   readonly writeUnits: (unit: ExecutionUnit) => readonly WriteUnit[];
 }
@@ -31,6 +33,7 @@ export function programReach(files: readonly FileReach[]): ProgramReach {
   resolveHandoffs(graph);
   const reachesOpaque = callersClosure(graph.opaque, graph.callers);
   return {
+    callingUnits: (unit) => callingUnits(graph, unit),
     writeUnits: (unit) =>
       callingUnits(graph, unit)
         .filter(

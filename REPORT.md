@@ -67,7 +67,7 @@ blocked a proven edit.
 | `abstentionReason`                  | Missing proof or preserved constraint                                                              |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `async-command-origin-unresolved`   | An async command's pending writes have a proven leaf boundary, but not an event-only origin        |
-| `atomic-transition-unproven`        | Companion writes may need to publish together; which cells and batch boundaries is unproven        |
+| `atomic-transition-unproven`        | Companion writes may need to publish together, or would commit apart from the converted cell       |
 | `binding-shape-unsupported`         | The hook result is bound in a shape the analyzer does not model                                    |
 | `callback-timing-unresolved`        | A deferred read may need a render snapshot, a command-entry snapshot, or the current value         |
 | `child-contract-unresolved`         | A receiving component or forwarding wrapper has unproven render reads, effects, captures, or props |

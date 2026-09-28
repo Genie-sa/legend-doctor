@@ -1,5 +1,9 @@
 import type { AbstentionReason, ResearchStep } from "../../core/types.js";
 import type { ClassifiedState, StateCandidate } from "../model.js";
+import {
+  hasOnlySplitCommitCompanions,
+  withoutCompanionWrites,
+} from "../verdicts/classification-context.js";
 import { isCustomHookOwner, runtimeFunctionName } from "../ast-helpers.js";
 import { AssumedLeafContracts } from "./assumed-leaf-contracts.js";
 import type { StateClassificationInputs } from "../verdicts/classification-context.js";
@@ -77,6 +81,25 @@ function declarationStep(scope: HypothesisScope): ResearchStep {
 }
 
 function atomicTransitionHypothesis(scope: HypothesisScope): Hypothesis {
+  return hasOnlySplitCommitCompanions(scope.inputs)
+    ? splitCommitHypothesis(scope)
+    : cowrittenHypothesis(scope);
+}
+
+function splitCommitHypothesis(scope: HypothesisScope): Hypothesis {
+  const { inputs } = scope;
+  const { splitCommitCompanions, state } = inputs;
+  const companionNames = joinNames(
+    splitCommitCompanions.map((companion) => companion.state.valueName),
+  );
+  return {
+    inputs: { ...inputs, splitCommitCompanions: [] },
+    question: `Converted alone, \`${state.valueName}\` may commit apart from React state ${companionNames} in the same transition; confirm no render, effect, or reader depends on them changing in the same commit.`,
+    research: [declarationStep(scope)],
+  };
+}
+
+function cowrittenHypothesis(scope: HypothesisScope): Hypothesis {
   const { inputs, partners } = scope;
   const { state, usage } = inputs;
   const partnerNames = partners.map((partner) => partner.valueName);
@@ -85,7 +108,7 @@ function atomicTransitionHypothesis(scope: HypothesisScope): Hypothesis {
       ? `alongside ${joinNames(partnerNames)}`
       : "alongside other state cells of this owner";
   return {
-    inputs: { ...inputs, hasCompanionWrites: false, hasNonClosingCompanionWrites: false },
+    inputs: withoutCompanionWrites(inputs),
     question:
       `\`${state.valueName}\` is written ${group} in the same handlers; confirm the group ` +
       "changes as one atomic transition, so every member can move into observables written " +

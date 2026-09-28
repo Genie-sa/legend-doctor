@@ -90,7 +90,8 @@ function ownerSuspensions(owner: ts.Node): readonly ts.Node[] {
   return suspensions;
 }
 
-function executionOwner(node: ts.Node): ts.Node {
+/** The function (or module) whose body starts the stretch the node runs in. */
+export function executionOwner(node: ts.Node): ts.Node {
   for (let current = node.parent; current; current = current.parent) {
     if (isRuntimeFunctionLike(current) && !runsSynchronouslyInCaller(current)) {
       return current;

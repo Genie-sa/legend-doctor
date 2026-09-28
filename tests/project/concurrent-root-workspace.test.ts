@@ -1,4 +1,7 @@
-import { ConcurrentRootResolver } from "../../src/project/concurrent-root-workspace.js";
+import {
+  ConcurrentRootResolver,
+  filesRenderingSyncLaneAlone,
+} from "../../src/project/concurrent-root-workspace.js";
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
@@ -143,4 +146,36 @@ test("catalog references resolve through pnpm and Bun workspace catalogs", async
     }),
     true,
   );
+});
+
+test("a workspace package on React below 19 renders the store's sync lane alone", async () => {
+  for (const [label, files, expected] of [
+    ["React 18", { "package.json": manifest({ dependencies: { react: "18.3.1" } }) }, true],
+    ["React 19", { "package.json": manifest({ dependencies: { react: "^19.1.0" } }) }, false],
+    ["no React", { "package.json": manifest({}) }, false],
+    [
+      "one React 18 package",
+      {
+        ...NPM_LOCKFILE,
+        "package.json": manifest({ workspaces: ["apps/*"] }),
+        "apps/web/package.json": JSON.stringify({
+          dependencies: { react: "^19.0.0" },
+          name: "web",
+        }),
+        "apps/legacy/package.json": JSON.stringify({
+          dependencies: { react: "^18.2.0" },
+          name: "old",
+        }),
+      },
+      true,
+    ],
+  ] as const) {
+    let verdict = !expected;
+    await withProject({ [APP_FILE]: "export {};", ...files }, async (root) => {
+      const file = path.join(root, APP_FILE);
+      const aloneFiles = await filesRenderingSyncLaneAlone([file]);
+      verdict = aloneFiles.has(file);
+    });
+    assert.equal(verdict, expected, label);
+  }
 });

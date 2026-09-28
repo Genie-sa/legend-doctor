@@ -5,6 +5,7 @@ import type {
   DialogPayloadCut,
   DirectReturnCallSite,
   SiblingRenderCut,
+  SplitCommitCompanion,
   StateCandidate,
   StateSubtree,
   StateUsage,
@@ -78,11 +79,39 @@ export interface StateClassificationInputs {
   readonly siblingRenderCut: SiblingRenderCut | null;
   readonly sourceComponents: ReadonlySet<string>;
   readonly sourceFile: ts.SourceFile;
+  /** Rendered React states the renderer may commit apart from this state's observable. */
+  readonly splitCommitCompanions: readonly SplitCommitCompanion[];
   readonly state: StateCandidate;
   /** The callee instructions for a new subscription in this file name. */
   readonly subscriptionHook: string;
   readonly subtree: StateSubtree | null;
   readonly usage: StateUsage;
+}
+
+/**
+ * The inputs with the co-write blocker assumed away, as if the co-written states converted together
+ * in one synchronous stretch. A companion written in another stretch still commits separately.
+ */
+export function withoutCompanionWrites(
+  inputs: StateClassificationInputs,
+): StateClassificationInputs {
+  return {
+    ...inputs,
+    hasCompanionWrites: false,
+    hasNonClosingCompanionWrites: false,
+    splitCommitCompanions: inputs.splitCommitCompanions.filter(
+      (companion) => !companion.sameStretch,
+    ),
+  };
+}
+
+/** Whether a renderer split commit, and no co-written React state, blocks this state's atomicity. */
+export function hasOnlySplitCommitCompanions({
+  hasCompanionWrites,
+  hasNonClosingCompanionWrites,
+  splitCommitCompanions,
+}: StateClassificationInputs): boolean {
+  return splitCommitCompanions.length > 0 && !hasCompanionWrites && !hasNonClosingCompanionWrites;
 }
 
 interface StateRenderCutEvidence {
