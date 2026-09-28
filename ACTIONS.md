@@ -1,6 +1,6 @@
 # Actions
 
-A `change` finding carries a proven edit; a `style` finding offers an equivalent form without a proven render or lifecycle saving. The finding carries the exact edit. Each link shows the before and after in
+A `change` finding carries a proven edit; a `style` finding offers an equivalent form without a proven render or lifecycle saving, so `--actionable` hides it and counts it under `hidden.practices`. The finding carries the exact edit. Each link shows the before and after in
 [EXAMPLES.md](EXAMPLES.md).
 
 ### React state

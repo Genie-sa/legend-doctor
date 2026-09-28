@@ -117,7 +117,8 @@ Validate suggested edits with your formatter, typecheck, and tests, then rescan.
 ```bash
 legend-doctor <root> --disposition change      # proven edits only
 legend-doctor <root> --disposition candidate   # needs a human or agent to read more
-legend-doctor <root> --actionable              # one entry per edit, keep findings hidden
+legend-doctor <root> --actionable              # one entry per edit; keep and style hidden
+legend-doctor <root> --disposition style       # equivalent forms with no proven saving
 legend-doctor <root> --fail-on change          # CI: exit 3 while a proven edit remains
 legend-doctor <root> --coverage                # parser and analysis coverage
 legend-doctor <root> --ignore-action use-ref   # hide one action for this run
