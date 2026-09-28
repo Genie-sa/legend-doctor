@@ -105,6 +105,24 @@ export const legendAppsPracticeCases = [
     target: "legend-apps-music",
   },
   {
+    action: "move-use-value-down",
+    disposition: "change",
+    file: "settings/SpotifySettings.tsx",
+    line: 21,
+    rationale:
+      "Toggling Spotify rerenders the 18-element settings owner, yet `enabled` is read only by the Checkbox and the Connect Button. The owner's two useCallbacks depend only on useToast, an imported hook whose body is `return useContext(ToastContext)`, so an enabled-only render cannot recreate them; there are no refs, effects, or render snapshots.",
+    target: "legend-apps-music",
+  },
+  {
+    action: "move-use-value-down",
+    disposition: "change",
+    file: "settings/SpotifySettings.tsx",
+    line: 22,
+    rationale:
+      "Every Client ID keystroke writes settings$.providers.spotify.clientId and rerenders the 18-element owner; only the controlled TextInput reads it. The handlers are useCallbacks keyed on the useContext-only useToast result, so a keystroke-only render recreates nothing the owner keeps.",
+    target: "legend-apps-music",
+  },
+  {
     action: "use-peek-for-snapshot",
     disposition: "style",
     file: "systems/AppMenu.macos.tsx",

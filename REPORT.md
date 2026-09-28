@@ -285,7 +285,7 @@ gate leaves no smaller boundary to extract. A JSX tag name chosen by a gate stay
 | `no-render-consumer`                     | Neither the returned JSX nor a render callback inside it reads the value                           |
 | `observable-binding-not-proven`          | The argument is neither a proven observable path nor a selector function                           |
 | `overlapping-parent-subscription`        | Another subscription in the owner already tracks this path or an ancestor                          |
-| `owner-commit-or-snapshot-work`          | The owner has refs, `.current`, `get()` or `peek()` snapshots, unstable cached hooks, or effects   |
+| `owner-commit-or-snapshot-work`          | A render snapshot, or an effect, cache, or ref that a subscription-only render could redo          |
 | `owner-not-proven`                       | The call is bound to a name, but no enclosing component or hook body is proven                     |
 | `render-callback-consumer`               | A synchronous callback inside the returned JSX reads the value once per item                       |
 | `returned-result`                        | The result is returned, so its consumers live outside this owner                                   |
@@ -399,11 +399,15 @@ Use an existing native application's device test setup for this bounded contract
    if frame, commit, layout or UI-thread claims are needed. Never infer those costs from JS selector timing.
 
 Closed `const` aliases/defaults and supported `useMemo` projections move with their subscriptions. Memo
-identity and dependencies remain intact. Literal primitive effect dependencies and explicitly typed primitive
-props can prove that an independent effect will not rerun on subscription-only updates. Missing/unstable
-or unresolved dependencies, callback snapshots, refs, overlapping parent subscriptions, repeated render
-callbacks, and unsupported expressions remain conservative blockers. General selector relocation is not
-implied by inventory coverage.
+identity and dependencies remain intact. Owner effects, `useMemo`/`useCallback` caches, and `ref` values do
+not block when every dependency (or the ref itself) keeps its identity on a subscription-only render:
+literals and explicitly typed primitive props, other `useValue` results, `useRef` and `useObservable`
+handles, `useState` tuple members, zero-argument calls to an imported hook whose body only returns
+`useContext(X)`, and caches whose own dependencies qualify. Such work is not redone when the cut removes
+the owner render. Render-time `.current`, `get()` and `peek()` reads, inline or computed callback refs,
+missing/unstable or unresolved dependencies, callback snapshots, overlapping parent subscriptions,
+repeated render callbacks, and unsupported expressions remain conservative blockers. General selector
+relocation is not implied by inventory coverage.
 
 ### Imported source coverage
 

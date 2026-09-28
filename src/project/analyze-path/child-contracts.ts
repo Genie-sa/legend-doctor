@@ -232,6 +232,10 @@ class ChildContracts implements ChildContractResolver {
     return this.context.sourceIndex.contextProviderSitesFor(this.importerFile, contextName);
   }
 
+  public contextReaderBindings(): ReadonlySet<string> {
+    return this.context.sourceIndex.contextReadersFor(this.importerFile);
+  }
+
   public hasPlatformVariant(): boolean {
     const match =
       /^(?<base>.*?)(?:\.(?:native|ios|android|web))?\.(?<extension>[cm]?[jt]sx?)$/u.exec(

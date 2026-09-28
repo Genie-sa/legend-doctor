@@ -44,6 +44,8 @@ export interface SourceIndex {
     file: string,
     contextName: string,
   ) => ReadonlyMap<string, ReadonlySet<string>>;
+  /** Imported hooks whose whole body returns one React context read. */
+  contextReadersFor: (file: string) => ReadonlySet<string>;
   deferredCallbackRegistrationsFor: (
     file: string,
   ) => ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<number>>>;
@@ -88,6 +90,7 @@ export function buildSourceIndexFromFiles(
     contextProviderSitesFor: (file, contextName) =>
       contextProviderSitesFor(state, file, contextName),
     contextReaderHooksFor: (file, contextName) => contextReaderHooksFor(state, file, contextName),
+    contextReadersFor: (file) => new Set(resolvedFor(state, file, "context-reader-hook").keys()),
     deferredCallbackHooksFor: (file) => deferredCallbackHooksFor(state, file),
     deferredCallbackRegistrationsFor: (file) => deferredCallbackRegistrationsFor(state, file),
     frameworkEventComponentFor: (file, name) => frameworkEventComponentFor(state, file, name),

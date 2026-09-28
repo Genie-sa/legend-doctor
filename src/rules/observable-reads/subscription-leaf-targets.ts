@@ -10,6 +10,7 @@ import {
   isUseValueCall,
   provenObservablePath,
 } from "./observable-paths.js";
+import { isHostTag, isImportedHookCall } from "../../core/imports.js";
 import { isInsideOwnerReturn, stableConditionalJsxSlot } from "./conditional-jsx-slots.js";
 import { nodeWithin, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
@@ -17,11 +18,11 @@ import type { SubscriptionFlow } from "./subscription-flow.js";
 import { hasPlainOwnerParameters } from "./owner-parameter-work.js";
 import { hasStableIndependentBindings } from "./independent-subscription-bindings.js";
 import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
-import { isImportedHookCall } from "../../core/imports.js";
 import { ownerClassProjectionCalls } from "./owner-class-projections.js";
 import { ownerHasMutableRenderRead } from "../state-proofs/render-purpose.js";
 import { pureFlowExpression } from "./flow-expressions.js";
 import { subscriptionFlow } from "./subscription-flow.js";
+import { subscriptionStableValue } from "./stable-effect-dependencies.js";
 import ts from "typescript";
 
 const MAX_LEAF_OWNER_SHARE = 0.4;
@@ -73,6 +74,10 @@ function trackedCalls(
   const trackedSources = new Set<ts.Node>();
   if (owner.body) {
     visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+      const refValue = stableRefAttributeValue(node, owner, scan);
+      if (refValue) {
+        trackedSources.add(refValue);
+      }
       if (
         ts.isCallExpression(node) &&
         (isDirectSubscription(node, scan) ||
@@ -171,6 +176,30 @@ function moveDownTarget(
   return leafElements / ownerElements <= MAX_LEAF_OWNER_SHARE
     ? { leaf, leafElements, node, ownerElements, references }
     : null;
+}
+
+/**
+ * React only attaches a host element's `ref` on commit and never reads it during render, so a ref
+ * whose identity survives a subscription-only render is no snapshot. A component `ref` or any other
+ * use of the same handle is a prop the child could read `.current` from, and stays imperative.
+ */
+function stableRefAttributeValue(
+  node: ts.Node,
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+): ts.Expression | null {
+  if (
+    !ts.isJsxAttribute(node) ||
+    node.name.getText() !== "ref" ||
+    !isHostTag(node.parent.parent.tagName.getText(), scan.imports) ||
+    !node.initializer ||
+    !ts.isJsxExpression(node.initializer) ||
+    !node.initializer.expression
+  ) {
+    return null;
+  }
+  const value = node.initializer.expression;
+  return subscriptionStableValue(value, owner, scan) ? value : null;
 }
 
 function isDirectSubscription(call: ts.CallExpression, scan: ObservableReadScan): boolean {

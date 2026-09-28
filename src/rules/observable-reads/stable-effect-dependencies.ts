@@ -1,6 +1,7 @@
 import { bindingContainsName, uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 import {
   bindingDeclarationCount,
+  collectBindingNames,
   isAssignmentOperator,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
@@ -8,13 +9,17 @@ import {
   isReactEffectCall,
   resolveLifecycleCallback,
 } from "../react-commit-sensitivity/effect-lifecycle.js";
+import { visit, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { ObservableReadScan } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { hasStableSourceBinding } from "./independent-subscription-bindings.js";
+import { identifiedUseValueDeclaration } from "./observable-paths.js";
+import { isImportedHookCall } from "../../core/imports.js";
+import { isUseObservableCall } from "../in-place-memo-keys/memo-dependencies.js";
 import { primitiveType } from "./primitive-paths.js";
 import ts from "typescript";
-import { visit } from "../../core/ast.js";
 
-/** An independent literal/primitive prop dependency does not change on a subscription-only render. */
+/** An effect whose dependencies keep their identity does not rerun on a subscription-only render. */
 export function hasStableEffectDependencies(
   call: ts.CallExpression,
   owner: RuntimeFunctionLike,
@@ -33,8 +38,175 @@ export function hasStableEffectDependencies(
     callback !== null &&
     dependencies !== undefined &&
     ts.isArrayLiteralExpression(dependencies) &&
-    dependencies.elements.every((dependency) => stablePrimitiveDependency(dependency, owner))
+    dependencies.elements.every((dependency) => subscriptionStableValue(dependency, owner, scan))
   );
+}
+
+/**
+ * A value that keeps its identity when only an unrelated subscription rerenders the owner:
+ * literals and primitive props, other `useValue` results, `useRef` and `useObservable` handles,
+ * `useState` tuple members, zero-argument reads of an imported context-reader hook, and
+ * `useMemo`/`useCallback` results whose own dependencies are stable. Counting the subscription
+ * being cut as stable is harmless: a dependency on it is a memo or effect consumer, which blocks
+ * the cut by itself.
+ */
+export function subscriptionStableValue(
+  expression: ts.Expression,
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+): boolean {
+  return stableValue(expression, { owner, scan, chain: new Set() });
+}
+
+/** A cached hook recomputes on a subscription-only render only when a dependency changes identity. */
+export function hasStableCacheDependencies(
+  call: ts.CallExpression,
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+): boolean {
+  return stableCache(call, { owner, scan, chain: new Set() });
+}
+
+interface StabilityScope {
+  readonly owner: RuntimeFunctionLike;
+  readonly scan: ObservableReadScan;
+  /** Declarations on the current dependency chain; a cycle proves nothing. */
+  readonly chain: Set<ts.VariableDeclaration>;
+}
+
+function stableValue(expression: ts.Expression, scope: StabilityScope): boolean {
+  const { owner } = scope;
+  if (stablePrimitiveDependency(expression, owner)) {
+    return true;
+  }
+  if (!ts.isIdentifier(expression) || bindingDeclarationCount(owner, expression.text) !== 1) {
+    return false;
+  }
+  const declaration = constOwnerDeclaration(owner, expression.text);
+  return declaration !== null && stableDeclaration(declaration, expression.text, scope);
+}
+
+function stableDeclaration(
+  declaration: ts.VariableDeclaration,
+  name: string,
+  scope: StabilityScope,
+): boolean {
+  if (scope.chain.has(declaration)) {
+    return false;
+  }
+  scope.chain.add(declaration);
+  const stable = ts.isIdentifier(declaration.name)
+    ? stableHookResult(declaration, scope)
+    : stateTupleMember(declaration, name, scope.scan);
+  scope.chain.delete(declaration);
+  return stable;
+}
+
+function stableHookResult(declaration: ts.VariableDeclaration, scope: StabilityScope): boolean {
+  const { scan } = scope;
+  const call = declaration.initializer;
+  if (!call || !ts.isCallExpression(call)) {
+    return false;
+  }
+  return (
+    identifiedUseValueDeclaration(declaration, scan) !== null ||
+    isReactHook(call, "useRef", scan) ||
+    isUseObservableCall(call, scan.imports) ||
+    stableCache(call, scope) ||
+    isContextRead(call, scope)
+  );
+}
+
+function stableCache(call: ts.CallExpression, scope: StabilityScope): boolean {
+  const { scan } = scope;
+  if (!isReactHook(call, "useMemo", scan) && !isReactHook(call, "useCallback", scan)) {
+    return false;
+  }
+  const [callback, dependencies, ...rest] = call.arguments;
+  return (
+    callback !== undefined &&
+    (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
+    dependencies !== undefined &&
+    ts.isArrayLiteralExpression(dependencies) &&
+    rest.length === 0 &&
+    dependencies.elements.every((dependency) => stableValue(dependency, scope))
+  );
+}
+
+/** A new provider value rerenders the owner through React context, independent of any subscription. */
+function isContextRead(call: ts.CallExpression, { owner, scan }: StabilityScope): boolean {
+  const callee = call.expression;
+  return (
+    ts.isIdentifier(callee) &&
+    call.arguments.length === 0 &&
+    call.questionDotToken === undefined &&
+    bindingDeclarationCount(owner, callee.text) === 0 &&
+    hasStableSourceBinding(callee) &&
+    (scan.childContracts?.contextReaderBindings().has(callee.text) ?? false)
+  );
+}
+
+function stateTupleMember(
+  declaration: ts.VariableDeclaration,
+  name: string,
+  scan: ObservableReadScan,
+): boolean {
+  const call = declaration.initializer;
+  if (
+    !ts.isArrayBindingPattern(declaration.name) ||
+    !call ||
+    !ts.isCallExpression(call) ||
+    !isReactHook(call, "useState", scan)
+  ) {
+    return false;
+  }
+  const [value, setter] = declaration.name.elements;
+  return [value, setter].some(
+    (element) =>
+      element !== undefined &&
+      ts.isBindingElement(element) &&
+      !element.dotDotDotToken &&
+      !element.initializer &&
+      ts.isIdentifier(element.name) &&
+      element.name.text === name,
+  );
+}
+
+function isReactHook(
+  call: ts.CallExpression,
+  canonicalName: "useCallback" | "useMemo" | "useRef" | "useState",
+  scan: ObservableReadScan,
+): boolean {
+  return isImportedHookCall({
+    call,
+    canonicalName,
+    localNames: scan.imports[canonicalName],
+    namespaceNames: scan.imports.reactNamespaces,
+  });
+}
+
+function constOwnerDeclaration(
+  owner: RuntimeFunctionLike,
+  name: string,
+): ts.VariableDeclaration | null {
+  let found: ts.VariableDeclaration | null = null;
+  if (!owner.body) {
+    return null;
+  }
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isVariableDeclarationList(node.parent) &&
+      (node.parent.flags & ts.NodeFlags.Const) !== 0
+    ) {
+      const names = new Set<string>();
+      collectBindingNames(node.name, names);
+      if (names.has(name)) {
+        found = node;
+      }
+    }
+  });
+  return found;
 }
 
 export function stablePrimitiveDependency(
