@@ -201,11 +201,16 @@ the shared binding for one call would strand the others.
 | `narrow-use-value-subscription` | `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)`                         |
 | `replace-legacy-use-value`      | Callees become `useValue`, a direct selector collapses, legacy specifiers leave the import |
 
-When `useValue` is not imported, the edit adds it beside a retained `@legendapp/state/react` specifier. The field
-is omitted when the edit would drop a comment or a type assertion, when a render read follows an early return or
-sits in JSX, a branch, or an iteration callback, when only a new import declaration would bring `useValue` into
-scope, when a destructure is annotated or its call has type arguments, and when a legacy binding is referenced
-other than by a reported call. Hoisting instructions, `move-*`, `split-*`, and batching stay prose.
+`use$`, `useSelector`, their aliases, and namespace calls from `@legendapp/state/react` are subscription hooks
+like `useValue`. Messages and edits keep the callee the source calls, so `use$(x$.get())` becomes `use$(x$)` and
+leaves the rename to `replace-legacy-use-value`; that finding's edits still compose because an in-place edit never
+touches the callee. A new subscription uses the hook the file already imports, preferring `useValue`; when none is
+imported, the edit adds `useValue` beside a retained `@legendapp/state/react` specifier, or `useSelector` when the
+installed or locked Legend State exports no `useValue`. The field is omitted when the edit would drop a comment or
+a type assertion, when a render read follows an early return or sits in JSX, a branch, or an iteration callback,
+when only a new import declaration would bring the hook into scope, when a render read would reuse a legacy
+binding that the file's legacy migration removes, when a destructure is annotated or its call has type arguments,
+and when a legacy binding is referenced other than by a reported call. Hoisting instructions, `move-*`, `split-*`, and batching stay prose.
 
 The unit suite applies each supported edit and typechecks the result against the installed `@legendapp/state`
 and React types. The corpus eval applies every emitted edit in memory, per finding and per file, and fails when a

@@ -1,6 +1,7 @@
 import type { HookImports } from "../core/imports.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import { bindingDeclarationCount } from "../core/analysis-ast.js";
+import { isUseValueCall } from "./observable-reads/observable-paths.js";
 import ts from "typescript";
 import { visit } from "../core/ast.js";
 
@@ -66,9 +67,7 @@ function rawSubscription(
     !ts.isCallExpression(node) ||
     node.arguments.length !== 1 ||
     node.typeArguments ||
-    !ts.isIdentifier(node.expression) ||
-    !scan.imports.useValue.has(node.expression.text) ||
-    bindingDeclarationCount(owner, node.expression.text) !== 0 ||
+    !isUseValueCall(node, scan.imports) ||
     !scalarObservable(node.arguments[0]!, owner, scan)
   ) {
     return null;

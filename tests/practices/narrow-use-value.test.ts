@@ -313,10 +313,12 @@ test("narrows the legacy useSelector and use$ aliases like useValue", () => {
     [`import { useSelector as select } from "@legendapp/state/react";`, "select"],
     [`import * as Legend from "@legendapp/state/react";`, "Legend.use$"],
   ] as const) {
-    assert.match(
-      requireValue(narrowed(importLine, call)).message ?? "",
-      /useValue\(profile\$\.name\)/u,
-      call,
+    const { message } = requireValue(narrowed(importLine, call));
+    assert.ok(
+      message.startsWith(
+        `Narrow \`profile\` from \`${call}(profile$)\` to \`${call}(profile$.name)\``,
+      ),
+      message,
     );
   }
 });

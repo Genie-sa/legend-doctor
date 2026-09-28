@@ -3,7 +3,7 @@ import {
   RESERVED_OBSERVABLE_MEMBERS,
   directGetReceiver,
   directObservableReadPath,
-  isCanonicalUseValueCall,
+  isUseValueCall,
   provenObservablePath,
 } from "./observable-paths.js";
 import {
@@ -19,7 +19,7 @@ import type { HookImports } from "../../core/imports.js";
 import type { ObservableReadScan } from "./model.js";
 import ts from "typescript";
 
-interface DirectUseValueInput {
+export interface DirectUseValueInput {
   kind: "eager-read" | "selector";
   observable: ts.Expression;
 }
@@ -30,7 +30,7 @@ export function directUseValueInput(
   observableBindings: ReadonlySet<string>,
 ): DirectUseValueInput | null {
   // Direct inputs forward options to get(); eager and callback reads do not inherit them.
-  if (!isCanonicalUseValueCall(call, imports) || call.arguments.length !== 1) {
+  if (!isUseValueCall(call, imports) || call.arguments.length !== 1) {
     return null;
   }
   const input = call.arguments[0]!;
@@ -216,7 +216,8 @@ export function directUseValueFinding(
   const typeArguments = call.typeArguments?.length
     ? `<${call.typeArguments.map((argument) => argument.getText(scan.sourceFile)).join(", ")}>`
     : "";
-  const hook = `${call.expression.getText(scan.sourceFile)}${typeArguments}`;
+  const callee = call.expression.getText(scan.sourceFile);
+  const hook = `${callee}${typeArguments}`;
   const current = `${hook}(${call.arguments.map((argument) => argument.getText(scan.sourceFile)).join(", ")})`;
   const replacement = `${hook}(${[
     path,
@@ -231,12 +232,12 @@ export function directUseValueFinding(
       disposition: eager ? "change" : "style",
       evidence: [
         eager
-          ? "the observable is read with get() before useValue receives its input"
-          : "useValue selector only returns one zero-argument get() call",
+          ? `the observable is read with get() before \`${callee}\` receives its input`
+          : `the \`${callee}\` selector only returns one zero-argument get() call`,
         `${path} is a proven Legend observable path`,
         ...(eager
           ? [
-              "direct input establishes useValue tracking outside observer, or reuses enclosing observer tracking without an empty selector subscription",
+              `direct input establishes \`${callee}\` tracking outside observer, or reuses enclosing observer tracking without an empty selector subscription`,
             ]
           : [
               "the selected observable value is retained without hook options; no render or lifecycle saving is proven",

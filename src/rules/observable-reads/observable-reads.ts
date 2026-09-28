@@ -1,3 +1,4 @@
+import type { InstalledLegendState, LegendPracticeFinding } from "../../core/types.js";
 import { directUseValueFinding, directUseValueInput } from "./use-value-inputs.js";
 import { localDeclarationPaths, localPrimitivePaths } from "./primitive-paths.js";
 import {
@@ -5,12 +6,13 @@ import {
   nonTrackingSnapshotObservable,
 } from "./non-tracking-snapshots.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
+import type { DirectUseValueInput } from "./use-value-inputs.js";
 import type { HookImports } from "../../core/imports.js";
-import type { LegendPracticeFinding } from "../../core/types.js";
 import { NO_OBSERVABLE_FIELD_FACTS } from "./field-writes.js";
 import type { ObservableFieldFacts } from "./field-writes.js";
 import type { ObservableReadScan } from "./model.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
+import { isCanonicalUseValueCall } from "./observable-paths.js";
 import { moveUseValueDownFinding } from "./move-down.js";
 import { moveUseValueIntoChildFinding } from "./move-into-child.js";
 import { narrowUseValueFinding } from "./narrow-use-value.js";
@@ -28,6 +30,8 @@ export interface ObservableReadRequest {
   readonly childContracts?: ChildContractResolver | null;
   readonly fileName: string;
   readonly imports: HookImports;
+  /** Null when no installed or locked Legend State version was resolved. */
+  readonly installedLegendState?: InstalledLegendState | null;
   readonly observableBindings: ReadonlySet<string>;
   readonly observableFields?: ObservableFieldFacts;
   readonly sourceFile: ts.SourceFile;
@@ -48,6 +52,7 @@ export function findObservableReadPractices(
       ...localDeclarationPaths(sourceFile, request.observableBindings, plainSeedPaths),
     ]),
     childContracts: request.childContracts ?? null,
+    installedLegendState: request.installedLegendState ?? null,
     observableFields: request.observableFields ?? NO_OBSERVABLE_FIELD_FACTS,
   };
   const findings: LegendPracticeFinding[] = [];
@@ -84,7 +89,7 @@ function collectCallFindings(
   findings: LegendPracticeFinding[],
 ): void {
   const directInput = directUseValueInput(call, scan.imports, scan.observableBindings);
-  if (directInput) {
+  if (directInput && !legacyMigrationCollapsesSelector(call, directInput, scan)) {
     findings.push(directUseValueFinding(call, directInput, scan));
   }
   const split = splitUseValueResultFinding(call, scan);
@@ -95,4 +100,20 @@ function collectCallFindings(
   if (snapshot) {
     findings.push(nonTrackingSnapshotFinding(call, snapshot, scan));
   }
+}
+
+/**
+ * `replace-legacy-use-value` already rewrites a legacy call's direct selector to the observable
+ * whenever the package exports `useValue`, so a second finding would repeat that instruction.
+ */
+function legacyMigrationCollapsesSelector(
+  call: ts.CallExpression,
+  input: DirectUseValueInput,
+  scan: ObservableReadScan,
+): boolean {
+  return (
+    input.kind === "selector" &&
+    !isCanonicalUseValueCall(call, scan.imports) &&
+    scan.installedLegendState?.useValueExport !== "missing"
+  );
 }

@@ -38,11 +38,12 @@ export function narrowUseValueFinding(
   if (!observable) {
     return null;
   }
+  const candidate = { declaration, hook: call.expression.getText(scan.sourceFile), observable };
   if (ts.isObjectBindingPattern(declaration.name)) {
-    return narrowBindingPatternFinding({ declaration, observable }, declaration.name, scan);
+    return narrowBindingPatternFinding(candidate, declaration.name, scan);
   }
   return ts.isIdentifier(declaration.name)
-    ? narrowIdentifierFinding({ declaration, observable }, declaration.name.text, scan)
+    ? narrowIdentifierFinding(candidate, declaration.name.text, scan)
     : null;
 }
 
@@ -139,10 +140,9 @@ function narrowCommonPathFinding(
   return sibling
     ? narrowFinding(
         {
-          declaration: reads.candidate.declaration,
+          ...reads.candidate,
           destructured: false,
           localName: reads.localName,
-          observable: reads.candidate.observable,
           property: commonPath.join("."),
           reads: reads.paths.length,
           sibling,
@@ -168,9 +168,7 @@ function consumesEveryKnownField(
   return consumed.size === knownKeys.size && [...knownKeys].every((key) => consumed.has(key));
 }
 
-interface NarrowInstruction {
-  readonly declaration: ts.VariableDeclaration;
-  readonly observable: ts.Expression;
+interface NarrowInstruction extends NarrowCandidate {
   readonly property: string;
   readonly localName: string;
   readonly reads: number;
@@ -206,10 +204,9 @@ function narrowObjectBindingFinding(
   return withEdits(
     narrowFinding(
       {
-        declaration: candidate.declaration,
+        ...candidate,
         destructured: true,
         localName,
-        observable: candidate.observable,
         property,
         reads: 1,
         sibling,
@@ -227,7 +224,7 @@ interface DestructuredNarrow {
   readonly property: string;
 }
 
-/** `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)` when no annotation, type argument, or comment ties the shapes. */
+/** `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)`, keeping the callee, when no annotation, type argument, or comment ties the shapes. */
 function destructuredNarrowEdits(
   narrow: DestructuredNarrow,
   scan: ObservableReadScan,
@@ -257,9 +254,10 @@ function narrowFinding(
   );
   const parentPath = instruction.observable.getText(scan.sourceFile);
   const leafPath = `${parentPath}.${instruction.property}`;
+  const { hook } = instruction;
   const message = instruction.destructured
-    ? `Replace the single-property destructure with \`const ${instruction.localName} = useValue(${leafPath})\``
-    : `Narrow \`${instruction.localName}\` from \`useValue(${parentPath})\` to \`useValue(${leafPath})\`; bind the leaf value directly and replace the \`${instruction.localName}.${instruction.property}\` reads`;
+    ? `Replace the single-property destructure with \`const ${instruction.localName} = ${hook}(${leafPath})\``
+    : `Narrow \`${instruction.localName}\` from \`${hook}(${parentPath})\` to \`${hook}(${leafPath})\`; bind the leaf value directly and replace the \`${instruction.localName}.${instruction.property}\` reads`;
   return {
     action: "narrow-use-value-subscription",
     confidence: "certain",

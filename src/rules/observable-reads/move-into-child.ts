@@ -113,7 +113,7 @@ function moveIntoChildFinding(
       "the child call site is unkeyed, unrepeated, unconditional, and owned by the component's only render return",
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `Move \`useValue(${observablePath})\` out of this owner: pass \`${observablePath}\` to \`${transport.component}\` as an observable prop and subscribe inside the child, using the resulting primitive for \`${transport.prop}\`. Updates will rerender the existing child without rerunning this owner.`,
+    message: `Move \`${use.call.expression.getText(scan.sourceFile)}(${observablePath})\` out of this owner: pass \`${observablePath}\` to \`${transport.component}\` as an observable prop and subscribe inside the child, using the resulting primitive for \`${transport.prop}\`. Updates will rerender the existing child without rerunning this owner.`,
     practice: "reactivity",
   };
 }

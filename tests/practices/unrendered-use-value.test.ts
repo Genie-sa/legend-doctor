@@ -177,6 +177,56 @@ test("keeps subscriptions when a render may rely on the forced rerender", () => 
   }
 });
 
+test("quotes the legacy hook it deletes beside a selector that tracks its own read", () => {
+  const preamble = header.replace("useObservable, useValue", "use$, useSelector");
+  const finding = requireValue(
+    unrendered(
+      `const player = use$(player$);
+       const current = useSelector(() => player$.index.get() === 1);
+       return <p>{current ? "current" : "idle"}</p>;`,
+      player,
+      preamble,
+    ),
+  );
+  assert.match(finding.message, /^Delete `const player = use\$\(player\$\)`/u);
+});
+
+test("keeps subscriptions beside selector reads that no hook tracks", () => {
+  const legacy = header.replace("useObservable, useValue", "use$, useSelector");
+  for (const [label, body, preamble] of [
+    [
+      "selector reads an unproven receiver",
+      `const player = use$(player$);
+       const current = useSelector(() => other$.get() === 1);
+       return <p>{current ? "current" : "idle"}</p>;`,
+      legacy,
+    ],
+    [
+      "selector read inside a nested callback",
+      `const player = use$(player$);
+       const current = useSelector(() => [1].some(() => player$.index.get() === 1));
+       return <p>{current ? "current" : "idle"}</p>;`,
+      legacy,
+    ],
+    [
+      "memo factory read",
+      `const player = useValue(player$);
+       const current = useMemo(() => player$.index.get() === 1, []);
+       return <p>{current ? "current" : "idle"}</p>;`,
+      header,
+    ],
+    [
+      "foreign selector hook",
+      `const player = use$(player$);
+       const current = useSelector(() => player$.index.get() === 1);
+       return <p>{current ? "current" : "idle"}</p>;`,
+      `${header.replace("useObservable, useValue", "use$")}\nimport { useSelector } from "react-redux";`,
+    ],
+  ] as const) {
+    assert.equal(unrendered(body, player, preamble), undefined, label);
+  }
+});
+
 test("requires a plain-data seed for the subscribed path", () => {
   const body = `const playing = useValue(player$.playing); return null;`;
   for (const [label, store] of [

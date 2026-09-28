@@ -38,7 +38,43 @@ export function Profile() {
   );
 });
 
-test("shares the useValue import edit with a render read in the same file", () => {
+test("shares the imported useValue with a render read in the same file", () => {
+  const source = `import { observable } from "@legendapp/state";
+import { useSelector, useValue } from "@legendapp/state/react";
+
+const state$ = observable({ count: 0, label: "", title: "" });
+
+export function Counter() {
+  const title = useValue(state$.title);
+  const count = state$.count.get();
+  const label = useSelector(state$.label);
+  return <p>{title}{count}{label}</p>;
+}
+`;
+  const findings = analyzeLegendPractices({ fileName: "fixture.tsx", sourceText: source });
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["use-value-for-render-read", "replace-legacy-use-value"],
+  );
+  assertVerifiedEdits(
+    source,
+    `import { observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
+
+const state$ = observable({ count: 0, label: "", title: "" });
+
+export function Counter() {
+  const title = useValue(state$.title);
+  const count = useValue(state$.count);
+  const label = useValue(state$.label);
+  return <p>{title}{count}{label}</p>;
+}
+`,
+    findings,
+  );
+});
+
+test("names the imported legacy hook in a render read without an edit the migration would strand", () => {
   const source = `import { observable } from "@legendapp/state";
 import { useMount, useSelector } from "@legendapp/state/react";
 
@@ -54,10 +90,13 @@ export function Counter() {
 }
 `;
   const findings = analyzeLegendPractices({ fileName: "fixture.tsx", sourceText: source });
+  const [renderRead] = findings;
   assert.deepEqual(
     findings.map((finding) => finding.action),
     ["use-value-for-render-read", "replace-legacy-use-value"],
   );
+  assert.match(renderRead?.message ?? "", /with `useSelector\(state\$\.count\)`/u);
+  assert.equal(renderRead?.edits, undefined);
   assertVerifiedEdits(
     source,
     `import { observable } from "@legendapp/state";
@@ -69,7 +108,7 @@ const state$ = observable({ count: 0, label: "" });
 
 export function Counter() {
   useMount(track);
-  const count = useValue(state$.count);
+  const count = state$.count.get();
   const label = useValue(state$.label);
   return <p>{count}{label}</p>;
 }

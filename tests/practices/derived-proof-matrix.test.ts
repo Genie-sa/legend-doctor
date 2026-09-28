@@ -137,6 +137,27 @@ test("dependency, hook-option, and asynchronous boundaries still abstain before 
   }
 });
 
+test("legacy hook inputs migrate only when the resolved version builds computed observables", () => {
+  const derived = (sourceText: string, version: string): LegendPracticeFinding | undefined =>
+    analyzeLegendPractices({
+      fileName: "fixture.tsx",
+      installedLegendState: {
+        source: "lockfile",
+        syncExport: "available",
+        useValueExport: "missing",
+        version,
+      },
+      sourceText,
+    }).find((entry) => entry.action === "derive-computed-observable");
+  for (const hook of ["use$", "useSelector"]) {
+    const finding = derived(source.replaceAll("useValue", hook), "3.0.0-beta.30");
+    assert.equal(finding?.disposition, "change", hook);
+    assert.ok(finding?.message.includes(`the \`${hook}(active$)\` subscription`), hook);
+    assert.ok(finding?.message.includes(`\`const selected = ${hook}(selected$)\``), hook);
+  }
+  assert.equal(derived(source.replaceAll("useValue", "useSelector"), "2.1.15"), undefined);
+});
+
 test("legacy and foreign hook entry points do not inherit the tested useValue contract", () => {
   for (const input of [
     source.replaceAll("useValue", "useSelector"),

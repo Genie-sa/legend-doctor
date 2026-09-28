@@ -75,6 +75,40 @@ test("suggests useObserveEffect only for dependencies sourced from useValue", ()
   );
 });
 
+test("treats use$ and useSelector dependencies like useValue ones", () => {
+  for (const [importLine, call] of [
+    ['import { use$ } from "@legendapp/state/react";', "use$"],
+    ['import { useSelector as select } from "@legendapp/state/react";', "select"],
+    ['import * as Legend from "@legendapp/state/react";', "Legend.useSelector"],
+  ] as const) {
+    assert.deepEqual(
+      actions(`
+        import { useEffect } from "react";
+        ${importLine}
+        export function Title({ title$ }: { title$: unknown }) {
+          const title = ${call}(title$);
+          useEffect(() => { document.title = title; }, [title]);
+          return null;
+        }
+      `),
+      ["use-observe-effect"],
+      call,
+    );
+  }
+  assert.notDeepEqual(
+    actions(`
+      import { useEffect } from "react";
+      import { useSelector } from "react-redux";
+      export function Title({ title$ }: { title$: unknown }) {
+        const title = useSelector(title$);
+        useEffect(() => { document.title = title; }, [title]);
+        return null;
+      }
+    `),
+    ["use-observe-effect"],
+  );
+});
+
 test("keeps a useValue-driven effect when the same value also renders its owner", () => {
   const findings = analyzeSource(
     `

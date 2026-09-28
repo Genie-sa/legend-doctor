@@ -49,7 +49,7 @@ export function collectUseValueBindings(
     }
     if (
       !ts.isCallExpression(node.initializer) ||
-      !isLocalHookCall(node.initializer, imports.useValue)
+      !isObservableSubscriptionHookCall(node.initializer, imports)
     ) {
       return;
     }

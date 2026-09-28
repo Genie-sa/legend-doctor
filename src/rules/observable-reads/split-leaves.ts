@@ -162,8 +162,9 @@ function splitLeavesMessage(
     reads.candidate.declaration.getStart(scan.sourceFile),
   );
   const parentPath = reads.candidate.observable.getText(scan.sourceFile);
+  const { hook } = reads.candidate;
   const declarations = leafNames
-    .map((leaf) => `\`const ${leaf.name} = useValue(${parentPath}.${leaf.path.join(".")})\``)
+    .map((leaf) => `\`const ${leaf.name} = ${hook}(${parentPath}.${leaf.path.join(".")})\``)
     .join(", ");
   return {
     action: "split-use-value-leaves",
@@ -175,7 +176,7 @@ function splitLeavesMessage(
       `unread ${siblings.map((sibling) => `\`${sibling}\``).join(", ")} ${siblings.length === 1 ? "is" : "are"} written without any field this owner reads, so each such write rerenders it today`,
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `Split \`${reads.localName}\` from \`useValue(${parentPath})\` into per-leaf subscriptions: ${declarations}; rewrite the ${reads.paths.length} raw-value reads of \`${reads.localName}.*\` to those leaf values so sibling fields no longer invalidate this component.`,
+    message: `Split \`${reads.localName}\` from \`${hook}(${parentPath})\` into per-leaf subscriptions: ${declarations}; rewrite the ${reads.paths.length} raw-value reads of \`${reads.localName}.*\` to those leaf values so sibling fields no longer invalidate this component.`,
     practice: "reactivity",
   };
 }

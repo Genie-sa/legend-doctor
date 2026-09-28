@@ -5,6 +5,9 @@ export const REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "u
 
 const OBSERVABLE_FACTORY_EXPORTS = ["observable", "syncState"];
 
+/** `useValue` and its legacy names, one subscription function in Legend State 3. */
+const SUBSCRIPTION_HOOK_EXPORTS = ["useValue", "use$", "useSelector"];
+
 const OBSERVABLE_TYPE_EXPORTS = [
   "Observable",
   "ObservableAny",
@@ -109,7 +112,9 @@ function collectLegendReactImports(
   signals: ModuleImportSignals,
   statement: ts.ImportDeclaration,
 ): void {
-  addNamedImportAliases(signals.useValueHooks, statement.importClause?.namedBindings, "useValue");
+  for (const hook of SUBSCRIPTION_HOOK_EXPORTS) {
+    addNamedImportAliases(signals.useValueHooks, statement.importClause?.namedBindings, hook);
+  }
 }
 
 function collectLegendStateImports(

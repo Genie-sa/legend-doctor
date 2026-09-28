@@ -1,36 +1,6 @@
 import { assertVerifiedEdits, practiceFindings } from "./edit-assertions.js";
-import { analyzeLegendPractices } from "../../src/practices/analyze-legend-practices.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-
-test("keeps render-read instructions prose-only when the installed Legend State has no useValue", () => {
-  const findings = analyzeLegendPractices({
-    fileName: "fixture.tsx",
-    installedLegendState: {
-      source: "installed",
-      syncExport: "available",
-      useValueExport: "missing",
-      version: "3.0.0-alpha.1",
-    },
-    sourceText: `import { observable } from "@legendapp/state";
-import { useMount } from "@legendapp/state/react";
-
-declare function track(): void;
-
-const counter$ = observable({ count: 0 });
-
-export function Counter() {
-  useMount(track);
-  const count = counter$.count.get();
-  return <p>{count}</p>;
-}
-`,
-  });
-  assert.deepEqual(
-    findings.map((finding) => [finding.action, finding.edits]),
-    [["use-value-for-render-read", undefined]],
-  );
-});
 
 test("passes the observable itself to useValue", () => {
   const source = `import { observable } from "@legendapp/state";

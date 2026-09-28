@@ -35,6 +35,23 @@ test("selects a confined strict boolean projection in a private JSX component", 
   assert.match(result[0]?.message ?? "", /useValue\(\(\) => active\$\.get\(\) === trackId\)/u);
 });
 
+test("selects the projection through the legacy hook the component already calls", () => {
+  for (const [importLine, hook] of [
+    ["{ use$, observer }", "use$"],
+    ["{ useSelector as select, observer }", "select"],
+  ] as const) {
+    const source = fixture(body.replace("useValue(active$)", `${hook}(active$)`)).replace(
+      "{ useValue, observer }",
+      importLine,
+    );
+    const [result] = findings(source);
+    assert.ok(
+      result?.message.includes(`\`const selected = ${hook}(() => active$.get() === trackId)\``),
+      hook,
+    );
+  }
+});
+
 for (const [name, source] of Object.entries({
   helper: fixture(body.replace("id === trackId", "id === hidden()")),
   event: fixture(body.replace("return <div", "const onClick = () => id; return <div")),
