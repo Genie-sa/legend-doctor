@@ -104,6 +104,7 @@ test("marks replace-legacy-use-value as style when the installed useValue is an 
     importedObservables: new Set(),
     importedObservableFactories: new Set(),
     installedLegendState: {
+      source: "installed",
       syncExport: "available",
       useValueExport: "alias",
       version: "3.0.0-beta.48",
@@ -122,7 +123,12 @@ test("suppresses replace-legacy-use-value when the installed package lacks useVa
     fileName: "fixture.ts",
     importedObservables: new Set(),
     importedObservableFactories: new Set(),
-    installedLegendState: { syncExport: "missing", useValueExport: "missing", version: "2.1.0" },
+    installedLegendState: {
+      source: "installed",
+      syncExport: "missing",
+      useValueExport: "missing",
+      version: "2.1.0",
+    },
   });
   assert.deepEqual(findings, []);
 });

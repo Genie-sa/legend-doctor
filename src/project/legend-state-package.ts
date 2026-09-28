@@ -1,8 +1,15 @@
 import type { InstalledLegendState, SyncExport, UseValueExport } from "../core/types.js";
+import { lockedLegendState } from "./legend-state-versions.js";
+import { lockedLegendStateVersion } from "./legend-state-lockfile.js";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 
-export type { InstalledLegendState, SyncExport, UseValueExport } from "../core/types.js";
+export type {
+  InstalledLegendState,
+  LegendStateSource,
+  SyncExport,
+  UseValueExport,
+} from "../core/types.js";
 
 interface JsonObject {
   [key: string]: JsonValue;
@@ -21,8 +28,19 @@ const USE_VALUE_PATTERN = /\buseValue\b/u;
 const SYNC_ENTRY = "./sync";
 const SYNC_DECLARATION_FILE = "sync.d.ts";
 
-export function resolveInstalledLegendState(root: string): Promise<InstalledLegendState | null> {
-  return resolveFromAncestor(path.resolve(root));
+/**
+ * The `@legendapp/state` the analysis root resolves to: the installed package when one is found,
+ * otherwise the single version its nearest lockfile pins, so an uninstalled checkout keeps its gates.
+ */
+export async function resolveInstalledLegendState(
+  root: string,
+): Promise<InstalledLegendState | null> {
+  const installed = await resolveFromAncestor(path.resolve(root));
+  if (installed) {
+    return installed;
+  }
+  const lockedVersion = await lockedLegendStateVersion(root);
+  return lockedVersion === null ? null : lockedLegendState(lockedVersion);
 }
 
 async function resolveFromAncestor(directory: string): Promise<InstalledLegendState | null> {
@@ -47,7 +65,7 @@ async function resolveFromManifest(
     resolveSyncExport(packageDirectory, manifest),
     resolveUseValueExport(packageDirectory, manifest),
   ]);
-  return { syncExport, useValueExport, version };
+  return { source: "installed", syncExport, useValueExport, version };
 }
 
 async function resolveSyncExport(

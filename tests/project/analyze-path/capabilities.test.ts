@@ -62,6 +62,7 @@ test("rule gates read the installed Legend State export shape and the React Comp
   const missingUseValue = {
     concurrentRoot: false,
     legendState: {
+      source: "installed" as const,
       syncExport: "missing" as const,
       useValueExport: "missing" as const,
       version: "2.1.0",
@@ -102,7 +103,12 @@ test("the tracking rule is switched off under Legend State 2.x, where auto track
   const gates = (version: string): readonly string[] =>
     disabledPracticeRules({
       concurrentRoot: false,
-      legendState: { syncExport: "available", useValueExport: "alias", version },
+      legendState: {
+        source: "installed",
+        syncExport: "available",
+        useValueExport: "alias",
+        version,
+      },
       reactCompiler: false,
     }).map(({ reason, rule }) => `${rule}:${reason}`);
 

@@ -48,6 +48,7 @@ export type {
   InstalledLegendState,
   LegendPracticeAction,
   LegendPracticeFinding,
+  LegendStateSource,
   ReportCapabilities,
   ReportScope,
   ReviewGuidance,
