@@ -37,8 +37,38 @@ Important fields:
 
 Compare reports only when `analyzer.build` matches.
 
+`capabilities.disabledRules` lists each rule the installed toolchain switched off, with its `rule`, `reason`,
+`detail`, and the number of analyzed `files` that skipped it. A disabled rule reports nothing, so a missing
+finding is not a clean file.
+
+| `disabledRules` reason     | Rules                                               | Meaning                                                                                                        |
+| -------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `legend-v2-tracking`       | `plain-primitive-projection`, `observable-tracking` | `@legendapp/state` 2.x can auto-track render `get()` calls through an app-wide setting the analyzer cannot see |
+| `react-compiler`           | `observable-clone-writes`                           | The React Compiler memoizes by reference, so in-place observable writes would leave memoized consumers stale   |
+| `sync-export-missing`      | `browser-storage-persistence`                       | The installed package has no `sync` entry point; storage-writing effects stay `keep-effect`                    |
+| `use-value-export-missing` | `plain-primitive-projection`, `legacy-use-value`    | The installed `@legendapp/state/react` entry point does not export `useValue`                                  |
+
 Every `review-state` and `review-effect` finding has an `abstentionReason`. It names the main fact or safety rule that
 blocked a proven edit.
+
+| `abstentionReason`                  | Missing proof or preserved constraint                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `async-command-origin-unresolved`   | An async command's pending writes have a proven leaf boundary, but not an event-only origin        |
+| `atomic-transition-unproven`        | Companion writes may need to publish together; which cells and batch boundaries is unproven        |
+| `binding-shape-unsupported`         | The hook result is bound in a shape the analyzer does not model                                    |
+| `callback-timing-unresolved`        | A deferred read may need a render snapshot, a command-entry snapshot, or the current value         |
+| `child-contract-unresolved`         | A receiving component or forwarding wrapper has unproven render reads, effects, captures, or props |
+| `effect-callback-unresolved`        | The effect callback declaration or its captured inputs cannot be resolved                          |
+| `effect-causal-owner-unresolved`    | The event or external lifecycle that owns the effect is unknown, so its scheduling stays           |
+| `effect-write-ownership-unresolved` | The effect's writes cannot be proven to move without changing its schedule                         |
+| `lifecycle-equivalence-unproven`    | Mount, replay, dependency-change, or cleanup behavior may differ under a Legend hook               |
+| `mount-identity-unproven`           | A new subscriber could change keys, conditional returns, or a child's mount identity               |
+| `no-proven-optimization`            | No independent leaf or lifecycle cost is demonstrated, so no edit is proposed                      |
+| `ownership-flow-unresolved`         | A value or setter escapes into hooks, objects, spreads, or callbacks the analyzer cannot follow    |
+| `paired-draft-effect-preserved`     | A synchronization effect paired with a state migration keeps its dependency timing                 |
+| `react-commit-sensitive`            | A transition, layout, imperative-handle, or other commit-sensitive consumer needs React scheduling |
+| `render-cut-unproven`               | No smaller subscription is proven to remove an owner render                                        |
+| `state-type-unresolved`             | The state may hold a callable value, so lazy initialization and function semantics are at risk     |
 
 Every review also carries `review: { kind, blockers, next }`. This is additive guidance in schema 4;
 the action and disposition remain authoritative. `blockers` combines the current reason, question facts,
@@ -150,17 +180,12 @@ work but does not reread or reparse files.
 
 - `inventory` records each recognized imported `useValue` call in eligible scanned files, including its
   `use$` and `useSelector` aliases. Each entry contains its source location, binding, observable, classified
-  reads, derivations, and status: `planned`, `other-action`, or `unresolved`. Unresolved entries have explicit
-  reasons; they are not findings.
-- Each read has a `kind`: `render` (a pure expression in the returned JSX), `render-callback` (a synchronous
-  array callback or IIFE inside the returned JSX, run once per item), `memo` (an owner-level `useMemo`
-  callback or dependency list), `derivation` (a pure `const` or `useMemo` projection that is followed in
-  turn), `effect`, `event-or-callback`, or `unknown`.
+  reads, derivations, and a `status`. Unresolved entries have explicit `reasons`; they are not findings.
+- Each read has a `kind` that says when the owner evaluates it.
 - A `useValue(() => …)` selector whose every tracked read is a proven `path$.get()` also carries
-  `selector: { tracks, result }`. `tracks` lists the tracked paths, and `result` is `boolean`, `primitive`,
-  or `unknown`, the value `useValue` compares to decide a re-render. `observable` is set only when the
-  selector tracks exactly one path. A selector that cannot be proven names its blocker in `reasons`, for
-  example `selector-calls-unproven-function` or `selector-read-not-proven`.
+  `selector: { tracks, result }`. `tracks` lists the tracked paths, and `result` is the value `useValue`
+  compares to decide a re-render. `observable` is set only when the selector tracks exactly one path. A
+  selector that cannot be proven names its blocker in `reasons`.
 - `coverage` counts those three statuses and their total. This is subscription inventory coverage, separate
   from hook coverage and manually labeled corpus recall. It does not count hidden subscriptions inside
   arbitrary custom hooks or unrecognized imports.
@@ -173,6 +198,54 @@ work but does not reread or reparse files.
 - `impact.basis: "provided-runtime-measurement"` identifies externally supplied before/after costs.
   Measurements do not bypass detector proofs or create findings.
 - `rejectedMeasurements` reports malformed, stale, duplicate, or unmatched measurement entries.
+
+| Inventory `status` | Meaning                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| `planned`          | A practice finding at this call carries a coordinated cut listed in `plans`          |
+| `other-action`     | A practice finding at this call proposes an edit other than a subscription cut       |
+| `unresolved`       | No finding at this call; `reasons` names every blocker the inventory could establish |
+
+| Read `kind`         | Where the owner evaluates the read                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------- |
+| `render`            | A pure expression in the returned JSX                                                     |
+| `render-callback`   | A synchronous array callback or IIFE inside the returned JSX, run once per item           |
+| `memo`              | An owner-level `useMemo` callback or dependency list, rerun only when dependencies change |
+| `derivation`        | A pure `const` or `useMemo` projection whose own reads are followed in turn               |
+| `effect`            | A React effect callback                                                                   |
+| `event-or-callback` | An event handler or other callback that runs outside render                               |
+| `unknown`           | A position the analyzer cannot classify, such as a `key` or `ref` value or an impure slot |
+
+| Selector `result` | What `useValue` compares                                                   |
+| ----------------- | -------------------------------------------------------------------------- |
+| `boolean`         | A proven boolean, such as a comparison or negation                         |
+| `primitive`       | A proven primitive, such as a number, string, or template literal          |
+| `unknown`         | A value that may be an object or array, or a tracked path of unproven type |
+
+| Inventory reason                         | Blocker                                                                                            |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `destructured-result`                    | The result is bound to a destructuring pattern                                                     |
+| `effect-consumer`                        | A React effect reads the value                                                                     |
+| `event-or-callback-consumer`             | An event handler or other deferred callback reads the value                                        |
+| `excluded-by-report-filter`              | A report filter hid the finding at this call, so its plan is withheld                              |
+| `memo-consumer`                          | A `useMemo` callback or dependency list reads the value                                            |
+| `no-render-consumer`                     | Neither the returned JSX nor a render callback inside it reads the value                           |
+| `observable-binding-not-proven`          | The argument is neither a proven observable path nor a selector function                           |
+| `overlapping-parent-subscription`        | Another subscription in the owner already tracks this path or an ancestor                          |
+| `owner-commit-or-snapshot-work`          | The owner has refs, `.current`, `get()` or `peek()` snapshots, unstable cached hooks, or effects   |
+| `owner-not-proven`                       | The call is bound to a name, but no enclosing component or hook body is proven                     |
+| `render-callback-consumer`               | A synchronous callback inside the returned JSX reads the value once per item                       |
+| `returned-result`                        | The result is returned, so its consumers live outside this owner                                   |
+| `selector-calls-unproven-function`       | The selector calls something other than a tracked `get()`, a known global, or a snapshot method    |
+| `selector-function-not-proven`           | The selector takes parameters or is async or a generator                                           |
+| `selector-observable-binding-not-proven` | A `get()` receiver is not rooted in a proven observable binding                                    |
+| `selector-read-not-proven`               | The selector reads an observable without a tracked `get()`, such as `peek()` or a bare node member |
+| `selector-syntax-not-proven`             | The selector uses syntax outside the modeled subset, such as an assignment or a loop               |
+| `selector-tracks-no-observable`          | The selector is proven but tracks no observable                                                    |
+| `shadowed-or-reassigned-binding`         | The binding or one of its derivations is declared more than once in the owner                      |
+| `stable-material-render-cut-not-proven`  | No specific blocker was found, but no stable cut removes a material part of the owner render       |
+| `unsupported-value-flow`                 | A read sits in a position the analyzer cannot classify                                             |
+| `use-value-options`                      | The call has no argument or passes options                                                         |
+| `wrapped-result`                         | The result is wrapped in another expression before it is bound                                     |
 
 A practice finding with a coordinated cut also has `subscription` metadata. Report filters remove matching
 plans and mark filtered inventory entries `excluded-by-report-filter`, so ignored actions do not reappear
@@ -284,9 +357,11 @@ With `--coverage`, `coverage.sourceContext` lists each target file's `requestedP
 `unavailable` runtime import/re-export edges reachable through indexed source. Each edge names the
 `importer`, `specifier`, selected `resolvedFile` when present, and one reason:
 
-- `module-unresolved`: TypeScript did not select a module under the current installation/configuration.
-- `declaration-only`: TypeScript selected a declaration file, which cannot supply implementation behavior.
-- `source-not-indexed`: the selected implementation is outside the source index or was rejected after parser recovery.
+| Unavailable `reason` | Meaning                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `module-unresolved`  | TypeScript did not select a module under the current installation and configuration           |
+| `declaration-only`   | TypeScript selected a declaration file, which cannot supply implementation behavior           |
+| `source-not-indexed` | The selected implementation is outside the source index or was rejected after parser recovery |
 
 Paths are relative to the scan root. Installed dependencies and package export conditions retain their
 normal precedence; this diagnostic never substitutes a same-named workspace implementation.

@@ -6,23 +6,26 @@ type Confidence = "certain" | "probable";
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public JSON protocol version.
 const SCHEMA_VERSION = 4 as const;
 
-type AbstentionReason =
-  | "async-command-origin-unresolved"
-  | "atomic-transition-unproven"
-  | "binding-shape-unsupported"
-  | "callback-timing-unresolved"
-  | "child-contract-unresolved"
-  | "effect-callback-unresolved"
-  | "effect-causal-owner-unresolved"
-  | "effect-write-ownership-unresolved"
-  | "lifecycle-equivalence-unproven"
-  | "mount-identity-unproven"
-  | "no-proven-optimization"
-  | "ownership-flow-unresolved"
-  | "paired-draft-effect-preserved"
-  | "react-commit-sensitive"
-  | "render-cut-unproven"
-  | "state-type-unresolved";
+const ABSTENTION_REASONS = [
+  "async-command-origin-unresolved",
+  "atomic-transition-unproven",
+  "binding-shape-unsupported",
+  "callback-timing-unresolved",
+  "child-contract-unresolved",
+  "effect-callback-unresolved",
+  "effect-causal-owner-unresolved",
+  "effect-write-ownership-unresolved",
+  "lifecycle-equivalence-unproven",
+  "mount-identity-unproven",
+  "no-proven-optimization",
+  "ownership-flow-unresolved",
+  "paired-draft-effect-preserved",
+  "react-commit-sensitive",
+  "render-cut-unproven",
+  "state-type-unresolved",
+] as const;
+
+type AbstentionReason = (typeof ABSTENTION_REASONS)[number];
 
 type AssumptionAnswer = "no" | "yes";
 
@@ -92,49 +95,82 @@ interface StateAssumption {
   updateSites: number;
 }
 
-type StateAction =
-  | "keep-state"
-  | "delete-unused-state"
-  | "move-state-down"
-  | "use-observable"
-  | "use-value"
-  | "delete-derived-state"
-  | "use-ref"
-  | "review-state";
+const STATE_ACTIONS = [
+  "keep-state",
+  "delete-unused-state",
+  "move-state-down",
+  "use-observable",
+  "use-value",
+  "delete-derived-state",
+  "use-ref",
+  "review-state",
+] as const;
 
-type EffectAction =
-  | "delete-effect"
-  | "move-to-event"
-  | "use-mount"
-  | "use-unmount"
-  | "use-observe-effect"
-  | "persist-observable"
-  | "keep-effect"
-  | "review-effect";
+type StateAction = (typeof STATE_ACTIONS)[number];
+
+const EFFECT_ACTIONS = [
+  "delete-effect",
+  "move-to-event",
+  "use-mount",
+  "use-unmount",
+  "use-observe-effect",
+  "persist-observable",
+  "keep-effect",
+  "review-effect",
+] as const;
+
+type EffectAction = (typeof EFFECT_ACTIONS)[number];
 
 type HookAction = StateAction | EffectAction;
 
-type LegendPracticeAction =
-  | "select-primitive-projection"
-  | "review-helper-tracking"
-  | "assign-observable-fields"
-  | "batch-observable-writes"
-  | "derive-computed-observable"
-  | "move-use-value-into-child"
-  | "move-use-value-down"
-  | "narrow-observable-write"
-  | "narrow-use-value-subscription"
-  | "pass-observable-to-reactive-input"
-  | "pass-observable-to-use-value"
-  | "peek-unrendered-use-value"
-  | "replace-legacy-use-value"
-  | "reuse-observable-reference"
-  | "snapshot-computed-initializer"
-  | "split-use-value-leaves"
-  | "split-use-value-result"
-  | "toggle-observable"
-  | "use-peek-for-snapshot"
-  | "use-value-for-render-read";
+const LEGEND_PRACTICE_ACTIONS = [
+  "select-primitive-projection",
+  "review-helper-tracking",
+  "assign-observable-fields",
+  "batch-observable-writes",
+  "derive-computed-observable",
+  "move-use-value-into-child",
+  "move-use-value-down",
+  "narrow-observable-write",
+  "narrow-use-value-subscription",
+  "pass-observable-to-reactive-input",
+  "pass-observable-to-use-value",
+  "peek-unrendered-use-value",
+  "replace-legacy-use-value",
+  "reuse-observable-reference",
+  "snapshot-computed-initializer",
+  "split-use-value-leaves",
+  "split-use-value-result",
+  "toggle-observable",
+  "use-peek-for-snapshot",
+  "use-value-for-render-read",
+] as const;
+
+type LegendPracticeAction = (typeof LEGEND_PRACTICE_ACTIONS)[number];
+
+const HOOK_DISPOSITIONS = ["candidate", "change", "keep"] as const;
+
+const PRACTICE_DISPOSITIONS = ["change", "style", "candidate"] as const;
+
+const REVIEW_KINDS = [
+  "confirm",
+  "recheck",
+  "declined",
+  "dependency",
+  "unsupported",
+  "no-proven-benefit",
+  "investigate",
+] as const;
+
+/** Why `capabilities.disabledRules` switched a rule off for the installed toolchain. */
+const CAPABILITY_GATE_REASONS = [
+  "legend-v2-tracking",
+  "react-compiler",
+  "sync-export-missing",
+  "use-value-export-missing",
+] as const;
+
+type CapabilityGateReason = (typeof CAPABILITY_GATE_REASONS)[number];
 
 interface SourceLocation {
   column: number;
@@ -163,7 +199,7 @@ interface HookFindingBase {
   /** Open question ids whose answers settle this review effect; answer those, not the effect. */
   waitsOn?: string[];
   confidence: Confidence;
-  disposition: "candidate" | "change" | "keep";
+  disposition: (typeof HOOK_DISPOSITIONS)[number];
   evidence: readonly string[];
   hook: "useEffect" | "useState";
   group?: {
@@ -192,14 +228,7 @@ interface HookFindingBase {
 interface ReviewGuidance {
   /** Known blockers from this verdict and its question; not an exhaustive proof inventory. */
   blockers: AbstentionReason[];
-  kind:
-    | "confirm"
-    | "recheck"
-    | "declined"
-    | "dependency"
-    | "unsupported"
-    | "no-proven-benefit"
-    | "investigate";
+  kind: (typeof REVIEW_KINDS)[number];
   /** The next concrete investigation or answer to supply. */
   next: string;
 }
@@ -220,7 +249,7 @@ interface LegendPracticeFinding {
   subscription?: SubscriptionCut;
   action: LegendPracticeAction;
   confidence: Confidence;
-  disposition: "change" | "style" | "candidate";
+  disposition: (typeof PRACTICE_DISPOSITIONS)[number];
   evidence: readonly string[];
   location: SourceLocation;
   message: string;
@@ -276,7 +305,7 @@ interface DisabledRule {
   detail: string;
   /** Analyzed files in which the rule was skipped. */
   files: number;
-  reason: string;
+  reason: CapabilityGateReason;
   rule: string;
 }
 
@@ -294,13 +323,24 @@ interface ReportScope {
   contextFiles: number;
 }
 
-export { SCHEMA_VERSION };
+export {
+  ABSTENTION_REASONS,
+  CAPABILITY_GATE_REASONS,
+  EFFECT_ACTIONS,
+  HOOK_DISPOSITIONS,
+  LEGEND_PRACTICE_ACTIONS,
+  PRACTICE_DISPOSITIONS,
+  REVIEW_KINDS,
+  SCHEMA_VERSION,
+  STATE_ACTIONS,
+};
 export type {
   AbstentionReason,
   AssumptionAnswer,
   AssumptionGroupMember,
   AssumptionStatus,
   AnalysisReport,
+  CapabilityGateReason,
   Confidence,
   DisabledRule,
   EffectAction,

@@ -4,6 +4,7 @@ import { findAncestor, isRuntimeFunctionLike, nodeWithin, visit } from "../../co
 import { lowestCommonJsxSubtree, nearestRepeatedRenderCall } from "../state-proofs/jsx-subtrees.js";
 import { primitiveExpression, pureFlowExpression, pureMemoProjection } from "./flow-expressions.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import type { SubscriptionInventoryReason } from "../../core/subscriptions.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import { isInsideOwnerReturn } from "./conditional-jsx-slots.js";
 import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
@@ -25,6 +26,9 @@ export type FlowReadKind =
   | "effect"
   | "unknown";
 
+/** A read that is not itself a followed derivation, as `classifyRead` settles it. */
+type ClassifiedReadKind = Exclude<FlowReadKind, "derivation">;
+
 const RENDERED_READ_KINDS: ReadonlySet<FlowReadKind> = new Set(["render", "render-callback"]);
 
 export interface FlowRead {
@@ -42,7 +46,7 @@ export interface SubscriptionFlow {
   readonly derivations: FlowDerivation[];
   readonly names: Set<string>;
   readonly primitives: Set<string>;
-  readonly blockers: Set<string>;
+  readonly blockers: Set<SubscriptionInventoryReason>;
 }
 
 export function subscriptionFlow(
@@ -172,7 +176,7 @@ function classifyRead(
   node: ts.Identifier,
   flow: SubscriptionFlow,
   scan: ObservableReadScan,
-): FlowReadKind {
+): ClassifiedReadKind {
   if (isDeclarationName(node)) {
     return "unknown";
   }
@@ -193,7 +197,7 @@ function classifyOwnerRead(
   node: ts.Identifier,
   flow: SubscriptionFlow,
   scan: ObservableReadScan,
-): FlowReadKind {
+): ClassifiedReadKind {
   if (
     !isInsideOwnerReturn(node, flow.use.owner) ||
     nearestRepeatedRenderCall(node, flow.use.owner)
@@ -266,7 +270,7 @@ function deferredReadKind(
   node: ts.Identifier,
   owner: RuntimeFunctionLike,
   scan: ObservableReadScan,
-): FlowReadKind {
+): ClassifiedReadKind {
   for (let current: ts.Node = node; current !== owner && current.parent; current = current.parent) {
     if (ts.isCallExpression(current) && isReactEffectCall(current, scan.imports)) {
       return "effect";
@@ -279,7 +283,7 @@ function classifyRenderRead(
   node: ts.Identifier,
   flow: SubscriptionFlow,
   scan: ObservableReadScan,
-): FlowReadKind {
+): ClassifiedReadKind {
   const boundary = lowestCommonJsxSubtree([node], flow.use.owner);
   const slot = findAncestor(node, ts.isJsxExpression);
   if (!boundary || !slot?.expression) {
