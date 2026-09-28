@@ -86,7 +86,9 @@ function importedUseValue(
  * The last named specifier from `@legendapp/state/react` that a legacy-hook migration keeps. Adding
  * `useValue` after it gives every edit in the file the same import change, whichever findings apply.
  */
-function retainedImportAnchor(clauses: readonly ts.ImportClause[]): ts.ImportSpecifier | null {
+export function retainedImportAnchor(
+  clauses: readonly ts.ImportClause[],
+): ts.ImportSpecifier | null {
   for (const clause of clauses) {
     const anchor = namedImportElements(clause).findLast(
       (element) => !isLegacyUseValueSpecifier(element),

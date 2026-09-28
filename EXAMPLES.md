@@ -617,6 +617,30 @@ keeps its identity across renders (module constants, refs, state setters, owned 
 another dependency could change in the same update and recompute the memo. Writes that replace the value with
 `set(next)`, writes to unread fields, `get(true)` reads, and bindings that are reassigned stay silent.
 
+### Re-render a Memo child that reads parent values
+
+`use-computed-for-parent-reads` changes a `<Memo>` whose child reads a value from its owner's render.
+
+```tsx
+const offset = useValue(feed$.offset);
+const index = offset + position;
+
+<Memo>{() => <Fork at={index} forks={forks$.get()} />}</Memo>; // Before
+<Computed>{() => <Fork at={index} forks={forks$.get()} />}</Computed>; // After
+```
+
+`Memo` wraps `Computed` in `React.memo` with an equality check that ignores new children unless `scoped` is set, so
+the owner's renders never reach the child. The child tracks the observables it reads, but every value it captures
+from the owner stays at the Memo's first render. `Computed` re-renders with its parent and keeps the same tracking.
+
+It is a `change` when a captured value changes whenever the owner re-renders for it: a `useValue`, `use$`, or
+`useSelector` result, React state whose setter is used, a `useSyncExternalStore` result, or a value, callback, or
+local render helper computed from one. It is a `candidate` when the child reads only props, context or custom-hook
+results, or values computed from them, which may stay constant for the Memo's lifetime. Observables, including props
+the component's type declares `Observable`, refs, state setters, owned observables, module values, and callbacks
+memoized without changing dependencies keep their identity and stay silent, as do `scoped` Memos and values read
+only inside event handlers.
+
 ## Keep effect timing correct
 
 ### Move event-owned work to the event

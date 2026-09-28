@@ -143,6 +143,7 @@ const LEGEND_PRACTICE_ACTIONS = [
   "split-use-value-leaves",
   "split-use-value-result",
   "toggle-observable",
+  "use-computed-for-parent-reads",
   "use-peek-for-snapshot",
   "use-value-for-render-read",
 ] as const;
@@ -155,6 +156,7 @@ const EDITABLE_PRACTICE_ACTIONS = [
   "pass-observable-to-use-value",
   "replace-legacy-use-value",
   "select-primitive-projection",
+  "use-computed-for-parent-reads",
   "use-peek-for-snapshot",
   "use-value-for-render-read",
 ] as const satisfies readonly LegendPracticeAction[];

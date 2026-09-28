@@ -191,7 +191,8 @@ Positions refer to the scanned source. Collect the edits you intend to apply to 
 and apply them from the end of the file backwards, or rescan between findings. Edits never overlap. Each
 finding's edits stand alone, and findings that share an import rewrite carry identical copies of it. Every
 named-import `replace-legacy-use-value` finding in a file carries the whole file's migration, because renaming
-the shared binding for one call would strand the others.
+the shared binding for one call would strand the others. Likewise, when a file's `use-computed-for-parent-reads`
+findings cover every use of its `Memo` import, each carries every rename and the import swap.
 
 | Edited action                   | Edit                                                                                                                               |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -201,6 +202,7 @@ the shared binding for one call would strand the others.
 | `narrow-use-value-subscription` | `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)`                                                                 |
 | `replace-legacy-use-value`      | Callees become `useValue`, a direct selector collapses, legacy specifiers leave the import                                         |
 | `select-primitive-projection`   | `const v = useValue(x$)`, read only as `v === id`, becomes `useValue(() => x$.get() === id)`; the comparisons read the new binding |
+| `use-computed-for-parent-reads` | `<Memo>` becomes `<Computed>`; `Computed` replaces the `Memo` specifier when no other `Memo` remains, and otherwise joins it       |
 
 `use$`, `useSelector`, their aliases, and namespace calls from `@legendapp/state/react` are subscription hooks
 like `useValue`. Messages and edits keep the callee the source calls, so `use$(x$.get())` becomes `use$(x$)` and
@@ -211,7 +213,8 @@ installed or locked Legend State exports no `useValue`. The field is omitted whe
 a type assertion, when a render read follows an early return or sits in JSX, a branch, or an iteration callback,
 when only a new import declaration would bring the hook into scope, when a render read would reuse a legacy
 binding that the file's legacy migration removes, when a destructure is annotated or its call has type arguments,
-and when a legacy binding is referenced other than by a reported call. Hoisting instructions, `move-*`, `split-*`, and batching stay prose.
+when a legacy binding is referenced other than by a reported call, and when a `Memo` import swap would touch the
+specifier another rule adds `useValue` beside. Hoisting instructions, `move-*`, `split-*`, and batching stay prose.
 
 The unit suite applies each supported edit and typechecks the result against the installed `@legendapp/state`
 and React types. The corpus eval applies every emitted edit in memory, per finding and per file, and fails when a

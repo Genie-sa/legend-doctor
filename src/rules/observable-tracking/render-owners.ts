@@ -66,7 +66,7 @@ function resolveRenderOwner(node: ts.Node, imports: HookImports, hops: number): 
   return iteration ? resolveRenderOwner(iteration, imports, hops + 1) : null;
 }
 
-function renderIterationCall(callback: RuntimeFunctionLike): ts.CallExpression | null {
+export function renderIterationCall(callback: RuntimeFunctionLike): ts.CallExpression | null {
   if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) {
     return null;
   }
