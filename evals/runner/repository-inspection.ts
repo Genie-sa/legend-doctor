@@ -30,7 +30,7 @@ export async function mapSequentially<Item, Result>(
   return results;
 }
 
-async function headCommit(repositoryRoot: string): Promise<string> {
+export async function headCommit(repositoryRoot: string): Promise<string> {
   const { stdout } = await execFileAsync("git", ["-C", repositoryRoot, "rev-parse", "HEAD"], {
     encoding: "utf8",
   });
