@@ -31,7 +31,14 @@ export interface SubscriptionInventory {
   reads: {
     location: SourceLocation;
     name: string;
-    kind: "render" | "derivation" | "event-or-callback" | "effect" | "unknown";
+    kind:
+      | "render"
+      | "derivation"
+      | "memo"
+      | "render-callback"
+      | "event-or-callback"
+      | "effect"
+      | "unknown";
   }[];
   derivations: SubscriptionCut["derivations"];
 }
