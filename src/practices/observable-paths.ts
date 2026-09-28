@@ -88,8 +88,12 @@ export function typeQueriesObservable(
   type: ts.TypeNode,
   observableBindings: ReadonlySet<string>,
 ): boolean {
+  return !annotatesOptionalDeclaration(type) && queriesObservable(type, observableBindings);
+}
+
+function queriesObservable(type: ts.TypeNode, observableBindings: ReadonlySet<string>): boolean {
   if (ts.isParenthesizedTypeNode(type)) {
-    return typeQueriesObservable(type.type, observableBindings);
+    return queriesObservable(type.type, observableBindings);
   }
   if (!ts.isTypeQueryNode(type)) {
     return false;
@@ -113,13 +117,31 @@ function unreservedEntityNamePath(exprName: ts.EntityName): string[] | null {
 }
 
 export function typeNamesObservable(type: ts.TypeNode, names: ReadonlySet<string>): boolean {
+  return !annotatesOptionalDeclaration(type) && namesObservable(type, names);
+}
+
+/**
+ * A union proves an observable only when every member is one: `Observable<T> | T` and
+ * `Observable<T> | undefined` may hold values that have no `.get()`, `.peek()`, or child paths.
+ */
+function namesObservable(type: ts.TypeNode, names: ReadonlySet<string>): boolean {
   if (ts.isParenthesizedTypeNode(type)) {
-    return typeNamesObservable(type.type, names);
+    return namesObservable(type.type, names);
   }
   if (ts.isUnionTypeNode(type)) {
-    return type.types.some((member) => typeNamesObservable(member, names));
+    return type.types.every((member) => namesObservable(member, names));
   }
   return (
     ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && names.has(type.typeName.text)
+  );
+}
+
+/** An optional parameter or property also holds `undefined`, whatever its annotation names. */
+function annotatesOptionalDeclaration(type: ts.TypeNode): boolean {
+  const { parent } = type;
+  return (
+    (ts.isParameter(parent) || ts.isPropertySignature(parent)) &&
+    parent.type === type &&
+    parent.questionToken !== undefined
   );
 }
