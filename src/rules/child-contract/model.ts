@@ -48,6 +48,12 @@ export interface HookPresentationConsumer {
   readonly renderSites: number;
 }
 
+/**
+ * Whether the components that render a child subscribe to the same observables: `proven` when
+ * every render site rerenders it on each change, `possible` when some site may, `absent` otherwise.
+ */
+export type ParentRerenderProof = "absent" | "possible" | "proven";
+
 export interface ChildContractResolver {
   /** Every source-visible caller supplies plain data at this nested prop path; no getter inference from types. */
   componentPropDataPath?: (owner: RuntimeFunctionLike, path: readonly string[]) => boolean;
@@ -89,6 +95,10 @@ export interface ChildContractResolver {
     invocation: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   ) => boolean;
   componentCallbackPropRunsOnlyInReactEffect: (componentName: string, propName: string) => boolean;
+  componentParentRerender: (
+    owner: RuntimeFunctionLike,
+    paths: readonly ts.Expression[],
+  ) => ParentRerenderProof;
   componentPropIsLeafRenderConsumer: (componentName: string, propName: string) => boolean;
   /** Every source file that reads a React context created or imported here, with its reader hooks. */
   contextConsumers: (contextName: string) => readonly ContextConsumerSource[];
@@ -96,6 +106,8 @@ export interface ChildContractResolver {
   contextProviderSites: (contextName: string) => number;
   /** Whether a platform-specific sibling (`.native`, `.ios`, `.android`, `.web`) shadows this file. */
   hasPlatformVariant: () => boolean;
+  /** Whether this module declares or imports an observable under this name. */
+  isObservableBinding: (name: string) => boolean;
   frameworkEventComponent: (componentName: string) => boolean;
   pureProjectionBindings: () => ReadonlySet<string>;
   resolveComponent: (name: string) => ChildComponentSource | null;

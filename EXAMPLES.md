@@ -631,7 +631,31 @@ useEffect(() => syncTheme(theme), [theme]);
 useObserveEffect(() => syncTheme(settings$.theme.get()));
 ```
 
-Keep the React effect when the same value also renders. Moving it could change post-commit timing.
+Keep the React effect when the same value also renders. Moving it could change post-commit timing. Keep it as well
+when every parent that renders the component subscribes to the same observable: the parent's render already reruns
+the component on each change, so dropping `useValue` saves nothing. When a parent might rerender it, through an
+ancestor subscription or a memoized child whose props may be stable, the finding is a review.
+
+The observer tracks every `get()` it runs synchronously, including reads before the first `await` of an async
+function it calls. A read of an observable that is not a dependency would become a new trigger, so the finding
+names it and tells you to `peek()` it instead:
+
+```tsx
+// Before
+const isPlaying = useValue(player$.isPlaying);
+useEffect(() => {
+  if (!isPlaying && window$.isOpen.get()) closeWindow();
+}, [isPlaying]);
+
+// After
+useObserveEffect(() => {
+  if (!player$.isPlaying.get() && window$.isOpen.peek()) closeWindow();
+});
+```
+
+Reads after an unconditional `await` and reads inside timers or promise callbacks stay untracked, so they are left
+alone. The finding becomes a review when a read runs in a callback of unknown timing, or calls `get()` on a receiver
+that is not proven to be an observable.
 
 ### Express proven lifecycle intent
 

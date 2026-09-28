@@ -16,10 +16,8 @@ import {
   keepExternalIntegrationEffect,
   keepLifecycleEffect,
   keepPairedMountEffect,
-  keepRenderedReactionEffect,
   keepStateIndependentEffect,
   keepStateSnapshotEffect,
-  observeEffect,
   ownershipDirectiveEffect,
   reviewCausalOwnerEffect,
   reviewEmptyDependencySetupEffect,
@@ -29,26 +27,23 @@ import {
   unresolvedCallbackEffect,
   useMountEffect,
 } from "./effect-verdicts.js";
-import { findAncestorUntil, identifiersNamed, nodeWithin } from "../../core/ast.js";
 import {
   isCommittedPropRefSnapshot,
   isExactCommittedPreviousValueGuard,
   isExactLatestValueRefMirror,
 } from "./committed-ref-mirrors.js";
-import {
-  isDeclarationName,
-  isNonValueIdentifier,
-  unwrapTransparentExpression,
-} from "../../core/analysis-ast.js";
 import type { EffectStateDependency } from "./state-independent-effects.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { analyzeEffectStateDependencies } from "./state-independent-effects.js";
 import { callbackIsCommittedRefIntegration } from "./committed-ref-integration.js";
 import { callbackReadsSynchronously } from "./synchronous-dependency-reads.js";
+import { findAncestorUntil } from "../../core/ast.js";
 import { findMutationSiteReset } from "./mutation-site-resets.js";
 import { findPureDerivedSetter } from "./derived-setters.js";
 import { isDependencyDrivenExternalCommandEffect } from "./external-command-effects.js";
+import { observableReactionClassification } from "./observable-reactions.js";
 import ts from "typescript";
+import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 const REACT_EFFECT_DIRECTIVE_PATTERN =
   /^(?:react-effect-allow\b|legend-doctor\s+keep-react-effect\b)/u;
@@ -177,9 +172,7 @@ function dependencyEffectClassification(
   if (isObservableSourcedReaction(effect, callback, inline)) {
     return (
       persistedObservableClassification(effect, inline) ??
-      (useValueDependenciesAreEffectOnly(effect, inline)
-        ? observeEffect()
-        : keepRenderedReactionEffect())
+      observableReactionClassification(effect, callback, inline)
     );
   }
   if (inline.hasCleanup) {
@@ -278,27 +271,6 @@ function isObservableSourcedReaction(
       (name) => inline.useValueBindings.has(name) || inline.useObservableBindings.has(name),
     ) &&
     directUseValueDependencies.every((name) => callbackReadsSynchronously(callback, name))
-  );
-}
-
-function useValueDependenciesAreEffectOnly(
-  effect: EffectCandidate,
-  inline: InlineEffectContext,
-): boolean {
-  const { call, dependencies, owner } = effect;
-  if (!owner || !dependencies) {
-    return false;
-  }
-  return dependencies.elements.every(
-    (element) =>
-      !ts.isIdentifier(element) ||
-      !inline.useValueBindings.has(element.text) ||
-      identifiersNamed(owner.body, element.text).every(
-        (reference) =>
-          isDeclarationName(reference) ||
-          isNonValueIdentifier(reference) ||
-          nodeWithin(reference, call),
-      ),
   );
 }
 

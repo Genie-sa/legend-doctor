@@ -5,6 +5,7 @@ import type {
   ContextConsumerSource,
   HookPresentationConsumer,
   HookReturnMembers,
+  ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
 import type {
   SourceHookDeclaration,
@@ -22,6 +23,7 @@ import {
 import type { AnalysisContext } from "./analysis-context.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceIndex } from "../source-components/source-components.js";
+import { componentParentRerender } from "./parent-rerenders.js";
 import { componentPropDataPath } from "./component-prop-data.js";
 import { importedHookConsumers } from "./hook-consumer-index.js";
 import { keyedCursorConsumerResult } from "../../rules/hook-keyed-cursor-contract/hook-keyed-cursor-contract.js";
@@ -170,6 +172,13 @@ class ChildContracts implements ChildContractResolver {
     });
   }
 
+  public componentParentRerender(
+    owner: RuntimeFunctionLike,
+    paths: readonly ts.Expression[],
+  ): ParentRerenderProof {
+    return componentParentRerender(this.context, owner, paths);
+  }
+
   public componentPropCallbackIsDeferred(
     componentName: string,
     propName: string,
@@ -238,6 +247,10 @@ class ChildContracts implements ChildContractResolver {
         candidate !== this.importerFile && this.context.project.getFile(candidate) !== undefined
       );
     });
+  }
+
+  public isObservableBinding(name: string): boolean {
+    return this.context.sourceIndex.observableDeclarationFor(this.importerFile, name) !== null;
   }
 
   public frameworkEventComponent(componentName: string): boolean {
