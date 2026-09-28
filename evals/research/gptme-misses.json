@@ -1,0 +1,58 @@
+{
+  "repository": "https://github.com/gptme/gptme.git",
+  "commit": "f7bb34871442bb69d3cbecde49c7ce1f2e22517a",
+  "scored": false,
+  "labels": [
+    {
+      "id": "GPTME-MEMO-META-WHOLE-MESSAGE",
+      "enforced": false,
+      "file": "webui/src/components/ChatMessage.tsx",
+      "line": 615,
+      "rationale": "`message$.get()` tracks the whole message to pass only `timestamp` and `metadata` to MessageMetaLabel, so the Memo reruns on every streamed token appended by `lastMessage$.content.set` (hooks/useConversation.ts:270). Leaf reads of the two fields remove those reruns."
+    },
+    {
+      "id": "GPTME-MEMO-STATUS-WHOLE-MESSAGE",
+      "enforced": false,
+      "file": "webui/src/components/ChatMessage.tsx",
+      "line": 772,
+      "rationale": "The failed-message Memo reads the whole message to check `_status` and `_error`, so it reruns on every streamed token (hooks/useConversation.ts:270) although those fields change only in stores/conversations.ts:168-170."
+    },
+    {
+      "id": "GPTME-CONTENT-LOG-PER-TOKEN",
+      "enforced": false,
+      "file": "webui/src/components/ConversationContent.tsx",
+      "line": 911,
+      "rationale": "The Memo reads `conversation$.data.log.get()`, which a child write notifies, so every streamed token reruns a backward scan for the last assistant model and rerenders OpenConversationPathButton; the streaming message has no metadata until completion, so the scan passes it on every token."
+    },
+    {
+      "id": "GPTME-CHATINPUT-WHOLE-CONVERSATION",
+      "enforced": false,
+      "action": "split-use-value-leaves",
+      "file": "webui/src/components/ChatInput.tsx",
+      "line": 882,
+      "rationale": "`use$(conversations$.get(conversationId))` subscribes the 1,400-line ChatInput to the whole ConversationState, including `data.log`, so it rerenders on every streamed token while reading only `isGenerating`, `executingTool` and `pendingTool` (883-888). The Map-entry binding is not proven, which blocks the leaf split."
+    },
+    {
+      "id": "GPTME-MAINLAYOUT-MUTATED-REGISTRY",
+      "enforced": false,
+      "action": "snapshot-mutated-use-value",
+      "file": "webui/src/components/MainLayout.tsx",
+      "line": 187,
+      "rationale": "The useMemo at 189-207 is keyed on `registry.servers`, but `updateServer` replaces an element in place (stores/servers.ts:336, called from settings/ServerConfiguration.tsx:174), which keeps the array's identity. Renaming the primary server rerenders MainLayout through `use$` while `serverName` in the memoized list stays stale. This is the same shape as the flagged hooks/useMultiServerConversations.ts:15, but the dependency is a member of the mutated object."
+    },
+    {
+      "id": "GPTME-MAINLAYOUT-MEMO-ON-COMPUTED-HANDLE",
+      "enforced": false,
+      "file": "webui/src/components/MainLayout.tsx",
+      "line": 263,
+      "rationale": "The useMemo reads `storeConversations$.get()` untracked and lists the stable computed handle as its dependency (291), so store-only conversations stay stale until another dependency changes. Subscribing with `use$` is not a safe fix: the computed at 236 rebuilds a fresh array from `conversations$.get()` on every streamed token."
+    },
+    {
+      "id": "GPTME-PROVIDER-HEALTH-HOOK-SUBSCRIPTIONS",
+      "enforced": false,
+      "file": "webui/src/hooks/useProviderHealth.ts",
+      "line": 90,
+      "rationale": "The hook subscribes `isLoading` and `error` (90-91) for every caller, but SidebarIcons.tsx:107 uses only `data`. Each fetch toggles `isLoading` at 30 and 63, rerendering the always-mounted icon rail twice, and ServerProviderHealthSettings.tsx:28 polls every 30 s while open. The subscription sits in a custom hook whose consumer is the caller."
+    }
+  ]
+}

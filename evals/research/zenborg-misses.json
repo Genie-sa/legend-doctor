@@ -1,0 +1,38 @@
+{
+  "repository": "https://github.com/equanimitech/zenborg.git",
+  "commit": "523af6cf9d18fa33941be971e057037283800ba0",
+  "scored": false,
+  "labels": [
+    {
+      "id": "ZENBORG-SETTINGS-OBSERVER-PHASE-READ",
+      "enforced": false,
+      "file": "src/components/SettingsModal.tsx",
+      "line": 84,
+      "rationale": "The `observer` body reads the whole `phaseConfigs$` map with `.get()` in render, but the sorted list feeds only the phases pane (262-367). Every slider pointermove writes `phaseConfigs$[id]` (267, via CircularPhaseSlider.tsx:238-252), so each move rerenders the whole modal, its navigation and its updater hook instead of only the pane. The modal stays mounted in LayoutClient.tsx:112 while closed. `.get()` inside an observer is not in the subscription inventory, so no finding is emitted."
+    },
+    {
+      "id": "ZENBORG-MOMENT-CARD-ROW-SELECTION",
+      "enforced": false,
+      "action": "select-primitive-projection",
+      "file": "src/components/MomentCard.tsx",
+      "line": 55,
+      "rationale": "Every mounted MomentCard calls useSelection, which subscribes to `editingMomentId` and the whole `selectedMomentIds` array (hooks/useSelection.ts:24-29), but the card uses only `isSelected(moment.id)`. Each start or stop of editing and each selection toggle rerenders every card. The timeline wrapper SortableMomentCard (TimelineCell.tsx:233, 238) also subscribes the whole array for one membership boolean. Per-row `includes(moment.id)` selectors at both sites confine a toggle to the rows whose membership flips, and editing changes stop rerendering cards."
+    },
+    {
+      "id": "ZENBORG-HABIT-HEALTH-PER-CARD",
+      "enforced": false,
+      "action": "derive-computed-observable",
+      "file": "src/hooks/useHabitHealth.ts",
+      "line": 29,
+      "rationale": "Each MomentCard, VirtualDeckCard and GhostHabitCard calls useHabitHealth. The hook subscribes to the whole `moments$` and `cyclePlans$` maps (29-32) and reruns computeHealth plus a full moment filter on every render (36-58). Cards under TimelineCell.tsx:78 and CycleDeck.tsx:72 already rerender on each moment write, so the hook's own subscriptions add no render there. Each write still repeats the O(moments) derivation once per card. A shared computed health per habit derives it once per write."
+    },
+    {
+      "id": "ZENBORG-TIMELINE-DISCARDED-TICK",
+      "enforced": false,
+      "action": "select-primitive-projection",
+      "file": "src/components/Timeline.tsx",
+      "line": 138,
+      "rationale": "`use$(timeTick$)` discards the counter that the 60 s interval (233-238) and window focus (188) bump. It exists so that `getExtendedTimelineDays` (142) recomputes, and that function depends only on today's date and `getActiveDay()` (lib/dates.ts:66-106, 147-157). Every minute the whole Timeline rerenders, along with every unmemoized DayRow and TimelineCell, each of which filters all moments (TimelineCell.tsx:82-84). A selector that projects the day keys rerenders only when a day boundary passes."
+    }
+  ]
+}

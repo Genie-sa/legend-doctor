@@ -49,6 +49,11 @@ export interface GoldPracticeCase {
   /** Assert cost classification when manually audited; omitted labels retain action-only matching. */
   disposition?: Exclude<LegendPracticeFinding["disposition"], "candidate">;
   action: LegendPracticeAction;
+  /**
+   * False marks an audited false positive awaiting its fix: the emitted finding does not fail the run,
+   * still counts against practice precision, and never matches. The fix deletes the label.
+   */
+  enforced?: boolean;
   file: string;
   line: number;
   rationale: string;

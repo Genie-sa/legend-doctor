@@ -1,0 +1,531 @@
+import type { GoldHookCase } from "../contracts.js";
+
+export const juntoHookCases = [
+  {
+    action: "use-observable",
+    file: "components/feed/OperatorFeed.tsx",
+    hook: "useState",
+    line: 274,
+    name: "expanded",
+    rationale:
+      "Toggling one card's details replaces the whole Set and rerenders the feed surface with every unmemoized FeedCard; a per-row membership selector renders only the toggled card, which alone reads `expanded.has(item.itemId)` at line 442.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/feed/OperatorFeed.tsx",
+    hook: "useState",
+    line: 280,
+    name: "scrolled",
+    rationale:
+      "The scroll handler at line 416 flips the flag whenever the list crosses 2px, rerendering the feed surface and every card; only the OverlayHeader's `data-scrolled` at line 404 reads it.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/fleet/FleetCompatibilitySection.tsx",
+    hook: "useState",
+    line: 32,
+    name: "detailsOpen",
+    rationale:
+      "The flag feeds only `open` on the <details> element at line 91, written by its own toggle event; a reactive prop keeps the compatibility section from rerendering on every expand and collapse.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/fleet/FleetHostForm.tsx",
+    hook: "useState",
+    line: 56,
+    name: "label",
+    rationale:
+      "Each keystroke in the label input rerenders the whole enroll form, including the capability buttons; the submit command reads the value once, so a leaf input subscriber removes those renders.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/fleet/FleetHostForm.tsx",
+    hook: "useState",
+    line: 57,
+    name: "endpoint",
+    rationale:
+      "Each keystroke in the endpoint input rerenders the whole enroll form; only the controlled input at line 140 renders it and submit snapshots it once.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/fleet/FleetHostForm.tsx",
+    hook: "useState",
+    line: 58,
+    name: "capabilities",
+    rationale:
+      "Only the capability buttons at line 148 read the list, through `includes(id)`; a per-item selector rerenders the toggled button instead of the form and its two inputs.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/InspectorFields.tsx",
+    hook: "useState",
+    line: 155,
+    name: "textDraft",
+    rationale:
+      "Every keystroke in the note textarea rerenders NodeFieldEditors and the KernelFieldEditors subtree at line 224; only the textarea reads the draft, and the sync effect at line 157 can assign both drafts to one observable.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/InspectorFields.tsx",
+    hook: "useState",
+    line: 156,
+    name: "gitCwdDraft",
+    rationale:
+      "Every keystroke in the repository folder input rerenders NodeFieldEditors and KernelFieldEditors; the value is read only by that input and by its blur and Enter commands.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/InspectorFields.tsx",
+    hook: "useState",
+    line: 353,
+    name: "pageUrl",
+    rationale:
+      "Each keystroke in the region's url default rerenders the owner, including the BrowserProfileSelect and EnrolledHostSelect components; only the url input renders the draft.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/InspectorFields.tsx",
+    hook: "useState",
+    line: 354,
+    name: "pageProfile",
+    rationale:
+      "A member of the effect-synchronized page defaults draft at lines 357-361; the profile is rendered only by its BrowserProfileSelect, so the model can live in one observable with leaf subscribers.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/InspectorFields.tsx",
+    hook: "useState",
+    line: 355,
+    name: "pageHost",
+    rationale:
+      "A member of the effect-synchronized page defaults draft at lines 357-361; the host is rendered only by its EnrolledHostSelect, so the model can live in one observable with leaf subscribers.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/InspectorFields.tsx",
+    hook: "useState",
+    line: 484,
+    name: "instructionDraft",
+    rationale:
+      "Every keystroke in the region briefing textarea rerenders the RegionRules editor beneath it; only the textarea and its blur and Escape commands read the draft.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/node-palette/NodePaletteModeDeck.tsx",
+    hook: "useState",
+    line: 119,
+    name: "folderOpen",
+    rationale:
+      "Only AgentLaunchContext at line 248 reads the flag; opening or closing the folder picker currently rerenders the whole node deck catalog.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/pad/PadCard.tsx",
+    hook: "useState",
+    line: 41,
+    name: "pad",
+    rationale:
+      "The fetched pad is read only by the thumbnail slot at line 106; a leaf subscriber there keeps each fetch result from rerendering the card header and its rename input.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/rts/KindSurface.tsx",
+    hook: "useState",
+    line: 452,
+    name: "formOpen",
+    rationale:
+      "Opening the fields form rerenders KindSurface, which recomputes the whole kind strip from the document; only the fields key at line 556 and the NodeFormFocus mount at line 565 read the flag.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/rts/ReseatConfirmDialog.tsx",
+    hook: "useState",
+    line: 21,
+    name: "dontShowAgain",
+    rationale:
+      "The checkbox at line 45 is the only render reader; the confirm command reads the value once, so the dialog body stops rerendering on each toggle.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/rts/RtsControls.tsx",
+    hook: "useState",
+    line: 301,
+    name: "pop",
+    rationale:
+      "Each popover toggle rerenders every task kind key; only the keys' active states and the conditional popover mounts read `pop`.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/rules/BoardSettings.tsx",
+    hook: "useState",
+    line: 54,
+    name: "wait",
+    rationale:
+      "The wait draft is read only by `value` on the input at line 113; each keystroke rerenders the whole board settings form.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/rules/RuleList.tsx",
+    hook: "useState",
+    line: 42,
+    name: "draft",
+    rationale:
+      "Each keystroke in the new-rule input rerenders every RuleRow with fresh callbacks; only the input reads the draft and `add` snapshots it once.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/settings/NotificationSettingsSection.tsx",
+    hook: "useState",
+    line: 81,
+    name: "test",
+    rationale:
+      "The send-test phases (sending, then sent or failed) are read only inside the test action row (lines 181-194), so each phase could rerender that row instead of the whole settings section. The analyzer reviews it because the other state is written in another stretch of `sendTest`, but `readDelivery` (line 86) sets `delivery` in the `.then` of its own IPC call at line 89, which already commits apart from the test phase today, so the conversion adds no split.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/settings/NotificationSettingsSection.tsx",
+    hook: "useState",
+    line: 82,
+    name: "delivery",
+    rationale:
+      "The delivery status gates only the blocked banner at line 164 and is written only by the `readDelivery` promise continuation at line 89, so a leaf subscriber removes the section render. The analyzer reviews it because the other state is written in another stretch of `sendTest`, but `readDelivery` (line 86) sets `delivery` in the `.then` of its own IPC call at line 89, which already commits apart from the test phase today, so the conversion adds no split.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/settings/ProvidersSettingsSection.tsx",
+    hook: "useState",
+    line: 37,
+    name: "backendModel",
+    rationale:
+      "Keystrokes in the model field rerender the whole providers form; the draft cluster is written together by the sync effect at lines 42-46 and read only by its inputs and the save command.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/settings/ProvidersSettingsSection.tsx",
+    hook: "useState",
+    line: 38,
+    name: "maxCallMinutes",
+    rationale:
+      "Keystrokes in the minutes field rerender the whole providers form; only its input renders the draft.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/settings/ProvidersSettingsSection.tsx",
+    hook: "useState",
+    line: 39,
+    name: "maxVoiceCostUsd",
+    rationale:
+      "Keystrokes in the cost field rerender the whole providers form; only its input renders the draft.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/sheet/SheetDetail.tsx",
+    hook: "useState",
+    line: 60,
+    name: "copied",
+    rationale:
+      "Each copy flips the flag twice, rerendering the whole sheet grid both times; only the copy IconButton's title at line 197 reads it.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/squads/SquadDialog.tsx",
+    hook: "useState",
+    line: 63,
+    name: "prompt",
+    rationale:
+      "Each keystroke in the shared prompt rerenders the squad dialog, including the Combobox options with their portrait rows; only the textarea renders the draft.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/squads/SquadDialog.tsx",
+    hook: "useState",
+    line: 64,
+    name: "seatPrompts",
+    rationale:
+      "Each per-seat keystroke replaces the record and rerenders the dialog; a per-item selector at the Input on line 200 renders only the edited seat.",
+    target: "junto-renderer",
+  },
+  {
+    action: "move-state-down",
+    file: "components/squads/SquadDialog.tsx",
+    hook: "useState",
+    line: 66,
+    name: "active",
+    rationale:
+      "The active option key is only transported to the Combobox (lines 146-147); arrowing through options rerenders the whole dialog, while a local wrapper keeps it in the combobox.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/terminal/ActorLedgerPane.tsx",
+    hook: "useState",
+    line: 158,
+    name: "response",
+    rationale:
+      "Keystrokes in a request row's response textarea rerender the whole row; the value and `canSend` are read only inside the needs-input fragment at line 200.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/terminal/TerminalSurface.tsx",
+    hook: "useState",
+    line: 706,
+    name: "geomLabel",
+    rationale:
+      "Each resize step writes the geometry label at line 853 and rerenders the 1,560-line TerminalSurface; only the <span> at line 2022 renders it.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/work/TaskBoard.tsx",
+    hook: "useState",
+    line: 938,
+    name: "draft",
+    rationale:
+      "Each keystroke in the card title editor rerenders the TaskCard and reruns its sortable hook; only the Input and the Save button's `disabled` at line 1068 read the draft.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/work/TaskBoard.tsx",
+    hook: "useState",
+    line: 1848,
+    name: "rejectionComment",
+    rationale:
+      "Each keystroke rerenders the task detail panel; only the Textarea and the reject Button at line 2236 read it. The clear at line 2244 runs after onReject has written its own state, so both updates still commit together.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/work/TaskOperatorPanel.tsx",
+    hook: "useState",
+    line: 176,
+    name: "defectSummary",
+    rationale:
+      "Each keystroke rerenders the 47-element operator panel; only the Textarea and the send-back Button at line 431 read it. `reset` at line 221 writes it with the remaining states in one synchronous stretch, and React 19 renders the observable's sync-lane update together with those default-lane updates in one commit.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/work/TaskOperatorPanel.tsx",
+    hook: "useState",
+    line: 177,
+    name: "defectRefs",
+    rationale:
+      "Each keystroke rerenders the operator panel; only the refs Input renders it. The post-await `reset` writes it in the same synchronous stretch as the remaining states, which React 19 commits once.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/work/TaskThread.tsx",
+    hook: "useState",
+    line: 201,
+    name: "comment",
+    rationale:
+      "Each keystroke rerenders the whole thread and its entries; only the Textarea and the send Button at line 279 read it. The clear at line 206 follows onComment's own state writes, so the update still lands in one commit.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/work/WorkSurfaces.tsx",
+    hook: "useState",
+    line: 479,
+    name: "title",
+    rationale:
+      "Each keystroke rerenders BoardDetail, a 66-element owner; only the title Input and the create Button at line 803 read it, and the clear at line 611 shares its stretch with setCreatingTopic and setSelectedTopicId, which React 19 renders with the sync-lane flush. The analyzer reviews it because `refreshList` writes `listError`, `detailTopics` and `selectedTopicId` in another stretch (lines 518-523), but those writes follow refreshList's own awaited fetch at line 516 and already commit apart from the clear today, so the conversion adds no split.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/work/WorkSurfaces.tsx",
+    hook: "useState",
+    line: 480,
+    name: "body",
+    rationale:
+      "Each keystroke rerenders BoardDetail; only the body Textarea renders it, and `createTopic` snapshots it once before the awaited create. The analyzer reviews it because `refreshList` writes `listError`, `detailTopics` and `selectedTopicId` in another stretch (lines 518-523), but those writes follow refreshList's own awaited fetch at line 516 and already commit apart from the clear today, so the conversion adds no split.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/work/WorkSurfaces.tsx",
+    hook: "useState",
+    line: 482,
+    name: "postText",
+    rationale:
+      "Each keystroke rerenders BoardDetail; only the post Textarea and the send Button at line 944 read it, and `submitPost` clears it at line 630 with no other React write before `await refreshList()`. The analyzer reviews it because `refreshList` writes `listError`, `detailTopics` and `selectedTopicId` in another stretch (lines 518-523), but those writes follow refreshList's own awaited fetch at line 516 and already commit apart from the clear today, so the conversion adds no split.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/settings/CompanionSettingsSection.tsx",
+    hook: "useState",
+    line: 220,
+    name: "checking",
+    rationale:
+      "Only Readiness renders the flag; the start of each check at line 230 then stops rerendering the section. The `finally` at line 234 shares a synchronous stretch with setStatus, so React 19 still commits both together.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/settings/ProvidersSettingsSection.tsx",
+    hook: "useState",
+    line: 36,
+    name: "apiKey",
+    rationale:
+      "Known false positive (atomic split after await): the analyzer emits use-observable, but both saves clear the key in a `.then` (lines 66, 107) and clear `saving` in the next `.finally` microtask. React batches those two default-lane updates today, while the observable's sync-lane flush runs before the finally and commits the empty key with the form still saving.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/work/WorkSurfaces.tsx",
+    hook: "useState",
+    line: 485,
+    name: "mutationError",
+    rationale:
+      "Known false positive (atomic split after await): the analyzer emits use-observable, but `run` sets the error in its post-await continuation (lines 571, 574) and createTopic, submitPost and notifyAll clear their pending flag in `finally` one microtask later (lines 618, 634, 676). React commits both together today; after the edit the error commits first on the sync lane and the owner rerenders anyway for the flag.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/InspectorFields.tsx",
+    hook: "useState",
+    line: 298,
+    name: "draft",
+    rationale:
+      "Known false positive (leaf is the owner): the analyzer emits use-observable, but PageUrlControl renders only a label, a span and the controlled input at line 312, so the render the cut removes is three host elements.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/gallery/ActivityMarkGallery.tsx",
+    hook: "useState",
+    line: 372,
+    name: "visible",
+    rationale:
+      "Known false positive (leaf is the owner): the analyzer emits use-observable, but the fleet grid is already memoized at line 383, so the Stress owner render outside the readout <span> at line 408 is a section, a header row and the Eyebrow.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/gallery/ActivityMarkGallery.tsx",
+    hook: "useState",
+    line: 373,
+    name: "frame",
+    rationale:
+      "Known false positive (leaf is the owner): the analyzer emits use-observable, but the interval writes it with `visible` into the same readout <span> at line 408 while the memoized grid at line 383 already skips the tick.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/rts/KindSurface.tsx",
+    hook: "useState",
+    line: 241,
+    name: "form",
+    rationale:
+      "Known false positive (leaf is the owner): the analyzer emits use-observable, but `form` drives the labels, active states and styles of every KindKey in RegionKindSurface (lines 268-298) and the RegionFieldFocus mount at line 304; the leaf would be the whole surface.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/rts/KindSurface.tsx",
+    hook: "useState",
+    line: 242,
+    name: "pathsOpen",
+    rationale:
+      "Known false positive (leaf is the owner): the analyzer emits use-observable, but `pathsOpen` is read by the folder key at line 277 and the RegionPathsModal mount at line 306, and it is co-written with `form`, which already owns the rest of the surface.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/rules/ChecksEditor.tsx",
+    hook: "useState",
+    line: 83,
+    name: "label",
+    rationale:
+      "Known false positive (leaf is the owner): the analyzer emits use-observable, but CheckDraftRow is two Inputs, the add Button that reads both drafts at line 120 and a discard IconButton, so after the cut the owner is a single flex div.",
+    target: "junto-renderer",
+  },
+  {
+    action: "review-state",
+    enforced: false,
+    file: "components/rules/ChecksEditor.tsx",
+    hook: "useState",
+    line: 84,
+    name: "command",
+    rationale:
+      "Known false positive (leaf is the owner): the analyzer emits use-observable, but every element of CheckDraftRow except the discard IconButton reads `label` or `command`, so no material render is removed.",
+    target: "junto-renderer",
+  },
+  {
+    action: "keep-effect",
+    enforced: false,
+    file: "components/rts/CompletedTaskNotify.tsx",
+    hook: "useEffect",
+    line: 28,
+    name: null,
+    rationale:
+      "Observing `doc` directly removes no render: the only parent, RtsBottomBar, subscribes to `doc`, `docEpoch` and `canvasName` through useRegionRollups (lib/region-rollups.ts:121-125) and renders CompletedTaskNotifyStack unmemoized at line 1406, so every document commit rerenders the stack anyway.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/work/TaskBoard.tsx",
+    hook: "useState",
+    line: 2300,
+    name: "nowMs",
+    rationale:
+      "The 1 s interval at line 2494 rerenders the whole TaskBoard while any task waits, invalidates the lane grouping memo at line 2439 even though laneForTask ignores the clock, and rerenders every lane and card. Only the header glance, the queue and incoming lane hints, and each approval mark read it.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/sheet/SheetDetail.tsx",
+    hook: "useState",
+    line: 63,
+    name: "scrollTop",
+    rationale:
+      "Every scroll event on the grid (line 218) rerenders the whole sheet editor, including the header and column name inputs; only the visible row range at line 176 reads it, and a subscriber that selects that range rerenders the body only when a row enters or leaves.",
+    target: "junto-renderer",
+  },
+] as const satisfies readonly GoldHookCase[];

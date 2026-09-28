@@ -1,0 +1,53 @@
+{
+  "repository": "https://github.com/skastr0/junto.git",
+  "commit": "f30adbb946421f8606f27b6e8a5e9e37c7e0fb85",
+  "scored": false,
+  "labels": [
+    {
+      "id": "JUNTO-CHATVIEW-TRANSCRIPT-PER-TOKEN",
+      "enforced": false,
+      "file": "src/renderer/components/chat/ChatView.tsx",
+      "line": 159,
+      "rationale": "ChatView subscribes to `chatState$[agentKey].transcript`, and every streamed chunk replaces that array (lib/chat-state.ts:315, :319), so the whole view, including the ThinkingOrb, the model Dropdown and ChatComposer, rerenders per token. Only ChatTranscript and SessionRail render the items; the owner needs the busy-tool flag and `transcript.length` (lines 175, 178-180), which merged chunks leave unchanged. The dynamic-key binding `chatState$[agentKey]` at line 149 is not proven, so no narrowing is offered."
+    },
+    {
+      "id": "JUNTO-TERMINAL-CLAIMED-TASK-DOC",
+      "enforced": false,
+      "file": "src/renderer/components/terminal/TerminalSurface.tsx",
+      "line": 724,
+      "rationale": "The 1,560-line TerminalSurface subscribes to the whole document and actor refs (lines 724-725) only to derive `claimedTask` at line 726, read at 1909-1916 and 2079-2088. PersistentTerminalHost passes `node` from `terminal$.openByNodeId` and never subscribes to the document, so every document commit rerenders every open terminal; a selector returning the claimed task's id, sink and brief would rerender only when the claim changes."
+    },
+    {
+      "id": "JUNTO-TERMINAL-RAILS-WHOLE-MAP",
+      "enforced": false,
+      "action": "narrow-use-value-subscription",
+      "file": "src/renderer/components/terminal/TerminalSurface.tsx",
+      "line": 1795,
+      "rationale": "`use$(terminal$.railsOpenByNodeId)` subscribes to every node's rails, but the surface reads only its own entry through actorRailsOpen (line 1796) and uses `.connections` at line 2187. A rail toggle on one terminal (lib/terminal-state.ts:127) rerenders every open TerminalSurface; subscribing to `railsOpenByNodeId[node.id]` limits it to the toggled one."
+    },
+    {
+      "id": "JUNTO-CANVAS-CHROME-HAS-NODES",
+      "enforced": false,
+      "action": "select-primitive-projection",
+      "file": "src/renderer/components/CanvasChrome.tsx",
+      "line": 27,
+      "rationale": "CanvasChrome subscribes to the whole document to pass `nodes.length > 0` to CanvasEmpty; App does not subscribe to the document, so every commit rerenders CanvasChrome, FilterTray and CanvasEmpty. Selecting the boolean rerenders only when the canvas gains or loses its first non-group node. The seed is the module constant EMPTY_DOC, which blocks the plain-seed proof."
+    },
+    {
+      "id": "JUNTO-APP-BOOT-GATE",
+      "enforced": false,
+      "action": "select-primitive-projection",
+      "file": "src/renderer/App.tsx",
+      "line": 306,
+      "rationale": "App subscribes to `canvasName` only for the boot gate `booting && !canvasName` at line 562, so every canvas open (App.tsx:151, :186, :242) rerenders the root component and every unmemoized host under it. Selecting the combined boolean from `booting` and `canvasName` rerenders App only when the boot indicator appears or disappears."
+    },
+    {
+      "id": "JUNTO-STOPPAGE-STALE-OCCUPANCY",
+      "enforced": false,
+      "action": "snapshot-mutated-use-value",
+      "file": "src/renderer/components/rts/StoppageRank.tsx",
+      "line": 70,
+      "rationale": "syncChatCoarse writes `chatCoarse$[agentKey]` in place (lib/chat-state.ts:428, :440), so `use$(chatCoarse$)` returns the same record and the occupancy memo at line 79, keyed on `[doc, chatCoarse, ranked]`, keeps stale marks. Chat status, turnBusy and hasBusyTools flips come from chat events that write neither the document nor `ranked`, so the staffing marks stay wrong until the next document commit. The analyzer reports this as a candidate."
+    }
+  ]
+}

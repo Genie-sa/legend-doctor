@@ -7,13 +7,18 @@ whatever it currently prints.
 
 - **Hook labels.** Every labeled `useState` or `useEffect` records the action it must receive. Proven opportunities the
   analyzer does not implement yet stay in the corpus with `enforced: false`: they count against recall without failing
-  the run. A label may also pin the `abstentionReason` a review finding must carry, and the review question it must ask
+  the run. An audited false positive is labeled the same way, with the action the tool should give and a rationale
+  that starts with `Known false positive`: it counts against precision without failing the run, and the fix that
+  removes it makes the label enforced. A label may also pin the `abstentionReason` a review finding must carry, and the review question it must ask
   through `assumption: { ifConfirmed }`.
 - **Grouped instructions.** State-cluster labels verify exact cluster membership.
 - **Legend practice labels.** Every practice finding on a labeled target must match a label; an unlabeled practice
   finding is a failure, so practice precision is measured over everything the tool prints. A manually audited optional
   `disposition` label also rejects the right action with an incorrect cost classification; omitted dispositions retain
-  action-only matching.
+  action-only matching. An audited false positive whose fix has not landed is labeled with the action the tool emits,
+  `enforced: false`, and a rationale that starts with `Known false positive`: the finding stays in practice precision
+  without failing the run, and the runner lists the label once the finding is gone so the fix deletes it. With the label
+  deleted, the corpus asserts absence: any later `change` or `style` finding there fails as unlabeled.
 - **Expert replay.** Performance commits by Legend State's author and by application maintainers are ground truth for
   what an expert changes. Each hunk is labeled at its line in the commit's first parent: `enforced` when a sound static
   proof shows the edit removes a render or lifecycle cost without changing behavior, `non-enforced` when it changes
@@ -39,6 +44,9 @@ Pinned public repositories, each at a fixed commit with focused source roots whe
 - `LegendApp/legend-apps`
 - `nonbili/NouTube`
 - `nonbili/Nori`
+- `gptme/gptme` (web UI)
+- `equanimitech/zenborg`
+- `skastr0/junto` (renderer)
 
 Repository source is never copied into this project. Each corpus entry pins a commit and a source location, and the
 runner scans local checkouts. A label enters the corpus only after manual review of the source it points at.
@@ -67,7 +75,10 @@ node dist/evals/run.js --complete \
   --repo legend-photos=/path/to/legend-photos \
   --repo legend-apps=/path/to/legend-apps \
   --repo noutube=/path/to/NouTube \
-  --repo nori=/path/to/Nori
+  --repo nori=/path/to/Nori \
+  --repo gptme=/path/to/gptme \
+  --repo zenborg=/path/to/zenborg \
+  --repo junto=/path/to/junto
 ```
 
 `--complete` requires every repository in the loaded corpus, including an optional private slice. Missing paths fail
@@ -97,7 +108,8 @@ handlers already render transaction writes once on legacy roots, and the three b
 records the runtime evidence behind the 17 Slides replay labels it moved to non-enforced. The [split-commit audit](audit-2026-09-28-split-commits.md) records the renderer
 proof behind cross-microtask atomic-transition reviews and the three formbricks labels it moved to review. The [replay sweep audit](audit-2026-09-28-replay-sweep.md)
 re-audits every remaining replay miss, moves four labels whose edit saves nothing alone to non-enforced, and records the
-yield of each candidate proof. A red corpus job remains a real gate; unit-suite success does not override it.
+yield of each candidate proof. The [unseen-app pin audit](audit-2026-09-28-unseen-apps.md) records the gptme, zenborg, and junto labels and the known
+false positives they carry. A red corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay
 
@@ -152,16 +164,20 @@ in `evals/performance-budgets.ts`:
 - **Time:** three times the repository's CI baseline, never below 60 seconds. The analyzer exposes no deterministic work
   counter, so wall time with that margin stands in for one.
 
-Baselines come from CI run 36409722431 on ubuntu-latest (4 CPUs, 16 GB) with the analyzer at 51f2d32:
+Baselines come from CI run 36409722431 on ubuntu-latest (4 CPUs, 16 GB) with the analyzer at 51f2d32, and for gptme,
+zenborg, and junto from CI run 36444683516 at c478731:
 
 | Repository                | Baseline | Limit |
 | ------------------------- | -------: | ----: |
 | `expensify`               |    47.6s |  143s |
 | `formbricks`              |    15.0s |   60s |
+| `junto`                   |    13.6s |   60s |
 | `legend-apps`             |     9.2s |   60s |
 | `outline`                 |     6.1s |   60s |
 | `noutube`                 |     4.5s |   60s |
 | `excalidraw`              |     4.2s |   60s |
+| `gptme`                   |     3.9s |   60s |
+| `zenborg`                 |     3.7s |   60s |
 | `hoalu`                   |     3.4s |   60s |
 | `open-webui-react-native` |     3.1s |   60s |
 | `legend-music`            |     2.4s |   60s |
