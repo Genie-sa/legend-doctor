@@ -120,7 +120,7 @@ test("moves branch-local state down when every outside reset provably unmounts t
         setPhase({ kind: "loading" });
       };
       return <main>
-        <button onClick={begin}>Begin</button>
+        <button onClick={begin}>{translate("begin")}</button>
         {phase.kind === "done" ? (
           <Result
             showDetails={showDetails}

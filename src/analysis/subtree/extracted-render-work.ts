@@ -32,14 +32,26 @@ const sourcesByDeclaration = new WeakMap<ts.Node, Map<string, readonly ts.Node[]
  * Owner parameters and module bindings sit outside the owner's own element count and are skipped.
  */
 export function extractedJsxElementCount(subtree: ts.Node, owner: RuntimeFunctionLike): number {
-  const roots = reachedRenderRoots(subtree, owner);
-  return roots
-    .filter((root) => !roots.some((other) => other !== root && nodeWithin(root, other)))
-    .reduce((total, root) => total + jsxElementCountIn(root), 0);
+  return extractedRenderRoots([subtree], owner).reduce(
+    (total, root) => total + jsxElementCountIn(root),
+    0,
+  );
 }
 
-function reachedRenderRoots(subtree: ts.Node, owner: RuntimeFunctionLike): readonly ts.Node[] {
-  const roots = new Set<ts.Node>([subtree]);
+/** The outermost regions extracted leaves render: the subtrees and the owner code they reach. */
+export function extractedRenderRoots(
+  subtrees: readonly ts.Node[],
+  owner: RuntimeFunctionLike,
+): readonly ts.Node[] {
+  const roots = reachedRenderRoots(subtrees, owner);
+  return roots.filter((root) => !roots.some((other) => other !== root && nodeWithin(root, other)));
+}
+
+function reachedRenderRoots(
+  subtrees: readonly ts.Node[],
+  owner: RuntimeFunctionLike,
+): readonly ts.Node[] {
+  const roots = new Set<ts.Node>(subtrees);
   for (const root of roots) {
     for (const reference of valueReferences(root)) {
       for (const source of ownerBindingSources(reference, root, owner)) {
