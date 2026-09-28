@@ -89,6 +89,7 @@ export interface SourceAnalysisRequest {
   readonly legendState?: InstalledLegendState | null;
   readonly legendValueBridges?: ReadonlyMap<string, ReadonlySet<string>>;
   readonly materiality?: MaterialityPolicy;
+  readonly reactCompiler?: boolean;
   readonly reportFileName: string;
   readonly sourceComponents?: ReadonlySet<string>;
   readonly stateFlow?: StateFlowIndex;
@@ -104,6 +105,7 @@ export function analyzeSourceFile({
   legendState = null,
   legendValueBridges = new Map(),
   materiality = DEFAULT_MATERIALITY,
+  reactCompiler = false,
   reportFileName,
   sourceComponents = new Set(),
   stateFlow = new StateFlowIndex(),
@@ -117,6 +119,7 @@ export function analyzeSourceFile({
     legendState,
     legendValueBridges,
     materiality,
+    reactCompiler,
     sourceComponents,
     stateFlow,
   });
@@ -190,6 +193,7 @@ function sourceAnalysisBase(
       ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
     ]),
     reactCommit,
+    reactCompiler: options.reactCompiler ?? false,
     sourceComponents,
     sourceFile,
     stateFlow,

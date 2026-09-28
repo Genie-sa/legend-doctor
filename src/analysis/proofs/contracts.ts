@@ -36,6 +36,7 @@ export interface ParsedSourceAnalysisOptions {
   readonly legendState: InstalledLegendState | null;
   readonly legendValueBridges: ReadonlyMap<string, ReadonlySet<string>>;
   readonly materiality?: MaterialityPolicy;
+  readonly reactCompiler?: boolean;
   readonly sourceComponents: ReadonlySet<string>;
   readonly stateFlow: StateFlowIndex;
 }
@@ -63,6 +64,8 @@ export interface SourceAnalysis {
   readonly materiality: MaterialityPolicy;
   readonly pureProjectionImports: ReadonlySet<string>;
   readonly reactCommit: ReactCommitContext;
+  /** The React Compiler compiles this file, so its components reuse JSX whose inputs are unchanged. */
+  readonly reactCompiler: boolean;
   readonly reactiveMutationsByOwner: ReadonlyMap<RuntimeFunctionLike, ReadonlySet<string>>;
   readonly sourceComponents: ReadonlySet<string>;
   readonly sourceFile: ts.SourceFile;

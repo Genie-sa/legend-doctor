@@ -5,6 +5,7 @@ import type {
   StateCluster,
   StateUsage,
 } from "./model.js";
+import type { HookFinding, StateAction } from "../core/types.js";
 import type { SourceAnalysis, StateAnalysisResult } from "./proofs/contracts.js";
 import {
   attachClusterGroup,
@@ -19,7 +20,6 @@ import {
 import { findingFor, stateEvidence } from "./finding-format.js";
 import { EMPTY_RUNTIME_FUNCTIONS } from "./constants.js";
 import type { FindingsScope } from "./finding-clusters.js";
-import type { HookFinding } from "../core/types.js";
 import type { ResolvedStateClassification } from "./assumptions/review-assumptions.js";
 import type { StateClassificationInputs } from "./verdicts/classification-context.js";
 import { classifyState } from "./verdicts/classify-state.js";
@@ -188,7 +188,10 @@ function resolveStateVerdict(
 ): StateVerdictResolution {
   const inputs = stateClassificationInputs(state, usage, result);
   const resolved = resolveStateClassification(
-    baseStateClassification(state, inputs, result),
+    compiledOwnerCutClassification(baseStateClassification(state, inputs, result), {
+      inputs,
+      result,
+    }),
     inputs,
     result,
   );
@@ -202,6 +205,44 @@ function resolveStateVerdict(
       ? commitSensitiveStateClassification(state)
       : resolved.classification,
     commitSensitiveOverride,
+  };
+}
+
+const LEAF_CUT_ACTIONS: ReadonlySet<StateAction> = new Set(["move-state-down", "use-observable"]);
+
+interface CompiledOwnerScope {
+  readonly inputs: StateClassificationInputs;
+  readonly result: FindingsScope;
+}
+
+/**
+ * The React Compiler reuses every JSX element whose inputs did not change, so moving state into a
+ * leaf saves only the owner's own function call. Per-row selectors and context values still cut
+ * renders the compiler cannot skip; any other leaf cut is worth only the owner's non-JSX render
+ * work, which the analysis cannot weigh.
+ */
+function compiledOwnerCutClassification(
+  classification: ClassifiedState,
+  { inputs, result }: CompiledOwnerScope,
+): ClassifiedState {
+  const { state } = inputs;
+  if (
+    !result.analysis.reactCompiler ||
+    !LEAF_CUT_ACTIONS.has(classification.action) ||
+    inputs.subtree?.repeated === true ||
+    inputs.isKeyedLeafCollection ||
+    inputs.isKeyedLeafRecord ||
+    inputs.isKeyedLeafScalar ||
+    inputs.isKeyedScalarWithSecondary ||
+    result.clusters.contextClusters.has(state)
+  ) {
+    return classification;
+  }
+  return {
+    action: "review-state",
+    abstentionReason: "render-cut-unproven",
+    confidence: "probable",
+    message: `Review \`${state.valueName}\` before migrating it: the React Compiler compiles this file and reuses the owner's JSX that does not read it, so a leaf cut saves only the owner's own function call. Migrate only when that non-JSX render work is measurably expensive.`,
   };
 }
 

@@ -149,3 +149,63 @@ test("compiler ownership walks up from each file's nearest package", async (test
 
   assert.deepEqual(narrowWriteFiles, [path.join("packages", "ui", "pages.tsx")]);
 });
+
+const LEAF_CUT_SCREEN = `
+  import { useState } from "react";
+  export function Panel() {
+    const [open, setOpen] = useState(false);
+    return (
+      <main>
+        <header><h1>Files</h1><p>Upload center</p></header>
+        <section><p>One</p><p>Two</p><p>Three</p><p>Four</p></section>
+        <aside><p>Tips</p><p>Limits</p></aside>
+        <footer><button onClick={() => setOpen(!open)}>{open ? "Close" : "Open"}</button></footer>
+      </main>
+    );
+  }
+`;
+
+const KEYED_ROW_SCREEN = `
+  import { useState } from "react";
+  export function Screen({ rows }: { rows: Array<{ id: string }> }) {
+    const [openId, setOpenId] = useState<string | null>(null);
+    return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+      {rows.map(row => <Row key={row.id} open={openId === row.id} onClick={() => setOpenId(openId === row.id ? null : row.id)} />)}
+    </main>;
+  }
+`;
+
+async function stateVerdict(
+  source: string,
+  compiled: boolean,
+): Promise<readonly [string, string | undefined]> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-compiled-cut-"));
+  try {
+    const manifest = compiled
+      ? { devDependencies: { "babel-plugin-react-compiler": "1.0.0" }, name: "app" }
+      : { name: "app" };
+    await writeFile(path.join(root, "package.json"), JSON.stringify(manifest), "utf8");
+    await writeFile(path.join(root, "screen.tsx"), source, "utf8");
+    const report = await analyzePath(root);
+    const finding = report.findings.find((candidate) => candidate.hook === "useState");
+    assert.ok(finding, "missing useState finding");
+    return [finding.action, finding.abstentionReason];
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+test("reviews a leaf cut in a compiled owner, whose unchanged JSX the compiler reuses", async () => {
+  const [uncompiled] = await stateVerdict(LEAF_CUT_SCREEN, false);
+  assert.ok(uncompiled === "use-observable" || uncompiled === "move-state-down", uncompiled);
+  assert.deepEqual(await stateVerdict(LEAF_CUT_SCREEN, true), [
+    "review-state",
+    "render-cut-unproven",
+  ]);
+});
+
+test("keeps a per-row selector cut in a compiled owner, since every row reads the state", async () => {
+  const uncompiled = await stateVerdict(KEYED_ROW_SCREEN, false);
+  assert.equal(uncompiled[0], "use-observable");
+  assert.deepEqual(await stateVerdict(KEYED_ROW_SCREEN, true), uncompiled);
+});

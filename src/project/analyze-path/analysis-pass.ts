@@ -121,7 +121,9 @@ export async function runAnalysisPass(
   const practiceFiles = legendPracticeFiles(entries, options.includeDetails);
   const [compiledFiles, rootCompiles, concurrentFiles, rootRendersConcurrently, legendStates] =
     await Promise.all([
-      filesWhere(practiceFiles, (file) => reactCompiler.packageCompilesFile(file)),
+      filesWhere(legendPracticeFiles(entries, true), (file) =>
+        reactCompiler.packageCompilesFile(file),
+      ),
       reactCompiler.compilesDirectory(options.context.root),
       filesWhere(practiceFiles, (file) => concurrentRoots.rendersFileConcurrently(file)),
       concurrentRoots.rendersDirectoryConcurrently(options.context.root),
@@ -233,11 +235,12 @@ function hookFindings(
   pass: AnalysisPass,
   { childContracts, stateFlow }: HookFindingScope,
 ): readonly HookFinding[] {
-  const { legendState } = fileCapabilities(entry, pass);
+  const { legendState, reactCompiler } = fileCapabilities(entry, pass);
   recordDisabledRules(pass.accumulator.disabledRules, disabledEffectRules(legendState));
   return analyzeSourceFile({
     file: entry.analysisFile,
     legendState,
+    reactCompiler,
     reportFileName: entry.reportFileName,
     sourceComponents: pass.context.sourceIndex.componentsFor(entry.file),
     stateFlow,
