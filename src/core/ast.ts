@@ -22,6 +22,12 @@ const RUNTIME_FUNCTION_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
 ]);
 const identifiersByNode = new WeakMap<ts.Node, ReadonlyMap<string, readonly ts.Identifier[]>>();
 
+/** Analysis never reads JSDoc nodes, so the parser skips them to save time and memory. */
+export const SOURCE_FILE_OPTIONS: ts.CreateSourceFileOptions = {
+  jsDocParsingMode: ts.JSDocParsingMode.ParseNone,
+  languageVersion: ts.ScriptTarget.Latest,
+};
+
 export function findAncestor<TNode extends ts.Node>(
   node: ts.Node,
   predicate: (candidate: ts.Node) => candidate is TNode,

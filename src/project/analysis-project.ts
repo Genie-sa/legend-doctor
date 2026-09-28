@@ -1,9 +1,9 @@
+import { SOURCE_FILE_OPTIONS, scriptKindForFile } from "../core/ast.js";
 import { canonicalPath, pathIdentityKey } from "../core/path-identity.js";
 
 import type { AnalysisDiagnostic } from "../core/parser-diagnostics.js";
 import { parserDiagnosticsOf } from "../core/parser-diagnostics.js";
 import path from "node:path";
-import { scriptKindForFile } from "../core/ast.js";
 import ts from "typescript";
 
 const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([
@@ -66,7 +66,7 @@ export function createAnalysisFile(fileName: string, sourceText: string): Analys
   const sourceFile = ts.createSourceFile(
     identityPath,
     sourceText,
-    ts.ScriptTarget.Latest,
+    SOURCE_FILE_OPTIONS,
     true,
     scriptKind,
   );
