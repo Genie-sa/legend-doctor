@@ -13,6 +13,9 @@ export function withSoleBindingFacts(request: LegendPracticesRequest): LegendPra
   return {
     ...request,
     importedObservableArrayPaths: solePaths(request.importedObservableArrayPaths),
+    importedObservableDataKeys: new Map(
+      [...(request.importedObservableDataKeys ?? [])].filter(([name]) => hasSoleRoot(name)),
+    ),
     importedObservableKeys: new Map(
       [...request.importedObservableKeys].filter(([name]) => hasSoleRoot(name)),
     ),

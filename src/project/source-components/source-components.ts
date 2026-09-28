@@ -55,6 +55,8 @@ export interface SourceIndex {
   observablePrimitivePathsFor: (file: string) => ReadonlySet<string>;
   /** Paths seeded with plain data, so subscribing to them never activates a lazy source. */
   observablePlainSeedPathsFor: (file: string) => ReadonlySet<string>;
+  /** Per imported exact object-literal observable, the top-level keys that hold data rather than functions. */
+  observableDataKeysFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoriesFor: (file: string) => ReadonlySet<string>;
   /** In-place writes from every indexed file to each observable the file can name. */
   observableInPlaceWritesFor: (file: string) => ObservableInPlaceWrites;
@@ -93,10 +95,13 @@ export function buildSourceIndexFromFiles(
     observablePrimitivePathsFor: (file) => observablePrimitivePathsFor(state, file),
     observablePlainSeedPathsFor: (file) =>
       observableDeclarationPathsFor(state, file, plainSeedPaths),
+    observableDataKeysFor: (file) =>
+      importedObservableKeys(state, file, (record) => record.observableDataKeys),
     observableFactoriesFor: (file) =>
       new Set(resolvedFor(state, file, "observable-factory").keys()),
     observableInPlaceWritesFor: (file) => observableInPlaceWritesFor(state, file),
-    observableKeysFor: (file) => observableKeysFor(state, file),
+    observableKeysFor: (file) =>
+      importedObservableKeys(state, file, (record) => record.observableKeys),
     observablePathsFor: (file) => observablePathsFor(state, file),
     observablesFor: (file) => new Set(resolvedFor(state, file, "observable").keys()),
     pureProjectionsFor: (file) => new Set(resolvedFor(state, file, "pure-projection").keys()),
@@ -308,13 +313,15 @@ function matchingValueWriters(
   return matches;
 }
 
-function observableKeysFor(
+function importedObservableKeys(
   state: SourceIndexState,
   file: string,
+  keysOf: (record: ModuleRecord) => ReadonlyMap<string, ReadonlySet<string>>,
 ): ReadonlyMap<string, ReadonlySet<string>> {
   const keys = new Map<string, ReadonlySet<string>>();
   for (const [localName, symbol] of resolvedFor(state, file, "observable")) {
-    const observableKeys = state.records.get(symbol.file)?.observableKeys.get(symbol.localName);
+    const record = state.records.get(symbol.file);
+    const observableKeys = record ? keysOf(record).get(symbol.localName) : undefined;
     if (observableKeys) {
       keys.set(localName, observableKeys);
     }

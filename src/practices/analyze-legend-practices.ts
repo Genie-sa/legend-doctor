@@ -1,4 +1,12 @@
-import { exactObjectLiteralKeys, unwrapTransparentExpression } from "../core/analysis-ast.js";
+import {
+  NO_OBSERVABLE_FIELD_FACTS,
+  observableFieldWriteGroups,
+} from "../rules/observable-reads/field-writes.js";
+import {
+  dataFieldKeys,
+  exactObjectLiteralKeys,
+  unwrapTransparentExpression,
+} from "../core/analysis-ast.js";
 import { isNonProductionHarness, visit } from "../core/ast.js";
 import type { AnalysisFile } from "../project/analysis-project.js";
 import type { ChildContractResolver } from "../rules/child-contract/model.js";
@@ -8,6 +16,7 @@ import type { InstalledLegendState } from "../project/legend-state-package.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import type { LegendPracticesRequest } from "./model.js";
 import { NO_CAPABILITIES } from "../project/capabilities.js";
+import type { ObservableFieldFacts } from "../rules/observable-reads/field-writes.js";
 import type { ObservableInPlaceWrites } from "../project/source-components/observable-in-place-writes.js";
 import type { SubscriptionInventory } from "../core/subscriptions.js";
 import { collectHookImports } from "../core/imports.js";
@@ -67,6 +76,7 @@ export interface LegendPracticesFileRequest {
   readonly childContracts?: ChildContractResolver | null;
   readonly file: AnalysisFile;
   readonly importedObservableArrayPaths?: ReadonlySet<string>;
+  readonly importedObservableDataKeys?: ReadonlyMap<string, ReadonlySet<string>>;
   readonly importedObservableFactories?: ReadonlySet<string>;
   readonly importedObservableKeys?: ReadonlyMap<string, ReadonlySet<string>>;
   readonly importedObservables?: ReadonlySet<string>;
@@ -83,6 +93,7 @@ export function analyzeLegendPracticesFile({
   childContracts = null,
   file,
   importedObservableArrayPaths = new Set(),
+  importedObservableDataKeys = new Map(),
   importedObservableFactories = new Set(),
   importedObservableKeys = new Map(),
   importedObservables = new Set(),
@@ -98,6 +109,7 @@ export function analyzeLegendPracticesFile({
     childContracts,
     fileName: reportFileName,
     importedObservableArrayPaths,
+    importedObservableDataKeys,
     importedObservableFactories,
     importedObservableKeys,
     importedObservables,
@@ -120,11 +132,11 @@ function analyzeParsedLegendPractices(
   const rules = enabledPracticeRules(request.capabilities).filter(
     (rule) => !rule.needsObservableBindings || observableBindings.size > 0,
   );
-  const observableKeys = rules.some((rule) => rule.id === "observable-reads")
-    ? collectObservableKeys(request, imports, observableBindings)
-    : new Map<string, ReadonlySet<string>>();
+  const observableFields = rules.some((rule) => rule.id === "observable-reads")
+    ? collectObservableFieldFacts(request, imports, observableBindings)
+    : NO_OBSERVABLE_FIELD_FACTS;
   return rules
-    .flatMap((rule) => rule.run({ imports, observableBindings, observableKeys, request }))
+    .flatMap((rule) => rule.run({ imports, observableBindings, observableFields, request }))
     .toSorted(compareFindingLocation);
 }
 
@@ -132,34 +144,50 @@ function compareFindingLocation(left: LegendPracticeFinding, right: LegendPracti
   return left.location.line - right.location.line || left.location.column - right.location.column;
 }
 
-function collectObservableKeys(
+function collectObservableFieldFacts(
   request: LegendPracticesRequest,
   imports: HookImports,
   observableBindings: ReadonlySet<string>,
-): ReadonlyMap<string, ReadonlySet<string>> {
+): ObservableFieldFacts {
   const keys = new Map(request.importedObservableKeys);
+  const dataKeys = new Map(request.importedObservableDataKeys);
   visit(request.sourceFile, (node) => {
-    if (
-      !ts.isVariableDeclaration(node) ||
-      !ts.isIdentifier(node.name) ||
-      !node.initializer ||
-      !observableBindings.has(node.name.text) ||
-      !hasSoleSourceBinding(request.sourceFile, node.name.text)
-    ) {
-      return;
-    }
-    const initializer = unwrapTransparentExpression(node.initializer);
-    if (
-      !ts.isCallExpression(initializer) ||
-      !isObservableFactoryCall(initializer, imports, request.importedObservableFactories)
-    ) {
-      return;
-    }
-    const initial = observableInitialValue(initializer, imports);
-    const objectKeys = initial ? exactObjectLiteralKeys(initial) : null;
-    if (objectKeys) {
-      keys.set(node.name.text, objectKeys);
+    const local = ts.isVariableDeclaration(node)
+      ? localObservableInitialValue(node, { imports, observableBindings, request })
+      : null;
+    const localKeys = local ? exactObjectLiteralKeys(local.initial) : null;
+    const localDataKeys = local ? dataFieldKeys(local.initial) : null;
+    if (local && localKeys && localDataKeys) {
+      keys.set(local.name, localKeys);
+      dataKeys.set(local.name, localDataKeys);
     }
   });
-  return keys;
+  return { dataKeys, keys, writes: observableFieldWriteGroups(request.observableInPlaceWrites) };
+}
+
+interface LocalObservableScope {
+  readonly imports: HookImports;
+  readonly observableBindings: ReadonlySet<string>;
+  readonly request: LegendPracticesRequest;
+}
+
+function localObservableInitialValue(
+  node: ts.VariableDeclaration,
+  { imports, observableBindings, request }: LocalObservableScope,
+): { readonly initial: ts.Expression; readonly name: string } | null {
+  if (
+    !ts.isIdentifier(node.name) ||
+    !node.initializer ||
+    !observableBindings.has(node.name.text) ||
+    !hasSoleSourceBinding(request.sourceFile, node.name.text)
+  ) {
+    return null;
+  }
+  const initializer = unwrapTransparentExpression(node.initializer);
+  const initial =
+    ts.isCallExpression(initializer) &&
+    isObservableFactoryCall(initializer, imports, request.importedObservableFactories)
+      ? observableInitialValue(initializer, imports)
+      : null;
+  return initial ? { initial, name: node.name.text } : null;
 }

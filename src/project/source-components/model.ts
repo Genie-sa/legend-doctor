@@ -36,6 +36,8 @@ export interface ModuleRecord {
   localExports: ReadonlyMap<string, string>;
   /** Per observable or `container.member$` declaration, the dotted paths whose initial value is an array literal. */
   observableArrayPaths: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Per exact object-literal observable, the top-level keys whose initial value is data rather than a function. */
+  observableDataKeys: ReadonlyMap<string, ReadonlySet<string>>;
   observableDeclarations: ReadonlySet<string>;
   observableKeys: ReadonlyMap<string, ReadonlySet<string>>;
   observableMemberDeclarations: ReadonlyMap<string, ReadonlySet<string>>;
@@ -137,6 +139,7 @@ export interface ModuleRecordDraft {
   legendValueWriters: Map<string, string>;
   localExports: Map<string, string>;
   observableArrayPaths: Map<string, ReadonlySet<string>>;
+  observableDataKeys: Map<string, ReadonlySet<string>>;
   observableDeclarations: Set<string>;
   observableFactoryCalls: Map<string, string>;
   observableFactoryDeclarations: Set<string>;

@@ -56,7 +56,7 @@ function narrowBindingPatternFinding(
       : null;
   if (
     property &&
-    consumesEveryKnownField(candidate.observable, [[property]], scan.observableKeys)
+    consumesEveryKnownField(candidate.observable, [[property]], scan.observableFields.keys)
   ) {
     return null;
   }
@@ -110,7 +110,7 @@ function narrowIdentifierFinding(
   const reads = rawValueReads(candidate, localName, owner);
   if (
     reads === null ||
-    consumesEveryKnownField(candidate.observable, reads.paths, scan.observableKeys)
+    consumesEveryKnownField(candidate.observable, reads.paths, scan.observableFields.keys)
   ) {
     return null;
   }

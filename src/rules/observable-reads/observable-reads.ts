@@ -7,6 +7,8 @@ import {
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
+import { NO_OBSERVABLE_FIELD_FACTS } from "./field-writes.js";
+import type { ObservableFieldFacts } from "./field-writes.js";
 import type { ObservableReadScan } from "./model.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
 import { moveUseValueDownFinding } from "./move-down.js";
@@ -27,7 +29,7 @@ export interface ObservableReadRequest {
   readonly fileName: string;
   readonly imports: HookImports;
   readonly observableBindings: ReadonlySet<string>;
-  readonly observableKeys?: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly observableFields?: ObservableFieldFacts;
   readonly sourceFile: ts.SourceFile;
 }
 
@@ -46,7 +48,7 @@ export function findObservableReadPractices(
       ...localDeclarationPaths(sourceFile, request.observableBindings, plainSeedPaths),
     ]),
     childContracts: request.childContracts ?? null,
-    observableKeys: request.observableKeys ?? new Map(),
+    observableFields: request.observableFields ?? NO_OBSERVABLE_FIELD_FACTS,
   };
   const findings: LegendPracticeFinding[] = [];
   visit(sourceFile, (node) => {
