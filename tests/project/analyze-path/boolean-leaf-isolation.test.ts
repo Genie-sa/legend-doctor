@@ -29,8 +29,8 @@ test("isolates an event-owned boolean across small presentation leaves and react
         const leave = useCallback(() => setActive(false), []);
         const surfaceClass = cx(active && "active");
         return <Surface className={cx("base", surfaceClass)} onEnter={enter} onLeave={leave}>
-          {active && <View><Text>Active</Text></View>}
-          <View>{active ? <Text>Drop</Text> : null}</View>
+          <div>{active && <View><Text>Active</Text></View>}</div>
+          <div>{active ? <Text>Drop</Text> : null}</div>
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
         </Surface>;
       }
@@ -71,41 +71,41 @@ test("isolates an event-owned boolean across small presentation leaves and react
           const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
           setScrolled(scrollTop + clientHeight >= scrollHeight);
         };
-        return <Surface>
+        return <main>
           <div onScroll={handleScroll}><Content/></div>
           {!scrolled && <Fade/>}
           {!scrolled && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function CustomComputedScreen() {
         const [customComputed, setCustomComputed] = useState(false);
         const handleScroll = (event: { currentTarget: { scrollTop: number } }) => setCustomComputed(event.currentTarget.scrollTop > 0);
-        return <Surface>
+        return <main>
           <Scroller onScroll={handleScroll}/>
           {!customComputed && <Fade/>}
           {!customComputed && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function InlineComputedScreen() {
         const [inlineComputed, setInlineComputed] = useState(false);
-        return <Surface>
+        return <main>
           <div onScroll={event => setInlineComputed(event.currentTarget.scrollTop > 0)}/>
           {!inlineComputed && <Fade/>}
           {!inlineComputed && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function OpaqueComputedScreen() {
         const [opaque, setOpaque] = useState(false);
         const handleScroll = (event: unknown) => setOpaque(calculateOverflow(event));
-        return <Surface>
+        return <main>
           <div onScroll={handleScroll}/>
           {!opaque && <Fade/>}
           {!opaque && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function CompanionComputedScreen() {
         const [companion, setCompanion] = useState(false);
@@ -114,21 +114,21 @@ test("isolates an event-owned boolean across small presentation leaves and react
           setCompanion(event.currentTarget.scrollTop > 0);
           setMeasurement(event.currentTarget.scrollTop);
         };
-        return <Surface>
+        return <main>
           <div onScroll={handleScroll}/>
           {!companion && <Fade/>}
           {!companion && <Hint/>}
           <Text>{measurement}</Text><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function EffectComputedScreen({ height }: { height: number }) {
         const [effectOwned, setEffectOwned] = useState(false);
         useEffect(() => setEffectOwned(height > 0), [height]);
-        return <Surface>
+        return <main>
           {!effectOwned && <Fade/>}
           {!effectOwned && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function MeasuredEffectScreen() {
         const contentRef = useRef<HTMLDivElement>(null);
@@ -138,23 +138,23 @@ test("isolates an event-owned boolean across small presentation leaves and react
           if (!content) return;
           setMeasuredOverflow(content.scrollHeight > content.clientHeight);
         }, []);
-        return <Surface>
+        return <main>
           <div ref={contentRef}><Content/></div>
           {measuredOverflow && <Fade/>}
           {measuredOverflow && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function OpaqueMeasuredEffectScreen() {
         const contentRef = useRef<HTMLDivElement>(null);
         const [opaqueMeasured, setOpaqueMeasured] = useState(false);
         useEffect(() => setOpaqueMeasured(measureOverflow(contentRef.current)), []);
-        return <Surface>
+        return <main>
           <div ref={contentRef}><Content/></div>
           {opaqueMeasured && <Fade/>}
           {opaqueMeasured && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function MixedMeasuredEffectScreen() {
         const contentRef = useRef<HTMLDivElement>(null);
@@ -163,12 +163,12 @@ test("isolates an event-owned boolean across small presentation leaves and react
           const content = contentRef.current;
           if (content) setMixedMeasured(content.scrollHeight > content.clientHeight);
         }, []);
-        return <Surface onClick={() => setMixedMeasured(false)}>
+        return <main onClick={() => setMixedMeasured(false)}>
           <div ref={contentRef}><Content/></div>
           {mixedMeasured && <Fade/>}
           {mixedMeasured && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function SeparatedMeasuredEffectScreen() {
         const contentRef = useRef<HTMLDivElement>(null);
@@ -177,13 +177,13 @@ test("isolates an event-owned boolean across small presentation leaves and react
           const content = contentRef.current;
           if (content) setSeparatedMeasured(content.scrollHeight > content.clientHeight);
         }, []);
-        return <Surface>
+        return <main>
           <div ref={contentRef}><Content/></div>
           {separatedMeasured && <Fade/>}
           <Content/>
           {separatedMeasured && <Hint/>}
           <View/><View/><View/><View/><View/><View/><View/><View/><View/><View/>
-        </Surface>;
+        </main>;
       }
       export function RepeatedComputedScreen({ rows }: { rows: Array<{ id: string; hidden: boolean }> }) {
         const [repeated, setRepeated] = useState(false);

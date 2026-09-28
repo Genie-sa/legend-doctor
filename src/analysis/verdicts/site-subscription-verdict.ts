@@ -28,6 +28,7 @@ import { isImportedTranslationCall } from "../../rules/effects/command-support-c
 import { isSafeProjectionExpression } from "../../rules/deferred-reveal/safe-projections.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { oneHopRenderProjectionReferences } from "../../rules/state-proofs/projection-hops.js";
+import { replacedElementTypeIsUnobserved } from "../../rules/child-contract/element-identity.js";
 import { stateWritesAreUntracked } from "./transport-verdicts.js";
 import ts from "typescript";
 
@@ -159,7 +160,10 @@ export function subscriptionSites(usage: StateUsage, scope: SiteScope): Subscrip
     ...reads.map((read) => (read ? renderReadSite(read, scope) : null)),
     ...transportAttributes(scope.state).map((attribute) => transportSite(attribute, scope)),
   ];
-  return sites.some((site) => site === null)
+  const { owner } = scope.state;
+  return sites.some(
+    (site) => site === null || !replacedElementTypeIsUnobserved(site.node, { ...scope, owner }),
+  )
     ? null
     : { derivedBindings: [...derivedBindings].toSorted(), sites: uniqueSites(sites) };
 }
