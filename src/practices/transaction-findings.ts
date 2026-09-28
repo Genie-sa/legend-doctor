@@ -1,6 +1,7 @@
 import type { ObservableWrite, TransactionRun, TransactionScan } from "./model.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import { isEvaluationInert } from "../core/analysis-ast.js";
+import { runsOnlyInHostEvents } from "../rules/child-contract/host-event-dispatch.js";
 import ts from "typescript";
 import { visit } from "../core/ast.js";
 
@@ -32,21 +33,55 @@ function writeLocation(
 const CONCURRENT_ROOT_EVIDENCE =
   "every React renderer in this workspace creates only concurrent roots, which already commit these writes in one render";
 
+const HOST_EVENT_EVIDENCE =
+  "these writes run synchronously inside a React event handler, which even a legacy root commits in one render";
+
 export function transactionFinding(
   run: TransactionRun,
   scan: TransactionScan,
 ): LegendPracticeFinding | null {
   const finding = renderTransactionFinding(run, scan);
-  return finding && scan.concurrentRoot ? concurrentRootReview(finding) : finding;
+  if (!finding) {
+    return null;
+  }
+  if (scan.concurrentRoot) {
+    return renderedOnceReview(
+      finding,
+      "React already renders these writes once.",
+      CONCURRENT_ROOT_EVIDENCE,
+    );
+  }
+  return writesRunInHostEvent(run, scan)
+    ? renderedOnceReview(
+        finding,
+        "React renders these writes once because this event handler runs inside its batch.",
+        HOST_EVENT_EVIDENCE,
+      )
+    : finding;
+}
+
+function writesRunInHostEvent(
+  { writes }: TransactionRun,
+  { childContracts }: TransactionScan,
+): boolean {
+  return runsOnlyInHostEvents(
+    writes[0]!.call,
+    (componentName, propName) =>
+      childContracts?.componentCallbackPropRunsOnlyInHostEvents(componentName, propName) ?? false,
+  );
 }
 
 /** Only a non-React tracker spanning several of the paths still observes the separate writes. */
-function concurrentRootReview(finding: LegendPracticeFinding): LegendPracticeFinding {
+function renderedOnceReview(
+  finding: LegendPracticeFinding,
+  reason: string,
+  evidence: string,
+): LegendPracticeFinding {
   return {
     ...finding,
     disposition: "candidate",
-    evidence: [...finding.evidence, CONCURRENT_ROOT_EVIDENCE],
-    message: `Review only: React already renders these writes once. ${finding.message} Apply it only when a non-React observer (\`observe\`, a computed, or an \`onChange\` listener) reads several of these paths; persistence already saves them together.`,
+    evidence: [...finding.evidence, evidence],
+    message: `Review only: ${reason} ${finding.message} Apply it only when a non-React observer (\`observe\`, a computed, or an \`onChange\` listener) reads several of these paths; persistence already saves them together.`,
   };
 }
 

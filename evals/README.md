@@ -92,7 +92,8 @@ is waived: see [the September 19 audit ledger](audit-2026-09-19.md) for the orig
 changes. The [September 28 audit](audit-2026-09-28.md) records the renderer proof behind concurrent-root transaction
 reviews and the three batch labels it retired. The [lockfile version audit](audit-2026-09-28-lockfile-versions.md)
 records the Legend State version each checkout pins and the `replace-legacy-use-value` labels it retired. The [in-place memo key audit](audit-2026-09-28-in-place-memo-keys.md) records the runtime and replay
-evidence behind `snapshot-mutated-use-value` and its two non-enforced legend-music candidates. A red corpus job remains a real gate; unit-suite success does not override it.
+evidence behind `snapshot-mutated-use-value` and its two non-enforced legend-music candidates. The [legacy-root handler audit](audit-2026-09-28-legacy-root-handlers.md) records the runtime proof that React event
+handlers already render transaction writes once on legacy roots, and the three batch labels it retired. A red corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay
 

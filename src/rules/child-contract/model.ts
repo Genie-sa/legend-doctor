@@ -95,6 +95,8 @@ export interface ChildContractResolver {
     invocation: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   ) => boolean;
   componentCallbackPropRunsOnlyInReactEffect: (componentName: string, propName: string) => boolean;
+  /** The component hands this callback prop only to host event props, never deferring or storing it. */
+  componentCallbackPropRunsOnlyInHostEvents: (componentName: string, propName: string) => boolean;
   componentParentRerender: (
     owner: RuntimeFunctionLike,
     paths: readonly ts.Expression[],
