@@ -44,3 +44,53 @@ test("proves untracked render reads through imported observables, leaving reacti
   );
   assert.deepEqual(report.capabilities.disabledRules, []);
 });
+
+const SETTINGS_STORE = `
+  import { observable } from "@legendapp/state";
+  export const settings$ = observable({ lang: "en", theme: { dark: false } });
+  export const other$ = observable("x");
+`;
+
+const SETTINGS_SCREEN = `
+  import { settings$ } from "./store";
+  import { useT } from "./hooks";
+  export function Screen() {
+    useT();
+    return <p>{settings$.lang.get()}{settings$.theme.dark.get() ? "dark" : "light"}</p>;
+  }
+`;
+
+function settingsHooks(hookBody: string): string {
+  return `
+    import { use$ } from "@legendapp/state/react";
+    import { other$, settings$ } from "./store";
+    export function useSettings() {
+      ${hookBody}
+    }
+    export function useT() {
+      return useSettings();
+    }
+  `;
+}
+
+async function screenRenderReadLines(hookBody: string): Promise<number[]> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-hook-coverage-"));
+  try {
+    await writeFile(path.join(root, "store.ts"), SETTINGS_STORE, "utf8");
+    await writeFile(path.join(root, "hooks.ts"), settingsHooks(hookBody), "utf8");
+    await writeFile(path.join(root, "screen.tsx"), SETTINGS_SCREEN, "utf8");
+    const report = await analyzePath(root);
+    return report.practices
+      .filter((practice) => practice.action === "use-value-for-render-read")
+      .map((practice) => practice.location.line);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+test("treats a render read as fresh when a custom hook the owner calls subscribes to its path", async () => {
+  assert.deepEqual(await screenRenderReadLines("return use$(settings$);"), []);
+  assert.deepEqual(await screenRenderReadLines("return use$(settings$.lang);"), [6]);
+  assert.deepEqual(await screenRenderReadLines("return use$(other$);"), [6, 6]);
+  assert.deepEqual(await screenRenderReadLines("return () => use$(settings$);"), [6, 6]);
+});

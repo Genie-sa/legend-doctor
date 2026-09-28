@@ -259,3 +259,42 @@ test("does not flag shallow or dynamically keyed reads", () => {
     [],
   );
 });
+
+test("does not flag a read that only guards render-phase observable writes", () => {
+  assert.deepEqual(
+    renderReads(`
+      export function Reset({ id }: { id: string | null }) {
+        if (!id) {
+          if (state$.value.get() !== 0 || state$.user.name.get() !== "") {
+            state$.value.set(0);
+            state$.user.assign({ name: "" });
+          }
+        }
+        return <div>{id}</div>;
+      }
+    `),
+    [],
+  );
+});
+
+test("flags a guard read whose branch reaches rendered output", () => {
+  const findings = renderReads(`
+    export function Label() {
+      let label = "empty";
+      if (state$.value.get() > 0) {
+        state$.value.set(0);
+        label = "reset";
+      }
+      if (state$.user.name.get() === "") {
+        state$.value.set(0);
+      } else {
+        return <p>named</p>;
+      }
+      return <div>{label}</div>;
+    }
+  `);
+  assert.deepEqual(
+    findings.map((finding) => finding.location.line),
+    [10, 14],
+  );
+});

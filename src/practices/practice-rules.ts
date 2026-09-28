@@ -172,6 +172,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
     needsObservableBindings: true,
     run: ({ imports, observableBindings, request }) =>
       findObservableTrackingPractices({
+        childContracts: request.childContracts,
         fileName: request.fileName,
         imports,
         installedLegendState: request.capabilities.legendState,
