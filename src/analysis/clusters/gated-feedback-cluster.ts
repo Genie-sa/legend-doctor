@@ -14,16 +14,14 @@ import {
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../../core/ast.js";
-import {
-  jsxElementCountIn,
-  lowestCommonJsxSubtree,
-} from "../../rules/state-proofs/jsx-subtrees.js";
 import type { ClusterMemberContext } from "./observable-clusters.js";
 import type { ClusterPairUsage } from "./cluster-pairs.js";
 import type { JsxSubtreeNode } from "../../rules/deferred-reveal/jsx-subtrees.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { distinctClusterPair } from "./cluster-pairs.js";
+import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
 import { hasStateInitializer } from "../../rules/deferred-reveal/deferred-reveal.js";
+import { lowestCommonJsxSubtree } from "../../rules/state-proofs/jsx-subtrees.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
 import ts from "typescript";
 import { uniqueReturnedExpression } from "../return-call-sites.js";
@@ -167,7 +165,11 @@ function feedbackRenderIsConfinedToPayloadGate(
   const feedbackLeaf = lowestCommonJsxSubtree(feedbackUsage.directRenderNodes, payload.owner);
   const returned =
     uniqueReturnedExpression(payload.owner) ?? uniqueJsxReturnAllowingNullGuard(payload.owner);
-  if (!feedbackLeaf || jsxElementCountIn(feedbackLeaf) > MAX_FEEDBACK_LEAF_ELEMENTS || !returned) {
+  if (
+    !feedbackLeaf ||
+    extractedJsxElementCount(feedbackLeaf, payload.owner) > MAX_FEEDBACK_LEAF_ELEMENTS ||
+    !returned
+  ) {
     return false;
   }
   let confined = false;

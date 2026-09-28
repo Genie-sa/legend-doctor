@@ -10,7 +10,6 @@ import {
   hasUnstableSubtreeLifetime,
   isSafeJsxProjectionReference,
   jsxElementCount,
-  jsxElementCountIn,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "../../rules/state-proofs/jsx-subtrees.js";
@@ -27,6 +26,7 @@ import type { JsxSubtreeNode } from "../../rules/deferred-reveal/jsx-subtrees.js
 import type { MaterialityPolicy } from "../constants.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { directDialogPayloadGateBranch } from "./dialog-gates.js";
+import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
 import { hasStateInitializer } from "../../rules/deferred-reveal/deferred-reveal.js";
 import { isDirectTruthyStateCondition } from "../clusters/gated-feedback-cluster.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
@@ -89,7 +89,7 @@ function dialogSubtreeIsBounded(
   { conditionalBoundary, materiality, usage }: DialogBoundaryScope,
 ): boolean {
   const ownerJsx = jsxElementCount(state.owner);
-  const dialogJsx = jsxElementCountIn(dialog);
+  const dialogJsx = extractedJsxElementCount(dialog, state.owner);
   return (
     !ts.isJsxFragment(dialog) &&
     ownerJsx >= materiality.broadOwnerJsx &&

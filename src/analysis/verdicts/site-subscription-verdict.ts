@@ -16,16 +16,17 @@ import {
   hasOnlyEventCommandReads,
   stateMayHoldCallable,
 } from "../../rules/state-proofs/state-proofs.js";
-import { jsxElementCount, jsxElementCountIn } from "../../rules/state-proofs/jsx-subtrees.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { HostTagImports } from "../../core/imports.js";
 import { MAX_LEAF_SUBTREE_RATIO } from "../constants.js";
 import type { MaterialityPolicy } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
+import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
 import { isCustomHookOwner } from "../ast-helpers.js";
 import { isHostTag } from "../../core/imports.js";
 import { isImportedTranslationCall } from "../../rules/effects/command-support-calls.js";
 import { isSafeProjectionExpression } from "../../rules/deferred-reveal/safe-projections.js";
+import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { oneHopRenderProjectionReferences } from "../../rules/state-proofs/projection-hops.js";
 import { stateWritesAreUntracked } from "./transport-verdicts.js";
 import ts from "typescript";
@@ -382,7 +383,10 @@ export function subscriptionSitesAreMaterial(
   sites: readonly SubscriptionSite[],
   state: StateCandidate,
 ): boolean {
-  const wrapped = sites.reduce((total, site) => total + jsxElementCountIn(site.node), 0);
+  const wrapped = sites.reduce(
+    (total, site) => total + extractedJsxElementCount(site.node, state.owner),
+    0,
+  );
   return wrapped / jsxElementCount(state.owner) <= MAX_LEAF_SUBTREE_RATIO;
 }
 

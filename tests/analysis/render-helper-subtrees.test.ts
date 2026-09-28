@@ -51,7 +51,7 @@ test("counts render helpers reached through a moved owner-level declaration", ()
   assert.notEqual(finding.action, "move-state-down");
 });
 
-test("abstains when a helper called from the subtree is reassigned", () => {
+test("counts every value assigned to a reassigned helper called from the subtree", () => {
   const finding = findingFor(
     `
     import { useState } from "react";
@@ -111,7 +111,7 @@ test("does not charge the subtree for a same-named binding scoped outside it", (
   assert.equal(finding.action, "move-state-down");
 });
 
-test("follows a handler whose own locals are reassigned without abstaining", () => {
+test("follows a handler whose own locals are reassigned", () => {
   const finding = findingFor(
     `
     import { useState } from "react";
@@ -130,6 +130,27 @@ test("follows a handler whose own locals are reassigned without abstaining", () 
     }
   `,
     "saving",
+  );
+  assert.equal(finding.action, "move-state-down");
+});
+
+test("still moves state down past a reassigned label that holds no JSX", () => {
+  const finding = findingFor(
+    `
+    import { useState } from "react";
+    export function Screen({ scheduled }) {
+      const [expanded, setExpanded] = useState(false);
+      let label = "Publish";
+      if (scheduled) {
+        label = "Schedule";
+      }
+      return <main>
+        ${OWNER_PREFIX}
+        <section><p>{expanded ? label : "Short"}</p><button onClick={() => setExpanded(v => !v)}>Toggle</button></section>
+      </main>;
+    }
+  `,
+    "expanded",
   );
   assert.equal(finding.action, "move-state-down");
 });

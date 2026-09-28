@@ -11,7 +11,6 @@ import {
 import { findAncestorUntil, nodeWithin } from "../core/ast.js";
 import {
   jsxElementCount,
-  jsxElementCountIn,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "../rules/state-proofs/jsx-subtrees.js";
@@ -19,6 +18,7 @@ import { jsxSubtreeForOpening, jsxSubtreeLabel, jsxTransportSite } from "./ast-h
 import type { JsxSubtreeNode } from "../rules/deferred-reveal/jsx-subtrees.js";
 import { MAX_LEAF_SUBTREE_RATIO } from "./constants.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
+import { extractedJsxElementCount } from "./subtree/extracted-render-work.js";
 import { firstDirectJsxOpeningAt } from "./return-call-sites.js";
 import { hasDirectInteractionSetter } from "./interaction-setters.js";
 import { hasIndependentRenderCutWitness } from "../rules/state-proofs/render-cut-witness.js";
@@ -150,7 +150,8 @@ function controlledProjectionConsumer(
   const consumer = lowestCommonJsxSubtree(references, state.owner);
   if (
     !consumer ||
-    jsxElementCountIn(consumer) / jsxElementCount(state.owner) > MAX_LEAF_SUBTREE_RATIO
+    extractedJsxElementCount(consumer, state.owner) / jsxElementCount(state.owner) >
+      MAX_LEAF_SUBTREE_RATIO
   ) {
     return null;
   }

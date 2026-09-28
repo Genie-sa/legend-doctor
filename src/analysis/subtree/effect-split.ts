@@ -13,7 +13,6 @@ import {
 } from "../../core/analysis-ast.js";
 import {
   isSafeJsxProjectionReference,
-  jsxElementCountIn,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "../../rules/state-proofs/jsx-subtrees.js";
@@ -25,6 +24,7 @@ import {
 import type { EffectSplitProjectionScope } from "./materiality.js";
 import type { JsxSubtreeNode } from "../../rules/deferred-reveal/jsx-subtrees.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { extractedJsxElementCount } from "./extracted-render-work.js";
 import { repeatedRenderHasStableItemKey } from "../../rules/state-proofs/unique-repeated-selection.js";
 import { stateSubtreeResult } from "./materiality.js";
 import ts from "typescript";
@@ -67,7 +67,7 @@ function presentationLeafFor(
     (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
     !repeatedRenderHasStableItemKey(callback) ||
     !leaf ||
-    jsxElementCountIn(leaf) > MAX_LEAF_ELEMENTS ||
+    extractedJsxElementCount(leaf, owner) > MAX_LEAF_ELEMENTS ||
     !nodeWithin(terminal, leaf)
   ) {
     return null;
@@ -77,13 +77,17 @@ function presentationLeafFor(
 
 function boundedUniquePresentationLeaves(
   leaves: readonly JsxSubtreeNode[],
+  owner: RuntimeFunctionLike,
   ownerJsx: number,
 ): readonly JsxSubtreeNode[] | null {
   const uniqueLeaves = [...new Map(leaves.map((leaf) => [leaf.getStart(), leaf])).values()];
   if (uniqueLeaves.length < MIN_TERMINAL_LEAVES || uniqueLeaves.length > MAX_TERMINAL_LEAVES) {
     return null;
   }
-  const leafElements = uniqueLeaves.reduce((total, leaf) => total + jsxElementCountIn(leaf), 0);
+  const leafElements = uniqueLeaves.reduce(
+    (total, leaf) => total + extractedJsxElementCount(leaf, owner),
+    0,
+  );
   return leafElements / ownerJsx > MAX_LEAF_SUBTREE_RATIO ? null : uniqueLeaves;
 }
 
@@ -121,7 +125,9 @@ export function effectSplitProjectionSubtree(
   const leaves = terminals
     ? terminalPresentationLeaves(terminals, state.owner, allowedCalls)
     : null;
-  const uniqueLeaves = leaves ? boundedUniquePresentationLeaves(leaves, ownerJsx) : null;
+  const uniqueLeaves = leaves
+    ? boundedUniquePresentationLeaves(leaves, state.owner, ownerJsx)
+    : null;
   const common = uniqueLeaves ? lowestCommonJsxSubtree(uniqueLeaves, state.owner) : null;
   if (!terminals || !uniqueLeaves || !common) {
     return null;

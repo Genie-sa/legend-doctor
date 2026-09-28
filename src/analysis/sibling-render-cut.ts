@@ -21,7 +21,6 @@ import {
   hasUnstableSubtreeLifetime,
   isSafeJsxProjectionReference,
   jsxElementCount,
-  jsxElementCountIn,
   lowestCommonJsxSubtree,
   nearestRepeatedRenderCall,
 } from "../rules/state-proofs/jsx-subtrees.js";
@@ -29,6 +28,7 @@ import { jsxProducerForSetterCall, shareUniqueOwnerReturn } from "./callbacks/lo
 import type { JsxSubtreeNode } from "../rules/deferred-reveal/jsx-subtrees.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
 import { directUniqueReturnCallSite } from "./return-call-sites.js";
+import { extractedJsxElementCount } from "./subtree/extracted-render-work.js";
 import { isJsxNode } from "../rules/state-proofs/callback-sites.js";
 import { isRenderGateReference } from "../rules/deferred-reveal/render-gates.js";
 import { jsxSubtreeAncestors } from "../rules/deferred-reveal/jsx-subtrees.js";
@@ -162,7 +162,8 @@ function siblingProjectionConsumer(
   }
   const consumer = sharedProjectionSubtree(references, state.owner);
   return consumer &&
-    jsxElementCountIn(consumer) / jsxElementCount(state.owner) <= MAX_LEAF_SUBTREE_RATIO
+    extractedJsxElementCount(consumer, state.owner) / jsxElementCount(state.owner) <=
+      MAX_LEAF_SUBTREE_RATIO
     ? consumer
     : null;
 }

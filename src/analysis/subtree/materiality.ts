@@ -51,9 +51,6 @@ export function isMaterialStateSubtree(
 ): boolean {
   const ownerJsx = jsxElementCount(owner);
   const subtreeJsx = extractedJsxElementCount(subtree, owner);
-  if (subtreeJsx === null) {
-    return false;
-  }
   return (
     (ownerJsx >= materiality.broadOwnerJsx && subtreeJsx / ownerJsx <= MAX_LEAF_SUBTREE_RATIO) ||
     (uniqueRepeatedProjection &&

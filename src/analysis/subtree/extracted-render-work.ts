@@ -14,56 +14,35 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { jsxElementCountIn } from "../../rules/state-proofs/jsx-subtrees.js";
 import ts from "typescript";
 
-type Resolution =
-  | { readonly kind: "follow"; readonly declaration: ts.Node }
-  | { readonly kind: "skip" }
-  | { readonly kind: "unresolved" };
-
 interface ScopedDeclaration {
   readonly declaration: ts.Node;
   readonly scope: ts.Node;
 }
 
-const SKIP: Resolution = { kind: "skip" };
-const UNRESOLVED: Resolution = { kind: "unresolved" };
-
 const declarationsByScope = new WeakMap<ts.Node, ReadonlyMap<string, ts.Node>>();
 
-const reassignedDeclarations = new WeakMap<ts.Node, boolean>();
+const sourcesByDeclaration = new WeakMap<ts.Node, Map<string, readonly ts.Node[]>>();
 
 /**
- * Upper bound on the JSX elements an extracted leaf renders: the subtree plus every owner-local
- * declaration it reaches, transitively. A render helper the subtree calls runs on each leaf render
- * whether it moves into the leaf with the state or is handed down from the owner, so its elements
- * never count toward the owner's saving. Owner parameters and module bindings sit outside the owner's
- * own element count and are skipped. Returns null when a reached binding is reassigned, because its
- * declaration then no longer shows which JSX it renders.
+ * Upper bound on the JSX elements an extracted leaf renders: the subtree plus the code behind every
+ * owner-local binding it reaches, transitively, including each later assignment to that binding. A
+ * render helper the subtree calls runs on each leaf render whether it moves into the leaf with the
+ * state or is handed down from the owner, so its elements never count toward the owner's saving.
+ * Owner parameters and module bindings sit outside the owner's own element count and are skipped.
  */
-export function extractedJsxElementCount(
-  subtree: ts.Node,
-  owner: RuntimeFunctionLike,
-): number | null {
+export function extractedJsxElementCount(subtree: ts.Node, owner: RuntimeFunctionLike): number {
   const roots = reachedRenderRoots(subtree, owner);
   return roots
-    ? roots
-        .filter((root) => !roots.some((other) => other !== root && nodeWithin(root, other)))
-        .reduce((total, root) => total + jsxElementCountIn(root), 0)
-    : null;
+    .filter((root) => !roots.some((other) => other !== root && nodeWithin(root, other)))
+    .reduce((total, root) => total + jsxElementCountIn(root), 0);
 }
 
-function reachedRenderRoots(
-  subtree: ts.Node,
-  owner: RuntimeFunctionLike,
-): readonly ts.Node[] | null {
+function reachedRenderRoots(subtree: ts.Node, owner: RuntimeFunctionLike): readonly ts.Node[] {
   const roots = new Set<ts.Node>([subtree]);
   for (const root of roots) {
     for (const reference of valueReferences(root)) {
-      const resolution = resolveOwnerBinding(reference, root, owner);
-      if (resolution.kind === "unresolved") {
-        return null;
-      }
-      if (resolution.kind === "follow") {
-        roots.add(resolution.declaration);
+      for (const source of ownerBindingSources(reference, root, owner)) {
+        roots.add(source);
       }
     }
   }
@@ -100,20 +79,16 @@ function isIntrinsicJsxTagName(node: ts.Identifier): boolean {
  * A binding scoped inside the scanned root has every write inside it as well, so the root already
  * covers it; owner parameters and bindings declared above the owner sit outside its element count.
  */
-function resolveOwnerBinding(
+function ownerBindingSources(
   reference: ts.Identifier,
   root: ts.Node,
   owner: RuntimeFunctionLike,
-): Resolution {
+): readonly ts.Node[] {
   const scoped = scopedDeclaration(reference, owner);
   if (!scoped || nodeWithin(scoped.scope, root) || isOwnerParameter(scoped.declaration, owner)) {
-    return SKIP;
+    return [];
   }
-  const { declaration } = scoped;
-  if (!isConstDeclaration(declaration) && isReassigned(declaration, reference.text, owner)) {
-    return UNRESOLVED;
-  }
-  return { kind: "follow", declaration };
+  return bindingSources(scoped.declaration, reference.text, owner);
 }
 
 function scopedDeclaration(
@@ -143,27 +118,36 @@ function isConstDeclaration(declaration: ts.Node): boolean {
   );
 }
 
-function isReassigned(declaration: ts.Node, name: string, owner: RuntimeFunctionLike): boolean {
-  const cached = reassignedDeclarations.get(declaration);
-  if (cached !== undefined) {
+/** The declaration of a binding and every assignment that can give it a later value. */
+function bindingSources(
+  declaration: ts.Node,
+  name: string,
+  owner: RuntimeFunctionLike,
+): readonly ts.Node[] {
+  const byName = sourcesByDeclaration.get(declaration) ?? new Map<string, readonly ts.Node[]>();
+  sourcesByDeclaration.set(declaration, byName);
+  const cached = byName.get(name);
+  if (cached) {
     return cached;
   }
-  let reassigned = false;
-  visit(owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node.text === name &&
-      isWriteTarget(node) &&
-      scopedDeclaration(node, owner)?.declaration === declaration
-    ) {
-      reassigned = true;
-    }
-  });
-  reassignedDeclarations.set(declaration, reassigned);
-  return reassigned;
+  const sources: ts.Node[] = [declaration];
+  if (!isConstDeclaration(declaration)) {
+    visit(owner.body, (node) => {
+      if (!ts.isIdentifier(node) || node.text !== name) {
+        return;
+      }
+      const write = assignedValue(node);
+      if (write && scopedDeclaration(node, owner)?.declaration === declaration) {
+        sources.push(write);
+      }
+    });
+  }
+  byName.set(name, sources);
+  return sources;
 }
 
-function isWriteTarget(node: ts.Identifier): boolean {
+/** The expression that supplies a new value when the identifier is an assignment target. */
+function assignedValue(node: ts.Identifier): ts.Node | null {
   let target: ts.Node = node;
   while (
     ts.isParenthesizedExpression(target.parent) ||
@@ -177,16 +161,17 @@ function isWriteTarget(node: ts.Identifier): boolean {
     target = target.parent;
   }
   const { parent } = target;
-  return (
-    (ts.isBinaryExpression(parent) &&
-      parent.left === target &&
-      isAssignmentOperator(parent.operatorToken.kind)) ||
-    ((ts.isForInStatement(parent) || ts.isForOfStatement(parent)) &&
-      parent.initializer === target) ||
-    ((ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) &&
-      (parent.operator === ts.SyntaxKind.PlusPlusToken ||
-        parent.operator === ts.SyntaxKind.MinusMinusToken))
-  );
+  if (
+    ts.isBinaryExpression(parent) &&
+    parent.left === target &&
+    isAssignmentOperator(parent.operatorToken.kind)
+  ) {
+    return parent;
+  }
+  return (ts.isForInStatement(parent) || ts.isForOfStatement(parent)) &&
+    parent.initializer === target
+    ? parent.expression
+    : null;
 }
 
 function scopeDeclarations(scope: ts.Node): ReadonlyMap<string, ts.Node> {
