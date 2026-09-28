@@ -316,8 +316,7 @@ function filterReport(report: AnalysisReport, filter: ReportFilter): FilteredRep
   const agentOnly = filter.actionableOnly ? agentFindings(report.findings) : report.findings;
   const findings = agentOnly.filter((finding) => shown(finding));
   const practices = report.practices.filter(
-    (practice) =>
-      shown(practice) && (!filter.actionableOnly || practice.disposition !== "candidate"),
+    (practice) => shown(practice) && (!filter.actionableOnly || practice.disposition === "change"),
   );
   if (report.subscriptionAnalysis) {
     report.subscriptionAnalysis = filterSubscriptionAnalysis(

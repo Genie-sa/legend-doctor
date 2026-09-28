@@ -29,8 +29,9 @@ Target
             node_modules, and vendor are skipped. Stdin is not read.
 
 Flags
-  --actionable              Hide keep findings and secondary members of
-                            finding groups, leaving one entry per edit
+  --actionable              Hide keep findings, secondary members of
+                            finding groups, and candidate and style
+                            practices, leaving one entry per proven edit
   --disposition <value>     Show only findings with this disposition
                             (candidate | change | keep | style)
   --fail-on <value,...>     Exit 3 when any shown finding or practice has one

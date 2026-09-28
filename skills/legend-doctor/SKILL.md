@@ -23,7 +23,7 @@ single-file scan can hide the proof a safe result needs. The report root carries
 `analyzer: { version, build }`; record `build` with any saved scan and compare scans only when it matches.
 
 Filters: `--disposition change` (proven edits only), `--disposition candidate` (needs review), `--actionable` for
-one entry per edit. On a large repository add `--changed` after the first full scan: it analyzes only files
+one entry per proven edit (`--disposition style` lists the equivalent forms it hides). On a large repository add `--changed` after the first full scan: it analyzes only files
 with uncommitted work while every file under the root still loads for proofs, so the rescan after an edit costs a
 parse instead of a full analysis. `--since <ref>` does the same for everything touched since the merge base with
 `<ref>`; `--staged` reads the git index. Scope flags need a directory target inside a git work tree. `--help` documents the complete surface; exit 2 means invalid usage (the error names the
