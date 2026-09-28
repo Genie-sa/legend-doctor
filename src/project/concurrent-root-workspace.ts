@@ -1,4 +1,5 @@
 import type { Package } from "@manypkg/get-packages";
+import { domRootInventory } from "./dom-root-creation.js";
 import { getPackages } from "@manypkg/get-packages";
 import { hostRunsNewArchitecture } from "./native-architecture.js";
 import { parse as parseYaml } from "yaml";
@@ -13,11 +14,30 @@ const FIRST_CONCURRENT_NEW_ARCHITECTURE: Version = { major: 0, minor: 74 };
 const FIRST_NEW_ARCHITECTURE_EXPO: Version = { major: 53, minor: 0 };
 /** React DOM 19 removed `render` and `hydrate`, so every root it creates is concurrent. */
 const FIRST_CONCURRENT_ONLY_DOM: Version = { major: 19, minor: 0 };
+/** React DOM 18 added `createRoot` and `hydrateRoot`, which create concurrent roots beside the legacy APIs. */
+const FIRST_CLIENT_ROOT_DOM: Version = { major: 18, minor: 0 };
+/**
+ * From Next.js 13.1 the pages client imports only `react-dom/client` and hydrates with `hydrateRoot`, and the
+ * app router, from 13.0, creates its roots with `createRoot` or `hydrateRoot`. 13.0.0's pages client still
+ * fell back to `ReactDOM.render` without a React 18 build flag.
+ */
+const FIRST_CLIENT_ROOT_NEXT: Version = { major: 13, minor: 1 };
 const RENDERER_FLOORS: ReadonlyMap<string, Version> = new Map([
   ["react-dom", FIRST_CONCURRENT_ONLY_DOM],
   ["react-native", FIRST_CONCURRENT_ONLY_NATIVE],
   ["react-native-macos", FIRST_CONCURRENT_ONLY_NATIVE],
   ["react-native-windows", FIRST_CONCURRENT_ONLY_NATIVE],
+]);
+const NATIVE_HOST_FLOOR: ConditionalFloor = {
+  floor: FIRST_CONCURRENT_NEW_ARCHITECTURE,
+  verdict: "new-architecture-host",
+};
+/** Below its floor, a locally installed renderer still creates only concurrent roots when a host proof holds. */
+const CONDITIONAL_FLOORS: ReadonlyMap<string, ConditionalFloor> = new Map([
+  ["react-dom", { floor: FIRST_CLIENT_ROOT_DOM, verdict: "client-root" }],
+  ["react-native", NATIVE_HOST_FLOOR],
+  ["react-native-macos", NATIVE_HOST_FLOOR],
+  ["react-native-windows", NATIVE_HOST_FLOOR],
 ]);
 const LOCAL_FIELDS = ["dependencies", "devDependencies"] as const;
 const PUBLISHED_FIELDS = [...LOCAL_FIELDS, "peerDependencies"] as const;
@@ -38,9 +58,18 @@ interface JsonObject {
 
 type JsonValue = boolean | number | string | null | readonly JsonValue[] | JsonObject;
 type Catalogs = ReadonlyMap<string, ReadonlyMap<string, string>>;
-/** `new-architecture-host`: concurrent only when every app host in the workspace runs the New Architecture. */
-type RendererVerdict = "concurrent" | "new-architecture-host" | "none" | "unproven";
+/**
+ * `new-architecture-host`: concurrent only when every app host in the workspace runs the New Architecture.
+ * `client-root`: concurrent only when the package creates its roots with `react-dom/client` and no workspace
+ * source can create a root any other way.
+ */
+type RendererVerdict = "client-root" | "concurrent" | "new-architecture-host" | "unproven";
 type DependencyField = (typeof PUBLISHED_FIELDS)[number];
+
+interface ConditionalFloor {
+  readonly floor: Version;
+  readonly verdict: Exclude<RendererVerdict, "concurrent" | "unproven">;
+}
 
 interface RendererDeclaration {
   readonly catalogs: Catalogs;
@@ -109,13 +138,56 @@ async function workspaceOf(directory: string): Promise<Workspace | null> {
 
 async function workspaceRendersConcurrently(workspace: Workspace): Promise<boolean> {
   const catalogs = await workspaceCatalogs(workspace.rootDir);
-  const verdicts = new Set(workspace.packages.map((pkg) => rendererVerdict(pkg, catalogs)));
-  if (verdicts.has("unproven") || (verdicts.size === 1 && verdicts.has("none"))) {
+  const renderers = workspace.packages.map((pkg) => ({
+    pkg,
+    verdicts: rendererVerdicts(pkg, catalogs),
+  }));
+  const verdicts = new Set(renderers.flatMap((renderer) => [...renderer.verdicts]));
+  if (verdicts.size === 0 || verdicts.has("unproven")) {
     return false;
   }
+  const clientRootPackages = renderers
+    .filter((renderer) => renderer.verdicts.has("client-root"))
+    .map((renderer) => renderer.pkg);
   return (
-    !verdicts.has("new-architecture-host") || everyHostRunsNewArchitecture(workspace, catalogs)
+    (!verdicts.has("new-architecture-host") ||
+      (await everyHostRunsNewArchitecture(workspace, catalogs))) &&
+    (clientRootPackages.length === 0 ||
+      (await everyPackageCreatesClientRoots(workspace, clientRootPackages, catalogs)))
   );
+}
+
+/**
+ * Each React DOM 18 package must create a root with `react-dom/client` in its own source or run under a
+ * framework that does, and no source file in the workspace may create a root any other way.
+ */
+async function everyPackageCreatesClientRoots(
+  workspace: Workspace,
+  packages: readonly Package[],
+  catalogs: Catalogs,
+): Promise<boolean> {
+  const inventory = await domRootInventory(workspace.rootDir);
+  if (inventory.otherRootCreation) {
+    return false;
+  }
+  const hosts = new Set(inventory.clientRootFiles.map((file) => owningPackage(workspace, file)));
+  return packages.every((pkg) => hosts.has(pkg) || nextCreatesClientRoots(pkg, catalogs));
+}
+
+function owningPackage(workspace: Workspace, file: string): Package | undefined {
+  return workspace.packages
+    .filter((pkg) => isWithin(pkg.dir, file))
+    .toSorted((left, right) => right.dir.length - left.dir.length)[0];
+}
+
+function isWithin(directory: string, file: string): boolean {
+  const relative = path.relative(directory, file);
+  return relative.split(path.sep)[0] !== ".." && !path.isAbsolute(relative);
+}
+
+function nextCreatesClientRoots(pkg: Package, catalogs: Catalogs): boolean {
+  const minimum = localMinimumVersion(pkg, "next", catalogs);
+  return minimum !== null && compareVersions(minimum, FIRST_CLIENT_ROOT_NEXT) >= 0;
 }
 
 async function everyHostRunsNewArchitecture(
@@ -133,10 +205,13 @@ async function everyHostRunsNewArchitecture(
   return proofs.length > 0 && proofs.every(Boolean);
 }
 
-/** A published package also runs under its consumers' renderers, so its peer ranges must qualify too. */
-function rendererVerdict(pkg: Package, catalogs: Catalogs): RendererVerdict {
+/**
+ * The verdict of each renderer the package declares; empty when it declares none. A published package also
+ * runs under its consumers' renderers, so its peer ranges must qualify too.
+ */
+function rendererVerdicts(pkg: Package, catalogs: Catalogs): ReadonlySet<RendererVerdict> {
   const fields = pkg.packageJson.private === true ? LOCAL_FIELDS : PUBLISHED_FIELDS;
-  const verdicts = new Set(
+  return new Set(
     fields.flatMap((field) =>
       Object.entries(pkg.packageJson[field] ?? {}).flatMap(([name, range]) => {
         const floor = RENDERER_FLOORS.get(name);
@@ -144,38 +219,37 @@ function rendererVerdict(pkg: Package, catalogs: Catalogs): RendererVerdict {
       }),
     ),
   );
-  if (verdicts.size === 0) {
-    return "none";
-  }
-  if (verdicts.has("unproven")) {
-    return "unproven";
-  }
-  return verdicts.has("new-architecture-host") ? "new-architecture-host" : "concurrent";
 }
 
-/** Below the floor, a locally installed native renderer still creates concurrent roots on the New Architecture. */
+/** A peer range answers for consumers' hosts, which no local proof covers. */
 function declarationVerdict(declaration: RendererDeclaration): RendererVerdict {
   const minimum = minimumVersion(
     resolveRange(declaration.name, declaration.range, declaration.catalogs),
   );
-  if (minimum !== null && compareVersions(minimum, declaration.floor) >= 0) {
+  if (minimum === null) {
+    return "unproven";
+  }
+  if (compareVersions(minimum, declaration.floor) >= 0) {
     return "concurrent";
   }
-  return declaration.floor === FIRST_CONCURRENT_ONLY_NATIVE &&
+  const conditional = CONDITIONAL_FLOORS.get(declaration.name);
+  return conditional &&
     declaration.field !== "peerDependencies" &&
-    minimum !== null &&
-    compareVersions(minimum, FIRST_CONCURRENT_NEW_ARCHITECTURE) >= 0
-    ? "new-architecture-host"
+    compareVersions(minimum, conditional.floor) >= 0
+    ? conditional.verdict
     : "unproven";
 }
 
 function expoDefaultsToNewArchitecture(pkg: Package, catalogs: Catalogs): boolean {
-  const range = LOCAL_FIELDS.map((field) => pkg.packageJson[field]?.["expo"]).find(
+  const minimum = localMinimumVersion(pkg, "expo", catalogs);
+  return minimum !== null && compareVersions(minimum, FIRST_NEW_ARCHITECTURE_EXPO) >= 0;
+}
+
+function localMinimumVersion(pkg: Package, name: string, catalogs: Catalogs): Version | null {
+  const range = LOCAL_FIELDS.map((field) => pkg.packageJson[field]?.[name]).find(
     (declared) => declared !== undefined,
   );
-  const minimum =
-    range === undefined ? null : minimumVersion(resolveRange("expo", range, catalogs));
-  return minimum !== null && compareVersions(minimum, FIRST_NEW_ARCHITECTURE_EXPO) >= 0;
+  return range === undefined ? null : minimumVersion(resolveRange(name, range, catalogs));
 }
 
 function resolveRange(name: string, range: string, catalogs: Catalogs): string | null {

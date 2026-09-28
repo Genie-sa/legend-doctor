@@ -26,12 +26,20 @@ interface TransactionReport {
   readonly transactions: readonly Pick<LegendPracticeFinding, "action" | "disposition">[];
 }
 
+const CREATE_ROOT_ENTRY = `
+import { createRoot } from "react-dom/client";
+
+createRoot(document.body).render(null);
+`;
+
 async function transactionsUnder(
   dependencies: Readonly<Record<string, string>>,
+  entry: Readonly<Record<string, string>> = {},
 ): Promise<TransactionReport> {
   let result: TransactionReport = { concurrentRoot: false, transactions: [] };
   await withProject(
     {
+      ...entry,
       "package.json": JSON.stringify({ dependencies, name: "app", private: true }),
       "player.ts": PLAYER,
     },
@@ -61,8 +69,12 @@ test("separate writes stay a proven render cost where a legacy root can render t
 });
 
 test("a concurrent root already renders separate writes once, so combining them is a review", async () => {
-  for (const dependencies of [{ "react-native": "0.86.2" }, { "react-dom": "19.2.3" }]) {
-    assert.deepEqual(await transactionsUnder(dependencies), {
+  for (const [dependencies, entry] of [
+    [{ "react-native": "0.86.2" }, {}],
+    [{ "react-dom": "19.2.3" }, {}],
+    [{ "react-dom": "18.3.1" }, { "main.tsx": CREATE_ROOT_ENTRY }],
+  ] as const) {
+    assert.deepEqual(await transactionsUnder(dependencies, entry), {
       concurrentRoot: true,
       transactions: [
         { action: "assign-observable-fields", disposition: "candidate" },
