@@ -5,6 +5,34 @@ import { visit } from "../../core/ast.js";
 
 const MEMO_ARGUMENT_COUNT = 2;
 
+/** Operators that never convert an operand, so no `valueOf`, `toString`, or getter can run. */
+const NON_COERCING_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.AmpersandAmpersandToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+  ts.SyntaxKind.EqualsEqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsEqualsToken,
+]);
+
+/** Loose equality converts an object operand only when the other operand is not nullish. */
+const LOOSE_EQUALITY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken,
+]);
+
+/** Relational and arithmetic operators convert objects through user code, but not primitives. */
+const PRIMITIVE_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.LessThanToken,
+  ts.SyntaxKind.LessThanEqualsToken,
+  ts.SyntaxKind.GreaterThanToken,
+  ts.SyntaxKind.GreaterThanEqualsToken,
+  ts.SyntaxKind.PlusToken,
+  ts.SyntaxKind.MinusToken,
+  ts.SyntaxKind.AsteriskToken,
+  ts.SyntaxKind.SlashToken,
+  ts.SyntaxKind.PercentToken,
+]);
+
 export interface ExpressionScope {
   readonly names: ReadonlySet<string>;
   readonly primitives: ReadonlySet<string>;
@@ -19,6 +47,7 @@ export function primitiveExpression(expression: ts.Expression, scope: Expression
   if (
     ts.isStringLiteralLike(value) ||
     ts.isNumericLiteral(value) ||
+    ts.isTemplateExpression(value) ||
     [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(
       value.kind,
     )
@@ -65,9 +94,15 @@ export function pureFlowExpression(expression: ts.Expression, scope: ExpressionS
 function compoundFlowExpression(value: ts.Expression, scope: ExpressionScope): boolean {
   if (ts.isBinaryExpression(value)) {
     return (
-      safeBinary(value) &&
+      safeBinary(value, scope) &&
       pureFlowExpression(value.left, scope) &&
       pureFlowExpression(value.right, scope)
+    );
+  }
+  if (ts.isTemplateExpression(value)) {
+    return value.templateSpans.every(
+      (span) =>
+        primitiveExpression(span.expression, scope) && pureFlowExpression(span.expression, scope),
     );
   }
   if (ts.isConditionalExpression(value)) {
@@ -94,14 +129,29 @@ function pureStringCall(value: ts.Expression, scope: ExpressionScope): boolean {
   );
 }
 
-function safeBinary(expression: ts.BinaryExpression): boolean {
-  return [
-    ts.SyntaxKind.QuestionQuestionToken,
-    ts.SyntaxKind.BarBarToken,
-    ts.SyntaxKind.AmpersandAmpersandToken,
-    ts.SyntaxKind.EqualsEqualsEqualsToken,
-    ts.SyntaxKind.ExclamationEqualsEqualsToken,
-  ].includes(expression.operatorToken.kind);
+function safeBinary(expression: ts.BinaryExpression, scope: ExpressionScope): boolean {
+  const operator = expression.operatorToken.kind;
+  if (NON_COERCING_OPERATORS.has(operator)) {
+    return true;
+  }
+  if (LOOSE_EQUALITY_OPERATORS.has(operator)) {
+    return nullishLiteral(expression.left, scope) || nullishLiteral(expression.right, scope);
+  }
+  return (
+    PRIMITIVE_OPERATORS.has(operator) &&
+    primitiveExpression(expression.left, scope) &&
+    primitiveExpression(expression.right, scope)
+  );
+}
+
+function nullishLiteral(expression: ts.Expression, scope: ExpressionScope): boolean {
+  const value = unwrapTransparentExpression(expression);
+  return (
+    value.kind === ts.SyntaxKind.NullKeyword ||
+    (ts.isIdentifier(value) &&
+      value.text === "undefined" &&
+      !sourceHasRuntimeBinding(scope.sourceFile, "undefined"))
+  );
 }
 
 /** Closed memo projections may build a private string array, but cannot mutate or call external code. */

@@ -6,8 +6,10 @@ import { primitiveExpression, pureFlowExpression, pureMemoProjection } from "./f
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SubscriptionInventoryReason } from "../../core/subscriptions.js";
 import { isImportedHookCall } from "../../core/imports.js";
+import { isImportedReactCall } from "../react-commit-sensitivity/binding-resolution.js";
 import { isInsideOwnerReturn } from "./conditional-jsx-slots.js";
 import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
+import { isRenderGateRead } from "./render-gates.js";
 import { isSynchronousRenderCallback } from "../state-proofs/callback-sites.js";
 import { isValueReferenceTo } from "./observable-paths.js";
 import ts from "typescript";
@@ -184,13 +186,11 @@ function classifyRead(
   if (!evaluated) {
     return deferredReadKind(node, flow.use.owner, scan);
   }
-  if (isOwnerMemoInput(evaluated, flow.use.owner, scan)) {
-    return "memo";
+  const hookInput = ownerHookInputKind(evaluated, flow.use.owner, scan);
+  if (hookInput || evaluated === node) {
+    return hookInput ?? classifyOwnerRead(node, flow, scan);
   }
-  if (evaluated !== node) {
-    return isInsideOwnerReturn(evaluated, flow.use.owner) ? "render-callback" : "unknown";
-  }
-  return classifyOwnerRead(node, flow, scan);
+  return isInsideOwnerReturn(evaluated, flow.use.owner) ? "render-callback" : "unknown";
 }
 
 function classifyOwnerRead(
@@ -198,13 +198,14 @@ function classifyOwnerRead(
   flow: SubscriptionFlow,
   scan: ObservableReadScan,
 ): ClassifiedReadKind {
-  if (
-    !isInsideOwnerReturn(node, flow.use.owner) ||
-    nearestRepeatedRenderCall(node, flow.use.owner)
-  ) {
+  const { owner, localName } = flow.use;
+  if (nearestRepeatedRenderCall(node, owner)) {
     return "unknown";
   }
-  return classifyRenderRead(node, flow, scan);
+  if (isRenderGateRead(node, { owner, imports: scan.imports, observableValue: localName })) {
+    return "render";
+  }
+  return isInsideOwnerReturn(node, owner) ? classifyRenderRead(node, flow, scan) : "unknown";
 }
 
 /** The outermost node that the owner evaluates while rendering, seen through synchronous callbacks. */
@@ -240,21 +241,41 @@ function isMemoCallback(callback: RuntimeFunctionLike, scan: ObservableReadScan)
   return ts.isCallExpression(call) && call.arguments[0] === callback && isMemoCall(call, scan);
 }
 
-function isOwnerMemoInput(
+/**
+ * A `useMemo` callback or dependency list is a memo read. The dependency list of an effect or
+ * `useCallback` only decides when that effect reruns or the callback changes identity, so it shares
+ * the kind of the callback it guards.
+ */
+function ownerHookInputKind(
   evaluated: ts.Node,
   owner: RuntimeFunctionLike,
   scan: ObservableReadScan,
-): boolean {
+): ClassifiedReadKind | null {
   for (let current = evaluated.parent; current !== owner; current = current.parent) {
-    if (ts.isCallExpression(current) && isMemoCall(current, scan)) {
-      const [callback, dependencies] = current.arguments;
-      return (
-        callback === evaluated ||
-        (dependencies !== undefined && nodeWithin(evaluated, dependencies))
-      );
+    const kind = ts.isCallExpression(current) ? hookInputKind(current, evaluated, scan) : null;
+    if (kind) {
+      return kind;
     }
   }
-  return false;
+  return null;
+}
+
+function hookInputKind(
+  call: ts.CallExpression,
+  evaluated: ts.Node,
+  scan: ObservableReadScan,
+): ClassifiedReadKind | null {
+  const [callback, dependencies] = call.arguments;
+  const inDependencies = dependencies !== undefined && nodeWithin(evaluated, dependencies);
+  if ((callback === evaluated || inDependencies) && isMemoCall(call, scan)) {
+    return "memo";
+  }
+  if (inDependencies && isReactEffectCall(call, scan.imports)) {
+    return "effect";
+  }
+  return inDependencies && isImportedReactCall(call, scan.imports, "useCallback")
+    ? "event-or-callback"
+    : null;
 }
 
 function isMemoCall(call: ts.CallExpression, scan: ObservableReadScan): boolean {

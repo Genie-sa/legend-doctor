@@ -80,7 +80,7 @@ function enclosingConditionalJsxExpression(
   return null;
 }
 
-function isConditionalRenderExpression(expression: ts.Expression): boolean {
+export function isConditionalRenderExpression(expression: ts.Expression): boolean {
   return (
     ts.isConditionalExpression(expression) ||
     (ts.isBinaryExpression(expression) &&
@@ -99,7 +99,7 @@ interface ConditionalOwnership {
   readonly resolving: ReadonlySet<string>;
 }
 
-function hasRenderOwnedConditionalInputs(
+export function hasRenderOwnedConditionalInputs(
   expression: ts.Expression,
   ownership: ConditionalOwnership,
 ): boolean {
