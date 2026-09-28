@@ -270,6 +270,9 @@ const observableRuntimeFields = {
   root: presentationRoot,
 } as const satisfies ReplayCommit;
 
+const deckRenderedRuntimeRationale =
+  "At this parent Deck rebuilds the PresentationProvider value in render from its six slide-clock subscriptions, so every runtime change re-renders Deck and the deck content with it, and a field reader renders exactly as often as a whole-runtime reader (tests/runtime/presentation-runtime-provider.test.ts). Field subscriptions skip a render only if the React Compiler memoizes Deck's content, which the app's compiler config allows but no static proof establishes, or after the computed runtime observable this commit also introduces at DeckRenderer lines 69-74, which is itself non-enforced.";
+
 const deckClockRationale =
   "Deck read these slide clocks only to build the provider value. Moving them into a computed runtime observable needs every context consumer converted to field subscriptions, and fixed previews now publish their own slide and step instead of the live ones.";
 
@@ -354,10 +357,10 @@ const runtimeFieldSubscriptions = {
       ] as const
     ).map(([file, line, source, reads]) => ({
       action: "split-use-value-leaves" as const,
-      expected: "enforced" as const,
+      expected: "non-enforced" as const,
       file,
       line,
-      rationale: `${source === lifecycle ? "useSlideLifecycle subscribes to the whole presentation runtime through usePresentation, and " : ""}${reads}, so updates to the other runtime fields re-rendered it; the parent already exports usePresentationValue for field subscriptions.`,
+      rationale: `${source === lifecycle ? "useSlideLifecycle subscribes to the whole presentation runtime through usePresentation, and " : ""}${reads}. ${deckRenderedRuntimeRationale}`,
       source,
     })),
     ...(
@@ -368,10 +371,10 @@ const runtimeFieldSubscriptions = {
     ).map(([file, line, reads]) => ({
       action: "narrow-use-value-subscription" as const,
       equivalents: ["split-use-value-leaves"] as const,
-      expected: "enforced" as const,
+      expected: "non-enforced" as const,
       file,
       line,
-      rationale: `useSlideLifecycle subscribes to the whole presentation runtime through usePresentation, and ${reads}, so updates to every other runtime field re-rendered it.`,
+      rationale: `useSlideLifecycle subscribes to the whole presentation runtime through usePresentation, and ${reads}. ${deckRenderedRuntimeRationale}`,
       source: lifecycle,
     })),
     {
@@ -546,11 +549,11 @@ const narrowPresentationHooks = {
   cases: [
     {
       action: "split-use-value-leaves",
-      expected: "enforced",
+      expected: "non-enforced",
       file: "runtime.tsx",
       line: 40,
       rationale:
-        "useSlideLifecycle returns eight fields from a whole-runtime subscription, so currentSlide, direction, and stepEpochs updates re-rendered every caller; usePresentationValue already exists in the file.",
+        "useSlideLifecycle returns eight fields from a whole-runtime subscription, but at this parent nothing in the tree calls it, and every setSlidesState write that changes a runtime field it drops (currentSlide, currentStep, direction, stepEpochs) also changes startedAt, stepStartedAt, or stepIndex, which it returns, while slideCount changes only through Deck's own render. Per-field subscriptions therefore notify on the same writes (tests/runtime/presentation-runtime-provider.test.ts).",
       source: "usePresentation()",
     },
     {
@@ -560,7 +563,7 @@ const narrowPresentationHooks = {
       file: "runtime.tsx",
       line: 46,
       rationale:
-        "useStep reads stepIndex only through comparisons with at, plus the at-th epoch, isActive, isPreview, and direction, so step changes that flip neither comparison and every other runtime field re-rendered each caller.",
+        "useStep reads stepIndex only through comparisons with at, plus the at-th epoch, isActive, isPreview, and direction, so step changes that flip neither comparison and every other runtime field re-rendered each caller. Deck publishes a computed runtime at this parent and the audience window does not subscribe to the step, so no parent render hides the saving (tests/runtime/presentation-runtime-provider.test.ts).",
       source: "usePresentation()",
     },
   ],

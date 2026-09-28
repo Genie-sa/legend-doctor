@@ -93,7 +93,8 @@ changes. The [September 28 audit](audit-2026-09-28.md) records the renderer proo
 reviews and the three batch labels it retired. The [lockfile version audit](audit-2026-09-28-lockfile-versions.md)
 records the Legend State version each checkout pins and the `replace-legacy-use-value` labels it retired. The [in-place memo key audit](audit-2026-09-28-in-place-memo-keys.md) records the runtime and replay
 evidence behind `snapshot-mutated-use-value` and its two non-enforced legend-music candidates. The [legacy-root handler audit](audit-2026-09-28-legacy-root-handlers.md) records the runtime proof that React event
-handlers already render transaction writes once on legacy roots, and the three batch labels it retired. A red corpus job remains a real gate; unit-suite success does not override it.
+handlers already render transaction writes once on legacy roots, and the three batch labels it retired. The [Slides parent-tree audit](audit-2026-09-28-slides-parent-tree.md)
+records the runtime evidence behind the 17 Slides replay labels it moved to non-enforced. A red corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay
 
@@ -103,7 +104,7 @@ recommend:
 
 | Repository                | Commits | Scope                                                                                                                                | Enforced | Non-enforced | Excluded |
 | ------------------------- | ------: | ------------------------------------------------------------------------------------------------------------------------------------ | -------: | -----------: | -------: |
-| `LegendApp/legend-apps`   |      41 | Jay Meistrich's July and September 2026 performance sweeps in Music, Slides, Markdown, Code, Chat History, Diff, and shared packages |       64 |           83 |      115 |
+| `LegendApp/legend-apps`   |      41 | Jay Meistrich's July and September 2026 performance sweeps in Music, Slides, Markdown, Code, Chat History, Diff, and shared packages |       47 |          100 |      115 |
 | `LegendApp/legend-music`  |      11 | Jay Meistrich's subscription, observer, and timer commits                                                                            |       16 |           25 |       30 |
 | `LegendApp/legend-photos` |       4 | Jay Meistrich's selection, image, plugin, and filmstrip commits                                                                      |        1 |            0 |        5 |
 | `nonbili/NouTube`         |       1 | The maintainer's feed and library modal commit                                                                                       |        3 |            1 |        8 |
@@ -115,7 +116,7 @@ subscription is what activates the load, so a later `peek()` can read the defaul
 For every supplied repository, the runner extracts the parent tree from the checkout's object store with `git archive`
 into a temporary directory, scans its source root, and prints `Expert replay recall: x/y`: enforced cases where a
 proven `change` finding at the labeled line carries the expert's action or a listed equivalent. Recall on September 28,
-2026 is 22/84. Each miss names what the analyzer reported there, including abstention reasons, subscription-inventory
+2026 is 23/67. Each miss names what the analyzer reported there, including abstention reasons, subscription-inventory
 blockers, and the gate at which the targeted rule abstained (`ruleGates`). Non-enforced cases are reported separately
 and list any proven change the analyzer makes there, since that contradicts the audit; neither misses nor non-enforced
 flags fail the run. A label whose parent line no longer contains its `source` text fails, as does a parent missing
