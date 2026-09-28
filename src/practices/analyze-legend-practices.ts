@@ -11,10 +11,12 @@ import { NO_CAPABILITIES } from "../project/capabilities.js";
 import type { SubscriptionInventory } from "../core/subscriptions.js";
 import { collectHookImports } from "../core/imports.js";
 import { enabledPracticeRules } from "./practice-rules.js";
+import { hasSoleSourceBinding } from "../rules/observable-reads/independent-subscription-bindings.js";
 import { isObservableFactoryCall } from "./observable-paths.js";
 import { observableInitialValue } from "../core/observable-initial-value.js";
 import { resolveObservableBindings } from "./observable-bindings.js";
 import ts from "typescript";
+import { withSoleBindingFacts } from "./sole-binding-facts.js";
 
 export interface LegendPracticesSourceRequest {
   readonly fileName: string;
@@ -99,7 +101,10 @@ export function analyzeLegendPracticesFile({
   return includeFindings ? findings : [];
 }
 
-function analyzeParsedLegendPractices(request: LegendPracticesRequest): LegendPracticeFinding[] {
+function analyzeParsedLegendPractices(
+  parsedRequest: LegendPracticesRequest,
+): LegendPracticeFinding[] {
+  const request = withSoleBindingFacts(parsedRequest);
   const { fileName, sourceFile } = request;
   if (isNonProductionHarness(fileName)) {
     return [];
@@ -132,7 +137,8 @@ function collectObservableKeys(
       !ts.isVariableDeclaration(node) ||
       !ts.isIdentifier(node.name) ||
       !node.initializer ||
-      !observableBindings.has(node.name.text)
+      !observableBindings.has(node.name.text) ||
+      !hasSoleSourceBinding(request.sourceFile, node.name.text)
     ) {
       return;
     }

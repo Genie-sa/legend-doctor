@@ -7,17 +7,21 @@ import {
 } from "./observable-paths.js";
 import type { HookImports } from "../core/imports.js";
 import type { LegendPracticesRequest } from "./model.js";
+import { declaresObservableProp } from "./observable-prop-types.js";
 import { isUseValueCall } from "../rules/observable-reads/observable-paths.js";
+import { staticPropertyName } from "../rules/child-contract/declared-prop-types.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../core/analysis-ast.js";
 import { visit } from "../core/ast.js";
 
 interface BindingAlias {
+  declaration: ts.Node;
   initializer: ts.Expression;
   name: string;
 }
 
 interface BindingTypeQuery {
+  declaration: ts.Node;
   name: string;
   type: ts.TypeNode;
 }
@@ -25,10 +29,11 @@ interface BindingTypeQuery {
 interface BindingScan {
   aliases: BindingAlias[];
   declarations: Map<string, number>;
-  directCandidates: Set<string>;
   factoryBindings: Set<string>;
   factoryCalls: BindingAlias[];
+  importedObservables: ReadonlySet<string>;
   imports: HookImports;
+  proofs: Map<string, Set<ts.Node>>;
   typeQueries: BindingTypeQuery[];
   useValueInputs: Set<string>;
 }
@@ -36,6 +41,8 @@ interface BindingScan {
 type NamedVariableDeclaration = ts.VariableDeclaration & { name: ts.Identifier };
 
 type NamedParameter = ts.ParameterDeclaration & { name: ts.Identifier };
+
+type NamedBindingElement = ts.BindingElement & { name: ts.Identifier };
 
 export function resolveObservableBindings(
   request: LegendPracticesRequest,
@@ -56,6 +63,10 @@ export function resolveObservableBindings(
   return collectObservableBindings(request, imports);
 }
 
+/**
+ * A name is an observable binding when every declaration of it in the file is proven observable,
+ * so each reference resolves to an observable whichever scope declares it.
+ */
 function collectObservableBindings(
   request: LegendPracticesRequest,
   imports: HookImports,
@@ -63,10 +74,11 @@ function collectObservableBindings(
   const scan: BindingScan = {
     aliases: [],
     declarations: new Map(),
-    directCandidates: new Set(request.importedObservables),
     factoryBindings: new Set(request.importedObservableFactories),
     factoryCalls: [],
+    importedObservables: request.importedObservables,
     imports,
+    proofs: new Map(),
     typeQueries: [],
     useValueInputs: new Set(),
   };
@@ -110,17 +122,45 @@ function recordObservableFactoryDeclaration(node: ts.Node, scan: BindingScan): v
 }
 
 function recordDeclaredName(node: ts.Node, scan: BindingScan): void {
-  if (ts.isImportClause(node) && node.name) {
-    recordDeclaration(scan.declarations, node.name.text);
-  } else if (ts.isImportSpecifier(node)) {
-    recordDeclaration(scan.declarations, node.name.text);
+  if (declaresImportName(node) && node.name) {
+    recordImportBinding(node.name, scan);
   } else if (isNamedVariableDeclaration(node)) {
     recordVariableBinding(node, scan);
   } else if (isNamedParameter(node)) {
     recordParameterBinding(node, scan);
-  } else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name) {
+  } else if (isNamedBindingElement(node)) {
+    recordBindingElement(node, scan);
+  } else if (declaresFunctionOrClassName(node) && node.name) {
     recordDeclaration(scan.declarations, node.name.text);
   }
+}
+
+function declaresImportName(
+  node: ts.Node,
+): node is ts.ImportClause | ts.ImportSpecifier | ts.NamespaceImport {
+  return ts.isImportClause(node) || ts.isImportSpecifier(node) || ts.isNamespaceImport(node);
+}
+
+function recordImportBinding(name: ts.Identifier, scan: BindingScan): void {
+  recordDeclaration(scan.declarations, name.text);
+  if (scan.importedObservables.has(name.text)) {
+    proveDeclaration(scan, name.text, name);
+  }
+}
+
+function declaresFunctionOrClassName(
+  node: ts.Node,
+): node is
+  | ts.ClassDeclaration
+  | ts.ClassExpression
+  | ts.FunctionDeclaration
+  | ts.FunctionExpression {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isClassExpression(node)
+  );
 }
 
 function isNamedVariableDeclaration(node: ts.Node): node is NamedVariableDeclaration {
@@ -131,36 +171,69 @@ function isNamedParameter(node: ts.Node): node is NamedParameter {
   return ts.isParameter(node) && ts.isIdentifier(node.name);
 }
 
+function isNamedBindingElement(node: ts.Node): node is NamedBindingElement {
+  return ts.isBindingElement(node) && ts.isIdentifier(node.name);
+}
+
 function recordVariableBinding(declaration: NamedVariableDeclaration, scan: BindingScan): void {
   const name = declaration.name.text;
   recordDeclaration(scan.declarations, name);
-  recordAnnotatedBinding(declaration.type, name, scan);
+  recordAnnotatedBinding(declaration, scan);
   if (declaration.initializer) {
-    scan.factoryCalls.push({ initializer: declaration.initializer, name });
+    const alias = { declaration, initializer: declaration.initializer, name };
+    scan.factoryCalls.push(alias);
     if (!declaration.type && declarationIsConst(declaration)) {
-      scan.aliases.push({ initializer: declaration.initializer, name });
+      scan.aliases.push(alias);
     }
   }
 }
 
 function recordParameterBinding(parameter: NamedParameter, scan: BindingScan): void {
-  const name = parameter.name.text;
-  recordDeclaration(scan.declarations, name);
-  recordAnnotatedBinding(parameter.type, name, scan);
+  recordDeclaration(scan.declarations, parameter.name.text);
+  recordAnnotatedBinding(parameter, scan);
+}
+
+function recordBindingElement(element: NamedBindingElement, scan: BindingScan): void {
+  recordDeclaration(scan.declarations, element.name.text);
+  if (destructuresObservableProp(element, scan.imports.observableTypes)) {
+    proveDeclaration(scan, element.name.text, element);
+  }
+}
+
+/** `({ value$ }: Props)`: a required, undefaulted prop that the parameter's type declares observable. */
+function destructuresObservableProp(
+  element: NamedBindingElement,
+  observableTypes: ReadonlySet<string>,
+): boolean {
+  const pattern = element.parent;
+  const parameter = pattern.parent;
+  if (
+    element.dotDotDotToken ||
+    element.initializer ||
+    !ts.isObjectBindingPattern(pattern) ||
+    !ts.isParameter(parameter) ||
+    !parameter.type
+  ) {
+    return false;
+  }
+  const propName = element.propertyName
+    ? staticPropertyName(element.propertyName)
+    : element.name.text;
+  return propName !== null && declaresObservableProp(parameter.type, propName, observableTypes);
 }
 
 function recordAnnotatedBinding(
-  type: ts.TypeNode | undefined,
-  name: string,
+  declaration: NamedParameter | NamedVariableDeclaration,
   scan: BindingScan,
 ): void {
+  const { name, type } = declaration;
   if (!type) {
     return;
   }
   if (typeNamesObservable(type, scan.imports.observableTypes)) {
-    scan.directCandidates.add(name);
+    proveDeclaration(scan, name.text, declaration);
   } else {
-    scan.typeQueries.push({ name, type });
+    scan.typeQueries.push({ declaration, name: name.text, type });
   }
 }
 
@@ -168,18 +241,34 @@ function seedCandidates(scan: BindingScan): Set<string> {
   const uniqueFactories = new Set(
     [...scan.factoryBindings].filter((name) => scan.declarations.get(name) === 1),
   );
-  const candidates = new Set(
-    [...scan.directCandidates].filter((name) => scan.declarations.get(name.split(".")[0]!) === 1),
-  );
   for (const candidate of scan.factoryCalls) {
-    if (
-      scan.declarations.get(candidate.name) === 1 &&
-      isObservableFactoryCall(candidate.initializer, scan.imports, uniqueFactories)
-    ) {
-      candidates.add(candidate.name);
+    if (isObservableFactoryCall(candidate.initializer, scan.imports, uniqueFactories)) {
+      proveDeclaration(scan, candidate.name, candidate.declaration);
     }
   }
+  const candidates = new Set(
+    [...scan.importedObservables].filter(
+      (path) => path.includes(".") && scan.declarations.get(path.split(".")[0]!) === 1,
+    ),
+  );
+  for (const name of scan.proofs.keys()) {
+    addProvenCandidate(scan, candidates, name);
+  }
   return candidates;
+}
+
+function proveDeclaration(scan: BindingScan, name: string, declaration: ts.Node): void {
+  const proofs = scan.proofs.get(name) ?? new Set<ts.Node>();
+  proofs.add(declaration);
+  scan.proofs.set(name, proofs);
+}
+
+function addProvenCandidate(scan: BindingScan, candidates: Set<string>, name: string): boolean {
+  if (candidates.has(name) || scan.proofs.get(name)?.size !== scan.declarations.get(name)) {
+    return false;
+  }
+  candidates.add(name);
+  return true;
 }
 
 function resolveAliasCandidates(scan: BindingScan, candidates: Set<string>): void {
@@ -205,17 +294,18 @@ function resolveAliasCandidate(
   scan: BindingScan,
   candidates: Set<string>,
 ): boolean {
-  if (scan.declarations.get(alias.name) !== 1 || candidates.has(alias.name)) {
+  if (candidates.has(alias.name) || scan.proofs.get(alias.name)?.has(alias.declaration)) {
     return false;
   }
   const readsDynamicKey =
     scan.useValueInputs.has(alias.name) &&
     observablePathWithElementAccess(alias.initializer, candidates);
-  if (readsDynamicKey || expressionIsObservablePath(alias.initializer, candidates)) {
-    candidates.add(alias.name);
-    return true;
+  if (!readsDynamicKey && !expressionIsObservablePath(alias.initializer, candidates)) {
+    return false;
   }
-  return false;
+  proveDeclaration(scan, alias.name, alias.declaration);
+  addProvenCandidate(scan, candidates, alias.name);
+  return true;
 }
 
 function resolveTypeQueryCandidate(
@@ -223,13 +313,15 @@ function resolveTypeQueryCandidate(
   scan: BindingScan,
   candidates: Set<string>,
 ): boolean {
-  if (scan.declarations.get(query.name) !== 1 || candidates.has(query.name)) {
+  if (
+    candidates.has(query.name) ||
+    scan.proofs.get(query.name)?.has(query.declaration) ||
+    !typeQueriesObservable(query.type, candidates)
+  ) {
     return false;
   }
-  if (!typeQueriesObservable(query.type, candidates)) {
-    return false;
-  }
-  candidates.add(query.name);
+  proveDeclaration(scan, query.name, query.declaration);
+  addProvenCandidate(scan, candidates, query.name);
   return true;
 }
 

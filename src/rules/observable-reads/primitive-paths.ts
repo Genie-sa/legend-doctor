@@ -1,5 +1,6 @@
 import { propertyNameText, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import { collectHookImports } from "../../core/imports.js";
+import { hasSoleSourceBinding } from "./independent-subscription-bindings.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
@@ -143,25 +144,19 @@ export function localPrimitivePaths(
   );
 }
 
-/** Paths that `pathsOf` proves for each observable binding declared exactly once in the file. */
+/** Paths that `pathsOf` proves for each observable binding that is the file's only binding of its name. */
 export function localDeclarationPaths(
   sourceFile: ts.SourceFile,
   bindings: ReadonlySet<string>,
   pathsOf: (declaration: ts.VariableDeclaration) => ReadonlySet<string>,
 ): ReadonlySet<string> {
   const paths = new Set<string>();
-  const declarations: ts.VariableDeclaration[] = [];
-  visit(sourceFile, (node) => {
-    if (ts.isVariableDeclaration(node)) {
-      declarations.push(node);
-    }
-  });
   visit(sourceFile, (node) => {
     if (
       !ts.isVariableDeclaration(node) ||
       !ts.isIdentifier(node.name) ||
       !bindings.has(node.name.text) ||
-      declarations.filter((item) => item.name.getText() === node.name.getText()).length !== 1
+      !hasSoleSourceBinding(sourceFile, node.name.text)
     ) {
       return;
     }

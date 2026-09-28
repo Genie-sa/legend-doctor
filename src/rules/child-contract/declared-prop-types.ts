@@ -9,17 +9,15 @@ function unwrapParenthesizedType(type: ts.TypeNode): ts.TypeNode {
   return current;
 }
 
-function soleTypeDeclaration(
-  source: ChildComponentSource,
+export function soleTypeDeclaration(
+  sourceFile: ts.SourceFile,
   typeName: string,
 ): ts.InterfaceDeclaration | ts.TypeAliasDeclaration | null {
-  const declarations = source.owner
-    .getSourceFile()
-    .statements.filter(
-      (statement): statement is ts.InterfaceDeclaration | ts.TypeAliasDeclaration =>
-        (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
-        statement.name.text === typeName,
-    );
+  const declarations = sourceFile.statements.filter(
+    (statement): statement is ts.InterfaceDeclaration | ts.TypeAliasDeclaration =>
+      (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
+      statement.name.text === typeName,
+  );
   const [declaration] = declarations;
   return declarations.length === 1 && declaration ? declaration : null;
 }
@@ -44,7 +42,7 @@ function propsTypeMembers(
   if (!ts.isTypeReferenceNode(propsType) || !ts.isIdentifier(propsType.typeName)) {
     return null;
   }
-  const declaration = soleTypeDeclaration(source, propsType.typeName.text);
+  const declaration = soleTypeDeclaration(source.owner.getSourceFile(), propsType.typeName.text);
   return declaration === null ? null : declaredTypeMembers(declaration);
 }
 
@@ -69,7 +67,7 @@ export function declaredPropType(
   return properties.length === 1 && property ? (property.type ?? null) : null;
 }
 
-function staticPropertyName(name: ts.PropertyName): string | null {
+export function staticPropertyName(name: ts.PropertyName): string | null {
   if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
     return name.text;
   }

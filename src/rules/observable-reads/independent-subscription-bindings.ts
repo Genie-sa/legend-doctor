@@ -7,7 +7,12 @@ import type { UseValueDeclaration } from "./model.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
-const stableBindingsBySource = new WeakMap<ts.SourceFile, ReadonlyMap<string, boolean>>();
+interface SourceBinding {
+  readonly count: number;
+  readonly stable: boolean;
+}
+
+const bindingsBySource = new WeakMap<ts.SourceFile, ReadonlyMap<string, SourceBinding>>();
 
 /** Primitive path evidence is name-based; never carry it across a second runtime binding. */
 export function hasStableIndependentBindings(
@@ -25,7 +30,13 @@ export function hasStableIndependentBindings(
 }
 
 export function hasStableSourceBinding(identifier: ts.Identifier): boolean {
-  return stableBindings(identifier.getSourceFile()).get(identifier.text) === true;
+  const binding = sourceBindings(identifier.getSourceFile()).get(identifier.text);
+  return binding?.count === 1 && binding.stable;
+}
+
+/** Name-keyed facts about one declaration hold only while no other runtime binding shares its name. */
+export function hasSoleSourceBinding(sourceFile: ts.SourceFile, name: string): boolean {
+  return sourceBindings(sourceFile).get(name)?.count === 1;
 }
 
 function hasStableReceiverFactory(receiver: ts.Identifier): boolean {
@@ -47,14 +58,15 @@ function hasStableReceiverFactory(receiver: ts.Identifier): boolean {
   return stable;
 }
 
-function stableBindings(sourceFile: ts.SourceFile): ReadonlyMap<string, boolean> {
-  const cached = stableBindingsBySource.get(sourceFile);
+function sourceBindings(sourceFile: ts.SourceFile): ReadonlyMap<string, SourceBinding> {
+  const cached = bindingsBySource.get(sourceFile);
   if (cached) {
     return cached;
   }
-  const bindings = new Map<string, boolean>();
+  const bindings = new Map<string, SourceBinding>();
   const record = (name: string, stable: boolean): void => {
-    bindings.set(name, !bindings.has(name) && stable);
+    const previous = bindings.get(name);
+    bindings.set(name, { count: (previous?.count ?? 0) + 1, stable: !previous && stable });
   };
   visit(sourceFile, (node) => {
     if (ts.isVariableDeclaration(node) || ts.isParameter(node)) {
@@ -71,7 +83,7 @@ function stableBindings(sourceFile: ts.SourceFile): ReadonlyMap<string, boolean>
       recordOtherBinding(node, record);
     }
   });
-  stableBindingsBySource.set(sourceFile, bindings);
+  bindingsBySource.set(sourceFile, bindings);
   return bindings;
 }
 
