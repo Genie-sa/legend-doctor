@@ -628,7 +628,10 @@ useEffect(() => syncTheme(theme), [theme]);
 useObserveEffect(() => syncTheme(settings$.theme.get()));
 ```
 
-Keep the React effect when the same value also renders. Moving it could change post-commit timing.
+Keep the React effect when the same value also renders. Moving it could change post-commit timing. Keep it as well
+when every parent that renders the component subscribes to the same observable: the parent's render already reruns
+the component on each change, so dropping `useValue` saves nothing. When a parent might rerender it, through an
+ancestor subscription or a memoized child whose props may be stable, the finding is a review.
 
 ### Express proven lifecycle intent
 

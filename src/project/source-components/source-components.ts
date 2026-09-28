@@ -52,6 +52,8 @@ export interface SourceIndex {
   hookDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
   legendValueBridgesFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observableArrayPathsFor: (file: string) => ReadonlySet<string>;
+  /** The declaring module and local name of an observable this file declares or imports. */
+  observableDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
   observablePrimitivePathsFor: (file: string) => ReadonlySet<string>;
   /** Paths seeded with plain data, so subscribing to them never activates a lazy source. */
   observablePlainSeedPathsFor: (file: string) => ReadonlySet<string>;
@@ -90,6 +92,7 @@ export function buildSourceIndexFromFiles(
     hookDeclarationFor: (file, name) => hookDeclarationFor(state, file, name),
     legendValueBridgesFor: (file) => legendValueBridgesFor(state, file),
     observableArrayPathsFor: (file) => observableArrayPathsFor(state, file),
+    observableDeclarationFor: (file, name) => observableDeclarationFor(state, file, name),
     observablePrimitivePathsFor: (file) => observablePrimitivePathsFor(state, file),
     observablePlainSeedPathsFor: (file) =>
       observableDeclarationPathsFor(state, file, plainSeedPaths),
@@ -187,6 +190,18 @@ function componentDeclarationFor(
     return { file: normalized, localName: name };
   }
   return resolvedFor(state, normalized, "component").get(name) ?? null;
+}
+
+function observableDeclarationFor(
+  state: SourceIndexState,
+  file: string,
+  name: string,
+): ResolvedSymbol | null {
+  const normalized = normalizeFile(file);
+  if (state.records.get(normalized)?.observableDeclarations.has(name)) {
+    return { file: normalized, localName: name };
+  }
+  return resolvedFor(state, normalized, "observable").get(name) ?? null;
 }
 
 function hookDeclarationFor(
