@@ -110,6 +110,33 @@ export function exactObjectLiteralKeys(expression: ts.Expression): ReadonlySet<s
   return keys;
 }
 
+/**
+ * Top-level keys of an exact object literal whose initial value is data. Methods, accessors,
+ * function values, and shorthand references are left out: none is proven to be a data field.
+ */
+export function dataFieldKeys(initial: ts.Expression): ReadonlySet<string> | null {
+  const value = unwrapTransparentExpression(initial);
+  if (!ts.isObjectLiteralExpression(value) || !exactObjectLiteralKeys(value)) {
+    return null;
+  }
+  const keys = new Set<string>();
+  for (const property of value.properties) {
+    const name =
+      ts.isPropertyAssignment(property) && !isFunctionValue(property.initializer)
+        ? propertyNameText(property.name)
+        : null;
+    if (name !== null) {
+      keys.add(name);
+    }
+  }
+  return keys;
+}
+
+function isFunctionValue(expression: ts.Expression): boolean {
+  const value = unwrapTransparentExpression(expression);
+  return ts.isArrowFunction(value) || ts.isFunctionExpression(value);
+}
+
 function objectLiteralPropertyKey(property: ts.ObjectLiteralElementLike): string | null {
   if (ts.isSpreadAssignment(property)) {
     return null;

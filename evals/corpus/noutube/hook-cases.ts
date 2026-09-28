@@ -72,4 +72,14 @@ export const noutubeHookCases = [
       "Uncertain: three status buttons read the flag, but the owner outside them is only four text rows, and the false write directly follows the awaited snapshot refresh that already rerenders the owner through context.",
     target: "noutube-extension",
   },
+  {
+    action: "move-state-down",
+    file: "SettingsBlocklistContent.tsx",
+    hook: "useState",
+    line: 78,
+    name: "value",
+    rationale:
+      "The draft is read and written only by the TextInput, the add button, and `add`, all inside the input row at line 91; a leaf around that row takes `kind` as a prop, so keystrokes stop rerendering the note, empty state, and every BlocklistRow.",
+    target: "noutube-blocklist",
+  },
 ] as const satisfies readonly GoldHookCase[];

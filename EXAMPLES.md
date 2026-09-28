@@ -236,7 +236,10 @@ dependencies.
 
 ### Split unrelated leaves
 
-`split-use-value-leaves` gives each leaf its own field subscription.
+`split-use-value-leaves` gives each leaf its own field subscription. It requires an object-literal initial value
+that proves the field set, and a production write that changes an unread data field without touching a read one.
+When every field that changes is already read, or the only unread fields are constants and functions, the split
+removes no render and the action abstains.
 
 ```tsx
 function Profile() {

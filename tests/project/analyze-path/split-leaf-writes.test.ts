@@ -1,0 +1,72 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import type { LegendPracticeFinding } from "../../../src/core/types.js";
+import { analyzePath } from "../../../src/project/analyze-path/analyze-path.js";
+import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
+import { requireValue } from "./harness.js";
+import test from "node:test";
+
+const STORE = `
+  import { observable } from "@legendapp/state";
+  export const status$ = observable({
+    enabled: false,
+    authenticated: false,
+    isLoading: false,
+    connect: () => status$.enabled.set(true),
+  });
+`;
+
+const COMPONENT = `
+  import { useValue } from "@legendapp/state/react";
+  import { status$ } from "./state/status";
+  export function SourceBadge() {
+    const status = useValue(status$);
+    return <span>{String(status.enabled && status.authenticated)}</span>;
+  }
+`;
+
+async function splitFindings(writerPath: string, writer: string): Promise<LegendPracticeFinding[]> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-split-leaf-writes-"));
+  try {
+    await mkdir(path.join(root, path.dirname(writerPath)), { recursive: true });
+    await mkdir(path.join(root, "state"), { recursive: true });
+    await writeFile(path.join(root, "state", "status.ts"), STORE, "utf8");
+    await writeFile(path.join(root, writerPath), writer, "utf8");
+    await writeFile(path.join(root, "source-badge.tsx"), COMPONENT, "utf8");
+    const report = await analyzePath(root);
+    return report.practices.filter((finding) => finding.action === "split-use-value-leaves");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+test("splits when another module writes an unread sibling on its own", async () => {
+  const [finding, ...rest] = await splitFindings(
+    "state/connect.ts",
+    `
+      import { status$ } from "./status";
+      export async function connect() {
+        status$.isLoading.set(true);
+      }
+    `,
+  );
+  assert.deepEqual(rest, []);
+  assert.match(
+    requireValue(finding).evidence.join(" "),
+    /unread `isLoading` is written without any field this owner reads/u,
+  );
+});
+
+test("ignores sibling writes that only a test makes", async () => {
+  assert.deepEqual(
+    await splitFindings(
+      "state/__tests__/status.test.ts",
+      `
+        import { status$ } from "../status";
+        status$.isLoading.set(true);
+      `,
+    ),
+    [],
+  );
+});

@@ -1,10 +1,8 @@
 import type { CorpusRepository } from "../contracts.js";
 
 /**
- * The modal directory is scanned file by file. SettingsBlocklistContent.tsx stays out until
- * split-use-value-leaves requires an unread sibling field: its `blocklist` split subscribes to every
- * field the component already reads, so it removes no render. SettingsTree.tsx stays out until subtree
- * materiality counts the JSX that the extracted leaf reaches through the owner's `renderPage()` helper.
+ * The modal directory is scanned file by file. SettingsTree.tsx stays out until subtree materiality
+ * counts the JSX that the extracted leaf reaches through the owner's `renderPage()` helper.
  */
 export const noutubeRepository = {
   commit: "8cb020814475ba5d3ad2499bf9d4a3dc128dc789",
@@ -46,6 +44,12 @@ export const noutubeRepository = {
       id: "noutube-playback-speed-modal",
       root: "components/modal/PlaybackSpeedModal.tsx",
       states: 0,
+    },
+    {
+      effects: 0,
+      id: "noutube-blocklist",
+      root: "components/modal/SettingsBlocklistContent.tsx",
+      states: 1,
     },
     {
       effects: 0,

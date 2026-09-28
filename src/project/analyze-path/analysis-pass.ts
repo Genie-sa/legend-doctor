@@ -4,6 +4,7 @@ import type {
   AnalysisReport,
   DisabledRule,
   HookFinding,
+  InstalledLegendState,
   LegendPracticeFinding,
   ReportScope,
 } from "../../core/types.js";
@@ -20,6 +21,7 @@ import { ConcurrentRootResolver } from "../concurrent-root-workspace.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import type { FileCapabilities } from "../capabilities.js";
 import type { FunctionCoverageEntry } from "./coverage-stages.js";
+import { InstalledLegendStateResolver } from "../installed-legend-state-resolver.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
 import { ReactCompilerResolver } from "../react-compiler-package.js";
 import { SCHEMA_VERSION } from "../../core/types.js";
@@ -74,6 +76,7 @@ interface AnalysisPass extends AnalysisPassOptions {
   accumulator: AnalysisAccumulator;
   compiledFiles: ReadonlySet<string>;
   concurrentFiles: ReadonlySet<string>;
+  legendStates: ReadonlyMap<string, InstalledLegendState | null>;
   rootCompiles: boolean;
   rootRendersConcurrently: boolean;
 }
@@ -116,14 +119,14 @@ export async function runAnalysisPass(
   const reactCompiler = new ReactCompilerResolver();
   const concurrentRoots = new ConcurrentRootResolver();
   const practiceFiles = legendPracticeFiles(entries, options.includeDetails);
-  const [compiledFiles, rootCompiles, concurrentFiles, rootRendersConcurrently] = await Promise.all(
-    [
+  const [compiledFiles, rootCompiles, concurrentFiles, rootRendersConcurrently, legendStates] =
+    await Promise.all([
       filesWhere(practiceFiles, (file) => reactCompiler.packageCompilesFile(file)),
       reactCompiler.compilesDirectory(options.context.root),
       filesWhere(practiceFiles, (file) => concurrentRoots.rendersFileConcurrently(file)),
       concurrentRoots.rendersDirectoryConcurrently(options.context.root),
-    ],
-  );
+      installedLegendStates(entries, options.context.installedLegendState),
+    ]);
   const pass: AnalysisPass = {
     ...options,
     accumulator: {
@@ -135,6 +138,7 @@ export async function runAnalysisPass(
     },
     compiledFiles,
     concurrentFiles,
+    legendStates,
     rootCompiles,
     rootRendersConcurrently,
   };
@@ -155,6 +159,19 @@ function legendPracticeFiles(
         (includeDetails || mayContainLegendPractice(entry.analysisFile)),
     )
     .map((entry) => entry.file);
+}
+
+async function installedLegendStates(
+  entries: readonly AnalysisFileEntry[],
+  rootInstall: InstalledLegendState | null,
+): Promise<ReadonlyMap<string, InstalledLegendState | null>> {
+  const resolver = new InstalledLegendStateResolver(rootInstall);
+  const files = entries.filter((entry) => isSupportedEntry(entry)).map((entry) => entry.file);
+  return new Map(
+    await Promise.all(
+      files.map(async (file) => [file, await resolver.resolveForFile(file)] as const),
+    ),
+  );
 }
 
 async function filesWhere(
@@ -237,7 +254,7 @@ function hookFindings(
 function fileCapabilities(entry: SupportedAnalysisFileEntry, pass: AnalysisPass): FileCapabilities {
   return {
     concurrentRoot: pass.concurrentFiles.has(entry.file),
-    legendState: pass.context.installedLegendState,
+    legendState: pass.legendStates.get(entry.file) ?? null,
     reactCompiler: pass.compiledFiles.has(entry.file),
   };
 }
@@ -271,6 +288,7 @@ function legendPracticeFindings(
     importedObservableFactories,
     includeFindings,
     importedObservableArrayPaths: sourceIndex.observableArrayPathsFor(entry.file),
+    importedObservableDataKeys: sourceIndex.observableDataKeysFor(entry.file),
     importedObservablePrimitivePaths: sourceIndex.observablePrimitivePathsFor(entry.file),
     importedObservablePlainSeedPaths: sourceIndex.observablePlainSeedPathsFor(entry.file),
     importedObservableKeys: sourceIndex.observableKeysFor(entry.file),
