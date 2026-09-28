@@ -3,9 +3,10 @@ import {
   disabledPracticeRules,
   enabledPracticeRules,
 } from "../../../src/practices/practice-rules.js";
-import { rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { analyzePath } from "../../../src/project/analyze-path/analyze-path.js";
 import assert from "node:assert/strict";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -119,4 +120,41 @@ test("the tracking rule is switched off under Legend State 2.x, where auto track
   ]);
   assert.deepEqual(gates("3.0.0-beta.48"), []);
   assert.deepEqual(gates("next"), []);
+});
+
+test("a workspace package gates rules by the Legend State it installs, others by the root's", async (testContext) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-capabilities-workspace-"));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  const files = {
+    "bun.lock": '{ "packages": { "@legendapp/state": ["@legendapp/state@3.0.0-beta.48", ""] } }',
+    "package.json": JSON.stringify({ name: "root", private: true, workspaces: ["apps/*"] }),
+    "apps/legacy/package.json": JSON.stringify({ name: "legacy" }),
+    "apps/legacy/node_modules/@legendapp/state/package.json": JSON.stringify({
+      name: "@legendapp/state",
+      version: "2.1.15",
+    }),
+    "apps/legacy/src/pages.tsx": CLONE_WRITE_COMPONENT,
+    "apps/current/package.json": JSON.stringify({ name: "current" }),
+    "apps/current/src/pages.tsx": CLONE_WRITE_COMPONENT,
+  };
+  for (const [file, source] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await writeFile(path.join(root, file), source, "utf8");
+  }
+
+  const report = await analyzePath(root);
+
+  assert.equal(report.capabilities.legendState?.source, "lockfile");
+  assert.equal(report.capabilities.legendState.version, "3.0.0-beta.48");
+  assert.deepEqual(
+    report.capabilities.disabledRules.map(({ files: count, reason, rule }) => ({
+      count,
+      reason,
+      rule,
+    })),
+    [
+      { count: 1, reason: "legend-v2-tracking", rule: "observable-tracking" },
+      { count: 1, reason: "legend-v2-tracking", rule: "plain-primitive-projection" },
+    ],
+  );
 });

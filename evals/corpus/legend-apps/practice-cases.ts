@@ -69,6 +69,24 @@ export const legendAppsPracticeCases = [
     target: "legend-apps-music",
   },
   {
+    action: "use-peek-for-snapshot",
+    disposition: "style",
+    file: "components/TitleBar.tsx",
+    line: 31,
+    rationale:
+      "The `onHover` pointer handler reads the showTitleBarOnHover setting once before writing the hover flag; an event handler is not a tracking context. settings$ comes from createObservableFile in the linked @legend-apps/storage workspace package.",
+    target: "legend-apps-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    disposition: "style",
+    file: "components/TitleBar.tsx",
+    line: 39,
+    rationale:
+      "The `onHoverLeave` handler reads the showTitleBarOnHover setting once before clearing the hover flag; an event handler is not a tracking context.",
+    target: "legend-apps-music",
+  },
+  {
     action: "split-use-value-leaves",
     disposition: "change",
     file: "settings/LibrarySettings.tsx",
@@ -90,9 +108,27 @@ export const legendAppsPracticeCases = [
     action: "use-peek-for-snapshot",
     disposition: "style",
     file: "systems/AppMenu.macos.tsx",
+    line: 219,
+    rationale:
+      "The library-open flag is read inside the stateSaved$.libraryIsOpen `onChange` listener that patches the native menu, outside any tracking context. stateSaved$ comes from createObservableFile in the linked @legend-apps/storage workspace package.",
+    target: "legend-apps-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    disposition: "style",
+    file: "systems/AppMenu.macos.tsx",
     line: 222,
     rationale:
       "The queue length is read inside the queue `onChange` listener that patches the native menu, outside any tracking context.",
+    target: "legend-apps-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    disposition: "style",
+    file: "systems/LocalMusicState.ts",
+    line: 1343,
+    rationale:
+      "The scanning flag is read once inside the librarySettings$.paths `onChange` listener to decide whether to start a scan, outside any tracking context; the listener is proven once librarySettings$ resolves through the linked @legend-apps/storage workspace package.",
     target: "legend-apps-music",
   },
   ...diffDirectObservableLines.map((line) => ({
