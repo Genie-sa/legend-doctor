@@ -389,4 +389,45 @@ export const legendMusicPracticeCases = [
       "isPlayerActive only seeds wasPlayingRef, which an observe effect refreshes later, so every play or pause rerenders the queue for a value no render reads.",
     target: "legend-music",
   },
+  {
+    action: "batch-observable-writes",
+    file: "components/Playlist.tsx",
+    line: 284,
+    rationale:
+      "Starting a native queue drag publishes the dragged item and clears the hovered zone as one transition; every DroppableZone reads both through useDragDrop.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "components/Playlist.tsx",
+    line: 500,
+    rationale: "Leaving the queue clears the dragged item and the hovered zone as one transition.",
+    target: "legend-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    disposition: "style",
+    file: "components/Playlist.tsx",
+    line: 509,
+    rationale:
+      "The native drag-hover handler reads the zone checkDropZones just hit-tested; the handler is no tracking context.",
+    target: "legend-music",
+  },
+  {
+    action: "use-peek-for-snapshot",
+    disposition: "style",
+    file: "components/Playlist.tsx",
+    line: 525,
+    rationale:
+      "The native drop handler snapshots the hit-tested zone to pick the drop index; the handler is no tracking context.",
+    target: "legend-music",
+  },
+  {
+    action: "batch-observable-writes",
+    file: "components/Playlist.tsx",
+    line: 529,
+    rationale:
+      "A drop clears the dragged item and the hovered zone as one transition before applying it.",
+    target: "legend-music",
+  },
 ] as const satisfies readonly GoldPracticeCase[];

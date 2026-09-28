@@ -149,6 +149,15 @@ export const legendAppsPracticeCases = [
       "The scanning flag is read once inside the librarySettings$.paths `onChange` listener to decide whether to start a scan, outside any tracking context; the listener is proven once librarySettings$ resolves through the linked @legend-apps/storage workspace package.",
     target: "legend-apps-music",
   },
+  ...[563, 579].map((line) => ({
+    action: "use-peek-for-snapshot" as const,
+    disposition: "style" as const,
+    file: "components/Playlist.tsx",
+    line,
+    rationale:
+      "A native drag handler snapshots the zone checkDropZones just hit-tested; the handler is no tracking context.",
+    target: "legend-apps-music",
+  })),
   ...diffDirectObservableLines.map((line) => ({
     action: "pass-observable-to-use-value" as const,
     disposition: "style" as const,

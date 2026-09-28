@@ -1,18 +1,23 @@
 import {
+  bindingDeclarationCount,
+  isAssignmentOperator,
+  unwrapTransparentExpression,
+} from "../core/analysis-ast.js";
+import {
   expressionIsObservablePath,
   isObservableFactoryCall,
   observablePathWithElementAccess,
   typeNamesObservable,
   typeQueriesObservable,
 } from "./observable-paths.js";
+import { findAncestor, isRuntimeFunctionLike, visit } from "../core/ast.js";
 import type { HookImports } from "../core/imports.js";
 import type { LegendPracticesRequest } from "./model.js";
+import type { ObservableContextReader } from "../project/source-components/observable-contexts.js";
 import { declaresObservableProp } from "./observable-prop-types.js";
 import { isUseValueCall } from "../rules/observable-reads/observable-paths.js";
 import { staticPropertyName } from "../rules/child-contract/declared-prop-types.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "../core/analysis-ast.js";
-import { visit } from "../core/ast.js";
 
 interface BindingAlias {
   declaration: ts.Node;
@@ -28,6 +33,7 @@ interface BindingTypeQuery {
 
 interface BindingScan {
   aliases: BindingAlias[];
+  contextReaders: ReadonlyMap<string, ObservableContextReader>;
   declarations: Map<string, number>;
   factoryBindings: Set<string>;
   factoryCalls: BindingAlias[];
@@ -56,7 +62,8 @@ export function resolveObservableBindings(
     imports.useComputed.size === 0 &&
     imports.observableTypes.size === 0 &&
     request.importedObservables.size === 0 &&
-    request.importedObservableFactories.size === 0;
+    request.importedObservableFactories.size === 0 &&
+    request.observableContextReaders.size === 0;
   if (lacksObservableSources) {
     return new Set<string>();
   }
@@ -73,6 +80,7 @@ function collectObservableBindings(
 ): ReadonlySet<string> {
   const scan: BindingScan = {
     aliases: [],
+    contextReaders: request.observableContextReaders,
     declarations: new Map(),
     factoryBindings: new Set(request.importedObservableFactories),
     factoryCalls: [],
@@ -179,6 +187,13 @@ function recordVariableBinding(declaration: NamedVariableDeclaration, scan: Bind
   const name = declaration.name.text;
   recordDeclaration(scan.declarations, name);
   recordAnnotatedBinding(declaration, scan);
+  if (
+    declaration.initializer &&
+    declarationIsConst(declaration) &&
+    readsObservableProp(declaration.initializer, name, scan)
+  ) {
+    proveDeclaration(scan, name, declaration);
+  }
   if (declaration.initializer) {
     const alias = { declaration, initializer: declaration.initializer, name };
     scan.factoryCalls.push(alias);
@@ -195,9 +210,102 @@ function recordParameterBinding(parameter: NamedParameter, scan: BindingScan): v
 
 function recordBindingElement(element: NamedBindingElement, scan: BindingScan): void {
   recordDeclaration(scan.declarations, element.name.text);
-  if (destructuresObservableProp(element, scan.imports.observableTypes)) {
+  if (
+    destructuresObservableProp(element, scan.imports.observableTypes) ||
+    destructuresObservableSource(element, scan)
+  ) {
     proveDeclaration(scan, element.name.text, element);
   }
+}
+
+/**
+ * `const { value$ } = props` from a typed props parameter, or `const { value$ } = useStore()` from
+ * a hook that returns a context value whose declared type holds `value$` as an observable. Only a
+ * `const` pattern keeps the binding from being rebound later.
+ */
+function destructuresObservableSource(element: NamedBindingElement, scan: BindingScan): boolean {
+  const pattern = element.parent;
+  const declaration = pattern.parent;
+  const propName = element.propertyName
+    ? staticPropertyName(element.propertyName)
+    : element.name.text;
+  if (
+    element.dotDotDotToken ||
+    element.initializer ||
+    propName === null ||
+    !ts.isObjectBindingPattern(pattern) ||
+    !ts.isVariableDeclaration(declaration) ||
+    !declaration.initializer ||
+    !declarationIsConst(declaration)
+  ) {
+    return false;
+  }
+  const source = unwrapTransparentExpression(declaration.initializer);
+  if (ts.isIdentifier(source)) {
+    return typedPropsDeclareObservable(source, propName, scan);
+  }
+  const reader = ts.isCallExpression(source) ? contextHookReader(source, scan) : null;
+  return reader !== null && declaresObservableProp(reader.value, propName, reader.observableTypes);
+}
+
+/** `props.value$` read from a typed props parameter that declares `value$` observable. */
+function readsObservableProp(initializer: ts.Expression, name: string, scan: BindingScan): boolean {
+  const read = unwrapTransparentExpression(initializer);
+  return (
+    ts.isPropertyAccessExpression(read) &&
+    !read.questionDotToken &&
+    read.name.text === name &&
+    ts.isIdentifier(read.expression) &&
+    typedPropsDeclareObservable(read.expression, name, scan)
+  );
+}
+
+/** The props parameter is the only binding of its name in the owner and its type declares the prop. */
+function typedPropsDeclareObservable(
+  props: ts.Identifier,
+  propName: string,
+  scan: BindingScan,
+): boolean {
+  const owner = findAncestor(props, isRuntimeFunctionLike);
+  if (!owner) {
+    return false;
+  }
+  const parameter = owner.parameters.find(
+    (candidate) => ts.isIdentifier(candidate.name) && candidate.name.text === props.text,
+  );
+  return (
+    parameter?.type !== undefined &&
+    !parameter.dotDotDotToken &&
+    !parameter.initializer &&
+    bindingDeclarationCount(owner, props.text) === 1 &&
+    !isAssigned(owner, props.text) &&
+    declaresObservableProp(parameter.type, propName, scan.imports.observableTypes)
+  );
+}
+
+function contextHookReader(
+  call: ts.CallExpression,
+  scan: BindingScan,
+): ObservableContextReader | null {
+  const callee = unwrapTransparentExpression(call.expression);
+  const reader = ts.isIdentifier(callee) ? scan.contextReaders.get(callee.text) : undefined;
+  return reader?.kind === "hook" &&
+    ts.isIdentifier(callee) &&
+    scan.declarations.get(callee.text) === 1
+    ? reader
+    : null;
+}
+
+function isAssigned(owner: ts.Node, name: string): boolean {
+  let assigned = false;
+  visit(owner, (node) => {
+    assigned ||=
+      ts.isBinaryExpression(node) &&
+      ts.isIdentifier(node.left) &&
+      node.left.text === name &&
+      isAssignmentOperator(node.operatorToken.kind);
+  });
+  return assigned;
 }
 
 /** `({ value$ }: Props)`: a required, undefaulted prop that the parameter's type declares observable. */

@@ -154,6 +154,7 @@ const EDITABLE_PRACTICE_ACTIONS = [
   "narrow-use-value-subscription",
   "pass-observable-to-use-value",
   "replace-legacy-use-value",
+  "select-primitive-projection",
   "use-peek-for-snapshot",
   "use-value-for-render-read",
 ] as const satisfies readonly LegendPracticeAction[];

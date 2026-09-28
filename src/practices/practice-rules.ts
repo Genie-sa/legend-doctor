@@ -12,7 +12,7 @@ import { findObservableOwnershipPractices } from "../rules/observable-ownership/
 import { findObservableReadPractices } from "../rules/observable-reads/observable-reads.js";
 import { findObservableTogglePractices } from "../rules/observable-toggle.js";
 import { findObservableTrackingPractices } from "../rules/observable-tracking/observable-tracking.js";
-import { findPlainPrimitiveProjections } from "../rules/plain-primitive-projection.js";
+import { findPrimitiveProjections } from "../rules/primitive-projection/primitive-projection.js";
 
 export type PracticeRuleId =
   | "plain-primitive-projection"
@@ -83,19 +83,20 @@ function isLegendBeforeV3(capabilities: FileCapabilities): boolean {
 
 export const PRACTICE_RULES: readonly PracticeRule[] = [
   {
-    disabledWhen: (capabilities) => {
-      if (isLegendBeforeV3(capabilities)) {
-        return LEGEND_V2_TRACKING_GATE;
-      }
-      return capabilities.legendState?.useValueExport === "missing" ? USE_VALUE_MISSING_GATE : null;
-    },
+    disabledWhen: (capabilities) =>
+      isLegendBeforeV3(capabilities) ? LEGEND_V2_TRACKING_GATE : null,
     id: "plain-primitive-projection",
     needsObservableBindings: true,
-    run: ({ imports, request }) =>
-      findPlainPrimitiveProjections({
-        imports,
-        sourceFile: request.sourceFile,
+    run: ({ imports, observableBindings, request }) =>
+      findPrimitiveProjections({
+        childContracts: request.childContracts,
+        contextReaders: request.observableContextReaders,
         fileName: request.fileName,
+        importedDeclarations: request.importedObservableDeclarations ?? new Map(),
+        imports,
+        observableBindings,
+        sourceFile: request.sourceFile,
+        stableContextRead: request.stableContextRead,
       }),
   },
   {
