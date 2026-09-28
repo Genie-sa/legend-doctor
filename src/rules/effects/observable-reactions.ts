@@ -6,6 +6,7 @@ import {
   keepRenderedReactionEffect,
   observeEffect,
   reviewParentRenderedReactionEffect,
+  reviewUntrackableCallEffect,
   reviewUntrackableReadsEffect,
 } from "./effect-verdicts.js";
 import type { InlineEffectContext } from "./model.js";
@@ -45,9 +46,12 @@ function unrenderedReactionClassification({
   if (parentRerender === "possible") {
     return reviewParentRenderedReactionEffect(inline.subscriptionHook);
   }
-  const peekedReads = incidentalObservableReads({ callback, inline, owner, sources });
-  return peekedReads
-    ? observeEffect(peekedReads, inline.subscriptionHook)
+  const reads = incidentalObservableReads({ callback, inline, owner, sources });
+  if (reads.kind === "peek") {
+    return observeEffect(reads.reads, inline.subscriptionHook);
+  }
+  return reads.kind === "untrackable-call"
+    ? reviewUntrackableCallEffect(reads.callee)
     : reviewUntrackableReadsEffect();
 }
 

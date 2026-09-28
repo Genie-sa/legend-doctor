@@ -134,7 +134,8 @@ CI fetches the parents the same way after the pinned commits, so the cost is one
 `npm run eval:runtime` runs the executable migration contracts under jsdom with pinned React and Legend State: form
 submission snapshots, keyed selection and draft identity, independent hook lifetimes, atomic dialog publication,
 memoized snapshot identity, and the lazy load a persisted-store subscription starts, with and without StrictMode. They
-also run in `npm test`.
+also cover the retry loop an observer starts when a loader it calls reads an observable before its first `await`, and
+they run in `npm test`.
 
 ### Scan budgets
 

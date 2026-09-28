@@ -1,5 +1,10 @@
+import type {
+  ImportedCallee,
+  ReachResolver,
+} from "../../project/source-components/synchronous-reach.js";
 import {
   bindingDeclarationCount,
+  hookCallName,
   isAssignmentOperator,
   outermostTransparentParent,
   rootIdentifier,
@@ -7,11 +12,17 @@ import {
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
+import {
+  hasSynchronousArrayReceiver,
+  isSynchronousEffectCallback,
+} from "./synchronous-dependency-reads.js";
 import type { HookImports } from "../../core/imports.js";
 import type { InlineEffectContext } from "./model.js";
 import type { PeekedRead } from "./effect-verdicts.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isSynchronousEffectCallback } from "./synchronous-dependency-reads.js";
+import { SYNCHRONOUS_CALLBACK_METHODS } from "../../core/execution-units.js";
+import { lexicalBinding } from "../../core/lexical-bindings.js";
+import { localReachResolver } from "../../project/source-components/reach-resolvers.js";
 import ts from "typescript";
 
 export interface ObservableReactionScope {
@@ -26,20 +37,43 @@ interface ReadScan {
   readonly callback: ts.ArrowFunction | ts.FunctionExpression;
   readonly imports: HookImports;
   readonly isObservableRoot: (root: ts.Identifier) => boolean;
+  readonly resolver: ReachResolver;
   readonly triggers: readonly (readonly string[])[];
+}
+
+/** How a call check resolves code, and the functions it has already followed. */
+interface CallFollow {
+  readonly isObservableRoot: (root: ts.Identifier) => boolean;
+  readonly resolver: ReachResolver;
+  readonly seen: Set<ts.Node>;
 }
 
 /** When a read runs relative to the observer's synchronous tracking pass. */
 type ReadTiming = "deferred" | "tracked" | "unknown";
 
+/**
+ * The reads a `useObserveEffect` rewrite must peek, or why it cannot state them: a read whose
+ * tracking is unknown, or a call into code that may track a read the rewrite cannot peek.
+ */
+export type IncidentalReads =
+  | { readonly kind: "peek"; readonly reads: readonly PeekedRead[] }
+  | { readonly kind: "unresolved" }
+  | { readonly kind: "untrackable-call"; readonly callee: string };
+
 type ReadVerdict =
   | { readonly kind: "ignore" }
   | { readonly kind: "peek"; readonly read: PeekedRead }
-  | { readonly kind: "unresolved" };
+  | { readonly kind: "unresolved" }
+  | { readonly kind: "untrackable-call"; readonly callee: string };
 
 const IGNORE: ReadVerdict = { kind: "ignore" };
 
-const UNRESOLVED: ReadVerdict = { kind: "unresolved" };
+const UNRESOLVED = { kind: "unresolved" } as const;
+
+/** Hooks whose returned handles run no application code when called or read. */
+const HOOK_HANDLES: ReadonlySet<string> = new Set(["useReducer", "useRef", "useState"]);
+
+const HOOK_NAME = /^use[A-Z$]/u;
 
 const DEFERRING_GLOBALS = new Set([
   "queueMicrotask",
@@ -55,22 +89,21 @@ const DEFERRING_METHODS = new Set(["addEventListener", "catch", "finally", "then
 
 /**
  * The tracked observable reads a `useObserveEffect` rewrite must turn into `.peek()` so they do not
- * become triggers, or null when some read's tracking cannot be stated. A read is tracked when it runs
- * during the observer's synchronous pass: in the callback itself, a synchronous collection callback,
- * or an immediately invoked function before its first unconditional `await`.
+ * become triggers, or why they cannot be stated. A read is tracked when it runs during the
+ * observer's synchronous pass: in the callback itself, a synchronous collection callback, an
+ * immediately invoked function before its first unconditional `await`, or a function they call.
  */
-export function incidentalObservableReads(
-  scope: ObservableReactionScope,
-): readonly PeekedRead[] | null {
+export function incidentalObservableReads(scope: ObservableReactionScope): IncidentalReads {
   const triggers = scope.sources.map((source) => staticPropertyPath(source));
   const staticTriggers = triggers.filter((trigger) => trigger !== null);
   if (staticTriggers.length !== triggers.length) {
-    return null;
+    return UNRESOLVED;
   }
   return trackedNonTriggerReads({
     callback: scope.callback,
     imports: scope.inline.imports,
     isObservableRoot: observableRootPredicate(scope, staticTriggers),
+    resolver: scope.inline.childContracts?.reachResolver?.() ?? localReachResolver,
     triggers: staticTriggers,
   });
 }
@@ -136,20 +169,21 @@ function isObservableFactoryCall(expression: ts.Expression, imports: HookImports
   );
 }
 
-function trackedNonTriggerReads(scan: ReadScan): readonly PeekedRead[] | null {
+function trackedNonTriggerReads(scan: ReadScan): IncidentalReads {
   const peeks = new Map<string, PeekedRead>();
-  let unresolved = false;
+  let blocked: Exclude<ReadVerdict, { kind: "ignore" | "peek" }> | null = null;
   visit(scan.callback.body, (node) => {
-    if (unresolved || !ts.isCallExpression(node)) {
+    if (blocked || !ts.isCallExpression(node)) {
       return;
     }
     const verdict = readVerdict(node, scan);
-    unresolved = verdict.kind === "unresolved";
     if (verdict.kind === "peek") {
       peeks.set(verdict.read.read, verdict.read);
+    } else if (verdict.kind !== "ignore") {
+      blocked = verdict;
     }
   });
-  return unresolved ? null : [...peeks.values()];
+  return blocked ?? { kind: "peek", reads: [...peeks.values()] };
 }
 
 function peekedRead(call: ts.CallExpression, callee: ts.PropertyAccessExpression): PeekedRead {
@@ -166,7 +200,150 @@ function readVerdict(call: ts.CallExpression, scan: ReadScan): ReadVerdict {
   const callee = call.expression;
   return ts.isPropertyAccessExpression(callee) && callee.name.text === "get"
     ? getVerdict(call, callee, scan)
+    : callVerdict(call, scan);
+}
+
+/** Only reads in the callback can be peeked, so a call that may track another read blocks it. */
+function callVerdict(call: ts.CallExpression, scan: ReadScan): ReadVerdict {
+  return readTiming(call, scan.callback) !== "deferred" &&
+    callMayTrackReads(call, { ...scan, seen: new Set() })
+    ? { callee: call.expression.getText(), kind: "untrackable-call" }
     : IGNORE;
+}
+
+/**
+ * Whether a call may run an observable read, or code out of view, before it returns. A function
+ * literal is scanned in place; a global, a package, or a React hook handle reads no application
+ * observable, and an observable's methods read only when they iterate. A hook may subscribe. A
+ * local function is followed to its first `await`.
+ */
+function callMayTrackReads(call: ts.CallExpression, follow: CallFollow): boolean {
+  const callee = unwrapTransparentExpression(call.expression);
+  if (ts.isArrowFunction(callee) || ts.isFunctionExpression(callee)) {
+    return false;
+  }
+  const root = ts.isIdentifier(callee) ? callee : rootIdentifier(callee);
+  if (root === null) {
+    return !ts.isPropertyAccessExpression(callee);
+  }
+  return calleeMayTrackReads(callee, root, follow);
+}
+
+function calleeMayTrackReads(
+  callee: ts.Expression,
+  root: ts.Identifier,
+  follow: CallFollow,
+): boolean {
+  if (HOOK_NAME.test(root.text)) {
+    return true;
+  }
+  if (ts.isPropertyAccessExpression(callee) && isObservableReceiver(callee, root, follow)) {
+    return isObservableIteration(callee);
+  }
+  if (ts.isPropertyAccessExpression(callee) && hasSynchronousArrayReceiver(callee.expression)) {
+    return false;
+  }
+  const target = calledCode(root, callee, follow.resolver);
+  if (target.kind === "function") {
+    return root !== callee || functionMayTrackReads(target.declaration, follow);
+  }
+  return target.kind === "unknown";
+}
+
+function isObservableReceiver(
+  callee: ts.PropertyAccessExpression,
+  root: ts.Identifier,
+  follow: CallFollow,
+): boolean {
+  const path = staticPropertyPath(callee.expression);
+  return (
+    follow.isObservableRoot(root) ||
+    (path !== null && follow.resolver.isObservablePath(root.getSourceFile(), path))
+  );
+}
+
+/** What calling a name runs; a React hook handle, like a global, runs no application code. */
+function calledCode(
+  root: ts.Identifier,
+  callee: ts.Expression,
+  resolver: ReachResolver,
+): ImportedCallee {
+  const binding = lexicalBinding(root);
+  if (binding?.kind === "import") {
+    return resolver.importedCallee(root.getSourceFile(), binding);
+  }
+  if (binding?.kind === "function") {
+    return binding;
+  }
+  if (binding?.kind !== "value" || isHookHandle(binding.declaration)) {
+    return { kind: "external" };
+  }
+  return root === callee || mayHoldApplicationMethods(binding.declaration, resolver)
+    ? { kind: "unknown" }
+    : { kind: "external" };
+}
+
+/** Parameters, reassignable bindings and application-built objects may carry application methods. */
+function mayHoldApplicationMethods(declaration: ts.Node, resolver: ReachResolver): boolean {
+  if (!ts.isVariableDeclaration(declaration) || !(declaration.parent.flags & ts.NodeFlags.Const)) {
+    return true;
+  }
+  const value = declaration.initializer && unwrapTransparentExpression(declaration.initializer);
+  if (value && ts.isObjectLiteralExpression(value)) {
+    return value.properties.some(
+      (property) =>
+        !ts.isPropertyAssignment(property) || isRuntimeFunctionLike(property.initializer),
+    );
+  }
+  if (!value || !ts.isCallExpression(value)) {
+    return value !== undefined && ts.isNewExpression(value);
+  }
+  const factory = unwrapTransparentExpression(value.expression);
+  return ts.isIdentifier(factory) && calledCode(factory, factory, resolver).kind !== "external";
+}
+
+/** A Legend collection method reads every element it visits, as a `.get()` would. */
+function isObservableIteration(callee: ts.Expression): boolean {
+  return (
+    ts.isPropertyAccessExpression(callee) &&
+    callee.name.text !== "set" &&
+    SYNCHRONOUS_CALLBACK_METHODS.has(callee.name.text)
+  );
+}
+
+function functionMayTrackReads(declaration: RuntimeFunctionLike, follow: CallFollow): boolean {
+  if (follow.seen.has(declaration)) {
+    return false;
+  }
+  follow.seen.add(declaration);
+  let tracks = false;
+  visit(declaration, (node) => {
+    tracks ||=
+      ts.isCallExpression(node) &&
+      !followsUnconditionalAwait(declaration, node) &&
+      (isGetCall(node) || callMayTrackReads(node, follow));
+  });
+  return tracks;
+}
+
+function isGetCall(call: ts.CallExpression): boolean {
+  return (
+    call.arguments.length === 0 &&
+    ts.isPropertyAccessExpression(call.expression) &&
+    call.expression.name.text === "get"
+  );
+}
+
+function isHookHandle(declaration: ts.Node): boolean {
+  const variable = ts.isVariableDeclaration(declaration)
+    ? declaration
+    : findAncestor(declaration, ts.isVariableDeclaration);
+  const initializer = variable?.initializer && unwrapTransparentExpression(variable.initializer);
+  return (
+    initializer !== undefined &&
+    ts.isCallExpression(initializer) &&
+    HOOK_HANDLES.has(hookCallName(initializer) ?? "")
+  );
 }
 
 function getVerdict(

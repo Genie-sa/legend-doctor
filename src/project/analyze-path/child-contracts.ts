@@ -22,6 +22,7 @@ import {
   propObjectCallbackIsDeferred,
 } from "../../rules/child-contract/child-contract.js";
 import type { AnalysisContext } from "./analysis-context.js";
+import type { ReachResolver } from "../source-components/synchronous-reach.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceIndex } from "../source-components/source-components.js";
 import { cached } from "./contract-cache.js";
@@ -77,6 +78,8 @@ class ChildContracts implements ChildContractResolver {
     resolveHook: (file, name) => this.hookComponentSource(file, name),
     sourceFile: (file) => this.context.project.getFile(file)?.sourceFile ?? null,
   };
+
+  public readonly reachResolver = (): ReachResolver => this.context.sourceIndex.reachResolver;
 
   public constructor(context: AnalysisContext, importerFile: string) {
     this.context = context;

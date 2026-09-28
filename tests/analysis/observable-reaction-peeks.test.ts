@@ -1,63 +1,13 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import type { HookFinding } from "../../src/core/types.js";
-import { analyzePath } from "../../src/project/analyze-path/analyze-path.js";
-import { analyzeSource } from "../../src/analysis/analyze-source.js";
+import {
+  converted,
+  manager,
+  projectVerdict,
+  sourceVerdict,
+  untrackable,
+} from "./observable-reaction-fixtures.js";
+import type { ReactionVerdict } from "./observable-reaction-fixtures.js";
 import assert from "node:assert/strict";
-import os from "node:os";
-import path from "node:path";
-import { requireValue } from "./harness.js";
 import test from "node:test";
-
-interface ReactionVerdict {
-  readonly action: HookFinding["action"];
-  readonly peeks: readonly string[];
-  readonly reason: HookFinding["abstentionReason"] | null;
-}
-
-function manager(body: string, extraHooks = ""): string {
-  return `
-    import { observable } from "@legendapp/state";
-    import { useObservable, useValue } from "@legendapp/state/react";
-    import { useEffect } from "react";
-    const window$ = observable({ isOpen: false, size: { width: 1 } });
-    const player$ = observable({ isPlaying: false, autoClose: true });
-    export function Manager({ store }: { store: { get: () => boolean } }) {
-      const isPlaying = useValue(player$.isPlaying);
-      const autoClose = useValue(player$.autoClose);
-      ${extraHooks}
-      useEffect(() => {
-        ${body}
-      }, [autoClose, isPlaying]);
-      return null;
-    }
-  `;
-}
-
-function reactionVerdict(finding: HookFinding): ReactionVerdict {
-  const peeks = [...finding.message.matchAll(/`(?<read>[^`]+)` with `[^`]+\.peek\([^`]*\)`/gu)].map(
-    (match) => match.groups!.read!,
-  );
-  return { action: finding.action, peeks, reason: finding.abstentionReason ?? null };
-}
-
-function sourceVerdict(source: string): ReactionVerdict {
-  const effect = requireValue(
-    analyzeSource(source, "fixture.tsx").find((finding) => finding.hook === "useEffect"),
-  );
-  return reactionVerdict(effect);
-}
-
-const converted = (...peeks: string[]): ReactionVerdict => ({
-  action: "use-observe-effect",
-  peeks,
-  reason: null,
-});
-
-const untrackable: ReactionVerdict = {
-  action: "review-effect",
-  peeks: [],
-  reason: "callback-timing-unresolved",
-};
 
 const cases: readonly (readonly [string, string, ReactionVerdict])[] = [
   [
@@ -127,23 +77,15 @@ test("observable reaction reads: peeks a stable useObservable handle listed as a
 });
 
 test("observable reaction reads: resolves an observable imported from another module", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-reaction-peeks-"));
-  try {
-    await writeFile(
-      path.join(root, "state.ts"),
+  const verdict = await projectVerdict({
+    "Manager.tsx": manager(
+      "if (!isPlaying && autoClose && visualizer$.isOpen.get()) close();",
+    ).replace(
+      'import { useEffect, useState } from "react";',
+      'import { useEffect, useState } from "react";\nimport { visualizer$ } from "./state";',
+    ),
+    "state.ts":
       'import { observable } from "@legendapp/state";\nexport const visualizer$ = observable({ isOpen: false });\n',
-    );
-    await writeFile(
-      path.join(root, "Manager.tsx"),
-      manager("if (!isPlaying && autoClose && visualizer$.isOpen.get()) close();").replace(
-        'import { useEffect } from "react";',
-        'import { useEffect } from "react";\nimport { visualizer$ } from "./state";',
-      ),
-    );
-    const report = await analyzePath(root);
-    const effect = requireValue(report.findings.find((finding) => finding.hook === "useEffect"));
-    assert.deepEqual(reactionVerdict(effect), converted("visualizer$.isOpen.get()"));
-  } finally {
-    await rm(root, { force: true, recursive: true });
-  }
+  });
+  assert.deepEqual(verdict, converted("visualizer$.isOpen.get()"));
 });
