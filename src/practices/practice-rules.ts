@@ -4,6 +4,7 @@ import type { LegendPracticeFinding } from "../core/types.js";
 import type { LegendPracticesRequest } from "./model.js";
 import { collectTransactionFindings } from "./transaction-runs.js";
 import { findDerivedUseValuePractices } from "../rules/derived-use-value/derived-use-value.js";
+import { findInPlaceMemoKeyPractices } from "../rules/in-place-memo-keys/in-place-memo-keys.js";
 import { findLegacyUseValuePractices } from "../rules/legacy-use-value.js";
 import { findObservableCloneWritePractices } from "../rules/observable-clone-writes/observable-clone-writes.js";
 import { findObservableOwnershipPractices } from "../rules/observable-ownership/observable-ownership.js";
@@ -15,6 +16,7 @@ import { findPlainPrimitiveProjections } from "../rules/plain-primitive-projecti
 export type PracticeRuleId =
   | "plain-primitive-projection"
   | "derived-use-value"
+  | "in-place-memo-keys"
   | "legacy-use-value"
   | "observable-clone-writes"
   | "observable-ownership"
@@ -176,6 +178,19 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
       findDerivedUseValuePractices({
         fileName: request.fileName,
         imports,
+        observableBindings,
+        sourceFile: request.sourceFile,
+      }),
+  },
+  {
+    id: "in-place-memo-keys",
+    needsObservableBindings: true,
+    run: ({ imports, observableBindings, request }) =>
+      findInPlaceMemoKeyPractices({
+        arrayPaths: request.importedObservableArrayPaths,
+        fileName: request.fileName,
+        imports,
+        inPlaceWrites: request.observableInPlaceWrites,
         observableBindings,
         sourceFile: request.sourceFile,
       }),

@@ -490,7 +490,7 @@ Render reads and reactive callbacks keep tracking reads.
 ## Track every render read
 
 Legend tracks a `get()` only inside a tracking context: `useValue`, `observer`, a reactive component's selector, or
-`observe`/`when`. These findings catch reads that fall outside one.
+`observe`/`when`. These findings catch reads that fall outside one, or whose change a memo hides.
 
 ### Subscribe to a render read
 
@@ -560,6 +560,30 @@ work. Every observable read must remain represented, including reads in otherwis
 ref-backed render snapshots. Omitted effects, duplicate properties, mutable declarations, results used whole, block
 bodies, async selectors, prototype-setting properties, reordered reads, spreads, defaults, rest elements, computed
 members, and calls stay as they are.
+
+### Select a copy when a memo keys on a mutated value
+
+`snapshot-mutated-use-value` changes a `useValue` whose raw result keys a `useMemo` while another write mutates that
+value in place.
+
+```tsx
+// Elsewhere: library$.folders.push(folder), library$.folders[i].name.set(name), or counts$.assign({ b: 2 })
+
+const folders = useValue(library$.folders); // Before
+const folders = useValue(() => [...library$.folders.get()]); // After
+const visible = useMemo(() => folders.filter((folder) => !folder.deleted), [folders]); // Unchanged
+```
+
+Legend applies child writes, array mutators, `assign`, and `delete` to the object it already holds, so `useValue`
+rerenders the component with the same reference and the memo returns its previous result. A copy selected inside
+`useValue` gets a new reference on every tracked change. If the derivation is cheap, computing it without `useMemo`
+is equally correct.
+
+The finding names each in-place write and fires only when the memo reads what the write changes: a membership write
+against any element read, a field write against a read of that field. It is a `change` when every other dependency
+keeps its identity across renders (module constants, refs, state setters, owned observables) and a `candidate` when
+another dependency could change in the same update and recompute the memo. Writes that replace the value with
+`set(next)`, writes to unread fields, `get(true)` reads, and bindings that are reassigned stay silent.
 
 ## Keep effect timing correct
 
