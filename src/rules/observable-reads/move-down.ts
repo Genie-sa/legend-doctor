@@ -198,10 +198,21 @@ export function hasAncestorUseValueSubscription(
     scan.observableBindings,
   );
   const currentPath = currentObservable && staticPropertyPath(currentObservable);
-  if (!owner.body || !currentPath) {
+  return (
+    !currentPath || otherSubscriptionTracksAncestor({ call: currentCall, owner }, currentPath, scan)
+  );
+}
+
+/** Another `useValue` in the owner tracks this path or an ancestor, so the owner rerenders anyway. */
+export function otherSubscriptionTracksAncestor(
+  current: Pick<UseValueDeclaration, "call" | "owner">,
+  currentPath: readonly string[],
+  scan: ObservableReadScan,
+): boolean {
+  const { call: currentCall, owner } = current;
+  if (!owner.body) {
     return true;
   }
-
   let overlap = false;
   visit(owner.body, (node) => {
     if (

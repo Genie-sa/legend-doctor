@@ -26,6 +26,8 @@ export interface SubscriptionInventory {
   owner: string;
   binding: string | null;
   observable: string | null;
+  /** Present for a `useValue(() => …)` binding whose every tracked read is a proven `path$.get()`. */
+  selector?: { tracks: string[]; result: "boolean" | "primitive" | "unknown" };
   status: "planned" | "other-action" | "unresolved";
   reasons: string[];
   reads: {
