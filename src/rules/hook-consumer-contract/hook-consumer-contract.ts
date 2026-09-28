@@ -192,7 +192,8 @@ export function hookPresentationConsumerResult({
     : "unsafe";
 }
 
-function hookBindingReferences(
+/** Every call of a hook binding in a file; any other value reference makes the file unsafe. */
+export function hookBindingReferences(
   sourceFile: ts.SourceFile,
   hookBinding: string,
 ): readonly ts.CallExpression[] | "unsafe" {

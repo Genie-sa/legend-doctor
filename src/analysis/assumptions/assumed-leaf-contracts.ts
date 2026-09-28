@@ -3,6 +3,7 @@ import type {
   ChildContractResolver,
   ContextConsumerSource,
   HookPresentationConsumer,
+  HookReturnMember,
   HookReturnMembers,
   ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
@@ -67,6 +68,10 @@ export class AssumedLeafContracts implements ChildContractResolver {
 
   public hookStateHasSingleLeafConsumer(hookName: string, members: HookReturnMembers): boolean {
     return this.#base.hookStateHasSingleLeafConsumer(hookName, members);
+  }
+
+  public hookStateUnreadMemberCalls(hookName: string, member: HookReturnMember): number | null {
+    return this.#base.hookStateUnreadMemberCalls(hookName, member);
   }
 
   public hookStatePresentationConsumer(

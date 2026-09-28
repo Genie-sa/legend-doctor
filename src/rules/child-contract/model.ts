@@ -78,6 +78,8 @@ export interface ChildContractResolver {
     setterProperty: string,
   ) => boolean;
   hookStateHasSingleLeafConsumer: (hookName: string, members: HookReturnMembers) => boolean;
+  /** Production call sites of a closed-world hook when none reads this returned member, else null. */
+  hookStateUnreadMemberCalls: (hookName: string, member: HookReturnMember) => number | null;
   hookStatePresentationConsumer: (
     hookName: string,
     members: HookReturnMembers,

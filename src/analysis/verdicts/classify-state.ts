@@ -53,6 +53,7 @@ import {
 } from "./small-owner-verdicts.js";
 import { stateCommandSnapshotEvidence, stateRenderCutEvidence } from "./classification-context.js";
 import type { ClassifiedState } from "../model.js";
+import { hookUnreadMemberVerdict } from "./hook-member-verdicts.js";
 import { ownerHasMutableRenderRead } from "../../rules/state-proofs/render-purpose.js";
 import { siteSubscriptionVerdict } from "./site-subscription-verdict.js";
 
@@ -64,6 +65,7 @@ const STATE_VERDICTS: readonly StateVerdict[] = [
   keyedCursorVerdict,
   boundaryMoveVerdict,
   unusedStateVerdict,
+  hookUnreadMemberVerdict,
   lazyCallbackLeafVerdict,
   asyncStatusVerdict,
   pairedAsyncStatusVerdict,

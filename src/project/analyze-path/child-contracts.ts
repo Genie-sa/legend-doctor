@@ -4,6 +4,7 @@ import type {
   ChildContractResolver,
   ContextConsumerSource,
   HookPresentationConsumer,
+  HookReturnMember,
   HookReturnMembers,
   ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
@@ -12,7 +13,11 @@ import type {
   SourceHookResolver,
 } from "../../rules/source-callback-contract/model.js";
 import { findComponentDeclaration, findHookDeclaration } from "./source-declarations.js";
-import { findHookPresentationConsumer, hasSingleLeafConsumer } from "./hook-consumers.js";
+import {
+  findHookPresentationConsumer,
+  hasSingleLeafConsumer,
+  unreadHookMemberCalls,
+} from "./hook-consumers.js";
 import {
   propCallbackIsDeferred,
   propCallbackRunsOnlyInReactEffect,
@@ -53,6 +58,7 @@ class ChildContracts implements ChildContractResolver {
   private readonly hookDeclarations = new Map<string, SourceHookDeclaration | null>();
   private readonly keyedCursorContracts = new Map<string, boolean>();
   private readonly leafConsumerContracts = new Map<string, boolean>();
+  private readonly unreadMemberContracts = new Map<string, number | null>();
   private readonly presentationConsumerContracts = new Map<
     string,
     HookPresentationConsumer | null
@@ -278,6 +284,21 @@ class ChildContracts implements ChildContractResolver {
         members,
       }),
     );
+  }
+
+  public hookStateUnreadMemberCalls(hookName: string, member: HookReturnMember): number | null {
+    const key = `${hookName}\0${JSON.stringify(member)}`;
+    if (this.unreadMemberContracts.has(key)) {
+      return this.unreadMemberContracts.get(key) ?? null;
+    }
+    const calls = unreadHookMemberCalls({
+      context: this.context,
+      hookName,
+      importerFile: this.importerFile,
+      member,
+    });
+    this.unreadMemberContracts.set(key, calls);
+    return calls;
   }
 
   public hookStatePresentationConsumer(
