@@ -27,18 +27,17 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend reads
 
-| Action                                                                                   | Removes                                                                        |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)               | Updates from unread sibling fields                                             |
-| [`peek-unrendered-use-value`](EXAMPLES.md#drop-a-subscription-no-render-reads)           | Renders for a value that only initializers or event commands read              |
-| [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                           | One broad subscription across unrelated leaves                                 |
-| [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                              | An observable update rendering a broad parent                                  |
-| [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                        | A parent render used only to pass one value                                    |
-| [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)      | Missing tracking or redundant hooks for eager reads; selector syntax is style  |
-| [`select-primitive-projection`](docs/plain-primitive-projection.md)                      | Renders for raw value changes that leave a row's equality comparison unchanged |
-| [`derive-computed-observable`](EXAMPLES.md#compute-a-derived-primitive-as-an-observable) | Renders for input changes that leave a memo unchanged                          |
-| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)          | Deprecated `useSelector` or `use$` usage                                       |
-| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                       | An `observer` render dependency from a `useState` initializer; elsewhere style |
+| Action                                                                              | Removes                                                                        |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)          | Updates from unread sibling fields                                             |
+| [`peek-unrendered-use-value`](EXAMPLES.md#drop-a-subscription-no-render-reads)      | Renders for a value that only initializers or event commands read              |
+| [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                      | One broad subscription across unrelated leaves                                 |
+| [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                         | An observable update rendering a broad parent                                  |
+| [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                   | A parent render used only to pass one value                                    |
+| [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names) | Missing tracking or redundant hooks for eager reads; selector syntax is style  |
+| [`select-primitive-projection`](docs/plain-primitive-projection.md)                 | Renders for raw value changes that leave a row's equality comparison unchanged |
+| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)     | Deprecated `useSelector` or `use$` usage                                       |
+| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                  | An `observer` render dependency from a `useState` initializer; elsewhere style |
 
 ### Legend tracking
 

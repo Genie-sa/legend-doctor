@@ -49,7 +49,7 @@ function evaluation(root: string, practices: LegendPracticeFinding[]): Evaluatio
             findings: [],
             hooks: { effects: 0, states: 0, total: 0 },
             practices,
-            schemaVersion: 5,
+            schemaVersion: 6,
           },
         },
       ],

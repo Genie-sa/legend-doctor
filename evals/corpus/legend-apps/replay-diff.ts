@@ -604,15 +604,6 @@ const diffSearchCompareOwnership = {
       source: "useState(0)",
     },
     {
-      action: "derive-computed-observable",
-      expected: "non-enforced",
-      file: "DiffViewerWindow.tsx",
-      line: 3160,
-      rationale:
-        "The memo reads searchQuery, React state, and the whole viewer state; a computed observable saves owner renders only once the query and every result consumer leave the owner.",
-      source: "useMemo(",
-    },
-    {
       expected: "excluded",
       file: "DiffViewerWindow.tsx",
       line: 3185,

@@ -2,7 +2,7 @@
 
 Field-level detail for the JSON report. Read [README.md](README.md) first.
 
-Version-gate consumers with `schemaVersion`, currently `5`.
+Version-gate consumers with `schemaVersion`, currently `6`.
 
 Grouped state findings may also include additive `transitions` evidence. `writes` lists direct
 setter calls with state names, line/column positions, handler identities, and enclosing control
@@ -17,6 +17,9 @@ exception/suspension boundaries; it does not authorize moving those expressions 
 literal. Group reviews name unresolved pairs by exact source location. These are bounded source
 facts, not a complete migration plan or new permission to convert a review finding. Transported
 setters still depend on the existing child-contract proofs and are not listed as direct writes.
+
+Schema 6 retires the `derive-computed-observable` practice action, which no pinned application, private slice,
+expert replay, or audited scan proposed as a change. No field changes.
 
 Schema 5 retires four practice actions that no pinned application, expert replay, or audited scan produced:
 `pass-observable-to-reactive-input`, `snapshot-computed-initializer`, `split-use-value-result`, and

@@ -23,11 +23,6 @@ function majorVersion(version: string): number {
   return Number(MAJOR_VERSION.exec(version)?.groups?.["major"] ?? Number.NaN);
 }
 
-/** Whether the resolved version is a Legend State 3 release; false when no version is known. */
-export function isLegendStateV3(legendState: InstalledLegendState | null): boolean {
-  return legendState !== null && majorVersion(legendState.version) >= FIRST_V3_MAJOR;
-}
-
 function publishedExports(
   version: string,
 ): Pick<InstalledLegendState, "syncExport" | "useValueExport"> {

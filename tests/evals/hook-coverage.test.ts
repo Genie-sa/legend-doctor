@@ -41,7 +41,7 @@ function evaluation(findings: HookFinding[]): Evaluation {
               legendState: null,
               reactCompiler: false,
             },
-            schemaVersion: 5,
+            schemaVersion: 6,
           },
         },
       ],

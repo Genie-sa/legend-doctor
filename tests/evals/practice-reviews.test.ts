@@ -17,7 +17,7 @@ function evaluation(practices: LegendPracticeFinding[]): Evaluation {
           repository: "repo",
           root: "/repo/feature",
           report: {
-            schemaVersion: 5,
+            schemaVersion: 6,
             files: 1,
             hooks: { total: 0, states: 0, effects: 0 },
             findings: [],
