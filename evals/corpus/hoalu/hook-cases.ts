@@ -3,12 +3,13 @@ import type { GoldHookCase } from "../contracts.js";
 export const hoaluHookCases = [
   {
     action: "use-observable",
+    enforced: false,
     file: "hooks/use-screenshot.ts",
     hook: "useState",
     line: 11,
     name: "status",
     rationale:
-      "The screenshot hook owns every async status write but never reads the value; publishing a hook-lifetime observable lets the sole broad chart consumer subscribe only around its screenshot button.",
+      "The screenshot hook owns every async status write but never reads the value; publishing a hook-lifetime observable would let the sole broad chart consumer subscribe only inside its screenshot button, but that Button hands its children to the third-party base-ui useRender, which no indexed source proves never inspects them.",
     target: "hoalu-app",
   },
   {
