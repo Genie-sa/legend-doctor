@@ -2,7 +2,7 @@
 
 Field-level detail for the JSON report. Read [README.md](README.md) first.
 
-Version-gate consumers with `schemaVersion`, currently `4`.
+Version-gate consumers with `schemaVersion`, currently `5`.
 
 Grouped state findings may also include additive `transitions` evidence. `writes` lists direct
 setter calls with state names, line/column positions, handler identities, and enclosing control
@@ -17,6 +17,10 @@ exception/suspension boundaries; it does not authorize moving those expressions 
 literal. Group reviews name unresolved pairs by exact source location. These are bounded source
 facts, not a complete migration plan or new permission to convert a review finding. Transported
 setters still depend on the existing child-contract proofs and are not listed as direct writes.
+
+Schema 5 retires four practice actions that no pinned application, expert replay, or audited scan produced:
+`pass-observable-to-reactive-input`, `snapshot-computed-initializer`, `split-use-value-result`, and
+`review-helper-tracking`. No field changes.
 
 Schema 4 removes the unused `diagnostics.semantic` field. Coverage schema 2 reports only `parser`, `lowering`,
 and `detector`: no detector consumed the former semantic stage. The experimental `createSemanticContext`,
@@ -450,22 +454,3 @@ may still work without implementation source. Detector stage `analyzed` describe
 complete imported semantics. Empty `unavailable` does not prove export compatibility or successful
 symbol proofs. Type-only, side-effect-only, dynamic imports and CommonJS require edges are outside
 this static symbol-edge inventory. Ordinary reports and action scoring are unchanged.
-
-## Helper tracking reviews
-
-`review-helper-tracking` practices have `disposition: candidate`. They identify a direct local helper
-called from an imported `useValue`, `useObserve`, `useObserveEffect`, or `observe` selector. The
-selector must have independent direct reads. A direct parent read already covers a helper's child
-read; a helper's broader parent read can introduce sibling dependencies beyond a direct child read.
-Evidence lists helper reads, writes, and synchronous `batch` boundaries.
-Additional dependencies can repeat selector work; the review does not establish React render savings,
-a measured execution count, or permission to replace shared helper reads with `peek`.
-
-This first phase abstains on imported helpers, call chains, recursion, mutable or shadowed dispatch,
-async/generator functions, parameter defaults, conditional or abrupt control flow, unproven helper
-initialization, and unresolved calls. Nested
-callback bodies do not inherit tracking merely by lexical containment. Separate reaction arguments
-remain separate. These limits can miss opportunities; absence of a review is not proof of no tracking.
-
-Use `--disposition candidate` to inspect these reviews. `--actionable` hides them and counts them under
-`hidden.practices`. They are listed separately from optimization precision in corpus output.

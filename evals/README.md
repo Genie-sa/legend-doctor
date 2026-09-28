@@ -186,5 +186,5 @@ proof. Report action deltas for every application after each detector phase, inc
 Candidate Legend practices are source reviews rather than optimization predictions. The runner lists
 every candidate location separately, excludes candidates from practice precision, and does not let a
 candidate satisfy an enforced optimization label. Unlabeled `change` and `style` practices still fail.
-`evals/research/helper-tracking.json` contains manually audited, pinned, non-enforced research labels;
-these are not loaded into scored corpus totals and do not claim imported-helper support.
+`evals/research/helper-tracking.json` keeps the manually audited, pinned, non-enforced research labels of the
+retired `review-helper-tracking` review; they are not loaded into scored corpus totals.

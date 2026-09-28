@@ -85,7 +85,7 @@ function report(findings: HookFinding[], practices: LegendPracticeFinding[] = []
     findings,
     hooks: { effects: findings.length, states: 0, total: findings.length },
     practices,
-    schemaVersion: 4,
+    schemaVersion: 5,
     subscriptionAnalysis: {
       coverage: { otherAction: 0, planned: 0, total: 1, unresolved: 1 },
       inventory: [

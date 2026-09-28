@@ -14,8 +14,8 @@ import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { RenderOwner } from "./render-owners.js";
 import type { TrackingScan } from "./model.js";
-import { eagerReactiveInput } from "./reactive-inputs.js";
 import { hasCoveringSubscription } from "./subscription-coverage.js";
+import { isReactiveInputArgument } from "./reactive-inputs.js";
 import { renderOwnerOf } from "./render-owners.js";
 import { subscriptionHookCallee } from "../../core/use-value-import.js";
 import ts from "typescript";
@@ -31,9 +31,9 @@ interface RenderRead {
 /**
  * A `get()` on a proven observable path that executes during a component's or custom hook's
  * render without any tracking context. Nothing subscribes, so the value is read once per render
- * and the owner never re-renders when it changes. Reads that another rule owns (eager reactive
- * inputs, `useValue` arguments), reads handed to hooks as snapshots, `key` attributes, observer
- * components, and paths already covered by a `useValue` in the same owner are left alone.
+ * and the owner never re-renders when it changes. Reads handed to Legend reactive inputs, which
+ * track on their own, `useValue` arguments, reads handed to hooks as snapshots, `key` attributes,
+ * observer components, and paths already covered by a `useValue` in the same owner are left alone.
  */
 export function renderReadFinding(
   call: ts.CallExpression,
@@ -50,7 +50,7 @@ function untrackedRenderRead(call: ts.CallExpression, scan: TrackingScan): Rende
   if (
     !observable ||
     !path ||
-    eagerReactiveInput(call, scan) ||
+    isReactiveInputArgument(call, scan) ||
     isSnapshotPosition(call, scan.imports)
   ) {
     return null;
