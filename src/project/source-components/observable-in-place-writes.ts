@@ -1,9 +1,9 @@
-import type { ProgramReach, WriteUnit } from "./write-units.js";
 import type { ResolvedSymbol, SourceIndexState } from "./model.js";
 import { isDeclarationName, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import { localReachResolver, projectReachResolver } from "./reach-resolvers.js";
 import type { ExecutionUnit } from "../../core/execution-units.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "../../rules/observable-reads/observable-paths.js";
+import type { WriteUnit } from "./write-units.js";
 import { executionUnit } from "../../core/execution-units.js";
 import { fileReach } from "./synchronous-reach.js";
 import { moduleRecord } from "./module-record.js";
@@ -63,11 +63,6 @@ const CHILD_WRITES = new Set(["delete", "set", "toggle"]);
 const CHILD_PROXY_FINDERS = new Set(["find", "findLast"]);
 
 const writesBySymbolByIndex = new WeakMap<SourceIndexState, ReadonlyMap<string, RootedWrite[]>>();
-const visibleObservablesByIndex = new WeakMap<
-  SourceIndexState,
-  Map<string, ReadonlyMap<string, ResolvedSymbol>>
->();
-const declarationCountsByFile = new WeakMap<ts.SourceFile, ReadonlyMap<string, number>>();
 
 export function observableInPlaceWritesFor(
   state: SourceIndexState,
@@ -119,42 +114,10 @@ function visibleObservables(
   state: SourceIndexState,
   file: string,
 ): ReadonlyMap<string, ResolvedSymbol> {
-  const byFile =
-    visibleObservablesByIndex.get(state) ?? new Map<string, ReadonlyMap<string, ResolvedSymbol>>();
-  visibleObservablesByIndex.set(state, byFile);
-  const cached = byFile.get(file);
-  if (cached) {
-    return cached;
-  }
-  const visible = collectVisibleObservables(state, file);
-  byFile.set(file, visible);
-  return visible;
-}
-
-function collectVisibleObservables(
-  state: SourceIndexState,
-  file: string,
-): ReadonlyMap<string, ResolvedSymbol> {
-  const imported = resolvedFor(state, file, "observable");
-  const declared = state.records.get(file)?.observableDeclarations;
+  const visible = new Map(resolvedFor(state, file, "observable"));
   const sourceFile = state.sourceFiles.get(file);
-  return declared?.size && sourceFile
-    ? withSolelyDeclared(imported, { declared, file, sourceFile })
-    : imported;
-}
-
-/** Adds each observable the file declares under a name nothing else in the file declares. */
-function withSolelyDeclared(
-  imported: ReadonlyMap<string, ResolvedSymbol>,
-  {
-    declared,
-    file,
-    sourceFile,
-  }: { declared: ReadonlySet<string>; file: string; sourceFile: ts.SourceFile },
-): ReadonlyMap<string, ResolvedSymbol> {
-  const visible = new Map(imported);
-  const counts = declarationCounts(sourceFile);
-  for (const localName of declared) {
+  const counts = sourceFile ? declarationCounts(sourceFile) : new Map<string, number>();
+  for (const localName of state.records.get(file)?.observableDeclarations ?? []) {
     if (counts.get(localName) === 1) {
       visible.set(localName, { file, localName });
     }
@@ -172,31 +135,17 @@ function indexedWrites(state: SourceIndexState): ReadonlyMap<string, RootedWrite
   return index;
 }
 
-/** The project call graph is built only when some write reaches an observable and needs its units. */
 function projectWrites(state: SourceIndexState): ReadonlyMap<string, RootedWrite[]> {
-  const keyedWrites = [...state.sourceFiles].flatMap(([file, sourceFile]) =>
-    keyedFileWrites(state, file, sourceFile),
-  );
-  if (keyedWrites.length === 0) {
-    return new Map();
-  }
   const resolver = projectReachResolver(state, visibleObservables);
   const reach = programReach(
     [...state.sourceFiles.values()].map((sourceFile) => fileReach(sourceFile, resolver)),
   );
-  return groupWritesBySymbol(keyedWrites, reach);
-}
-
-function groupWritesBySymbol(
-  keyedWrites: readonly [string, CollectedWrite][],
-  reach: ProgramReach,
-): ReadonlyMap<string, RootedWrite[]> {
   const index = new Map<string, RootedWrite[]>();
-  for (const [key, { root, site, unit }] of keyedWrites) {
-    const write = { ...site, units: reach.writeUnits(unit) };
-    const writes = index.get(key) ?? [];
-    writes.push({ root, write });
-    index.set(key, writes);
+  for (const [file, sourceFile] of state.sourceFiles) {
+    for (const [key, { root, site, unit }] of keyedFileWrites(state, file, sourceFile)) {
+      const write = { ...site, units: reach.writeUnits(unit) };
+      index.set(key, [...(index.get(key) ?? []), { root, write }]);
+    }
   }
   return index;
 }
@@ -207,11 +156,11 @@ function keyedFileWrites(
   file: string,
   sourceFile: ts.SourceFile,
 ): [string, CollectedWrite][] {
-  const visible = visibleObservables(state, file);
-  const writes = visible.size > 0 ? collectInPlaceWrites(sourceFile) : [];
+  const writes = collectInPlaceWrites(sourceFile);
   if (writes.length === 0) {
     return [];
   }
+  const visible = visibleObservables(state, file);
   const counts = declarationCounts(sourceFile);
   return writes.flatMap((entry): [string, CollectedWrite][] => {
     const symbol = visible.get(entry.root);
@@ -226,17 +175,12 @@ function symbolKey(symbol: ResolvedSymbol): string {
 }
 
 function declarationCounts(sourceFile: ts.SourceFile): ReadonlyMap<string, number> {
-  const cached = declarationCountsByFile.get(sourceFile);
-  if (cached) {
-    return cached;
-  }
   const counts = new Map<string, number>();
   visit(sourceFile, (node) => {
     if (ts.isIdentifier(node) && isDeclarationName(node)) {
       counts.set(node.text, (counts.get(node.text) ?? 0) + 1);
     }
   });
-  declarationCountsByFile.set(sourceFile, counts);
   return counts;
 }
 
