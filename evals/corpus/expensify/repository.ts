@@ -11,6 +11,7 @@ export const expensifyRepository = {
       root: "src/hooks/useCompleteOnboarding.ts",
       states: 1,
     },
+    { effects: 3, id: "expensify-lazy-asset", root: "src/hooks/useLazyAsset.ts", states: 7 },
     { effects: 1, id: "expensify-address", root: "src/pages/AddressPage.tsx", states: 4 },
     {
       effects: 4,

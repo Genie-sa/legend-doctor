@@ -4,14 +4,30 @@ import type { HookAction } from "../../../src/core/types.js";
 export const expensifyHookCases = [
   {
     action: "use-observable",
+    enforced: false,
     file: "useCompleteOnboarding.ts",
     hook: "useState",
     line: 59,
     name: "isLoading",
     rationale:
-      "The hook publishes loading without reading it, and both indexed onboarding screens render it only at one stable submit-button site; each screen can subscribe there while the async command stays hook-owned.",
+      "The hook publishes loading without reading it, and both indexed onboarding screens render it only at one stable submit-button site; each screen can subscribe there while the async command stays hook-owned. tests/ui/OnboardingAccountingAndInterestedFeatures.tsx, outside the context root, mocks the hook with a plain `isLoading: false`, so publishing an observable also changes that test's contract.",
     target: "expensify-complete-onboarding",
   },
+  ...(
+    [
+      [59, "isLoading"],
+      [60, "hasError"],
+    ] as const
+  ).map(([line, name]) => ({
+    action: "review-state" as const,
+    file: "useLazyAsset.ts",
+    hook: "useState" as const,
+    line,
+    name,
+    rationale:
+      "tests/unit/hooks/useLazyAsset.test.ts, outside the context root, asserts the returned member, so neither deleting the state nor publishing an observable in its place preserves the hook's tested contract.",
+    target: "expensify-lazy-asset",
+  })),
   {
     action: "use-observable",
     file: "ImportSpreadsheet.tsx",
