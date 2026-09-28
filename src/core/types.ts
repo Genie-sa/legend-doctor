@@ -139,6 +139,7 @@ const LEGEND_PRACTICE_ACTIONS = [
   "replace-legacy-use-value",
   "reuse-observable-reference",
   "snapshot-computed-initializer",
+  "snapshot-mutated-use-value",
   "split-use-value-leaves",
   "split-use-value-result",
   "toggle-observable",

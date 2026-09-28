@@ -33,6 +33,7 @@ import { disabledPracticeRules } from "../../practices/practice-rules.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
 import path from "node:path";
 import { rankedQuestions } from "../../analysis/assumptions/ranked-questions.js";
+import { relativeInPlaceWrites } from "../source-components/observable-in-place-writes.js";
 import { reportConfirmations } from "../../analysis/assumptions/report-confirmations.js";
 
 interface AnalysisFileEntry {
@@ -273,6 +274,10 @@ function legendPracticeFindings(
     importedObservablePrimitivePaths: sourceIndex.observablePrimitivePathsFor(entry.file),
     importedObservablePlainSeedPaths: sourceIndex.observablePlainSeedPathsFor(entry.file),
     importedObservableKeys: sourceIndex.observableKeysFor(entry.file),
+    observableInPlaceWrites: relativeInPlaceWrites(
+      sourceIndex.observableInPlaceWritesFor(entry.file),
+      pass.analysisRoot,
+    ),
     childContracts,
   });
 }

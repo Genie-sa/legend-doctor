@@ -8,11 +8,13 @@ import type { InstalledLegendState } from "../project/legend-state-package.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import type { LegendPracticesRequest } from "./model.js";
 import { NO_CAPABILITIES } from "../project/capabilities.js";
+import type { ObservableInPlaceWrites } from "../project/source-components/observable-in-place-writes.js";
 import type { SubscriptionInventory } from "../core/subscriptions.js";
 import { collectHookImports } from "../core/imports.js";
 import { enabledPracticeRules } from "./practice-rules.js";
 import { hasSoleSourceBinding } from "../rules/observable-reads/independent-subscription-bindings.js";
 import { isObservableFactoryCall } from "./observable-paths.js";
+import { localObservableInPlaceWrites } from "../project/source-components/observable-in-place-writes.js";
 import { observableInitialValue } from "../core/observable-initial-value.js";
 import { resolveObservableBindings } from "./observable-bindings.js";
 import ts from "typescript";
@@ -52,6 +54,7 @@ export function analyzeLegendPractices({
     importedObservableFactories,
     importedObservableKeys,
     importedObservables,
+    observableInPlaceWrites: localObservableInPlaceWrites(sourceFile),
     sourceFile,
   });
 }
@@ -68,6 +71,7 @@ export interface LegendPracticesFileRequest {
   readonly importedObservableKeys?: ReadonlyMap<string, ReadonlySet<string>>;
   readonly importedObservables?: ReadonlySet<string>;
   readonly includeFindings?: boolean;
+  readonly observableInPlaceWrites?: ObservableInPlaceWrites;
   readonly reportFileName: string;
 }
 
@@ -83,6 +87,7 @@ export function analyzeLegendPracticesFile({
   importedObservableKeys = new Map(),
   importedObservables = new Set(),
   includeFindings = true,
+  observableInPlaceWrites = new Map(),
   reportFileName,
 }: LegendPracticesFileRequest): LegendPracticeFinding[] {
   const findings = analyzeParsedLegendPractices({
@@ -96,6 +101,7 @@ export function analyzeLegendPracticesFile({
     importedObservableFactories,
     importedObservableKeys,
     importedObservables,
+    observableInPlaceWrites,
     sourceFile: file.sourceFile,
   });
   return includeFindings ? findings : [];

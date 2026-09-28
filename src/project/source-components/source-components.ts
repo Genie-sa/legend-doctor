@@ -21,11 +21,13 @@ import {
   observablePrimitivePathsFor,
 } from "./observable-primitive-paths.js";
 import type { AnalysisFile } from "../analysis-project.js";
+import type { ObservableInPlaceWrites } from "./observable-in-place-writes.js";
 import type { SourceContextCoverage } from "./source-context.js";
 import { callbackPackageVersion } from "./callback-package-version.js";
 import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js";
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
+import { observableInPlaceWritesFor } from "./observable-in-place-writes.js";
 import { observablePathsFor } from "./observable-containers.js";
 import { plainSeedPaths } from "../../rules/observable-reads/plain-seed-paths.js";
 import { sourceContextFor } from "./source-context.js";
@@ -54,6 +56,8 @@ export interface SourceIndex {
   /** Paths seeded with plain data, so subscribing to them never activates a lazy source. */
   observablePlainSeedPathsFor: (file: string) => ReadonlySet<string>;
   observableFactoriesFor: (file: string) => ReadonlySet<string>;
+  /** In-place writes from every indexed file to each observable the file can name. */
+  observableInPlaceWritesFor: (file: string) => ObservableInPlaceWrites;
   observableKeysFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observablePathsFor: (file: string) => ReadonlySet<string>;
   observablesFor: (file: string) => ReadonlySet<string>;
@@ -91,6 +95,7 @@ export function buildSourceIndexFromFiles(
       observableDeclarationPathsFor(state, file, plainSeedPaths),
     observableFactoriesFor: (file) =>
       new Set(resolvedFor(state, file, "observable-factory").keys()),
+    observableInPlaceWritesFor: (file) => observableInPlaceWritesFor(state, file),
     observableKeysFor: (file) => observableKeysFor(state, file),
     observablePathsFor: (file) => observablePathsFor(state, file),
     observablesFor: (file) => new Set(resolvedFor(state, file, "observable").keys()),
