@@ -11,41 +11,44 @@ import { isNonProductionHarness } from "../../core/ast.js";
  */
 export interface ObservableWriteGroup {
   readonly paths: readonly (readonly string[])[];
+  /** The stretch also calls application code that is not in view, so it may write any path. */
+  readonly opaque: boolean;
   /** `file:line` of the stretch's first write, relative to the analysis root. */
   readonly site: string;
 }
 
 /**
- * Write groups per observable, from the production writes that can land after a consumer mounts:
- * test and story writes and module-load initialization are ignored.
+ * Write groups per observable, one per synchronous stretch of production code that runs a write
+ * after a consumer mounts. Test and story stretches are ignored.
  */
 export function observableWriteGroups(
   writes: ObservableInPlaceWrites,
 ): ReadonlyMap<string, readonly ObservableWriteGroup[]> {
-  return new Map(
-    [...writes].map(([name, sites]) => [
-      name,
-      writeGroups(
-        sites.filter((site) => !site.unit.atModuleLoad && !isNonProductionHarness(site.file)),
-      ),
-    ]),
-  );
+  return new Map([...writes].map(([name, sites]) => [name, writeGroups(sites)]));
 }
 
 function writeGroups(sites: readonly InPlaceObservableWrite[]): readonly ObservableWriteGroup[] {
   const groups = new Map<string, ObservableWriteGroup>();
-  for (const site of sites) {
-    const key = `${site.file}\0${site.unit.key}`;
-    const group = groups.get(key) ?? { paths: [], site: `${site.file}:${site.line}` };
-    groups.set(key, { ...group, paths: [...group.paths, site.path] });
+  for (const site of sites.filter((candidate) => !isNonProductionHarness(candidate.file))) {
+    for (const unit of site.units.filter((candidate) => !isNonProductionHarness(candidate.file))) {
+      const group = groups.get(unit.key) ?? {
+        opaque: unit.opaque,
+        paths: [],
+        site: `${site.file}:${site.line}`,
+      };
+      groups.set(unit.key, { ...group, paths: [...group.paths, site.path] });
+    }
   }
   return [...groups.values()];
 }
 
-/** The top-level fields a group writes, or null when a runtime-keyed member could be any field. */
+/**
+ * The top-level fields a group writes, or null when a runtime-keyed member or code out of view
+ * could write any field.
+ */
 export function topLevelFields(group: ObservableWriteGroup): ReadonlySet<string> | null {
   const fields = new Set(group.paths.map((path) => path[0] ?? ANY_MEMBER));
-  return fields.has(ANY_MEMBER) ? null : fields;
+  return group.opaque || fields.has(ANY_MEMBER) ? null : fields;
 }
 
 /** Whether two member paths can name the same node or one another's ancestor. */

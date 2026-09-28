@@ -283,6 +283,13 @@ test("keeps the broad subscription when no unread field is written on its own", 
       store$.channels.set([]);`,
     ],
     [
+      "unread field written by a helper the read-field stretch calls",
+      EDITABLE_BLOCKLIST,
+      `const clearDraft = () => store$.draft.set("");
+      store$.keywords.set([]);
+      clearDraft();`,
+    ],
+    [
       "unread field written after an await that loops back to a read-field write",
       EDITABLE_BLOCKLIST,
       `for (const channel of ["a"]) {
