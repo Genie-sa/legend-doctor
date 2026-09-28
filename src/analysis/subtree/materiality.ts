@@ -10,7 +10,7 @@ import { commonRepeatedRender, jsxSubtreeLabel } from "../ast-helpers.js";
 import { findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import {
   hasUnstableSubtreeLifetime,
-  jsxElementCountIn,
+  jsxElementCount,
   nearestRepeatedRenderCall,
 } from "../../rules/state-proofs/jsx-subtrees.js";
 import type { JsxSubtreeNode } from "../../rules/deferred-reveal/jsx-subtrees.js";
@@ -18,6 +18,7 @@ import type { MaterialityPolicy } from "../constants.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { commonRenderGateSubtree } from "../../rules/deferred-reveal/render-gates.js";
 import { expressionDependsOnBinding } from "../../rules/state-proofs/binding-lookup.js";
+import { extractedJsxElementCount } from "./extracted-render-work.js";
 import { hasStateInitializer } from "../../rules/deferred-reveal/deferred-reveal.js";
 import { isJsxNode } from "../../rules/state-proofs/callback-sites.js";
 import { oneHopRenderProjectionReferences } from "../../rules/state-proofs/projection-hops.js";
@@ -45,10 +46,14 @@ interface SubtreeMaterialityEvidence {
 
 export function isMaterialStateSubtree(
   subtree: JsxSubtreeNode,
-  ownerJsx: number,
+  owner: RuntimeFunctionLike,
   { effectWrittenPresentation, materiality, uniqueRepeatedProjection }: SubtreeMaterialityEvidence,
 ): boolean {
-  const subtreeJsx = jsxElementCountIn(subtree);
+  const ownerJsx = jsxElementCount(owner);
+  const subtreeJsx = extractedJsxElementCount(subtree, owner);
+  if (subtreeJsx === null) {
+    return false;
+  }
   return (
     (ownerJsx >= materiality.broadOwnerJsx && subtreeJsx / ownerJsx <= MAX_LEAF_SUBTREE_RATIO) ||
     (uniqueRepeatedProjection &&
