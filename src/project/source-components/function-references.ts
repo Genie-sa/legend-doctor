@@ -4,7 +4,6 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { functionEntryKey } from "../../core/execution-units.js";
 import { lexicalBinding } from "../../core/lexical-bindings.js";
 import ts from "typescript";
-import { visit } from "../../core/ast.js";
 
 /** How one file refers to functions, which decides whether a function can start its own stretch. */
 export interface FunctionReferences {
@@ -34,18 +33,16 @@ export function functionReferences(
     exported: new Set(),
     named: new Set(),
   };
-  visit(sourceFile, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      !isNonValueIdentifier(node) &&
-      !ts.findAncestor(
-        node,
-        (ancestor) => ts.isTypeNode(ancestor) || ts.isImportDeclaration(ancestor),
-      )
-    ) {
+  const walk = (node: ts.Node): void => {
+    if (ts.isTypeNode(node) || ts.isImportDeclaration(node)) {
+      return;
+    }
+    if (ts.isIdentifier(node) && !isNonValueIdentifier(node)) {
       recordReference(references, node, resolver);
     }
-  });
+    node.forEachChild(walk);
+  };
+  walk(sourceFile);
   return references;
 }
 

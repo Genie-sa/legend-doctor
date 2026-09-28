@@ -13,12 +13,26 @@ export type LexicalBinding =
   /** A parameter, a destructured or reassignable variable, or a non-function `const`. */
   | { readonly kind: "value"; readonly declaration: ts.Node };
 
+/** Nodes other than functions whose statements or header can declare names. */
+const SCOPE_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.Block,
+  ts.SyntaxKind.CaseClause,
+  ts.SyntaxKind.CatchClause,
+  ts.SyntaxKind.ClassExpression,
+  ts.SyntaxKind.DefaultClause,
+  ts.SyntaxKind.ForInStatement,
+  ts.SyntaxKind.ForOfStatement,
+  ts.SyntaxKind.ForStatement,
+  ts.SyntaxKind.ModuleBlock,
+  ts.SyntaxKind.SourceFile,
+]);
+
 const bindingsByScope = new WeakMap<ts.Node, ReadonlyMap<string, LexicalBinding>>();
 
 /** Null when no enclosing scope declares the name, so it is a global. */
 export function lexicalBinding(identifier: ts.Identifier): LexicalBinding | null {
   for (let scope = identifier.parent; scope; scope = scope.parent) {
-    const binding = scopeBindings(scope).get(identifier.text);
+    const binding = isScope(scope) ? scopeBindings(scope).get(identifier.text) : undefined;
     if (binding) {
       return binding;
     }
@@ -46,6 +60,14 @@ function scopeBindings(scope: ts.Node): ReadonlyMap<string, LexicalBinding> {
   }
   bindingsByScope.set(scope, bindings);
   return bindings;
+}
+
+/**
+ * No other node declares names. Skipping them keeps the binding cache at one entry per scope
+ * instead of one per ancestor of every resolved identifier.
+ */
+function isScope(node: ts.Node): boolean {
+  return SCOPE_KINDS.has(node.kind) || isRuntimeFunctionLike(node);
 }
 
 function hasStatements(
