@@ -4,7 +4,7 @@ import type { StateTransitionEvidence } from "./state-transitions.js";
 type Confidence = "certain" | "probable";
 
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public JSON protocol version.
-const SCHEMA_VERSION = 4 as const;
+const SCHEMA_VERSION = 5 as const;
 
 const ABSTENTION_REASONS = [
   "async-command-origin-unresolved",
@@ -125,7 +125,6 @@ type HookAction = StateAction | EffectAction;
 
 const LEGEND_PRACTICE_ACTIONS = [
   "select-primitive-projection",
-  "review-helper-tracking",
   "assign-observable-fields",
   "batch-observable-writes",
   "derive-computed-observable",
@@ -133,15 +132,12 @@ const LEGEND_PRACTICE_ACTIONS = [
   "move-use-value-down",
   "narrow-observable-write",
   "narrow-use-value-subscription",
-  "pass-observable-to-reactive-input",
   "pass-observable-to-use-value",
   "peek-unrendered-use-value",
   "replace-legacy-use-value",
   "reuse-observable-reference",
-  "snapshot-computed-initializer",
   "snapshot-mutated-use-value",
   "split-use-value-leaves",
-  "split-use-value-result",
   "toggle-observable",
   "use-computed-for-parent-reads",
   "use-peek-for-snapshot",

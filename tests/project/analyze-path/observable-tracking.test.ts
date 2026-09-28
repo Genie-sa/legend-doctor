@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-test("proves untracked render reads and eager reactive inputs through imported observables", async (testContext) => {
+test("proves untracked render reads through imported observables, leaving reactive inputs alone", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-tracking-"));
   testContext.after(() => rm(root, { force: true, recursive: true }));
   await writeFile(
@@ -40,10 +40,7 @@ test("proves untracked render reads and eager reactive inputs through imported o
       practice.location.line,
       practice.action,
     ]),
-    [
-      ["screen.tsx", 5, "use-value-for-render-read"],
-      ["screen.tsx", 6, "pass-observable-to-reactive-input"],
-    ],
+    [["screen.tsx", 5, "use-value-for-render-read"]],
   );
   assert.deepEqual(report.capabilities.disabledRules, []);
 });

@@ -5,7 +5,7 @@ import ts from "typescript";
 
 export type LegendReactComponent = "Computed" | "For" | "Memo" | "Show" | "Switch";
 
-export type LegendReaction =
+type LegendReaction =
   | "observe"
   | "useObserve"
   | "useObserveEffect"
@@ -31,7 +31,6 @@ export interface HookImports {
   legendObservers: ReadonlySet<string>;
   legendSyncNamespaces: ReadonlySet<string>;
   legacyUseValue: ReadonlySet<string>;
-  linked: ReadonlySet<string>;
   observable: ReadonlySet<string>;
   observableTypes: ReadonlySet<string>;
   /** Local names of the `reactive` factory that adds `$`-prefixed selector props to a component. */
@@ -130,7 +129,6 @@ const LEGEND_NAMED_IMPORT_TARGETS = new Map<string, SetImportKey>([
   ["ObservablePrimitive", "observableTypes"],
   ["ObservableSet", "observableTypes"],
   ["batch", "batch"],
-  ["linked", "linked"],
   ["observable", "observable"],
   ["syncState", "syncState"],
 ]);
@@ -170,7 +168,6 @@ function createHookImportSets(): HookImportSets {
     legendReactNamespaces: new Set(),
     legendReactions: new Map(),
     legendSyncNamespaces: new Set(),
-    linked: new Set(),
     observable: new Set(),
     observableTypes: new Set(),
     reactiveFactories: new Set(),

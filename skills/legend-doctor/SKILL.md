@@ -51,9 +51,8 @@ clean file.
 | `keep`      | Preserve the current React or lifecycle boundary.                                               |
 | `style`     | Apply only when the installed Legend API supports the equivalent form.                          |
 
-For `review-helper-tracking`, establish the intended trigger set and measure selector executions before choosing a
-call-site snapshot boundary. Preserve shared helper behavior. Candidate practices are visible with
-`--disposition candidate` and hidden by `--actionable`; they are outside optimization precision scoring.
+Candidate practices are visible with `--disposition candidate` and hidden by `--actionable`; they are outside
+optimization precision scoring.
 
 When an imported implementation is unavailable, inspect `--coverage` and the `sourceContext` reasons documented in
 `REPORT.md`. Resolve the selected package source before extending a proof. An empty unavailable list alone does not

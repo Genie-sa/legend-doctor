@@ -549,52 +549,9 @@ The direct initializer form carries `edits`, including a `useValue` specifier be
 A read inside a conditional, JSX, or iteration callback gets a hoisting instruction: add `const value =
 useValue(path$)` at the top of the owner and read the binding there. The rule stays silent for `observer` and
 `reactiveObserver` components, for paths a `useValue` in the same owner already covers (directly, through a selector,
-or through a `const` alias), for hook-argument snapshots such as `useState(x$.get())`, for `key` reads, and for
+or through a `const` alias), for hook-argument snapshots such as `useState(x$.get())`, for reads handed to a Legend
+input that tracks on its own (`Show if`, `For each`, a `Memo` child, a `$` prop, or `when`), for `key` reads, and for
 `get(true)` or dynamically keyed paths.
-
-### Pass the observable to a reactive input
-
-`pass-observable-to-reactive-input` changes a `get()` or `peek()` handed to an input that tracks on its own.
-
-```tsx
-<Show if={ready$.get()}>{() => <Panel />}</Show>; // Before
-<Show if={ready$}>{() => <Panel />}</Show>; // After
-
-<For each={items$.get()}>{(item$) => <Row item$={item$} />}</For>; // Before
-<For each={items$}>{(item$) => <Row item$={item$} />}</For>; // After
-
-<Memo>{name$.get()}</Memo>; // Before
-<Memo>{name$}</Memo>; // After
-
-<$React.input $value={name$.get()} />; // Before
-<$React.input $value={name$} />; // After
-
-when(ready$.get(), start); // Before
-when(ready$, start); // After
-```
-
-Covered inputs: `Show if`/`ifReady`, `Switch value`, `For each`, `Memo` and `Computed` children, `$`-prefixed props
-on `$React`, native `$View`-style hosts and `reactive()` components, and the first argument of `observe`, `when`,
-`whenReady`, `useObserve`, `useObserveEffect`, `useWhen`, and `useWhenReady`. The snapshot is evaluated once in the
-parent's render, so the input only updates when the parent happens to re-render; `For` also calls `get()` on what it
-receives, so a raw array breaks it. `useValue(x$.get())` stays with `pass-observable-to-use-value`.
-
-### Split a selector that only builds a literal
-
-`split-use-value-result` offers a `style` rewrite for a const destructured selector whose members are direct reads or inert expressions.
-
-```tsx
-const { a, b } = useValue(() => ({ a: state$.a.get(), b: state$.b.get() })); // Before
-const a = useValue(state$.a); // After
-const b = useValue(state$.b);
-```
-
-The aggregate object is fresh; its destructured values retain their own identities. This rewrite removes the result
-allocation and adds per-path subscriptions. It does not prove fewer owner renders, lower CPU cost, or less native
-work. Every observable read must remain represented, including reads in otherwise unused fields: they may invalidate
-ref-backed render snapshots. Omitted effects, duplicate properties, mutable declarations, results used whole, block
-bodies, async selectors, prototype-setting properties, reordered reads, spreads, defaults, rest elements, computed
-members, and calls stay as they are.
 
 ### Select a copy when a memo keys on a mutated value
 
@@ -805,18 +762,6 @@ const user$ = store$.user; // After
 stability, or context. `useObservable` also deactivates the node it returns when the component unmounts, and that
 node is the shared source. Nest one observable inside another only as an intentional link whose reads and writes
 forward to the source.
-
-### Snapshot an initial value instead of writing a computed
-
-```tsx
-const draft$ = useObservable(() => store$.user.name.get() || fallback); // Before
-const draft$ = useObservable(store$.user.name.peek() || fallback); // After
-draft$.set(event.target.value); // Unchanged
-```
-
-A function initializer with a tracked `get()` creates a computed observable, and a computed replaces any written
-value on its next recomputation. The finding fires only when the owner also writes the observable; an initializer
-that is never written stays a legitimate derivation, and a `linked` or `synced` body already declares its own setter.
 
 ## Final check
 

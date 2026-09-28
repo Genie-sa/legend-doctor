@@ -42,13 +42,11 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend tracking
 
-| Action                                                                                         | Removes                                                      |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                          | A render read that never subscribes                          |
-| [`pass-observable-to-reactive-input`](EXAMPLES.md#pass-the-observable-to-a-reactive-input)     | A snapshot frozen in an input that tracks on its own         |
-| [`split-use-value-result`](EXAMPLES.md#split-a-selector-that-only-builds-a-literal)            | Aggregate result allocation (style; no proven render saving) |
-| [`snapshot-mutated-use-value`](EXAMPLES.md#select-a-copy-when-a-memo-keys-on-a-mutated-value)  | A useMemo result left stale by an in-place write             |
-| [`use-computed-for-parent-reads`](EXAMPLES.md#re-render-a-memo-child-that-reads-parent-values) | A `<Memo>` child frozen on its first render's parent values  |
+| Action                                                                                         | Removes                                                     |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                          | A render read that never subscribes                         |
+| [`snapshot-mutated-use-value`](EXAMPLES.md#select-a-copy-when-a-memo-keys-on-a-mutated-value)  | A useMemo result left stale by an in-place write            |
+| [`use-computed-for-parent-reads`](EXAMPLES.md#re-render-a-memo-child-that-reads-parent-values) | A `<Memo>` child frozen on its first render's parent values |
 
 ### Legend writes
 
@@ -61,10 +59,9 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend ownership
 
-| Action                                                                                                 | Removes                                              |
-| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| [`reuse-observable-reference`](EXAMPLES.md#reuse-the-observable-you-already-have)                      | A wrapper node identical to its source observable    |
-| [`snapshot-computed-initializer`](EXAMPLES.md#snapshot-an-initial-value-instead-of-writing-a-computed) | Writes that a computed initializer silently replaces |
+| Action                                                                            | Removes                                           |
+| --------------------------------------------------------------------------------- | ------------------------------------------------- |
+| [`reuse-observable-reference`](EXAMPLES.md#reuse-the-observable-you-already-have) | A wrapper node identical to its source observable |
 
 ### Keep and review
 
@@ -75,7 +72,3 @@ These carry no edit. A `keep` finding preserves code that is already correct; a 
 | [`keep-state`](EXAMPLES.md#keep-small-local-state-in-react)            | React state is already the smallest render boundary; an observable would only add machinery |
 | [`keep-effect`](EXAMPLES.md#keep-an-effect-while-changing-its-storage) | The effect's React timing, cleanup, or ownership must stay as written                       |
 | `review-state`, `review-effect`                                        | An unsafe guess; `abstentionReason` names the missing proof ([REPORT.md](REPORT.md))        |
-| `review-helper-tracking`                                               | Extra observable dependencies reached through one synchronous local helper                  |
-
-`review-helper-tracking` is a candidate review, not an optimization instruction. Establish intended triggers
-and selector execution cost before changing snapshot boundaries.

@@ -17,7 +17,7 @@ function evaluation(practices: LegendPracticeFinding[]): Evaluation {
           repository: "repo",
           root: "/repo/feature",
           report: {
-            schemaVersion: 4,
+            schemaVersion: 5,
             files: 1,
             hooks: { total: 0, states: 0, effects: 0 },
             findings: [],
@@ -35,13 +35,13 @@ function evaluation(practices: LegendPracticeFinding[]): Evaluation {
   };
 }
 const review: LegendPracticeFinding = {
-  action: "review-helper-tracking",
+  action: "batch-observable-writes",
   disposition: "candidate",
   confidence: "probable",
   evidence: [],
   location: { file: "screen.tsx", line: 4, column: 1 },
-  message: "Review trigger intent",
-  practice: "reactivity",
+  message: "Review whether the writes must publish together",
+  practice: "batch",
 };
 
 test("candidate reviews remain visible without inflating optimization precision", () => {
@@ -50,7 +50,7 @@ test("candidate reviews remain visible without inflating optimization precision"
   assert.deepEqual(run.failures, []);
   assert.deepEqual(practiceReviewLines(run), [
     "Candidate Legend practices: 1 (not precision-scored).",
-    "Unscored practice review [feature/screen.tsx:4]: review-helper-tracking",
+    "Unscored practice review [feature/screen.tsx:4]: batch-observable-writes",
   ]);
 });
 
@@ -72,6 +72,6 @@ test("a candidate cannot satisfy a labeled optimization or hide an unexpected ch
     { labels: 1, matches: 0, predictions: 1 },
   );
   assert.equal(run.failures.length, 2);
-  assert.match(run.failures[0]!, /expected review-helper-tracking/u);
+  assert.match(run.failures[0]!, /expected batch-observable-writes/u);
   assert.match(run.failures[1]!, /unexpected Legend practice use-peek-for-snapshot/u);
 });

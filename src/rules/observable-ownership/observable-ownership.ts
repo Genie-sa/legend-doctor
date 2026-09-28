@@ -5,7 +5,6 @@ import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import { nestedObservableArgumentFinding } from "./nested-observable-arguments.js";
 import ts from "typescript";
-import { writtenComputedInitializerFinding } from "./written-computed-initializers.js";
 
 export type { ObservableOwnershipScan } from "./model.js";
 
@@ -26,9 +25,7 @@ export function findObservableOwnershipPractices(
     if (!factory) {
       return;
     }
-    const finding =
-      nestedObservableArgumentFinding(node, factory, scan) ??
-      (factory === "useObservable" ? writtenComputedInitializerFinding(node, scan) : null);
+    const finding = nestedObservableArgumentFinding(node, factory, scan);
     if (finding) {
       findings.push(finding);
     }

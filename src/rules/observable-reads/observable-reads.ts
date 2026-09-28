@@ -17,7 +17,6 @@ import { isCanonicalUseValueCall } from "./observable-paths.js";
 import { moveUseValueDownFinding } from "./move-down.js";
 import { moveUseValueIntoChildFinding } from "./move-into-child.js";
 import { narrowUseValueFinding } from "./narrow-use-value.js";
-import { splitUseValueResultFinding } from "./fresh-selector-results.js";
 import { subscriptionInventory } from "./subscription-inventory.js";
 import ts from "typescript";
 import { unrenderedUseValueFinding } from "./unrendered-subscriptions.js";
@@ -95,10 +94,6 @@ function collectCallFindings(
   const directInput = directUseValueInput(call, scan.imports, scan.observableBindings);
   if (directInput && !legacyMigrationCollapsesSelector(call, directInput, scan)) {
     findings.push(directUseValueFinding(call, directInput, scan));
-  }
-  const split = splitUseValueResultFinding(call, scan);
-  if (split) {
-    findings.push(split);
   }
   const snapshot = nonTrackingSnapshotObservable(call, scan);
   if (snapshot) {
