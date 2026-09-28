@@ -148,9 +148,19 @@ work but does not reread or reparse files.
 
 `subscriptionAnalysis` is an additive section of schema 4. Its own `version` is `1`.
 
-- `inventory` records each recognized imported `useValue` call in eligible scanned files, including aliases.
-  Each entry contains its source location, binding, observable, classified reads, derivations, and status:
-  `planned`, `other-action`, or `unresolved`. Unresolved entries have explicit reasons; they are not findings.
+- `inventory` records each recognized imported `useValue` call in eligible scanned files, including its
+  `use$` and `useSelector` aliases. Each entry contains its source location, binding, observable, classified
+  reads, derivations, and status: `planned`, `other-action`, or `unresolved`. Unresolved entries have explicit
+  reasons; they are not findings.
+- Each read has a `kind`: `render` (a pure expression in the returned JSX), `render-callback` (a synchronous
+  array callback or IIFE inside the returned JSX, run once per item), `memo` (an owner-level `useMemo`
+  callback or dependency list), `derivation` (a pure `const` or `useMemo` projection that is followed in
+  turn), `effect`, `event-or-callback`, or `unknown`.
+- A `useValue(() => …)` selector whose every tracked read is a proven `path$.get()` also carries
+  `selector: { tracks, result }`. `tracks` lists the tracked paths, and `result` is `boolean`, `primitive`,
+  or `unknown`, the value `useValue` compares to decide a re-render. `observable` is set only when the
+  selector tracks exactly one path. A selector that cannot be proven names its blocker in `reasons`, for
+  example `selector-calls-unproven-function` or `selector-read-not-proven`.
 - `coverage` counts those three statuses and their total. This is subscription inventory coverage, separate
   from hook coverage and manually labeled corpus recall. It does not count hidden subscriptions inside
   arbitrary custom hooks or unrecognized imports.
