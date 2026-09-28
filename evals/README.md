@@ -188,3 +188,5 @@ every candidate location separately, excludes candidates from practice precision
 candidate satisfy an enforced optimization label. Unlabeled `change` and `style` practices still fail.
 `evals/research/helper-tracking.json` contains manually audited, pinned, non-enforced research labels;
 these are not loaded into scored corpus totals and do not claim imported-helper support.
+`evals/research/memo-props-*.json` records the audited `stabilize-memo-prop` sites: outline candidates whose
+identity inputs come from package hooks, and an excalidraw proven change outside the labeled targets.

@@ -142,6 +142,7 @@ const LEGEND_PRACTICE_ACTIONS = [
   "snapshot-mutated-use-value",
   "split-use-value-leaves",
   "split-use-value-result",
+  "stabilize-memo-prop",
   "toggle-observable",
   "use-computed-for-parent-reads",
   "use-peek-for-snapshot",
@@ -288,7 +289,7 @@ interface LegendPracticeFinding {
   evidence: readonly string[];
   location: SourceLocation;
   message: string;
-  practice: "assign" | "batch" | "ownership" | "reactivity";
+  practice: "assign" | "batch" | "memoization" | "ownership" | "reactivity";
 }
 
 /** How the confirmations file matched the scan's assumptions. */

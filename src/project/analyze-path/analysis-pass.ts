@@ -33,8 +33,10 @@ import { createChildContractResolver } from "./child-contracts.js";
 import { disabledEffectRules } from "../../rules/effects/browser-storage-persistence.js";
 import { disabledPracticeRules } from "../../practices/practice-rules.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
+import { memoPropFindings } from "./memo-prop-scan.js";
 import path from "node:path";
 import { rankedQuestions } from "../../analysis/assumptions/ranked-questions.js";
+import { recordDisabledRules } from "./disabled-rules.js";
 import { relativeInPlaceWrites } from "../source-components/observable-in-place-writes.js";
 import { reportConfirmations } from "../../analysis/assumptions/report-confirmations.js";
 
@@ -121,7 +123,7 @@ export async function runAnalysisPass(
   const practiceFiles = legendPracticeFiles(entries, options.includeDetails);
   const [compiledFiles, rootCompiles, concurrentFiles, rootRendersConcurrently, legendStates] =
     await Promise.all([
-      filesWhere(practiceFiles, (file) => reactCompiler.packageCompilesFile(file)),
+      filesWhere(supportedFiles(entries), (file) => reactCompiler.packageCompilesFile(file)),
       reactCompiler.compilesDirectory(options.context.root),
       filesWhere(practiceFiles, (file) => concurrentRoots.rendersFileConcurrently(file)),
       concurrentRoots.rendersDirectoryConcurrently(options.context.root),
@@ -148,6 +150,10 @@ export async function runAnalysisPass(
   return pass;
 }
 
+function supportedFiles(entries: readonly AnalysisFileEntry[]): readonly string[] {
+  return entries.filter((entry) => isSupportedEntry(entry)).map((entry) => entry.file);
+}
+
 function legendPracticeFiles(
   entries: readonly AnalysisFileEntry[],
   includeDetails: boolean,
@@ -166,7 +172,7 @@ async function installedLegendStates(
   rootInstall: InstalledLegendState | null,
 ): Promise<ReadonlyMap<string, InstalledLegendState | null>> {
   const resolver = new InstalledLegendStateResolver(rootInstall);
-  const files = entries.filter((entry) => isSupportedEntry(entry)).map((entry) => entry.file);
+  const files = supportedFiles(entries);
   return new Map(
     await Promise.all(
       files.map(async (file) => [file, await resolver.resolveForFile(file)] as const),
@@ -217,9 +223,8 @@ function analyzeSupportedFileEntry(entry: SupportedAnalysisFileEntry, pass: Anal
   if (analyzeHooks) {
     pass.accumulator.findings.push(...hookFindings(entry, pass, { childContracts, stateFlow }));
   }
-  if (analyzePractices) {
-    pass.accumulator.practices.push(...legendPracticeFindings(entry, pass, childContracts));
-  }
+  const practices = analyzePractices ? legendPracticeFindings(entry, pass, childContracts) : [];
+  pass.accumulator.practices.push(...practices, ...memoPropFindings(entry, pass));
   recordEntryCoverage(entry, pass, stateFlow);
 }
 
@@ -302,17 +307,6 @@ function legendPracticeFindings(
     stableContextRead: (localName) => sourceIndex.contextReadIsStableFor(entry.file, localName),
     childContracts,
   });
-}
-
-function recordDisabledRules(
-  disabledRules: Map<string, DisabledRule>,
-  disabled: readonly Omit<DisabledRule, "files">[],
-): void {
-  for (const rule of disabled) {
-    const key = `${rule.rule}\0${rule.reason}`;
-    const entry = disabledRules.get(key) ?? { ...rule, files: 0 };
-    disabledRules.set(key, { ...entry, files: entry.files + 1 });
-  }
 }
 
 function recordEntryCoverage(

@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/excalidraw/excalidraw",
+  "commit": "abeeaeba217ab3b5193b78c8d8d63c373b518ced",
+  "scored": false,
+  "labels": [
+    {
+      "id": "MEMO-PROPS-APP-FOOTER",
+      "file": "excalidraw-app/App.tsx",
+      "line": 1061,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin; reported as a proven change. AppFooter is React.memo without a comparator and receives an inline onChange arrow. ExcalidrawWrapper re-renders for forceRefresh (line 453), whose value is never bound and whose setter runs alone in the dev-only debug effect (line 466) and the main menu refresh callback (line 1035), so each such render re-renders AppFooter with equal inputs. The cost is real but small and mostly dev-only. Not enforced because excalidraw-app/App.tsx lies outside the labeled excalidraw targets."
+    },
+    {
+      "id": "MEMO-PROPS-APP-MAIN-MENU",
+      "file": "excalidraw-app/App.tsx",
+      "line": 1030,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin; reported as a candidate. AppMainMenu is React.memo and receives an inline refresh arrow, so renders for errorMessage (378), forceRefresh (453) and latestShareableLink (767) re-render the menu. onCollabDialogOpen, isCollaborating and isCollabDisabled come from atom hooks whose identity the analyzer cannot prove, so the finding stays a candidate. The render cost is low: the main menu renders a trigger only while it is closed."
+    }
+  ]
+}
