@@ -72,7 +72,7 @@ function outermostTransparentWrapper(node: ts.Node): ts.Node {
   return expression;
 }
 
-function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
+export function isSynchronousEffectCallback(callback: RuntimeFunctionLike): boolean {
   if (
     callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
     callback.asteriskToken

@@ -127,6 +127,10 @@ export class AssumedLeafContracts implements ChildContractResolver {
     return this.#base.hasPlatformVariant();
   }
 
+  public isObservableBinding(name: string): boolean {
+    return this.#base.isObservableBinding(name);
+  }
+
   public frameworkEventComponent(componentName: string): boolean {
     return this.#base.frameworkEventComponent(componentName);
   }
