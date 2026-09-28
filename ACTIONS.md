@@ -42,12 +42,13 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend tracking
 
-| Action                                                                                        | Removes                                                      |
-| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                         | A render read that never subscribes                          |
-| [`pass-observable-to-reactive-input`](EXAMPLES.md#pass-the-observable-to-a-reactive-input)    | A snapshot frozen in an input that tracks on its own         |
-| [`split-use-value-result`](EXAMPLES.md#split-a-selector-that-only-builds-a-literal)           | Aggregate result allocation (style; no proven render saving) |
-| [`snapshot-mutated-use-value`](EXAMPLES.md#select-a-copy-when-a-memo-keys-on-a-mutated-value) | A useMemo result left stale by an in-place write             |
+| Action                                                                                         | Removes                                                      |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                          | A render read that never subscribes                          |
+| [`pass-observable-to-reactive-input`](EXAMPLES.md#pass-the-observable-to-a-reactive-input)     | A snapshot frozen in an input that tracks on its own         |
+| [`split-use-value-result`](EXAMPLES.md#split-a-selector-that-only-builds-a-literal)            | Aggregate result allocation (style; no proven render saving) |
+| [`snapshot-mutated-use-value`](EXAMPLES.md#select-a-copy-when-a-memo-keys-on-a-mutated-value)  | A useMemo result left stale by an in-place write             |
+| [`use-computed-for-parent-reads`](EXAMPLES.md#re-render-a-memo-child-that-reads-parent-values) | A `<Memo>` child frozen on its first render's parent values  |
 
 ### Legend writes
 
