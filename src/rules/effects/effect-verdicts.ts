@@ -102,6 +102,16 @@ export function observeEffect(
   };
 }
 
+export function reviewUntrackableCallEffect(callee: string): ClassifiedEffect {
+  return {
+    action: "review-effect",
+    abstentionReason: "callback-timing-unresolved",
+    confidence: "probable",
+    derivedState: null,
+    message: `Review this effect before choosing \`useObserveEffect\`; \`${callee}\` can run, before it returns, an observable \`.get()\` that is not a dependency, or code the analyzer cannot follow. The observer would track that read as a new trigger, and it cannot be peeked from the effect. Peek it where it runs, or keep the React effect.`,
+  };
+}
+
 export function reviewUntrackableReadsEffect(): ClassifiedEffect {
   return {
     action: "review-effect",

@@ -131,7 +131,7 @@ function declarationHasArrayType(
   );
 }
 
-function hasSynchronousArrayReceiver(expression: ts.Expression): boolean {
+export function hasSynchronousArrayReceiver(expression: ts.Expression): boolean {
   const receiver = unwrapTransparentExpression(expression);
   if (ts.isArrayLiteralExpression(receiver)) {
     return true;

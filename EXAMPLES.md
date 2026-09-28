@@ -660,6 +660,21 @@ Reads after an unconditional `await` and reads inside timers or promise callback
 alone. The finding becomes a review when a read runs in a callback of unknown timing, or calls `get()` on a receiver
 that is not proven to be an observable.
 
+A function the effect calls runs inside the observer's pass too, and its reads cannot be peeked from the effect. A
+project function, local or imported, is followed up to its first unconditional `await`; if it reads an observable
+there, the finding becomes a review that names the call. So does any call whose code is not followed: an import from a
+module out of view, a method of an application object, a callback prop, a value a hook returns, or a function held in
+a variable. Globals, packages, React setters and refs, built-in methods of constants, and observable writes stay
+convertible.
+
+```tsx
+// Stays a React effect: loadThread reads mail$.errorId before its first await, so an observer
+// would refetch every time a failed load records its error.
+useEffect(() => {
+  if (selectedId) void loadThread(selectedId);
+}, [selectedId]);
+```
+
 ### Express proven lifecycle intent
 
 Use `use-mount` and `use-unmount` only when lifecycle timing is proven equivalent.

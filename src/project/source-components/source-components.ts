@@ -29,10 +29,15 @@ import {
   observableDeclarationsFor,
   observablePrimitivePathsFor,
 } from "./observable-primitive-paths.js";
+import {
+  observableInPlaceWritesFor,
+  observableReachResolver,
+} from "./observable-in-place-writes.js";
 import { observablePlainSeedPathsFor, plainConstantsFor } from "./plain-constants.js";
 import type { AnalysisFile } from "../analysis-project.js";
 import type { ObservableContextReader } from "./observable-contexts.js";
 import type { ObservableInPlaceWrites } from "./observable-in-place-writes.js";
+import type { ReachResolver } from "./synchronous-reach.js";
 import type { SourceContextCoverage } from "./source-context.js";
 import type { SourceResolution } from "./module-resolution.js";
 import { callbackPackageVersion } from "./callback-package-version.js";
@@ -40,13 +45,13 @@ import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
 import { observableContextReadersFor } from "./observable-contexts.js";
-import { observableInPlaceWritesFor } from "./observable-in-place-writes.js";
 import { observablePathsFor } from "./observable-containers.js";
 import { sourceContextFor } from "./source-context.js";
 import type ts from "typescript";
 
 export interface SourceIndex {
   moduleFileFor: (file: string, specifier: string) => string | null;
+  reachResolver: ReachResolver;
   callbackPackageVersionFor: (file: string, specifier: string) => string | null;
   sourceContextFor: (file: string) => SourceContextCoverage;
   componentDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
@@ -103,6 +108,7 @@ export function buildSourceIndexFromFiles(
   const state = createSourceIndexState(root, files, resolution);
   return {
     moduleFileFor: (file, specifier) => resolveModule(state, file, specifier),
+    reachResolver: observableReachResolver(state),
     callbackPackageVersionFor: (file, specifier) => callbackPackageVersion(state, file, specifier),
     sourceContextFor: (file) => sourceContextFor(state, file),
     componentDeclarationFor: (file, name) => componentDeclarationFor(state, file, name),

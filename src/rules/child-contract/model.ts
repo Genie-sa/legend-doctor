@@ -1,3 +1,4 @@
+import type { ReachResolver } from "../../project/source-components/synchronous-reach.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
 
@@ -55,6 +56,8 @@ export interface HookPresentationConsumer {
 export type ParentRerenderProof = "absent" | "possible" | "proven";
 
 export interface ChildContractResolver {
+  /** Resolves imports to the project function bodies they name, as the synchronous reach does. */
+  reachResolver?: () => ReachResolver;
   /** Every source-visible caller supplies plain data at this nested prop path; no getter inference from types. */
   componentPropDataPath?: (owner: RuntimeFunctionLike, path: readonly string[]) => boolean;
   componentArrayItemCallbackIsDeferred: (

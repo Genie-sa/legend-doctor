@@ -5,6 +5,7 @@ import { isNonProductionHarness, visit } from "../../core/ast.js";
 import { localReachResolver, projectReachResolver } from "./reach-resolvers.js";
 import type { ExecutionUnit } from "../../core/execution-units.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "../../rules/observable-reads/observable-paths.js";
+import type { ReachResolver } from "./synchronous-reach.js";
 import { executionUnit } from "../../core/execution-units.js";
 import { fileReach } from "./synchronous-reach.js";
 import { moduleRecord } from "./module-record.js";
@@ -115,6 +116,11 @@ export function localObservableInPlaceWrites(sourceFile: ts.SourceFile): Observa
   return result;
 }
 
+/** Imports resolve to project function bodies, and receivers to the observables each file sees. */
+export function observableReachResolver(state: SourceIndexState): ReachResolver {
+  return projectReachResolver(state, visibleObservables);
+}
+
 function visibleObservables(
   state: SourceIndexState,
   file: string,
@@ -180,7 +186,7 @@ function projectWrites(state: SourceIndexState): ReadonlyMap<string, RootedWrite
   if (keyedWrites.length === 0) {
     return new Map();
   }
-  const resolver = projectReachResolver(state, visibleObservables);
+  const resolver = observableReachResolver(state);
   const reach = programReach(
     [...state.sourceFiles.values()].map((sourceFile) => fileReach(sourceFile, resolver)),
   );
