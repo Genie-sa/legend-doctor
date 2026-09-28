@@ -133,6 +133,48 @@ submission snapshots, keyed selection and draft identity, independent hook lifet
 memoized snapshot identity, and the lazy load a persisted-store subscription starts, with and without StrictMode. They
 also run in `npm test`.
 
+### Scan budgets
+
+Scoring scans focused targets, often single files under one shared source index, so it never analyzes a whole
+application. A cost that grows with the number of scanned files can pass it unnoticed: #57 left scoring green while a
+whole-app Expensify scan went from 20s to 229s and ran out of memory at Node's default heap.
+
+The `Check whole-app scan budgets` step of the corpus job scans each pinned repository root in its own Node process,
+one repository at a time, and fails a repository that runs out of heap or is killed at its time limit. The limits live
+in `evals/performance-budgets.ts`:
+
+- **Heap:** `--max-old-space-size=4096`, Node's default on a 16 GB host, pinned so every machine enforces the same cap.
+  Expensify has the least headroom: on Node 22 it passes at 3328 MiB and runs out of memory at 3072 MiB.
+- **Time:** three times the repository's CI baseline, never below 60 seconds. The analyzer exposes no deterministic work
+  counter, so wall time with that margin stands in for one.
+
+Baselines come from CI run 36409722431 on ubuntu-latest (4 CPUs, 16 GB) with the analyzer at 51f2d32:
+
+| Repository                | Baseline | Limit |
+| ------------------------- | -------: | ----: |
+| `expensify`               |    47.6s |  143s |
+| `formbricks`              |    15.0s |   60s |
+| `legend-apps`             |     9.2s |   60s |
+| `outline`                 |     6.1s |   60s |
+| `noutube`                 |     4.5s |   60s |
+| `excalidraw`              |     4.2s |   60s |
+| `hoalu`                   |     3.4s |   60s |
+| `open-webui-react-native` |     3.1s |   60s |
+| `legend-music`            |     2.4s |   60s |
+| `nori`                    |     2.2s |   60s |
+| `legend-photos`           |     1.2s |   60s |
+
+Each scan prints its wall time, peak RSS, file count, and hook count, so the job log shows trends before a limit
+trips. Run it locally with the same arguments as the eval:
+
+```bash
+node dist/evals/scan-budgets.js --complete --repo legend-music=/path/to/legend-music ...
+```
+
+When an analyzer change legitimately costs more, or a pin moves, take the new baselines from that PR's job log and
+say in the PR why the cost is worth it. A new public repository needs a baseline too; the unit suite and the scan
+step both fail without one.
+
 ## Changing the corpus
 
 Read `AGENTS.md` first. When a detector changes, add a minimal adversarial fixture test and a manually audited label
