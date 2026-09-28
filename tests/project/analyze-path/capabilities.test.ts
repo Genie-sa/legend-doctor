@@ -94,6 +94,7 @@ test("rule gates read the installed Legend State export shape and the React Comp
       "observable-toggle",
       "observable-tracking",
       "derived-use-value",
+      "in-place-memo-keys",
       "observable-ownership",
     ],
   );
