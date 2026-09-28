@@ -84,9 +84,11 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/legend-doctor-corpus
-          key: public-corpus-v1-${{ runner.os }}-${{ hashFiles('evals/corpus/**/repository.ts', 'evals/corpus/repositories.ts') }}
+          key: public-corpus-v1-${{ runner.os }}-${{ hashFiles('evals/corpus/**/repository.ts', 'evals/corpus/repositories.ts', 'evals/corpus/**/replay-commits.ts') }}
 
-      - name: Fetch exact public pins
+      # Expert replays scan each commit's parent tree, so fetch those parents by SHA as well;
+      # a shallow fetch per parent avoids cloning full history.
+      - name: Fetch exact public pins and replay parents
         env:
           CORPUS_DIRECTORY: ${{ runner.temp }}/legend-doctor-corpus
         run: |
@@ -94,14 +96,20 @@ jobs:
           import { execFileSync } from 'node:child_process';
           import { mkdirSync } from 'node:fs';
           import path from 'node:path';
+          import { replayCommits } from './dist/evals/corpus/replay-commits.js';
           import { repositories } from './dist/evals/corpus/repositories.js';
+          const git = (root, args) => execFileSync('git', ['-C', root, ...args], { stdio: 'inherit' });
           for (const repository of repositories) {
             const root = path.join(process.env.CORPUS_DIRECTORY, repository.name);
             mkdirSync(root, { recursive: true });
             execFileSync('git', ['init', '--quiet', root]);
-            const git = (args) => execFileSync('git', ['-C', root, ...args], { stdio: 'inherit' });
-            git(['fetch', '--depth=1', '--no-tags', repository.url, repository.commit]);
-            git(['checkout', '--detach', repository.commit]);
+            git(root, ['fetch', '--depth=1', '--no-tags', repository.url, repository.commit]);
+            git(root, ['checkout', '--detach', repository.commit]);
+          }
+          for (const { parent, repository } of replayCommits) {
+            const { url } = repositories.find(({ name }) => name === repository);
+            const root = path.join(process.env.CORPUS_DIRECTORY, repository);
+            git(root, ['fetch', '--depth=1', '--no-tags', url, `${parent}:refs/replay/${parent}`]);
           }
           NODE
 

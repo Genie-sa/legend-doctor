@@ -1,0 +1,24 @@
+import type { GoldHookCase } from "../contracts.js";
+
+export const noriHookCases = [
+  {
+    action: "use-observable",
+    file: "components/bookmark/BookmarkItem.tsx",
+    hook: "useState",
+    line: 115,
+    name: "menuOpen",
+    rationale:
+      "The flag reaches only AnchorMenu's `visible` prop; closing the menu writes it alone, so a leaf subscriber closes it without rerendering the memoized tile, its favicon, and its title.",
+    target: "nori",
+  },
+  {
+    action: "use-observable",
+    file: "components/sheet/BookmarkEditorSheet.tsx",
+    hook: "useState",
+    line: 32,
+    name: "metadataLoading",
+    rationale:
+      "The flag only labels the save button, while the owner recomputes tag suggestions over every bookmark and renders the whole form; the true write before the metadata fetch no longer rerenders that owner.",
+    target: "nori",
+  },
+] as const satisfies readonly GoldHookCase[];

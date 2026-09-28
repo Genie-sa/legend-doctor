@@ -3,11 +3,15 @@ import { parseSelection, selectionLines, validateSelection } from "./runner/sele
 import { scoreHookCases, scorePractices, scoreStateGroups } from "./runner/scoring.js";
 import type { CorpusSlice } from "./corpus/private-corpus.js";
 import type { Evaluation } from "./runner/model.js";
+import type { ReplayOutcome } from "./runner/replay-scoring.js";
 import { goldCases } from "./corpus/hook-cases.js";
 import { goldPracticeCases } from "./corpus/practice-cases.js";
 import { goldStateGroups } from "./corpus/state-groups.js";
 import { loadPrivateCorpus } from "./corpus/private-corpus.js";
 import process from "node:process";
+import { replayCommits } from "./corpus/replay-commits.js";
+import { replayExpertCommits } from "./runner/replay.js";
+import { replaySummaryLines } from "./runner/replay-summary.js";
 import { repositories } from "./corpus/repositories.js";
 import { summaryLines } from "./runner/summary.js";
 
@@ -49,14 +53,20 @@ async function evaluate(): Promise<void> {
   await mapSequentially(corpus.repositories, (repository) =>
     inspectRepository(run, repository, selection.roots),
   );
-  reportEvaluation(run, corpus);
+  const replays = await replayExpertCommits(replayCommits, selection.roots, run.failures);
+  reportEvaluation(run, corpus, replays);
 }
 
-function reportEvaluation(run: Evaluation, corpus: CorpusSlice): void {
+function reportEvaluation(
+  run: Evaluation,
+  corpus: CorpusSlice,
+  replays: readonly ReplayOutcome[],
+): void {
   if (run.targets.size === 0) {
     run.failures.push("No targets were evaluated; refusing to report empty precision/recall.");
   } else {
-    process.stdout.write(`${scoreCorpus(run, corpus).join("\n")}\n`);
+    const lines = [...scoreCorpus(run, corpus), ...replaySummaryLines(replays)];
+    process.stdout.write(`${lines.join("\n")}\n`);
   }
   reportFailures(run.failures);
 }

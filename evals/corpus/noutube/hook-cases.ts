@@ -1,0 +1,65 @@
+import type { GoldHookCase } from "../contracts.js";
+
+export const noutubeHookCases = [
+  {
+    action: "use-observable",
+    file: "FeedModal.tsx",
+    hook: "useState",
+    line: 82,
+    name: "filterMenuQuery",
+    rationale:
+      "Every keystroke of the folder filter rerenders the whole feed owner and recomputes its bookmark filters; the query is read only inside the open folder menu, and the effect that clears it on menu change can write the observable in the same place.",
+    target: "noutube-feed-modal",
+  },
+  {
+    action: "use-observable",
+    file: "SettingsModalTabSettings.tsx",
+    hook: "useState",
+    line: 903,
+    name: "updatingYtDlp",
+    rationale:
+      "The pending flag feeds only the yt-dlp row's `loading` prop; subscribing at that call site keeps the other action rows out of both transitions of the awaited update.",
+    target: "noutube-settings-tabs",
+  },
+  {
+    action: "use-observable",
+    file: "MainPageContent.tsx",
+    hook: "useState",
+    line: 413,
+    name: "blocklistSynced",
+    rationale:
+      "The flag gates only the desktop tab list and is written once after the main process receives the blocklist, so a leaf subscriber mounts the tabs without rerendering the page owner.",
+    target: "noutube-page",
+  },
+  {
+    action: "use-observe-effect",
+    file: "components/native/AppShell.tsx",
+    hook: "useEffect",
+    line: 70,
+    name: null,
+    rationale:
+      "`language` is subscribed only to feed this effect, and neither parent subscribes to it; observing settings$.language directly applies the language without rerendering the provider shell.",
+    target: "noutube-extension",
+  },
+  {
+    action: "use-observable",
+    file: "components/native/ExtensionHome.tsx",
+    hook: "useState",
+    line: 164,
+    name: "busy",
+    rationale:
+      "The bookmark command's pending flag reaches only the header, while the owner also renders the feed list and six modals that rerender on both transitions today.",
+    target: "noutube-extension",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/native/SyncSection.tsx",
+    hook: "useState",
+    line: 19,
+    name: "busy",
+    rationale:
+      "Uncertain: three status buttons read the flag, but the owner outside them is only four text rows, and the false write directly follows the awaited snapshot refresh that already rerenders the owner through context.",
+    target: "noutube-extension",
+  },
+] as const satisfies readonly GoldHookCase[];
