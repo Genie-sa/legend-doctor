@@ -15,6 +15,7 @@ import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
 import { useValueBinding } from "./use-value-bindings.js";
 import { visit } from "../../core/ast.js";
+import { wrappedResultDeclaration } from "./wrapped-use-value-results.js";
 
 type ProvenBinding = Exclude<UseValueBinding, { kind: "unproven" }>;
 
@@ -40,7 +41,7 @@ function inventoryEntry(
   scan: ObservableReadScan,
   findings: readonly LegendPracticeFinding[],
 ): SubscriptionInventory {
-  const declaration = ts.isVariableDeclaration(call.parent) ? call.parent : null;
+  const declaration = wrappedResultDeclaration(call);
   const analysis = bindingAnalysis(call, scan);
   const { binding, flow } = analysis;
   const use = flow?.use;

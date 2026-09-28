@@ -43,6 +43,8 @@ export interface ModuleRecord {
   observableMemberDeclarations: ReadonlyMap<string, ReadonlySet<string>>;
   observableFactoryCalls: ReadonlyMap<string, string>;
   observableFactoryDeclarations: ReadonlySet<string>;
+  /** Module `const` bindings of a plain scalar literal, such as `const WIDTH = 340`. */
+  plainConstantDeclarations: ReadonlySet<string>;
   pureProjectionDeclarations: ReadonlySet<string>;
   reactContexts: ReadonlySet<string>;
   reexports: ReadonlyMap<string, ReexportBinding>;
@@ -67,6 +69,7 @@ export type SourceSymbolKind =
   | "observable"
   | "observable-container"
   | "observable-factory"
+  | "plain-constant"
   | "pure-projection"
   | "react-context";
 
@@ -145,6 +148,7 @@ export interface ModuleRecordDraft {
   observableFactoryDeclarations: Set<string>;
   observableKeys: Map<string, ReadonlySet<string>>;
   observableMemberDeclarations: Map<string, ReadonlySet<string>>;
+  plainConstantDeclarations: Set<string>;
   pureProjectionDeclarations: Set<string>;
   reactContexts: Set<string>;
   reexports: Map<string, ReexportBinding>;

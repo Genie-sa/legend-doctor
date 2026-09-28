@@ -16,10 +16,7 @@ import {
 } from "./symbol-resolution.js";
 import { cachedModuleResolutionHost, normalizeFile, resolveModule } from "./module-resolution.js";
 import { contextProviderSitesFor, contextReaderHooksFor } from "./context-readers.js";
-import {
-  observableDeclarationPathsFor,
-  observablePrimitivePathsFor,
-} from "./observable-primitive-paths.js";
+import { observablePlainSeedPathsFor, plainConstantsFor } from "./plain-constants.js";
 import type { AnalysisFile } from "../analysis-project.js";
 import type { ObservableInPlaceWrites } from "./observable-in-place-writes.js";
 import type { SourceContextCoverage } from "./source-context.js";
@@ -29,7 +26,7 @@ import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
 import { observableInPlaceWritesFor } from "./observable-in-place-writes.js";
 import { observablePathsFor } from "./observable-containers.js";
-import { plainSeedPaths } from "../../rules/observable-reads/plain-seed-paths.js";
+import { observablePrimitivePathsFor } from "./observable-primitive-paths.js";
 import { sourceContextFor } from "./source-context.js";
 import type ts from "typescript";
 
@@ -61,6 +58,8 @@ export interface SourceIndex {
   observablePlainSeedPathsFor: (file: string) => ReadonlySet<string>;
   /** Per imported exact object-literal observable, the top-level keys that hold data rather than functions. */
   observableDataKeysFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
+  /** Names bound to a module `const` of a plain scalar literal, locally or through an import. */
+  plainConstantsFor: (file: string) => ReadonlySet<string>;
   observableFactoriesFor: (file: string) => ReadonlySet<string>;
   /** In-place writes from every indexed file to each observable the file can name. */
   observableInPlaceWritesFor: (file: string) => ObservableInPlaceWrites;
@@ -99,8 +98,8 @@ export function buildSourceIndexFromFiles(
     observableArrayPathsFor: (file) => observableArrayPathsFor(state, file),
     observableDeclarationFor: (file, name) => observableDeclarationFor(state, file, name),
     observablePrimitivePathsFor: (file) => observablePrimitivePathsFor(state, file),
-    observablePlainSeedPathsFor: (file) =>
-      observableDeclarationPathsFor(state, file, plainSeedPaths),
+    observablePlainSeedPathsFor: (file) => observablePlainSeedPathsFor(state, file),
+    plainConstantsFor: (file) => plainConstantsFor(state, file),
     observableDataKeysFor: (file) =>
       importedObservableKeys(state, file, (record) => record.observableDataKeys),
     observableFactoriesFor: (file) =>

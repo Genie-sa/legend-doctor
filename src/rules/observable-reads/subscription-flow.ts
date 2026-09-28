@@ -1,17 +1,17 @@
 import type { ObservableReadScan, UseValueDeclaration } from "./model.js";
 import { bindingDeclarationCount, isDeclarationName } from "../../core/analysis-ast.js";
-import { findAncestor, isRuntimeFunctionLike, nodeWithin, visit } from "../../core/ast.js";
+import { findAncestor, isRuntimeFunctionLike, nodeWithin } from "../../core/ast.js";
 import { lowestCommonJsxSubtree, nearestRepeatedRenderCall } from "../state-proofs/jsx-subtrees.js";
 import { primitiveExpression, pureFlowExpression, pureMemoProjection } from "./flow-expressions.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SubscriptionInventoryReason } from "../../core/subscriptions.js";
+import { blockScopedReferences } from "../../core/scope-references.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import { isImportedReactCall } from "../react-commit-sensitivity/binding-resolution.js";
 import { isInsideOwnerReturn } from "./conditional-jsx-slots.js";
 import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
 import { isRenderGateRead } from "./render-gates.js";
 import { isSynchronousRenderCallback } from "../state-proofs/callback-sites.js";
-import { isValueReferenceTo } from "./observable-paths.js";
 import ts from "typescript";
 
 /**
@@ -75,17 +75,31 @@ function collectFlowReads(flow: SubscriptionFlow, scan: ObservableReadScan): voi
   const { use } = flow;
   const pending = [use.declaration];
   for (const declaration of pending) {
-    const name = declaration.name.getText();
-    if (bindingDeclarationCount(use.owner, name) !== 1) {
+    if (!isConstBinding(declaration)) {
       flow.blockers.add("shadowed-or-reassigned-binding");
       continue;
     }
-    visit(use.owner.body, (node) => {
-      if (isValueReferenceTo(node, name, declaration.name)) {
-        collectRead(node, flow, { scan, pending });
-      }
-    });
+    if (bindingDeclarationCount(use.owner, declaration.name.text) !== 1) {
+      flow.blockers.add("shadowed-or-reassigned-binding");
+    }
+    for (const reference of blockScopedReferences(declaration)) {
+      collectRead(reference, flow, { scan, pending });
+    }
   }
+}
+
+/**
+ * A `const` is never reassigned, so scope resolution finds every read. A nested redeclaration still
+ * blocks the flow: `names` and `primitives` are keyed by text and would describe that binding too.
+ */
+function isConstBinding(
+  declaration: ts.VariableDeclaration,
+): declaration is ts.VariableDeclaration & { readonly name: ts.Identifier } {
+  return (
+    ts.isIdentifier(declaration.name) &&
+    ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+  );
 }
 
 function collectRead(

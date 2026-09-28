@@ -1,6 +1,7 @@
 import type { InstalledLegendState, LegendPracticeFinding } from "../../core/types.js";
 import { directUseValueFinding, directUseValueInput } from "./use-value-inputs.js";
 import { localDeclarationPaths, localPrimitivePaths } from "./primitive-paths.js";
+import { localPlainConstants, plainSeedPaths } from "./plain-seed-paths.js";
 import {
   nonTrackingSnapshotFinding,
   nonTrackingSnapshotObservable,
@@ -16,7 +17,6 @@ import { isCanonicalUseValueCall } from "./observable-paths.js";
 import { moveUseValueDownFinding } from "./move-down.js";
 import { moveUseValueIntoChildFinding } from "./move-into-child.js";
 import { narrowUseValueFinding } from "./narrow-use-value.js";
-import { plainSeedPaths } from "./plain-seed-paths.js";
 import { splitUseValueResultFinding } from "./fresh-selector-results.js";
 import { subscriptionInventory } from "./subscription-inventory.js";
 import ts from "typescript";
@@ -27,6 +27,7 @@ export interface ObservableReadRequest {
   readonly inventory?: SubscriptionInventory[] | undefined;
   readonly primitivePaths?: ReadonlySet<string>;
   readonly plainSeedPaths?: ReadonlySet<string>;
+  readonly plainConstants?: ReadonlySet<string> | undefined;
   readonly childContracts?: ChildContractResolver | null;
   readonly fileName: string;
   readonly imports: HookImports;
@@ -41,6 +42,7 @@ export function findObservableReadPractices(
   request: ObservableReadRequest,
 ): LegendPracticeFinding[] {
   const { sourceFile } = request;
+  const plainConstants = request.plainConstants ?? localPlainConstants(sourceFile);
   const scan: ObservableReadScan = {
     ...request,
     primitivePaths: new Set([
@@ -49,7 +51,9 @@ export function findObservableReadPractices(
     ]),
     plainSeedPaths: new Set([
       ...(request.plainSeedPaths ?? []),
-      ...localDeclarationPaths(sourceFile, request.observableBindings, plainSeedPaths),
+      ...localDeclarationPaths(sourceFile, request.observableBindings, (declaration) =>
+        plainSeedPaths(declaration, plainConstants),
+      ),
     ]),
     childContracts: request.childContracts ?? null,
     installedLegendState: request.installedLegendState ?? null,

@@ -295,7 +295,7 @@ gate leaves no smaller boundary to extract. A JSX tag name chosen by a gate stay
 | `selector-read-not-proven`               | The selector reads an observable without a tracked `get()`, such as `peek()` or a bare node member |
 | `selector-syntax-not-proven`             | The selector uses syntax outside the modeled subset, such as an assignment or a loop               |
 | `selector-tracks-no-observable`          | The selector is proven but tracks no observable                                                    |
-| `shadowed-or-reassigned-binding`         | The binding or one of its derivations is declared more than once in the owner                      |
+| `shadowed-or-reassigned-binding`         | The binding is not a `const`, or it or a derivation shares its name with another owner binding     |
 | `stable-material-render-cut-not-proven`  | No specific blocker was found, but no stable cut removes a material part of the owner render       |
 | `unsupported-value-flow`                 | A read sits in a position the analyzer cannot classify                                             |
 | `use-value-options`                      | The call has no argument or passes options                                                         |

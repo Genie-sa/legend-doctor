@@ -10,6 +10,7 @@ import {
 import { dataFieldKeys, exactObjectLiteralKeys } from "../../core/analysis-ast.js";
 import { directObservableMembers, isObservableInitializer } from "./observable-declarations.js";
 import { directReactContextReader, isReactContextInitializer } from "./react-traits.js";
+import { isPlainConstantDeclaration } from "../../rules/observable-reads/plain-seed-paths.js";
 import { styledComponentTarget } from "./framework-event-components.js";
 import ts from "typescript";
 
@@ -54,6 +55,21 @@ function collectVariableDeclaration(
   collectObjectObservableMembers(context, draft, signals);
   collectObservableDeclaration(context, draft, signals);
   collectComponentVariableDeclaration(context, draft, signals);
+  collectPlainConstantDeclaration(context, draft);
+}
+
+function collectPlainConstantDeclaration(
+  context: DeclarationContext,
+  draft: ModuleRecordDraft,
+): void {
+  const { declaration } = context;
+  if (!isPlainConstantDeclaration(declaration)) {
+    return;
+  }
+  draft.plainConstantDeclarations.add(declaration.name.text);
+  if (context.exported) {
+    draft.localExports.set(declaration.name.text, declaration.name.text);
+  }
 }
 
 function collectReactContextDeclaration(

@@ -34,6 +34,7 @@ const DECLARED_SYMBOL_LOOKUPS = {
   observable: (record: ModuleRecord): NameLookup => record.observableDeclarations,
   "observable-container": (record: ModuleRecord): NameLookup => record.observableMemberDeclarations,
   "observable-factory": (record: ModuleRecord): NameLookup => record.observableFactoryDeclarations,
+  "plain-constant": (record: ModuleRecord): NameLookup => record.plainConstantDeclarations,
   "pure-projection": (record: ModuleRecord): NameLookup => record.pureProjectionDeclarations,
   "react-context": (record: ModuleRecord): NameLookup => record.reactContexts,
 } satisfies Record<SourceSymbolKind, (record: ModuleRecord) => NameLookup>;
