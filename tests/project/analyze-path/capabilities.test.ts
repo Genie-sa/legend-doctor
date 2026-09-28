@@ -23,7 +23,10 @@ test("the report names the toolchain facts and the practice rules they switched 
   assert.equal(report.capabilities.legendState, null);
   assert.deepEqual(
     report.capabilities.disabledRules.map(({ files, reason, rule }) => ({ files, reason, rule })),
-    [{ files: 1, reason: "react-compiler", rule: "observable-clone-writes" }],
+    [
+      { files: 1, reason: "react-compiler", rule: "memo-props" },
+      { files: 1, reason: "react-compiler", rule: "observable-clone-writes" },
+    ],
   );
   assert.ok(!report.practices.some((practice) => practice.action === "narrow-observable-write"));
 });

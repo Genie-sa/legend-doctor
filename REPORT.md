@@ -30,7 +30,7 @@ Important fields:
 | `root`         | Base directory for every finding path                                       |
 | `analyzer`     | Tool `version` and compiled `build`                                         |
 | `findings`     | React state and effect findings                                             |
-| `practices`    | Legend State practice findings                                              |
+| `practices`    | Legend State and render-identity practice findings                          |
 | `hidden`       | Findings removed by filters                                                 |
 | `capabilities` | Legend State version and exports, React Compiler status, and disabled rules |
 | `scope`        | Active scope flag and loaded context file count                             |
@@ -50,12 +50,12 @@ A lockfile version newer than the verified releases reports `unknown` exports an
 `detail`, and the number of analyzed `files` that skipped it. A disabled rule reports nothing, so a missing
 finding is not a clean file.
 
-| `disabledRules` reason     | Rules                                               | Meaning                                                                                                        |
-| -------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `legend-v2-tracking`       | `plain-primitive-projection`, `observable-tracking` | `@legendapp/state` 2.x can auto-track render `get()` calls through an app-wide setting the analyzer cannot see |
-| `react-compiler`           | `observable-clone-writes`                           | The React Compiler memoizes by reference, so in-place observable writes would leave memoized consumers stale   |
-| `sync-export-missing`      | `browser-storage-persistence`                       | The resolved package has no `sync` entry point; storage-writing effects stay `keep-effect`                     |
-| `use-value-export-missing` | `legacy-use-value`                                  | The resolved `@legendapp/state/react` entry point does not export `useValue`                                   |
+| `disabledRules` reason     | Rules                                               | Meaning                                                                                                                                                                 |
+| -------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legend-v2-tracking`       | `plain-primitive-projection`, `observable-tracking` | `@legendapp/state` 2.x can auto-track render `get()` calls through an app-wide setting the analyzer cannot see                                                          |
+| `react-compiler`           | `observable-clone-writes`, `memo-props`             | The React Compiler memoizes by reference, so in-place observable writes would leave memoized consumers stale, and props built during render already keep their identity |
+| `sync-export-missing`      | `browser-storage-persistence`                       | The resolved package has no `sync` entry point; storage-writing effects stay `keep-effect`                                                                              |
+| `use-value-export-missing` | `legacy-use-value`                                  | The resolved `@legendapp/state/react` entry point does not export `useValue`                                                                                            |
 
 Every `review-state` and `review-effect` finding has an `abstentionReason`. It names the main fact or safety rule that
 blocked a proven edit.

@@ -818,6 +818,23 @@ A function initializer with a tracked `get()` creates a computed observable, and
 value on its next recomputation. The finding fires only when the owner also writes the observable; an initializer
 that is never written stays a legitimate derivation, and a `linked` or `synced` body already declares its own setter.
 
+## Keep memoized children memoized
+
+### Stabilize a prop a memoized child compares
+
+```tsx
+const [open, setOpen] = useState(false);
+<Row onPick={() => select(id)} style={{ margin: 4 }} />; // Before
+const pick = useCallback(() => select(id), [id]);
+<Row onPick={pick} style={ROW_STYLE} />; // After, with `const ROW_STYLE = { margin: 4 }` at module scope
+```
+
+`memo` and `observer` skip a render only when every prop keeps its identity. A literal, function, or element built
+during render is new each time, so every `open` write re-renders `Row` although nothing it reads changed. The
+finding is a `change` only when the owner has state or a subscription the element never reads, some write of it
+leaves everything the element reads unchanged, and every other prop is proven to keep its identity; otherwise it is
+a `candidate` that names the unproven values. It is off under the React Compiler, which already memoizes these values.
+
 ## Final check
 
 Before finishing:

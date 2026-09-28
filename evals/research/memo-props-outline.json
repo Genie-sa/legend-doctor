@@ -1,0 +1,70 @@
+{
+  "repository": "https://github.com/outline/outline",
+  "commit": "bae9790355385b2b2987123eeb3978c6c06e6ed6",
+  "scored": false,
+  "labels": [
+    {
+      "id": "MEMO-PROPS-API-KEYS-TABLE",
+      "file": "app/scenes/Settings/ApiKeys.tsx",
+      "line": 145,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: ApiKeysTable is a mobx observer and receives an inline page object. Each keystroke in the filter input sets query (line 32), which the table never reads, so every keystroke re-renders the whole table with equal data. data, sort and next come from useTableRequest and a router-derived memo, so their identity is not provable and the finding stays a candidate."
+    },
+    {
+      "id": "MEMO-PROPS-CUSTOM-EMOJIS-TABLE",
+      "file": "app/scenes/Settings/CustomEmojis.tsx",
+      "line": 138,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: the same shape as ApiKeys. The query state (line 35) changes on every filter keystroke and re-renders the observer EmojisTable through its inline page object. The useTableRequest results and canManage are unproven, so it stays a candidate."
+    },
+    {
+      "id": "MEMO-PROPS-GROUP-MEMBERS-TABLE",
+      "file": "app/scenes/Settings/GroupMembers.tsx",
+      "line": 261,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: GroupMembersTable is an observer with an inline page object, and it re-renders for every filter keystroke through query (line 81). group comes from a MobX store lookup, and data, sort and next come from useTableRequest, so the finding stays a candidate."
+    },
+    {
+      "id": "MEMO-PROPS-GROUP-MEMBERS-LEAVE-CONTEXT",
+      "file": "app/scenes/Settings/GroupMembers.tsx",
+      "line": 209,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: the inner ActionContextProvider in the Scene actions receives a fresh value object and a fresh Button child, so each filter keystroke re-renders the provider and every action-context consumer below it. It is a real but small cost (one button). t from react-i18next is a package hook whose identity is not provable."
+    },
+    {
+      "id": "MEMO-PROPS-WEBHOOKS-TABLE",
+      "file": "plugins/webhooks/client/Settings.tsx",
+      "line": 143,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: this has the same keystroke-driven re-render of the observer WebhookSubscriptionsTable through an inline page object as ApiKeys. The useTableRequest results are unproven."
+    },
+    {
+      "id": "MEMO-PROPS-SIDEBAR-ACCOUNT-MENU",
+      "file": "app/components/Sidebar/Sidebar.tsx",
+      "line": 283,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: AccountMenu is an observer whose children render prop is rebuilt on every Sidebar_ render. isCollapsing, offset, isHovering, isAnimating and hasPointerMoved never reach it, so each hover change, animation toggle, collapse and resize start re-renders the account menu. Per-move width changes arrive through MobX, which the rule does not model as a render trigger. t is the only unproven input."
+    },
+    {
+      "id": "MEMO-PROPS-DOCUMENT-COPY-EXPLORER",
+      "file": "app/components/DocumentExplorer/DocumentCopy.tsx",
+      "line": 70,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin: the observer DocumentExplorer receives the inline copy function, so the two copying transitions per copy re-render the explorer tree. The render is real but rare. The same handler also calls the onSubmit prop, and items and t are unproven, so it stays a candidate."
+    },
+    {
+      "id": "MEMO-PROPS-HISTORY-EVENT-LIST",
+      "file": "app/scenes/Document/components/History/History.tsx",
+      "line": 270,
+      "enforced": false,
+      "rationale": "Manually audited at the pin; unresolved. PaginatedEventList is memo with an inline empty element, and it renders for compareTo and showChanges. Both handlers also rewrite the location through updateLocation, which can change the router-derived items, fetch and document in the same transition, so whether any render is avoidable is not established."
+    }
+  ]
+}

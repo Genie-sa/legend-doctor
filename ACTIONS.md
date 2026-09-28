@@ -66,6 +66,12 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 | [`reuse-observable-reference`](EXAMPLES.md#reuse-the-observable-you-already-have)                      | A wrapper node identical to its source observable    |
 | [`snapshot-computed-initializer`](EXAMPLES.md#snapshot-an-initial-value-instead-of-writing-a-computed) | Writes that a computed initializer silently replaces |
 
+### React rendering
+
+| Action                                                                          | Removes                                                                   |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`stabilize-memo-prop`](EXAMPLES.md#stabilize-a-prop-a-memoized-child-compares) | Memoized child renders caused by props rebuilt on unrelated owner renders |
+
 ### Keep and review
 
 These carry no edit. A `keep` finding preserves code that is already correct; a review names the proof it lacks.
