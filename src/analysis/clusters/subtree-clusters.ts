@@ -83,6 +83,7 @@ function companionsStayInside(
 export function findStateSubtreeClusters(
   subtreeByState: ReadonlyMap<StateCandidate, StateSubtree>,
   companionWrites: StateCompanionWrites,
+  subscriptionHook: string,
 ): ReadonlyMap<StateCandidate, StateCluster> {
   const result = new Map<StateCandidate, StateCluster>();
   for (const [node, grouped] of groupCandidatesBySubtree(subtreeByState, companionWrites)) {
@@ -93,7 +94,7 @@ export function findStateSubtreeClusters(
     ) {
       continue;
     }
-    const cluster = subtreeCluster(candidates);
+    const cluster = subtreeCluster(candidates, subscriptionHook);
     for (const member of cluster.members) {
       result.set(member, cluster);
     }
@@ -101,7 +102,10 @@ export function findStateSubtreeClusters(
   return result;
 }
 
-function subtreeCluster(candidates: readonly SubtreeCandidate[]): StateCluster {
+function subtreeCluster(
+  candidates: readonly SubtreeCandidate[],
+  subscriptionHook: string,
+): StateCluster {
   const first = candidates[0]!;
   const members = candidates.map((candidate) => candidate.state);
   const names = members.map((member) => member.valueName);
@@ -111,7 +115,7 @@ function subtreeCluster(candidates: readonly SubtreeCandidate[]): StateCluster {
     candidates.some(
       (candidate) => candidate.subtree.unstable || candidate.subtree.kind !== "direct",
     );
-  const ownership = subtreeClusterOwnership(repeated, needsObservable);
+  const ownership = subtreeClusterOwnership(repeated, needsObservable, subscriptionHook);
   return {
     action: needsObservable ? "use-observable" : "move-state-down",
     id: `state-cluster:subtree:${first.state.owner.getStart()}:${first.subtree.node.getStart()}:${names.join(",")}`,

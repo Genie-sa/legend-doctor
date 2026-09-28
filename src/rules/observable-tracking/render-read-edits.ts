@@ -13,14 +13,18 @@ function canExitEarly(statement: ts.Statement): boolean {
   return exits;
 }
 
+/** The first earlier statement in the same block that can leave it, below which a hook would run conditionally. */
+export function earlyExitBefore(statement: ts.Statement): ts.Statement | undefined {
+  const body = statement.parent;
+  const preceding = ts.isBlock(body)
+    ? body.statements.slice(0, body.statements.indexOf(statement))
+    : [];
+  return preceding.find((candidate) => canExitEarly(candidate));
+}
+
 /** A hook placed at `statement` runs on every render only when no earlier statement can leave the body. */
 function runsOnEveryRender(statement: ts.Statement): boolean {
-  const body = statement.parent;
-  if (!ts.isBlock(body)) {
-    return false;
-  }
-  const preceding = body.statements.slice(0, body.statements.indexOf(statement));
-  return !preceding.some((candidate) => canExitEarly(candidate));
+  return ts.isBlock(statement.parent) && earlyExitBefore(statement) === undefined;
 }
 
 /**

@@ -22,7 +22,7 @@ export function observableReactionClassification(
   const { owner } = effect;
   return owner && useValueDependenciesAreEffectOnly(effect, inline)
     ? unrenderedReactionClassification({ callback, inline, owner, effect })
-    : keepRenderedReactionEffect();
+    : keepRenderedReactionEffect(inline.subscriptionHook);
 }
 
 /** A reaction whose `useValue` dependencies render nothing in the owner. */
@@ -40,13 +40,15 @@ function unrenderedReactionClassification({
   const sources = useValueDependencySources(effect, owner, inline);
   const parentRerender = inline.childContracts?.componentParentRerender(owner, sources) ?? "absent";
   if (parentRerender === "proven") {
-    return keepParentRenderedReactionEffect();
+    return keepParentRenderedReactionEffect(inline.subscriptionHook);
   }
   if (parentRerender === "possible") {
-    return reviewParentRenderedReactionEffect();
+    return reviewParentRenderedReactionEffect(inline.subscriptionHook);
   }
   const peekedReads = incidentalObservableReads({ callback, inline, owner, sources });
-  return peekedReads ? observeEffect(peekedReads) : reviewUntrackableReadsEffect();
+  return peekedReads
+    ? observeEffect(peekedReads, inline.subscriptionHook)
+    : reviewUntrackableReadsEffect();
 }
 
 /** The observable argument of each `useValue` call whose result the effect lists as a dependency. */

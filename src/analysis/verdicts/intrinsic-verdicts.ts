@@ -59,7 +59,7 @@ export function controlledCutVerdict(context: StateClassificationContext): Class
       confidence: "probable",
       message: dialogPayloadCut.conditional
         ? `Replace nullable dialog payload \`${state.valueName}\` with a component-lifetime observable and replace the complete conditional ${dialogPayloadCut.consumerLabel} slot at line ${dialogPayloadCut.consumerLine} with one always-mounted stable leaf subscriber; evaluate the existing payload gate and call-free child projections there, use non-tracking snapshots in event commands, and preserve callbacks, write positions, and the dialog's conditional mount identity.`
-        : `Replace nullable dialog payload \`${state.valueName}\` with a component-lifetime observable and wrap the complete always-mounted ${dialogPayloadCut.consumerLabel} call site at line ${dialogPayloadCut.consumerLine} in one stable leaf subscriber; subscribe there with \`useValue\`, use non-tracking snapshots in event commands, and preserve the existing open expression, callbacks, write positions, and mount identity.`,
+        : `Replace nullable dialog payload \`${state.valueName}\` with a component-lifetime observable and wrap the complete always-mounted ${dialogPayloadCut.consumerLabel} call site at line ${dialogPayloadCut.consumerLine} in one stable leaf subscriber; subscribe there with \`${context.subscriptionHook}\`, use non-tracking snapshots in event commands, and preserve the existing open expression, callbacks, write positions, and mount identity.`,
     };
   }
   return null;
@@ -92,21 +92,21 @@ export function keyedSelectionVerdict(context: StateClassificationContext): Clas
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace keyed collection state \`${state.valueName}\` with a component-lifetime observable collection; extract the repeated row and subscribe there with an equivalent per-row \`useValue\` membership selector, preserve any proven filter inside the row and aggregate leaves, and read commands without subscribing.`,
+      message: `Replace keyed collection state \`${state.valueName}\` with a component-lifetime observable collection; extract the repeated row and subscribe there with an equivalent per-row \`${context.subscriptionHook}\` membership selector, preserve any proven filter inside the row and aggregate leaves, and read commands without subscribing.`,
     };
   }
   if (isKeyedLeafRecord) {
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace keyed record state \`${state.valueName}\` with a component-lifetime observable record; extract the stable-keyed row, subscribe there to only its dynamic entry with \`useValue(${state.valueName}$[rowKey])\`, and preserve every optimistic and rollback command position while replacing exact clone writes with child \`.set(...)\` and \`.delete()\` operations.`,
+      message: `Replace keyed record state \`${state.valueName}\` with a component-lifetime observable record; extract the stable-keyed row, subscribe there to only its dynamic entry with \`${context.subscriptionHook}(${state.valueName}$[rowKey])\`, and preserve every optimistic and rollback command position while replacing exact clone writes with child \`.set(...)\` and \`.delete()\` operations.`,
     };
   }
   if (isKeyedLeafScalar) {
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace scalar row-selection state \`${state.valueName}\` with a component-lifetime observable; extract a stable-keyed row component and subscribe with a per-item \`useValue(() => ${state.valueName}$.get() === rowDiscriminator)\` selector, while event commands read or update the cursor without subscribing.`,
+      message: `Replace scalar row-selection state \`${state.valueName}\` with a component-lifetime observable; extract a stable-keyed row component and subscribe with a per-item \`${context.subscriptionHook}(() => ${state.valueName}$.get() === rowDiscriminator)\` selector, while event commands read or update the cursor without subscribing.`,
     };
   }
   return null;

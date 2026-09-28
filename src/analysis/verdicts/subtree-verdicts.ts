@@ -185,14 +185,14 @@ export function unsafeOwnershipVerdict(
     return {
       action: "use-value",
       confidence: "probable",
-      message: `Delete the React mirror \`${state.valueName}\` and derive it with \`useValue\` from the observable read in its Legend reaction.`,
+      message: `Delete the React mirror \`${state.valueName}\` and derive it with \`${context.subscriptionHook}\` from the observable read in its Legend reaction.`,
     };
   }
   if (belongsToObservableSelection && !usage.shadowed) {
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace the selection hook's React state cluster with one observable model; expose observable fields and subscribe per row or control with \`useValue\`.`,
+      message: `Replace the selection hook's React state cluster with one observable model; expose observable fields and subscribe per row or control with \`${context.subscriptionHook}\`.`,
     };
   }
   return null;
@@ -208,7 +208,7 @@ export function confinedSubtreeVerdict(
       return {
         action: "use-observable",
         confidence: "probable",
-        message: `Replace \`${state.valueName}\` with a component-lifetime observable and subscribe with a per-item \`useValue\` selector inside the repeated row under the ${directSubtree.label} subtree at line ${directSubtree.line}; do not subscribe the list owner.`,
+        message: `Replace \`${state.valueName}\` with a component-lifetime observable and subscribe with a per-item \`${context.subscriptionHook}\` selector inside the repeated row under the ${directSubtree.label} subtree at line ${directSubtree.line}; do not subscribe the list owner.`,
       };
     }
     const moved = movedDeclarationsNote(directSubtree.movedDeclarations);
@@ -216,7 +216,7 @@ export function confinedSubtreeVerdict(
       return {
         action: "use-observable",
         confidence: "probable",
-        message: `Replace \`${state.valueName}\` with a component-lifetime observable, extract the ${directSubtree.label} subtree at line ${directSubtree.line} into a leaf wrapper, and subscribe there with \`useValue\`; keeping ownership here preserves conditional mount lifetime.${moved}${forwardedSetterNote(state, usage)}`,
+        message: `Replace \`${state.valueName}\` with a component-lifetime observable, extract the ${directSubtree.label} subtree at line ${directSubtree.line} into a leaf wrapper, and subscribe there with \`${context.subscriptionHook}\`; keeping ownership here preserves conditional mount lifetime.${moved}${forwardedSetterNote(state, usage)}`,
       };
     }
     return {
@@ -320,7 +320,7 @@ export function wideOwnerTransportVerdict(
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace \`${state.valueName}\` with \`useObservable\` at this owner and subscribe with \`useValue\` only in the transported leaf consumers.`,
+      message: `Replace \`${state.valueName}\` with \`useObservable\` at this owner and subscribe with \`${context.subscriptionHook}\` only in the transported leaf consumers.`,
     };
   }
   return null;

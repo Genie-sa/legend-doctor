@@ -89,13 +89,16 @@ function peekInstruction(peekedReads: readonly PeekedRead[]): string {
   return ` Replace ${replacements.join(", ")}: the effect does not depend on ${reads}, and a tracked \`.get()\` would rerun the reaction on every change to ${them}.`;
 }
 
-export function observeEffect(peekedReads: readonly PeekedRead[]): ClassifiedEffect {
+export function observeEffect(
+  peekedReads: readonly PeekedRead[],
+  subscriptionHook: string,
+): ClassifiedEffect {
   const peeks = peekInstruction(peekedReads);
   return {
     action: "use-observe-effect",
     confidence: "probable",
     derivedState: null,
-    message: `Rewrite this post-mount reaction with \`useObserveEffect\`, reading its observable sources directly; dependencies are \`useValue\` snapshots or stable \`useObservable\` handles.${peeks}`,
+    message: `Rewrite this post-mount reaction with \`useObserveEffect\`, reading its observable sources directly; dependencies are \`${subscriptionHook}\` snapshots or stable \`useObservable\` handles.${peeks}`,
   };
 }
 
@@ -110,34 +113,31 @@ export function reviewUntrackableReadsEffect(): ClassifiedEffect {
   };
 }
 
-export function keepRenderedReactionEffect(): ClassifiedEffect {
+export function keepRenderedReactionEffect(subscriptionHook: string): ClassifiedEffect {
   return {
     action: "keep-effect",
     confidence: "probable",
     derivedState: null,
-    message:
-      "Keep this React effect; its `useValue` dependencies also render this owner, so an observable reaction would keep the subscription and only move the side effect ahead of commit.",
+    message: `Keep this React effect; its \`${subscriptionHook}\` dependencies also render this owner, so an observable reaction would keep the subscription and only move the side effect ahead of commit.`,
   };
 }
 
-export function keepParentRenderedReactionEffect(): ClassifiedEffect {
+export function keepParentRenderedReactionEffect(subscriptionHook: string): ClassifiedEffect {
   return {
     action: "keep-effect",
     confidence: "probable",
     derivedState: null,
-    message:
-      "Keep this React effect; every component that renders this owner subscribes to its `useValue` dependencies too and rerenders it on each change, so an observable reaction would remove no render.",
+    message: `Keep this React effect; every component that renders this owner subscribes to its \`${subscriptionHook}\` dependencies too and rerenders it on each change, so an observable reaction would remove no render.`,
   };
 }
 
-export function reviewParentRenderedReactionEffect(): ClassifiedEffect {
+export function reviewParentRenderedReactionEffect(subscriptionHook: string): ClassifiedEffect {
   return {
     action: "review-effect",
     abstentionReason: "render-cut-unproven",
     confidence: "probable",
     derivedState: null,
-    message:
-      "Review this effect before choosing `useObserveEffect`; a component that renders this owner also subscribes to its `useValue` dependencies, so dropping them may not remove the owner's render. Prove that every parent render site is memoized with stable props or reads none of these observables.",
+    message: `Review this effect before choosing \`useObserveEffect\`; a component that renders this owner also subscribes to its \`${subscriptionHook}\` dependencies, so dropping them may not remove the owner's render. Prove that every parent render site is memoized with stable props or reads none of these observables.`,
   };
 }
 

@@ -69,6 +69,43 @@ test("tells the agent to hoist a subscription for reads in JSX, conditionals, an
   assert.match(requireValue(findings[2]).message, /`const items = useValue\(state\$\.items\)`/u);
 });
 
+test("moves an initializer read below an early exit above it instead of replacing it in place", () => {
+  const findings = renderReads(`
+    export function useTokenLogo(id: string | undefined) {
+      if (!id) return undefined;
+
+      const items = state$.items.get();
+      return items.find((item) => item.id === id);
+    }
+    export function Label({ ready }: { ready: boolean }) {
+      if (!ready) {
+        throw new Error("not ready");
+      }
+      const value = state$.value.get();
+      return <span>{value}</span>;
+    }
+  `);
+  assert.deepEqual(
+    findings.map((finding) => [
+      finding.location.line,
+      finding.message.split(";")[0],
+      finding.edits,
+    ]),
+    [
+      [
+        11,
+        "Move this declaration above the early exit at line 9 and replace `state$.items.get()` with `useValue(state$.items)` there, so the hook runs on every render",
+        undefined,
+      ],
+      [
+        18,
+        "Move this declaration above the early exit at line 15 and replace `state$.value.get()` with `useValue(state$.value)` there, so the hook runs on every render",
+        undefined,
+      ],
+    ],
+  );
+});
+
 test("avoids a suggested binding name that the owner already declares", () => {
   const [finding] = renderReads(`
     export function Screen() {

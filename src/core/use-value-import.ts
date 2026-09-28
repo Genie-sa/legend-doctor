@@ -126,8 +126,11 @@ export interface SubscriptionHookReference extends UseValueReference {
   readonly legacy: boolean;
 }
 
-/** The export a new subscription names when the file imports none: `useValue`, unless the package lacks it. */
-function exportedSubscriptionHook(legendState: InstalledLegendState | null): string {
+/**
+ * The export a new subscription names when the file imports none: `useValue`, unless the package lacks it.
+ * Instructions for other files, whose imports are unknown, name this export.
+ */
+export function subscriptionHookExport(legendState: InstalledLegendState | null): string {
   return legendState?.useValueExport === "missing" ? USE_SELECTOR : USE_VALUE;
 }
 
@@ -161,7 +164,7 @@ function namespaceSubscriptionHook(
         ts.isNamespaceImport(bindings) &&
         isBoundOnlyByImport(sourceFile, bindings.name.text),
     );
-  const exported = exportedSubscriptionHook(legendState);
+  const exported = subscriptionHookExport(legendState);
   return namespace
     ? { callee: `${namespace.name.text}.${exported}`, edits: [], legacy: exported !== USE_VALUE }
     : null;
@@ -188,7 +191,7 @@ export function subscriptionHookCallee(
 ): string {
   return (
     importedSubscriptionHook(sourceFile, legendReactImports(sourceFile), legendState)?.callee ??
-    exportedSubscriptionHook(legendState)
+    subscriptionHookExport(legendState)
   );
 }
 
@@ -206,7 +209,7 @@ export function subscriptionHookReference(
   if (imported) {
     return imported;
   }
-  const exported = exportedSubscriptionHook(legendState);
+  const exported = subscriptionHookExport(legendState);
   const anchor = retainedImportAnchor(clauses);
   if (!anchor || !isUnusedName(source.sourceFile, exported)) {
     return null;
