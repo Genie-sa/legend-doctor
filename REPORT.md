@@ -37,7 +37,16 @@ Important fields:
 
 Compare reports only when `analyzer.build` matches.
 
-`capabilities.disabledRules` lists each rule the installed toolchain switched off, with its `rule`, `reason`,
+`capabilities.legendState` is `null` when no version is known. Otherwise, `source` says where the version came from:
+
+| `source`    | Meaning                                                                                                                    |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `installed` | The nearest installed `@legendapp/state`; `useValueExport` and `syncExport` are read from its declarations and export map. |
+| `lockfile`  | Nothing is installed, and the nearest lockfile pins exactly one version; its exports come from the published release.      |
+
+A lockfile version newer than the verified releases reports `unknown` exports and gates no rule.
+
+`capabilities.disabledRules` lists each rule the resolved toolchain switched off, with its `rule`, `reason`,
 `detail`, and the number of analyzed `files` that skipped it. A disabled rule reports nothing, so a missing
 finding is not a clean file.
 
@@ -45,8 +54,8 @@ finding is not a clean file.
 | -------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `legend-v2-tracking`       | `plain-primitive-projection`, `observable-tracking` | `@legendapp/state` 2.x can auto-track render `get()` calls through an app-wide setting the analyzer cannot see |
 | `react-compiler`           | `observable-clone-writes`                           | The React Compiler memoizes by reference, so in-place observable writes would leave memoized consumers stale   |
-| `sync-export-missing`      | `browser-storage-persistence`                       | The installed package has no `sync` entry point; storage-writing effects stay `keep-effect`                    |
-| `use-value-export-missing` | `plain-primitive-projection`, `legacy-use-value`    | The installed `@legendapp/state/react` entry point does not export `useValue`                                  |
+| `sync-export-missing`      | `browser-storage-persistence`                       | The resolved package has no `sync` entry point; storage-writing effects stay `keep-effect`                     |
+| `use-value-export-missing` | `plain-primitive-projection`, `legacy-use-value`    | The resolved `@legendapp/state/react` entry point does not export `useValue`                                   |
 
 Every `review-state` and `review-effect` finding has an `abstentionReason`. It names the main fact or safety rule that
 blocked a proven edit.

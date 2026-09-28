@@ -112,6 +112,7 @@ test("persisting an existing observable's value names syncObservable and both st
 
 test("an installed Legend State without the sync entry point keeps every persistence effect in React", () => {
   const legendState = {
+    source: "installed" as const,
     syncExport: "missing" as const,
     useValueExport: "alias" as const,
     version: "2.1.15",

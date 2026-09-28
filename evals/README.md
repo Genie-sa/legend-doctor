@@ -79,7 +79,8 @@ checkouts by those manifests, and runs `--complete`. Application dependencies an
 The cache is saved before evaluation so existing detector failures do not force repeated cold downloads. No mismatch
 is waived: see [the September 19 audit ledger](audit-2026-09-19.md) for the original seven failures, the follow-up source audits and detector repairs, and 31 unscored
 changes. The [September 28 audit](audit-2026-09-28.md) records the renderer proof behind concurrent-root transaction
-reviews and the three batch labels it retired. A red corpus job remains a real gate; unit-suite success does not override it.
+reviews and the three batch labels it retired. The [lockfile version audit](audit-2026-09-28-lockfile-versions.md)
+records the Legend State version each checkout pins and the `replace-legacy-use-value` labels it retired. A red corpus job remains a real gate; unit-suite success does not override it.
 
 `npm run eval:runtime` runs the executable migration contracts under jsdom with pinned React and Legend State: form
 submission snapshots, keyed selection and draft identity, independent hook lifetimes, atomic dialog publication, and

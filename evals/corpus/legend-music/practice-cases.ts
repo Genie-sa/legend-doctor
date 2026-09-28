@@ -3,10 +3,11 @@ import type { GoldPracticeCase } from "../contracts.js";
 export const legendMusicPracticeCases = [
   {
     action: "replace-legacy-use-value",
+    disposition: "style",
     file: "legend-kit/react-native/windowDimensions.tsx",
     line: 40,
     rationale:
-      "Legend State documents useValue as the supported replacement for the legacy useSelector hook, with the observable argument unchanged.",
+      "The pinned bun.lock resolves @legendapp/state 3.0.0-beta.42, whose useValue is an alias of useSelector: the rename changes no subscription.",
     target: "legend-music",
   },
   {

@@ -293,7 +293,13 @@ type UseValueExport = "alias" | "distinct" | "missing" | "unknown";
 
 type SyncExport = "available" | "missing" | "unknown";
 
+/** Where the version came from: the installed package, or the nearest lockfile when none is installed. */
+const LEGEND_STATE_SOURCES = ["installed", "lockfile"] as const;
+
+type LegendStateSource = (typeof LEGEND_STATE_SOURCES)[number];
+
 interface InstalledLegendState {
+  source: LegendStateSource;
   /** Whether the installed package exposes the sync entry point that carries `synced` and `syncObservable`. */
   syncExport: SyncExport;
   /** How the installed react entry point exports useValue relative to useSelector. */
@@ -329,6 +335,7 @@ export {
   EFFECT_ACTIONS,
   HOOK_DISPOSITIONS,
   LEGEND_PRACTICE_ACTIONS,
+  LEGEND_STATE_SOURCES,
   PRACTICE_DISPOSITIONS,
   REVIEW_KINDS,
   SCHEMA_VERSION,
@@ -347,6 +354,7 @@ export type {
   HookAction,
   HookFinding,
   InstalledLegendState,
+  LegendStateSource,
   RankedQuestion,
   LegendPracticeAction,
   LegendPracticeFinding,

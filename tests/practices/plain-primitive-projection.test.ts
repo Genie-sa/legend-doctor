@@ -159,7 +159,12 @@ test("projection version gates reject v2 and missing exports while permitting th
     const result = analyzeLegendPractices({
       sourceText: fixture(body),
       fileName: "fixture.tsx",
-      installedLegendState: { version, useValueExport, syncExport: "available" },
+      installedLegendState: {
+        source: "installed",
+        version,
+        useValueExport,
+        syncExport: "available",
+      },
     }).filter((finding) => finding.action === "select-primitive-projection");
     assert.equal(result.length, expected);
   }
