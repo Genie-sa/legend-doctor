@@ -6,6 +6,8 @@ Use these examples after reading a finding. They show the shape of an edit, not 
 - Inspect `candidate` findings first.
 - Preserve ownership, timing, mount identity, keys, cleanup, and atomic updates.
 - Check the installed Legend State version and types.
+- When a finding carries `edits`, apply those instead of retyping the example. See
+  [REPORT.md](REPORT.md#machine-applicable-edits).
 
 The snippets assume these imports when needed:
 
@@ -202,6 +204,9 @@ const name = profile.name;
 const name = useValue(profile$.name);
 ```
 
+A single-property destructure such as `const { name } = useValue(profile$)` carries `edits` that produce
+`const name = useValue(profile$.name)`. Renaming reads of a whole-value binding stays prose.
+
 For a derived primitive, keep the comparison inside the selector:
 
 ```tsx
@@ -304,6 +309,9 @@ separate selector hook. Async selectors and calls with options remain unchanged 
 contracts can differ. An eager `useValue(profile$.name.get())` is still `change`: direct input establishes tracking in
 an ordinary component or avoids redundant selector hooks inside `observer`. Keep `useValue(() => ...)` when the
 selector derives a value from one or more observables, including boolean projections and formatted computed values.
+
+Both actions carry `edits`. A legacy migration renames every legacy call in the file and removes the legacy import
+specifiers together, so each of those findings carries the same file-wide edit set.
 
 ### Compute a derived primitive as an observable
 
@@ -485,7 +493,7 @@ const save = () => persist(settings$.theme.get()); // Before
 const save = () => persist(settings$.theme.peek()); // After
 ```
 
-Render reads and reactive callbacks keep tracking reads.
+Render reads and reactive callbacks keep tracking reads. The finding's `edits` rename `get` to `peek`.
 
 ## Track every render read
 
@@ -511,6 +519,8 @@ function Counter() {
 }
 ```
 
+The direct initializer form carries `edits`, including a `useValue` specifier beside an existing
+`@legendapp/state/react` import. It carries none after an early return, where the new hook would be conditional.
 A read inside a conditional, JSX, or iteration callback gets a hoisting instruction: add `const value =
 useValue(path$)` at the top of the owner and read the binding there. The rule stays silent for `observer` and
 `reactiveObserver` components, for paths a `useValue` in the same owner already covers (directly, through a selector,

@@ -148,6 +148,15 @@ const LEGEND_PRACTICE_ACTIONS = [
 
 type LegendPracticeAction = (typeof LEGEND_PRACTICE_ACTIONS)[number];
 
+/** Practice actions whose findings can carry `edits`. */
+const EDITABLE_PRACTICE_ACTIONS = [
+  "narrow-use-value-subscription",
+  "pass-observable-to-use-value",
+  "replace-legacy-use-value",
+  "use-peek-for-snapshot",
+  "use-value-for-render-read",
+] as const satisfies readonly LegendPracticeAction[];
+
 const HOOK_DISPOSITIONS = ["candidate", "change", "keep"] as const;
 
 const PRACTICE_DISPOSITIONS = ["change", "style", "candidate"] as const;
@@ -176,6 +185,23 @@ interface SourceLocation {
   column: number;
   file: string;
   line: number;
+}
+
+/** A 1-based line and UTF-16 column in the scanned source, the convention `location` uses. */
+interface SourcePosition {
+  column: number;
+  line: number;
+}
+
+/**
+ * Replaces the half-open range [`start`, `end`) of `file` with `newText`; equal positions insert.
+ * Positions refer to the scanned source, so apply one file's edits together, from its end.
+ */
+interface TextEdit {
+  end: SourcePosition;
+  file: string;
+  newText: string;
+  start: SourcePosition;
 }
 
 /** How to check a conversion that rests on a confirmed answer rather than a proof. */
@@ -250,6 +276,11 @@ interface LegendPracticeFinding {
   action: LegendPracticeAction;
   confidence: Confidence;
   disposition: (typeof PRACTICE_DISPOSITIONS)[number];
+  /**
+   * The message's edit, present only when syntax fully determines it. Edits never overlap; findings
+   * that share an import rewrite carry identical copies of it, which apply once.
+   */
+  edits?: readonly TextEdit[];
   evidence: readonly string[];
   location: SourceLocation;
   message: string;
@@ -332,6 +363,7 @@ interface ReportScope {
 export {
   ABSTENTION_REASONS,
   CAPABILITY_GATE_REASONS,
+  EDITABLE_PRACTICE_ACTIONS,
   EFFECT_ACTIONS,
   HOOK_DISPOSITIONS,
   LEGEND_PRACTICE_ACTIONS,
@@ -364,9 +396,11 @@ export type {
   ResearchStep,
   ReviewGuidance,
   SourceLocation,
+  SourcePosition,
   StateAction,
   StateAssumption,
   SyncExport,
+  TextEdit,
   UseValueExport,
   Verification,
 };

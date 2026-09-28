@@ -1,6 +1,7 @@
 import {
   ABSTENTION_REASONS,
   CAPABILITY_GATE_REASONS,
+  EDITABLE_PRACTICE_ACTIONS,
   EFFECT_ACTIONS,
   HOOK_DISPOSITIONS,
   LEGEND_PRACTICE_ACTIONS,
@@ -41,6 +42,7 @@ const TABLE_SETS: readonly DocumentedSet[] = [
   { document: "skills/legend-doctor/SKILL.md", header: "Disposition", values: DISPOSITIONS },
   { document: "REPORT.md", header: "`abstentionReason`", values: ABSTENTION_REASONS },
   { document: "REPORT.md", header: "`review.kind`", values: REVIEW_KINDS },
+  { document: "REPORT.md", header: "Edited action", values: EDITABLE_PRACTICE_ACTIONS },
   { document: "REPORT.md", header: "`source`", values: LEGEND_STATE_SOURCES },
   { document: "REPORT.md", header: "`disabledRules` reason", values: CAPABILITY_GATE_REASONS },
   { document: "REPORT.md", header: "Inventory `status`", values: SUBSCRIPTION_INVENTORY_STATUSES },

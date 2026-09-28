@@ -1,3 +1,4 @@
+import type { LegendPracticeFinding, TextEdit } from "../../core/types.js";
 import {
   RESERVED_OBSERVABLE_MEMBERS,
   directGetReceiver,
@@ -12,8 +13,9 @@ import {
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
+import { replaceWithDescendant, withEdits } from "../../core/text-edits.js";
+import type { EditSource } from "../../core/text-edits.js";
 import type { HookImports } from "../../core/imports.js";
-import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
 import ts from "typescript";
 
@@ -181,6 +183,27 @@ function nodeContainsValueIdentifier(node: ts.Node, name: string): boolean {
   return found;
 }
 
+/** A `receiver.get()` call with nothing between the receiver and the call that an edit could drop. */
+function isDirectGetOf(read: ts.Node, receiver: ts.Expression): boolean {
+  return (
+    ts.isCallExpression(read) &&
+    ts.isPropertyAccessExpression(read.expression) &&
+    read.expression.expression === receiver
+  );
+}
+
+/** Rewrites `x$.get()` or `() => x$.get()` to `x$` when the read is the argument's whole body. */
+export function directObservableArgumentEdit(
+  source: EditSource,
+  argument: ts.Expression,
+  observable: ts.Expression,
+): TextEdit | null {
+  const read = ts.isArrowFunction(argument) ? argument.body : argument;
+  return isDirectGetOf(read, observable)
+    ? replaceWithDescendant(source, argument, observable)
+    : null;
+}
+
 export function directUseValueFinding(
   call: ts.CallExpression,
   input: DirectUseValueInput,
@@ -200,26 +223,30 @@ export function directUseValueFinding(
     ...call.arguments.slice(1).map((argument) => argument.getText(scan.sourceFile)),
   ].join(", ")})`;
   const eager = input.kind === "eager-read";
-  return {
-    action: "pass-observable-to-use-value",
-    confidence: "certain",
-    disposition: eager ? "change" : "style",
-    evidence: [
-      eager
-        ? "the observable is read with get() before useValue receives its input"
-        : "useValue selector only returns one zero-argument get() call",
-      `${path} is a proven Legend observable path`,
-      ...(eager
-        ? [
-            "direct input establishes useValue tracking outside observer, or reuses enclosing observer tracking without an empty selector subscription",
-          ]
-        : [
-            "the selected observable value is retained without hook options; no render or lifecycle saving is proven",
-            "inside observer, direct inputs use observer subscription ownership instead of a separate selector hook",
-          ]),
-    ],
-    location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `Replace \`${current}\` with \`${replacement}\`; the direct observable form ${eager ? "provides reactive input directly, reusing observer tracking when present" : "reads the same observable with less code"}.`,
-    practice: "reactivity",
-  };
+  const edit = directObservableArgumentEdit(scan, call.arguments[0]!, input.observable);
+  return withEdits(
+    {
+      action: "pass-observable-to-use-value",
+      confidence: "certain",
+      disposition: eager ? "change" : "style",
+      evidence: [
+        eager
+          ? "the observable is read with get() before useValue receives its input"
+          : "useValue selector only returns one zero-argument get() call",
+        `${path} is a proven Legend observable path`,
+        ...(eager
+          ? [
+              "direct input establishes useValue tracking outside observer, or reuses enclosing observer tracking without an empty selector subscription",
+            ]
+          : [
+              "the selected observable value is retained without hook options; no render or lifecycle saving is proven",
+              "inside observer, direct inputs use observer subscription ownership instead of a separate selector hook",
+            ]),
+      ],
+      location: { column: character + 1, file: scan.fileName, line: line + 1 },
+      message: `Replace \`${current}\` with \`${replacement}\`; the direct observable form ${eager ? "provides reactive input directly, reusing observer tracking when present" : "reads the same observable with less code"}.`,
+      practice: "reactivity",
+    },
+    edit ? [edit] : null,
+  );
 }
