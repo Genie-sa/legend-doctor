@@ -52,6 +52,26 @@ const SAME_LEAF = "const codec = useValue(settings$.codec);";
 const PLAIN_SITE = "<Child key={id} />";
 const FRESH_SITE = "<Child key={id} build={() => id} />";
 
+const HOOKS = `
+  import { useValue } from "@legendapp/state/react";
+  import { settings$ } from "./settings";
+  export function useTheme() {
+    return useValue(settings$.theme);
+  }
+  export function usePlayback() {
+    const theme = useTheme();
+    const codec = useValue(settings$.codec);
+    return { codec, theme };
+  }
+`;
+
+function hookParent(subscription: string): string {
+  return parent(subscription, PLAIN_SITE).replace(
+    'import { Child } from "./Child";',
+    'import { Child } from "./Child"; import { usePlayback, useTheme } from "./hooks";',
+  );
+}
+
 async function effectVerdict(files: Readonly<Record<string, string>>): Promise<Verdict> {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-parent-rerender-"));
   try {
@@ -146,6 +166,25 @@ const cases: readonly (readonly [string, Readonly<Record<string, string>>, Verdi
       "Parent.tsx": parent(SAME_LEAF, PLAIN_SITE),
     },
     ["review-effect", "render-cut-unproven"],
+  ],
+  [
+    "keeps the effect when the parent subscribes to the leaf through a custom hook it calls",
+    { "Child.tsx": BARE_CHILD, "hooks.ts": HOOKS, "Parent.tsx": hookParent("usePlayback();") },
+    ["keep-effect", null],
+  ],
+  [
+    "converts the effect when the parent's custom hook subscribes to a sibling leaf only",
+    { "Child.tsx": BARE_CHILD, "hooks.ts": HOOKS, "Parent.tsx": hookParent("useTheme();") },
+    ["use-observe-effect", null],
+  ],
+  [
+    "converts the effect when the parent calls the subscribing hook only inside a callback",
+    {
+      "Child.tsx": BARE_CHILD,
+      "hooks.ts": HOOKS,
+      "Parent.tsx": hookParent("const later = () => usePlayback();"),
+    },
+    ["use-observe-effect", null],
   ],
 ];
 

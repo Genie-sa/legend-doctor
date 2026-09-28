@@ -66,9 +66,10 @@ const MAX_CUSTOM_HOOK_DEPTH = 3;
 const CUSTOM_HOOK_NAME = /^use[A-Z0-9]/u;
 
 /**
- * Whether the components that render `owner` subscribe to these observable paths themselves and
- * so rerender it on the same changes. `proven` needs every reference to be a JSX site whose render
- * owner subscribes to every path exactly and whose render reaches the child.
+ * Whether the components that render `owner` subscribe to these observable paths themselves, or
+ * through source-resolved custom hooks their render calls, and so rerender it on the same changes.
+ * `proven` needs every reference to be a JSX site whose render owner subscribes to every path
+ * exactly and whose render reaches the child.
  */
 export function componentParentRerender(
   context: AnalysisContext,
@@ -153,7 +154,10 @@ function siteRerender(reference: ts.Identifier, query: SiteQuery): SiteRerender 
   if (!opening || parent?.kind !== "component") {
     return "unresolved";
   }
-  const parentPaths = subscribedPaths(parent.owner, imports, query.context);
+  const parentPaths = [
+    ...subscribedPaths(parent.owner, imports, query.context),
+    ...customHookSubscribedPaths(query.context, parent.owner, MAX_CUSTOM_HOOK_DEPTH),
+  ];
   const coverage = query.childPaths.map((path) => pathCoverage(path, parentPaths));
   if (coverage.every((entry) => entry === "none")) {
     return "independent";
