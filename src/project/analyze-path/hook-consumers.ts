@@ -5,8 +5,10 @@ import type {
 import {
   hookConsumerResult,
   hookPresentationConsumerResult,
+  sourceMayReadMember,
 } from "../../rules/hook-consumer-contract/hook-consumer-contract.js";
 import type { AnalysisContext } from "./analysis-context.js";
+import { closedHookConsumers } from "./hook-consumer-closure.js";
 import { hookConsumers } from "./hook-consumer-index.js";
 
 interface HookConsumerQuery {
@@ -41,10 +43,14 @@ export function findHookPresentationConsumer(
     query.importerFile,
     query.hookName,
   );
-  if (!declaration) {
+  const closure = declaration ? closedHookConsumers(query.context, declaration) : null;
+  if (
+    !closure ||
+    closure.harnesses.some((file) => sourceMayReadMember(file.sourceFile, query.members.value))
+  ) {
     return null;
   }
-  const results = hookConsumers(query.context, declaration).map(({ file, hookBinding }) =>
+  const results = closure.consumers.map(({ file, hookBinding }) =>
     hookPresentationConsumerResult({
       broadOwnerJsx: query.broadOwnerJsx,
       hookBinding,

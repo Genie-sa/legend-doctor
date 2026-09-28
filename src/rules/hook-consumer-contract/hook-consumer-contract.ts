@@ -192,6 +192,20 @@ export function hookPresentationConsumerResult({
     : "unsafe";
 }
 
+/** A file that never spells a returned property's name cannot read it, however it reaches the hook. */
+export function sourceMayReadMember(sourceFile: ts.SourceFile, member: HookReturnMember): boolean {
+  if (member.kind !== "property") {
+    return true;
+  }
+  let named = false;
+  visit(sourceFile, (node) => {
+    if ((ts.isIdentifier(node) || ts.isStringLiteralLike(node)) && node.text === member.name) {
+      named = true;
+    }
+  });
+  return named;
+}
+
 function hookBindingReferences(
   sourceFile: ts.SourceFile,
   hookBinding: string,
