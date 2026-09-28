@@ -12,8 +12,7 @@ test("tracks observable paths created by proven project factories and aliases", 
     const store$ = makeStore({ profile: { name: "Ada", email: "ada@example.com" } });
     const profile$ = store$.profile;
     function Name(value$: typeof profile$) {
-      const profile = useValue(value$);
-      return <span>{profile.name}</span>;
+      return <span>{value$.name.get()}</span>;
     }
   `,
     fileName: "fixture.tsx",
@@ -22,9 +21,9 @@ test("tracks observable paths created by proven project factories and aliases", 
   });
   assert.deepEqual(
     findings.map((finding) => finding.action),
-    ["narrow-use-value-subscription"],
+    ["use-value-for-render-read"],
   );
-  assert.match(requireValue(findings[0]).message ?? "", /useValue\(value\$\.name\)/u);
+  assert.match(requireValue(findings[0]).message ?? "", /value\$\.name/u);
 });
 
 test("tracks typed aliases of source-proven observable member paths", () => {
@@ -33,8 +32,7 @@ test("tracks typed aliases of source-proven observable member paths", () => {
     import { useValue } from "@legendapp/state/react";
     import { dialog } from "./state";
     function Name(value$: typeof dialog.value$.profile) {
-      const profile = useValue(value$);
-      return <span>{profile.name}</span>;
+      return <span>{value$.name.get()}</span>;
     }
   `,
     fileName: "fixture.tsx",
@@ -42,9 +40,9 @@ test("tracks typed aliases of source-proven observable member paths", () => {
   });
   assert.deepEqual(
     findings.map((finding) => finding.action),
-    ["narrow-use-value-subscription"],
+    ["use-value-for-render-read"],
   );
-  assert.match(requireValue(findings[0]).message ?? "", /useValue\(value\$\.name\)/u);
+  assert.match(requireValue(findings[0]).message ?? "", /value\$\.name/u);
 });
 
 test("does not infer mutable, nullable, reserved, or unproven observable aliases", () => {
@@ -56,8 +54,7 @@ test("does not infer mutable, nullable, reserved, or unproven observable aliases
     const store$ = observable({ profile: { name: "Ada" } });
     ${declarations}
     export function Name() {
-      const profile = useValue(${expression});
-      return <span>{profile.name}</span>;
+      return <span>{${expression}.name.get()}</span>;
     }
   `,
       fileName: "fixture.tsx",
@@ -73,30 +70,34 @@ test("does not infer mutable, nullable, reserved, or unproven observable aliases
 });
 
 test("does not propagate observable provenance through shadowed roots or factories", () => {
-  const findings = analyzeLegendPractices({
-    sourceText: `
-      import { useValue } from "@legendapp/state/react";
+  const actions = (shadows: string): string[] =>
+    analyzeLegendPractices({
+      sourceText: `
       import { createStore, shared$ } from "./store";
 
       const fromFactory$ = createStore();
       const fromShared$ = shared$.profile;
 
+      export function rename(email: string) {
+        fromFactory$.status.set("away");
+        fromShared$.email.set(email);
+      }
+
       export function Screen() {
-        const createStore = () => ({ profile: { name: "local" } });
-        const shared$ = { profile: { name: "local" } };
-        const factoryValue = useValue(fromFactory$);
-        const sharedValue = useValue(fromShared$);
-        return <>{factoryValue.profile.name}{sharedValue.name}{createStore}{shared$}</>;
+        ${shadows}
+        return null;
       }
     `,
-    fileName: "Screen.tsx",
-    importedObservables: new Set(["shared$"]),
-    importedObservableFactories: new Set(["createStore"]),
-  });
+      fileName: "Screen.tsx",
+      importedObservables: new Set(["shared$"]),
+      importedObservableFactories: new Set(["createStore"]),
+    }).map((finding) => finding.action);
 
-  assert.equal(
-    findings.some((finding) => finding.action === "narrow-use-value-subscription"),
-    false,
+  assert.deepEqual(actions(""), ["batch-observable-writes"]);
+  assert.deepEqual(
+    actions(`const createStore = () => ({ profile: { name: "local" } });
+        const shared$ = { profile: { name: "local" } };`),
+    [],
   );
 });
 
@@ -118,30 +119,24 @@ function typedProfileActions(declaration: string): string[] {
 test("does not prove observables through maybe-observable, nullable, or optional annotations", () => {
   for (const declaration of [
     `export function Name(value$: Observable<${PROFILE}> | ${PROFILE}) {
-      const profile = useValue(value$);
-      return <span>{profile.name}</span>;
+      return <span>{value$.name.get()}</span>;
     }`,
     `export function Name(value$: Observable<${PROFILE}> | undefined) {
-      const profile = useValue(value$);
-      return <span>{profile?.name}</span>;
+      return <span>{value$?.name.get()}</span>;
     }`,
     `export function Name(value$: (null | ObservableParam<${PROFILE}>)) {
-      const profile = useValue(value$);
-      return <span>{profile?.name}</span>;
+      return <span>{value$?.name.get()}</span>;
     }`,
     `export function Name(value$?: Observable<${PROFILE}>) {
-      const profile = useValue(value$);
-      return <span>{profile?.name}</span>;
+      return <span>{value$?.name.get()}</span>;
     }`,
     `export function Name(value$?: typeof profile$) {
-      const profile = useValue(value$);
-      return <span>{profile?.name}</span>;
+      return <span>{value$?.name.get()}</span>;
     }`,
     `declare function pick(): Observable<${PROFILE}> | ${PROFILE};
     const picked$ = pick();
     export function Name() {
-      const profile = useValue(picked$);
-      return <span>{profile.name}</span>;
+      return <span>{picked$.name.get()}</span>;
     }`,
     `export function Name(name$: Observable<string> | string) {
       const local$ = useObservable(name$);
@@ -152,8 +147,7 @@ test("does not prove observables through maybe-observable, nullable, or optional
       return <span>{useValue(local$)}</span>;
     }`,
     `export function Name({ value$ }: { value$: Observable<${PROFILE}> | ${PROFILE} }) {
-      const profile = useValue(value$);
-      return <span>{profile.name}</span>;
+      return <span>{value$.name.get()}</span>;
     }`,
   ]) {
     assert.deepEqual(typedProfileActions(declaration), [], declaration);
@@ -163,19 +157,13 @@ test("does not prove observables through maybe-observable, nullable, or optional
 test("proves unions whose every member is an observable type", () => {
   for (const declaration of [
     `export function Name(value$: Observable<${PROFILE}> | ObservableParam<${PROFILE}>) {
-      const profile = useValue(value$);
-      return <span>{profile.name}</span>;
+      return <span>{value$.name.get()}</span>;
     }`,
     `type Props = { value$: Observable<${PROFILE}> | ObservableParam<${PROFILE}> };
     export function Name({ value$ }: Props) {
-      const profile = useValue(value$);
-      return <span>{profile.name}</span>;
+      return <span>{value$.name.get()}</span>;
     }`,
   ]) {
-    assert.deepEqual(
-      typedProfileActions(declaration),
-      ["narrow-use-value-subscription"],
-      declaration,
-    );
+    assert.deepEqual(typedProfileActions(declaration), ["use-value-for-render-read"], declaration);
   }
 });

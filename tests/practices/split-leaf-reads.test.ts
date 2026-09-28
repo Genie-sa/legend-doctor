@@ -166,12 +166,14 @@ function blocklistSplits(store: string, writer: string): string[] {
   return analyzeLegendPractices({
     fileName: "fixture.tsx",
     sourceText: `
-      import { observable } from "@legendapp/state";
+      import { batch, observable } from "@legendapp/state";
       import { useValue } from "@legendapp/state/react";
       declare function loadBlocklist(): { channels: string[]; keywords: string[]; draft: string };
       declare function defaults(): { channels: string[]; keywords: string[] };
+      declare function save(): Promise<void>;
+      declare function onBlur(listener: () => void): void;
       const store$ = ${store};
-      export function write(field: "draft") {
+      export async function write(field: "draft") {
         ${writer}
       }
       export function Blocklist() {
@@ -187,7 +189,16 @@ function blocklistSplits(store: string, writer: string): string[] {
 const EDITABLE_BLOCKLIST = `observable({ channels: [] as string[], keywords: [] as string[], draft: "" })`;
 
 test("splits when an unread data field is written without any read field", () => {
-  for (const writer of [`store$.draft.set("");`, `store$.assign({ draft: "" });`]) {
+  for (const writer of [
+    `store$.draft.set("");`,
+    `store$.assign({ draft: "" });`,
+    `store$.keywords.set([]);
+    await save();
+    store$.draft.set("");`,
+    `store$.keywords.set([]);
+    store$.draft.set("");
+    onBlur(() => store$.draft.set(""));`,
+  ]) {
     assert.equal(blocklistSplits(EDITABLE_BLOCKLIST, writer).length, 1, writer);
   }
 });
@@ -220,6 +231,33 @@ test("keeps the broad subscription when no unread field is written on its own", 
       EDITABLE_BLOCKLIST,
       `store$.keywords.set([]); store$.draft.set("");`,
     ],
+    [
+      "unread field written on a later line of the same synchronous stretch",
+      EDITABLE_BLOCKLIST,
+      `store$.keywords.set([]);
+      store$.draft.set("");`,
+    ],
+    [
+      "unread field written inside a batch beside a read field",
+      EDITABLE_BLOCKLIST,
+      `store$.keywords.set([]);
+      batch(() => store$.draft.set(""));`,
+    ],
+    [
+      "unread field written by an array callback beside a read field",
+      EDITABLE_BLOCKLIST,
+      `["a"].forEach(() => store$.draft.set(""));
+      store$.channels.set([]);`,
+    ],
+    [
+      "unread field written after an await that loops back to a read-field write",
+      EDITABLE_BLOCKLIST,
+      `for (const channel of ["a"]) {
+        store$.channels.push(channel);
+        await save();
+        store$.draft.set("");
+      }`,
+    ],
     ["unread field written through a runtime key", EDITABLE_BLOCKLIST, `store$[field].set("");`],
     [
       "unread field replaced only by a whole-value write",
@@ -235,4 +273,24 @@ test("keeps the broad subscription when no unread field is written on its own", 
   ] as const) {
     assert.deepEqual(blocklistSplits(store, writer), [], label);
   }
+});
+
+test("ignores unread-field writes that run only while the module loads", () => {
+  const splits = (writes: string): number =>
+    analyzeLegendPractices({
+      fileName: "fixture.tsx",
+      sourceText: `
+      import { observable } from "@legendapp/state";
+      import { useValue } from "@legendapp/state/react";
+      const saved$ = observable({ draft: "" });
+      const store$ = ${EDITABLE_BLOCKLIST};
+      ${writes}
+      export function Blocklist() {
+        const blocklist = useValue(store$);
+        return <span>{blocklist.channels.length}{blocklist.keywords.length}</span>;
+      }
+    `,
+    }).filter((finding) => finding.action === "split-use-value-leaves").length;
+  assert.equal(splits(`store$.draft.set(saved$.draft.peek());`), 0);
+  assert.equal(splits(`saved$.draft.onChange(({ value }) => store$.draft.set(value));`), 1);
 });

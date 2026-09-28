@@ -204,6 +204,10 @@ const name = profile.name;
 const name = useValue(profile$.name);
 ```
 
+The finding needs a production write that changes another field under the subscribed parent without touching the
+read one. Otherwise nothing the narrow subscription skips ever changes, and the action abstains. That covers a parent
+passed in as a prop, a parent that is only replaced whole, and a field only ever written together with the read one.
+
 A single-property destructure such as `const { name } = useValue(profile$)` carries `edits` that produce
 `const name = useValue(profile$.name)`. Renaming reads of a whole-value binding stays prose.
 
@@ -240,6 +244,11 @@ dependencies.
 that proves the field set, and a production write that changes an unread data field without touching a read one.
 When every field that changes is already read, or the only unread fields are constants and functions, the split
 removes no render and the action abstains.
+
+Both actions count writes by synchronous stretch, not by line. Writes in the same function body before an `await`,
+or inside one `batch` or array callback, land in one render, so an unread field written beside a read one proves
+nothing. A write after an `await`, or in a separate handler or listener, is its own stretch. Writes in the
+module body run while the module loads, before any importer renders, so they never count.
 
 ```tsx
 function Profile() {

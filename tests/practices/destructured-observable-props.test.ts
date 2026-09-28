@@ -64,11 +64,10 @@ test("destructured props declared observable by their parameter type are observa
         label$?: Observable<string>;
       }
       export function Card({ profile$, label$ }: CardProps) {
-        const profile = useValue(profile$);
-        return <h2>{profile.name}{label$?.get()}</h2>;
+        return <h2>{profile$.name.get()}{label$?.get()}</h2>;
       }
     `),
-    ["11 narrow-use-value-subscription"],
+    ["11 use-value-for-render-read"],
   );
 });
 

@@ -11,15 +11,6 @@ export const noriPracticeCases = [
     target: "nori",
   },
   {
-    action: "narrow-use-value-subscription",
-    disposition: "change",
-    file: "components/sheet/SettingsSheetSections.tsx",
-    line: 171,
-    rationale:
-      "The plan section reads only `ios?.expiresAt`, while entitlement refreshes can change the unread `status`, `willRenew`, and `linkedEmail` fields of auth$.ios; the leaf also yields undefined when `ios` is null.",
-    target: "nori",
-  },
-  {
     action: "narrow-observable-write",
     disposition: "change",
     file: "lib/webview-title-resolver.ts",

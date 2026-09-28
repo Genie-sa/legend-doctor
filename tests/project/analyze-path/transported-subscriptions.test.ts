@@ -157,6 +157,9 @@ test("analyzes useValue-only files for the narrowest observable child", async ()
       `
         import { observable } from "@legendapp/state";
         export const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+        export function rename(email: string) {
+          profile$.email.set(email);
+        }
       `,
       "utf8",
     );

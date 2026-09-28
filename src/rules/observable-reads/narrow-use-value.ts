@@ -16,6 +16,8 @@ import {
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import { replaceCommentFreeNode, replaceNode, withEdits } from "../../core/text-edits.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import type { SiblingWrite } from "./sibling-writes.js";
+import { independentSiblingWrite } from "./sibling-writes.js";
 import { splitLeavesFinding } from "./split-leaves.js";
 import ts from "typescript";
 
@@ -133,17 +135,21 @@ function narrowCommonPathFinding(
   ) {
     return null;
   }
-  return narrowFinding(
-    {
-      declaration: reads.candidate.declaration,
-      destructured: false,
-      localName: reads.localName,
-      observable: reads.candidate.observable,
-      property: commonPath.join("."),
-      reads: reads.paths.length,
-    },
-    scan,
-  );
+  const sibling = independentSiblingWrite(reads.candidate.observable, commonPath, scan);
+  return sibling
+    ? narrowFinding(
+        {
+          declaration: reads.candidate.declaration,
+          destructured: false,
+          localName: reads.localName,
+          observable: reads.candidate.observable,
+          property: commonPath.join("."),
+          reads: reads.paths.length,
+          sibling,
+        },
+        scan,
+      )
+    : null;
 }
 
 function consumesEveryKnownField(
@@ -169,6 +175,7 @@ interface NarrowInstruction {
   readonly localName: string;
   readonly reads: number;
   readonly destructured: boolean;
+  readonly sibling: SiblingWrite;
 }
 
 function narrowObjectBindingFinding(
@@ -189,7 +196,10 @@ function narrowObjectBindingFinding(
     return null;
   }
   const property = element.propertyName?.text ?? element.name.text;
-  if (RESERVED_OBSERVABLE_MEMBERS.has(property)) {
+  const sibling = RESERVED_OBSERVABLE_MEMBERS.has(property)
+    ? null
+    : independentSiblingWrite(candidate.observable, [property], scan);
+  if (!sibling) {
     return null;
   }
   const localName = element.name.text;
@@ -202,6 +212,7 @@ function narrowObjectBindingFinding(
         observable: candidate.observable,
         property,
         reads: 1,
+        sibling,
       },
       scan,
     ),
@@ -256,6 +267,7 @@ function narrowFinding(
     evidence: [
       `the value from ${parentPath} is read only through the static \`${instruction.property}\` property`,
       `${leafPath} is a proven Legend observable path and has ${instruction.reads} raw-value read${instruction.reads === 1 ? "" : "s"}`,
+      `\`${instruction.sibling.path}\` is written at ${instruction.sibling.site} without touching \`${leafPath}\`, so that write rerenders this owner today`,
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
     message: `${message} so sibling observable fields no longer invalidate this component.`,
