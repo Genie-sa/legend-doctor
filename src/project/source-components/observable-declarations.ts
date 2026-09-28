@@ -1,7 +1,11 @@
-import { bindingDeclarationCount, isAssignmentOperator } from "../../core/analysis-ast.js";
+import {
+  bindingDeclarationCount,
+  isAssignmentOperator,
+  propertyNameText,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
 import type { ComponentFunction } from "./model.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "./declaration-shapes.js";
 import { visit } from "../../core/ast.js";
 
 export function isObservableTypeReference(
@@ -188,13 +192,5 @@ export function directObservableMembers(
 }
 
 function staticPropertyName(property: ts.ObjectLiteralElementLike): string | null {
-  return ts.isSpreadAssignment(property) || !property.name
-    ? null
-    : staticObjectMemberName(property.name);
-}
-
-function staticObjectMemberName(name: ts.PropertyName): string | null {
-  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
-    ? name.text
-    : null;
+  return ts.isSpreadAssignment(property) || !property.name ? null : propertyNameText(property.name);
 }

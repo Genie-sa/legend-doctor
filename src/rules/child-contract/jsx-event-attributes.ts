@@ -5,16 +5,16 @@ import {
   jsxOwnerIsDeferredEventTarget,
   jsxOwnerTarget,
 } from "./jsx-owner.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import { commandItemEventIsDeferred } from "./command-item-events.js";
 import { deeperTrace } from "./model.js";
+import { outermostTransparentParent } from "../../core/analysis-ast.js";
 import ts from "typescript";
 
 export function jsxAttributeCarriesCallbackIdentity(
   attribute: ts.JsxAttribute,
   callback: ts.Expression,
 ): boolean {
-  let value = climbTransparentExpression(callback);
+  let value = outermostTransparentParent(callback);
   if (
     ts.isConditionalExpression(value.parent) &&
     (value.parent.whenTrue === value || value.parent.whenFalse === value)

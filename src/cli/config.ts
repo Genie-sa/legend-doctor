@@ -5,7 +5,7 @@ import type { MaterialityTier } from "../analysis/constants.js";
 import { UsageError } from "./usage-error.js";
 import path from "node:path";
 
-export const CONFIG_FILE_NAME = "legend-doctor.config.json";
+const CONFIG_FILE_NAME = "legend-doctor.config.json";
 
 /** Project defaults read from the nearest `legend-doctor.config.json` at or above the scan root. */
 export interface ScanConfig {
@@ -37,7 +37,7 @@ export async function discoverConfig(root: string): Promise<ScanConfig> {
     : parseConfig(await readFile(nearest, "utf8"), nearest);
 }
 
-export function parseConfig(text: string, source: string): ScanConfig {
+function parseConfig(text: string, source: string): ScanConfig {
   const label = path.basename(source);
   const parsed = parseJson(text, label);
   if (!isJsonObject(parsed)) {

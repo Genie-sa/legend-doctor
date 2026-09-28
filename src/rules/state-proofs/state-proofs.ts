@@ -13,15 +13,14 @@ import {
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { isHookDependencyReference, isJsxNode } from "./callback-sites.js";
+import { EMPTY_NODES } from "../../analysis/constants.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
 import ts from "typescript";
 
-const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();
-
 const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
 
-export { stateMayHoldCallable, stateTypeMayBeCallable } from "../callable-state.js";
+export { stateMayHoldCallable } from "../callable-state.js";
 
 export function hasDirectPrimitiveInitializer(state: StateCandidate): boolean {
   const [initializer] = state.call.arguments;

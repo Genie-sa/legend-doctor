@@ -14,6 +14,7 @@ import {
 import type { HookImports } from "../../core/imports.js";
 import type { InstalledLegendState } from "../../core/types.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { isConstDeclaration } from "../../core/binding-references.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import { isLegendStateV3 } from "../../project/legend-state-versions.js";
 import ts from "typescript";
@@ -105,7 +106,7 @@ function useMemoInitializer(
   declaration: ts.VariableDeclaration,
   imports: HookImports,
 ): ts.CallExpression | null {
-  if (!declaration.initializer || !isConst(declaration)) {
+  if (!declaration.initializer || !isConstDeclaration(declaration)) {
     return null;
   }
   const call = unwrapTransparentExpression(declaration.initializer);
@@ -127,13 +128,6 @@ function isSynchronousThunk(node: ts.Expression): node is MemoCallback {
     node.parameters.length === 0 &&
     !node.asteriskToken &&
     !node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
-  );
-}
-
-function isConst(declaration: ts.VariableDeclaration): boolean {
-  return (
-    ts.isVariableDeclarationList(declaration.parent) &&
-    (declaration.parent.flags & ts.NodeFlags.Const) !== 0
   );
 }
 
@@ -182,7 +176,7 @@ function useValueDeclarationInput(
     !ts.isCallExpression(call) ||
     call.arguments.length !== 1 ||
     !ts.isIdentifier(declaration.name) ||
-    !isConst(declaration) ||
+    !isConstDeclaration(declaration) ||
     !isComputedMemoSubscription(call, scan) ||
     findAncestor(declaration, isRuntimeFunctionLike) !== owner
   ) {

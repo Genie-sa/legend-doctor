@@ -1,7 +1,8 @@
 import { bindingDeclarationCount, unwrapTransparentExpression } from "../../core/analysis-ast.js";
-import { bindingReferences, cursorEquality, isImportedUseCallback } from "./binding-references.js";
+import { cursorEquality, isImportedUseCallback } from "./binding-references.js";
 import { findAncestor, findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingReferences } from "../../core/binding-references.js";
 import ts from "typescript";
 
 export interface MemoizedRowRenderer {

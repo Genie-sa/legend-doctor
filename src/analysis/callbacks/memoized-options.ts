@@ -3,6 +3,7 @@ import {
   bindingDeclarationCount,
   isDeclarationName,
   isNonValueIdentifier,
+  propertyNameText,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import {
@@ -19,7 +20,6 @@ import { isHookDependencyReference } from "../../rules/state-proofs/callback-sit
 import { isImportedHookCall } from "../../core/imports.js";
 import { isJsxEventHandlerReference } from "../../rules/state-proofs/event-roots.js";
 import { localCallbackByBinding } from "./local-callbacks.js";
-import { staticPropertyName } from "../commands/memoized-option-command.js";
 import ts from "typescript";
 
 export function sourceProvenOptionEventCallbacks(
@@ -101,7 +101,7 @@ function deferredOptionCallback(
   if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) {
     return null;
   }
-  const propertyName = staticPropertyName(property.name);
+  const propertyName = propertyNameText(property.name);
   const callbackName = ts.isShorthandPropertyAssignment(property)
     ? property.name
     : unwrapTransparentExpression(property.initializer);

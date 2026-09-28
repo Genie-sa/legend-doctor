@@ -1,5 +1,5 @@
 import { propertyNameText, unwrapTransparentExpression } from "../../core/analysis-ast.js";
-import { collectHookImports } from "../../core/imports.js";
+import { isDirectValueFactory } from "../../core/imports.js";
 import { soleTypeDeclaration } from "../child-contract/declared-prop-types.js";
 import ts from "typescript";
 
@@ -67,15 +67,6 @@ export function declarationValueDomain(
   }
   const [seed] = call.arguments;
   return seed ? seedValueDomain(seed, path) : null;
-}
-
-function isDirectValueFactory(call: ts.CallExpression): boolean {
-  const imports = collectHookImports(call.getSourceFile());
-  return (
-    ts.isIdentifier(call.expression) &&
-    (imports.observable.has(call.expression.text) ||
-      imports.useObservable.has(call.expression.text))
-  );
 }
 
 function seedValueDomain(seed: ts.Expression, path: readonly string[]): ValueDomain | null {

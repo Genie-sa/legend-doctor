@@ -2,10 +2,10 @@ import {
   bindingDeclarationCount,
   isDeclarationName,
   isNonValueIdentifier,
+  unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { nearestNestedFunction, nodeWithin, visit } from "../../core/ast.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "./declaration-shapes.js";
 
 const MINIMUM_STORED_CALLBACK_REFERENCES = 2;
 

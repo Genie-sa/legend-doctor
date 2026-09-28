@@ -1,6 +1,7 @@
 import {
   bindingDeclarationCount,
   isAssignmentOperator,
+  isIdentifierNamed,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
@@ -161,23 +162,18 @@ function everyWriteIsPrimitive(name: string, scope: PrimitiveScope): boolean {
       return;
     }
     if (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind)) {
-      primitive = !writesName(node.left, name) || isPrimitiveAssignment(node, scope);
+      primitive = !isIdentifierNamed(node.left, name) || isPrimitiveAssignment(node, scope);
       return;
     }
     if (
       (ts.isForInStatement(node) || ts.isForOfStatement(node)) &&
       ts.isExpression(node.initializer) &&
-      writesName(node.initializer, name)
+      isIdentifierNamed(node.initializer, name)
     ) {
       primitive = false;
     }
   });
   return primitive;
-}
-
-function writesName(target: ts.Expression, name: string): boolean {
-  const written = unwrapTransparentExpression(target);
-  return ts.isIdentifier(written) && written.text === name;
 }
 
 function isPrimitiveAssignment(assignment: ts.BinaryExpression, scope: PrimitiveScope): boolean {

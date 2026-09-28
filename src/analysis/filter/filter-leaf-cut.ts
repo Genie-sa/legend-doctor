@@ -16,13 +16,13 @@ import {
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
+import { jsxTargetName, stateValueReferences } from "../ast-helpers.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { ExactStringFilter } from "./string-filter.js";
 import type { MaterialityPolicy } from "../constants.js";
 import { exactStringFilter } from "./string-filter.js";
 import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
-import { jsxTargetName } from "../ast-helpers.js";
 import ts from "typescript";
 
 function stateIsTransportedFilterTerm(state: StateCandidate, usage: StateUsage): boolean {
@@ -183,20 +183,4 @@ export function directSetterTransport(state: StateCandidate): SetterTransport | 
     }
   });
   return matches.length === 1 ? matches[0]! : null;
-}
-
-function stateValueReferences(state: StateCandidate): ts.Identifier[] {
-  const references: ts.Identifier[] = [];
-  visit(state.owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node.text === state.valueName &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node) &&
-      node.parent !== state.call.parent
-    ) {
-      references.push(node);
-    }
-  });
-  return references;
 }

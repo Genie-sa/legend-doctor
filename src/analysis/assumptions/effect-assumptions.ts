@@ -3,6 +3,7 @@ import type { HookFinding, ResearchStep, StateAssumption } from "../../core/type
 import { assumptionStatus, ownerFingerprint } from "./state-assumptions.js";
 import type { ConfirmationSet } from "./confirmations.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
+import { lineOf } from "../../core/ast.js";
 import { runtimeFunctionName } from "../ast-helpers.js";
 import ts from "typescript";
 import { useMountEffect } from "../../rules/effects/effect-verdicts.js";
@@ -21,10 +22,6 @@ export interface EffectAssumptionResult {
 }
 
 const LIFECYCLE_REASON = "lifecycle-equivalence-unproven";
-
-function lineOf(node: ts.Node, sourceFile: ts.SourceFile): number {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-}
 
 function mountResearch(scope: EffectAssumptionScope): ResearchStep[] {
   const { effect, reportFile, sourceFile } = scope;

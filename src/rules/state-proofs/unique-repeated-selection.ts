@@ -1,19 +1,15 @@
 import {
   findAncestorUntil,
   nodeWithin,
-  visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../../core/ast.js";
-import {
-  isDeclarationName,
-  isNonValueIdentifier,
-  unwrapTransparentExpression,
-} from "../../core/analysis-ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingIsReferenced } from "../../core/binding-references.js";
 import { expressionDependsOnBinding } from "./binding-lookup.js";
 import { expressionIsUniquelyFiltered } from "./uniqueness-filters.js";
 import { nearestRepeatedRenderCall } from "./jsx-subtrees.js";
 import ts from "typescript";
+import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 export function repeatedRenderHasStableItemKey(
   callback: ts.ArrowFunction | ts.FunctionExpression,
@@ -151,21 +147,6 @@ function nodesShareOneKeyedLeaf(nodes: readonly ts.Node[], clause: ts.CaseClause
     nodes.every((node) => nearestJsxElement(node, clause) === leaf) &&
     jsxKeyMatchesLiteral(leaf, clause.expression)
   );
-}
-
-function bindingIsReferenced(node: ts.Node, name: string): boolean {
-  let found = false;
-  visit(node, (current) => {
-    if (
-      ts.isIdentifier(current) &&
-      current.text === name &&
-      !isDeclarationName(current) &&
-      !isNonValueIdentifier(current)
-    ) {
-      found = true;
-    }
-  });
-  return found;
 }
 
 function isPrimitiveLiteral(expression: ts.Expression): boolean {

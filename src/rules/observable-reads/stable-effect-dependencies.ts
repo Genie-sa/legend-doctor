@@ -1,4 +1,3 @@
-import { bindingContainsName, uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 import {
   bindingDeclarationCount,
   collectBindingNames,
@@ -12,12 +11,14 @@ import {
 import { visit, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { ObservableReadScan } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingContainsName } from "../../core/binding-references.js";
 import { hasStableSourceBinding } from "./independent-subscription-bindings.js";
 import { identifiedUseValueDeclaration } from "./observable-paths.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import { isUseObservableCall } from "../in-place-memo-keys/memo-dependencies.js";
 import { primitiveType } from "./primitive-paths.js";
 import ts from "typescript";
+import { uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 
 /** An effect whose dependencies keep their identity does not rerun on a subscription-only render. */
 export function hasStableEffectDependencies(
@@ -209,10 +210,7 @@ function constOwnerDeclaration(
   return found;
 }
 
-export function stablePrimitiveDependency(
-  expression: ts.Expression,
-  owner: RuntimeFunctionLike,
-): boolean {
+function stablePrimitiveDependency(expression: ts.Expression, owner: RuntimeFunctionLike): boolean {
   if (
     ts.isStringLiteralLike(expression) ||
     ts.isNumericLiteral(expression) ||

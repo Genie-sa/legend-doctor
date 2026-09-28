@@ -4,7 +4,7 @@ import type { StateCandidate, StateUsage } from "../model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { addCallbackWithNestedFunctions } from "../callbacks/local-callbacks.js";
 import { directReactHookFormEventCallbacks } from "../../rules/async-leaf-status/react-hook-form-adapters.js";
-import { groupStatesByOwner } from "../clusters/observable-clusters.js";
+import { groupStatesByOwner } from "../ast-helpers.js";
 import { hasOnlyEventCommandReads } from "../../rules/state-proofs/state-proofs.js";
 import { hasStateInitializer } from "../../rules/deferred-reveal/deferred-reveal.js";
 import { sourceProvenDirectEventCallbacks } from "../callbacks/deferred-events.js";

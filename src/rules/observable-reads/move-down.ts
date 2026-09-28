@@ -2,6 +2,7 @@ import type { JsxSubtree, ObservableReadScan, UseValueDeclaration } from "./mode
 import {
   bindingDeclarationCount,
   isDeclarationName,
+  outermostTransparentParent,
   staticPropertyPath,
 } from "../../core/analysis-ast.js";
 import {
@@ -9,7 +10,6 @@ import {
   identifiedUseValueDeclaration,
   isUseValueCall,
   isValueReferenceTo,
-  outermostTransparentParent,
   provenObservablePath,
 } from "./observable-paths.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";

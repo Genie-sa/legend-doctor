@@ -4,10 +4,13 @@ import {
   objectBindingOmitsProperty,
 } from "./prop-bindings.js";
 import { findAncestor, identifiersNamed, isRuntimeFunctionLike } from "../../core/ast.js";
-import { isDeclarationName, isNonValueIdentifier } from "../../core/analysis-ast.js";
+import {
+  isDeclarationName,
+  isNonValueIdentifier,
+  outermostTransparentParent,
+} from "../../core/analysis-ast.js";
 import type { CallbackTrace } from "./model.js";
 import { MAX_CALLBACK_PATH_DEPTH } from "./model.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import ts from "typescript";
 
 interface ContextConsumerProbe {
@@ -51,7 +54,7 @@ function contextReaderConsumer(node: ts.Identifier): {
     return null;
   }
   const resolved = contextReaderOwner(call);
-  const carriedCall = climbTransparentExpression(call);
+  const carriedCall = outermostTransparentParent(call);
   const declaration = carriedCall.parent;
   if (
     !resolved ||

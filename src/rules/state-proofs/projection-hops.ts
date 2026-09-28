@@ -1,11 +1,8 @@
-import {
-  bindingDeclarationCount,
-  isDeclarationName,
-  isNonValueIdentifier,
-} from "../../core/analysis-ast.js";
-import { findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
+import { findAncestorUntil, nodeWithin } from "../../core/ast.js";
 import { EMPTY_BINDINGS } from "./jsx-subtrees.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingDeclarationCount } from "../../core/analysis-ast.js";
+import { bindingReferences } from "../../core/binding-references.js";
 import { isSafeProjectionExpression } from "../deferred-reveal/safe-projections.js";
 import { sourceHasRuntimeBinding } from "./binding-lookup.js";
 import ts from "typescript";
@@ -138,21 +135,4 @@ function constProjectionDeclaration(
     return null;
   }
   return { initializer, name };
-}
-
-/** Every value reference to the binding inside the owner, excluding its own declaration name. */
-function bindingReferences(owner: RuntimeFunctionLike, name: ts.Identifier): ts.Identifier[] {
-  const references: ts.Identifier[] = [];
-  visit(owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node.text === name.text &&
-      node !== name &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node)
-    ) {
-      references.push(node);
-    }
-  });
-  return references;
 }

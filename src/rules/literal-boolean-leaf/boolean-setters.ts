@@ -9,6 +9,7 @@ import {
 import { findAncestorUntil, nearestNestedFunction, visit } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { jsxAttributeIsIntrinsicEvent } from "../async-leaf-status/event-rooted-commands.js";
 import { mutationRegionOnlyCallsStateSetters } from "../effect-drafts/draft-mutations.js";
 import ts from "typescript";
 
@@ -82,7 +83,7 @@ function isInlineIntrinsicEventHandler(
     ts.isJsxExpression(initializer) &&
     initializer.expression !== undefined &&
     unwrapTransparentExpression(initializer.expression) === callback &&
-    attributeIsIntrinsicEvent(attribute)
+    jsxAttributeIsIntrinsicEvent(attribute)
   );
 }
 
@@ -109,7 +110,7 @@ function referencesAreIntrinsicEventAttributes(owner: RuntimeFunctionLike, name:
     safe =
       attribute !== null &&
       isDirectJsxAttributeExpression(attribute, node) &&
-      attributeIsIntrinsicEvent(attribute);
+      jsxAttributeIsIntrinsicEvent(attribute);
   });
   return referenced && safe;
 }
@@ -121,16 +122,6 @@ function isValueReferenceNamed(node: ts.Node, name: string): node is ts.Identifi
     !isDeclarationName(node) &&
     !isNonValueIdentifier(node)
   );
-}
-
-function attributeIsIntrinsicEvent(attribute: ts.JsxAttribute): boolean {
-  if (!/^on[A-Z]/u.test(attribute.name.getText())) {
-    return false;
-  }
-  const opening = attribute.parent.parent;
-  const tag =
-    ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening) ? opening.tagName : null;
-  return tag !== null && ts.isIdentifier(tag) && /^[a-z]/u.test(tag.text);
 }
 
 function isBooleanExpression(expression: ts.Expression): boolean {

@@ -1,5 +1,9 @@
 import type { StateCandidate, StateUsage } from "./model.js";
-import { isValueTransitionProp, unwrapTransparentExpression } from "../core/analysis-ast.js";
+import {
+  isIdentifierNamed,
+  isValueTransitionProp,
+  unwrapTransparentExpression,
+} from "../core/analysis-ast.js";
 import { KEY_VALUE_TUPLE_LENGTH } from "./constants.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
 import { nearestMutationFunction } from "./mutations.js";
@@ -199,11 +203,6 @@ function isArrayMembershipAppend(
     !ts.isSpreadElement(member) &&
     isIdentifierNamed(member, value)
   );
-}
-
-function isIdentifierNamed(expression: ts.Expression, name: string): boolean {
-  const value = unwrapTransparentExpression(expression);
-  return ts.isIdentifier(value) && value.text === name;
 }
 
 export function isValueTransitionAttribute(

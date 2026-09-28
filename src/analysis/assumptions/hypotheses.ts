@@ -5,6 +5,7 @@ import { AssumedLeafContracts } from "./assumed-leaf-contracts.js";
 import type { StateClassificationInputs } from "../verdicts/classification-context.js";
 import { asyncCommandHypothesis } from "./async-command-hypothesis.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
+import { lineOf } from "../../core/ast.js";
 import path from "node:path";
 import { pathIdentityKey } from "../../core/path-identity.js";
 import type ts from "typescript";
@@ -42,10 +43,6 @@ function joinNames(names: readonly string[]): string {
     return quoted.join("");
   }
   return `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
-}
-
-function lineOf(node: ts.Node, sourceFile: ts.SourceFile = node.getSourceFile()): number {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
 }
 
 function sortedLines(nodes: readonly ts.Node[], sourceFile: ts.SourceFile): number[] {

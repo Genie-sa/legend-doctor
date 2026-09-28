@@ -409,6 +409,26 @@ export function unwrapTransparentExpression(expression: ts.Expression): ts.Expre
   return current;
 }
 
+export function outermostTransparentParent(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    (ts.isParenthesizedExpression(current.parent) ||
+      ts.isAsExpression(current.parent) ||
+      ts.isTypeAssertionExpression(current.parent) ||
+      ts.isSatisfiesExpression(current.parent) ||
+      ts.isNonNullExpression(current.parent)) &&
+    current.parent.expression === current
+  ) {
+    current = current.parent;
+  }
+  return current;
+}
+
+export function isIdentifierNamed(expression: ts.Expression, name: string): boolean {
+  const value = unwrapTransparentExpression(expression);
+  return ts.isIdentifier(value) && value.text === name;
+}
+
 export function propertyNameText(name: ts.PropertyName): string | null {
   return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
     ? name.text

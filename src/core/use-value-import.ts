@@ -44,7 +44,7 @@ export function isLegacyUseValueSpecifier(specifier: ts.ImportSpecifier): boolea
 }
 
 /** The name is bound only by imports, so a call through it reaches the imported value everywhere. */
-function isBoundOnlyByImport(sourceFile: ts.SourceFile, name: string): boolean {
+export function isBoundOnlyByImport(sourceFile: ts.SourceFile, name: string): boolean {
   return identifiersNamed(sourceFile, name).every((identifier) => !isDeclarationName(identifier));
 }
 

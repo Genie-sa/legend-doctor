@@ -1,6 +1,7 @@
 import type { EffectCandidate, StateCandidate, StateUsage } from "../../analysis/model.js";
 import { visit, visitSkippingNestedFunctions } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { groupStatesByOwner } from "../../analysis/ast-helpers.js";
 import { isRenderGateReference } from "./render-gates.js";
 import { localBindingNames } from "../../core/analysis-ast.js";
 import ts from "typescript";
@@ -24,18 +25,6 @@ export function findDeferredRevealStates(
     }
   }
   return result;
-}
-
-function groupStatesByOwner(
-  states: readonly StateCandidate[],
-): ReadonlyMap<RuntimeFunctionLike, StateCandidate[]> {
-  const byOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
-  for (const state of states) {
-    const ownerStates = byOwner.get(state.owner) ?? [];
-    ownerStates.push(state);
-    byOwner.set(state.owner, ownerStates);
-  }
-  return byOwner;
 }
 
 function effectRevealedState(

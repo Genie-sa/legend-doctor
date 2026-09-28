@@ -1,12 +1,13 @@
 import {
   bindingDeclarationCount,
   isNonValueIdentifier,
+  outermostTransparentParent,
+  propertyNameText,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
-import { isBindingName, propertyName } from "./prop-bindings.js";
 import type { ChildComponentSource } from "./model.js";
 import { MAX_TRACKED_NAMES } from "./model.js";
-import { climbTransparentExpression } from "./carried-values.js";
+import { isBindingName } from "./prop-bindings.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
@@ -89,7 +90,7 @@ export function spreadCallbackIsOverridden(
     !following.some((property) => ts.isSpreadAssignment(property)) &&
     following.some(
       (property) =>
-        !ts.isSpreadAssignment(property) && propertyName(property.name) === callbackProp,
+        !ts.isSpreadAssignment(property) && propertyNameText(property.name) === callbackProp,
     )
   );
 }
@@ -115,7 +116,7 @@ export function arrayBindingsStayWithinTrackedConsumers(
 }
 
 function arrayReferenceStaysTracked(node: ts.Identifier): boolean {
-  const value = climbTransparentExpression(node);
+  const value = outermostTransparentParent(node);
   const member = value.parent;
   if (!ts.isPropertyAccessExpression(member) || member.expression !== value) {
     return false;

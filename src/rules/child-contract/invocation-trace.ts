@@ -18,17 +18,16 @@ import {
   isHookDependencyReference,
   isSynchronousRenderCallback,
 } from "../state-proofs/callback-sites.js";
+import { isNonValueIdentifier, outermostTransparentParent } from "../../core/analysis-ast.js";
 import {
   jsxAttributeCarriesCallbackIdentity,
   jsxEventAttributeIsDeferred,
 } from "./jsx-event-attributes.js";
 import { MAX_CALLBACK_PATH_DEPTH } from "./model.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import { commandItemEventIsDeferred } from "./command-item-events.js";
 import { higherOrderCallDefersCallback } from "./higher-order-factories.js";
 import { isBindingName } from "./prop-bindings.js";
-import { isNonValueIdentifier } from "../../core/analysis-ast.js";
 import ts from "typescript";
 
 interface CallbackInvocationProbe {
@@ -206,7 +205,7 @@ export function callbackIsDeferredByJsx(
   if (ts.isFunctionDeclaration(callback) || trace.depth > MAX_CALLBACK_PATH_DEPTH) {
     return false;
   }
-  const expression = climbTransparentExpression(callback);
+  const expression = outermostTransparentParent(callback);
   const attribute = findAncestorUntil(expression, ts.isJsxAttribute, source.owner);
   if (
     !attribute ||

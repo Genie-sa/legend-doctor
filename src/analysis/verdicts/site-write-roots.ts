@@ -17,6 +17,7 @@ import type { HostTagImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isHookDependencyReference } from "../../rules/state-proofs/callback-sites.js";
 import { isHostTag } from "../../core/imports.js";
+import { jsxTargetName } from "../ast-helpers.js";
 import ts from "typescript";
 
 export interface WriteRootScope {
@@ -95,7 +96,7 @@ function referenceIsEventRooted(
  * component cannot be resolved, the `on*` naming convention applies, as in the other event proofs.
  */
 function isProvenEventAttribute(attribute: ts.JsxAttribute, scope: WriteRootScope): boolean {
-  const tag = attributeTagName(attribute);
+  const tag = jsxTargetName(attribute);
   if (tag === null) {
     return false;
   }
@@ -167,11 +168,4 @@ function ownerSetterNames(state: StateCandidate): ReadonlySet<string> {
     }
   });
   return names;
-}
-
-function attributeTagName(attribute: ts.JsxAttribute): string | null {
-  const opening = attribute.parent.parent;
-  return ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
-    ? opening.tagName.getText()
-    : null;
 }

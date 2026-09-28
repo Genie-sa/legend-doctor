@@ -2,6 +2,7 @@ import type { ReactComponentWrappers } from "../../core/react-component-wrappers
 import { isReactComponentWrapper } from "../../core/react-component-wrappers.js";
 import { isRuntimeFunctionLike } from "../../core/ast.js";
 import ts from "typescript";
+import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 export function isInsideModuleDeclaration(node: ts.Node): boolean {
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
@@ -13,20 +14,6 @@ export function isInsideModuleDeclaration(node: ts.Node): boolean {
     }
   }
   return false;
-}
-
-export function unwrapTransparentExpression(expression: ts.Expression): ts.Expression {
-  let current = expression;
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isTypeAssertionExpression(current) ||
-    ts.isSatisfiesExpression(current) ||
-    ts.isNonNullExpression(current)
-  ) {
-    current = current.expression;
-  }
-  return current;
 }
 
 export function isSemanticComponentName(name: string): boolean {

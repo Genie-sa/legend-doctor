@@ -1,15 +1,12 @@
 import type { HookBody, ReactHookImports, StoredCallbackRef } from "./model.js";
-import {
-  callbackIsReactEffectArgument,
-  isImportedReactRef,
-  isTracedFunction,
-} from "./react-effects.js";
+import { callbackIsReactEffectArgument, isImportedReactRef } from "./react-effects.js";
 import {
   isDeclarationName,
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { nearestNestedFunction, nodeWithin, visit } from "../../core/ast.js";
+import { isPlainFunction } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
 export function storedCallbackRef(
@@ -156,7 +153,7 @@ function refObjectIsAssignedInEffect(
   }
   const effect = nearestNestedFunction(assignment, body.source.owner);
   return (
-    effect !== null && isTracedFunction(effect) && callbackIsReactEffectArgument(effect, body.hooks)
+    effect !== null && isPlainFunction(effect) && callbackIsReactEffectArgument(effect, body.hooks)
   );
 }
 

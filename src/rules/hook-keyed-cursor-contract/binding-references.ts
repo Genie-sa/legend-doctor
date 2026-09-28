@@ -1,11 +1,8 @@
-import {
-  bindingDeclarationCount,
-  isDeclarationName,
-  isNonValueIdentifier,
-} from "../../core/analysis-ast.js";
+import { bindingDeclarationCount, isDeclarationName } from "../../core/analysis-ast.js";
+import { calleeRootIdentifier, findAncestor, findAncestorUntil, visit } from "../../core/ast.js";
 import { collectHookImports, isImportedHookCall } from "../../core/imports.js";
-import { findAncestor, findAncestorUntil, visit } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingReferences } from "../../core/binding-references.js";
 import ts from "typescript";
 
 export function cursorEquality(reference: ts.Identifier): ts.BinaryExpression | null {
@@ -17,25 +14,6 @@ export function cursorEquality(reference: ts.Identifier): ts.BinaryExpression | 
     )
     ? parent
     : null;
-}
-
-export function bindingReferences(
-  owner: RuntimeFunctionLike,
-  binding: ts.Identifier,
-): ts.Identifier[] {
-  const references: ts.Identifier[] = [];
-  visit(owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node.text === binding.text &&
-      node !== binding &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node)
-    ) {
-      references.push(node);
-    }
-  });
-  return references;
 }
 
 export function uniqueDirectJsxAttributeReference(
@@ -56,19 +34,9 @@ export function jsxAttributeContaining(node: ts.Node, name: string): ts.JsxAttri
   return attribute?.name.getText() === name ? attribute : null;
 }
 
-function callRootIdentifier(call: ts.CallExpression): ts.Identifier | null {
-  if (ts.isIdentifier(call.expression)) {
-    return call.expression;
-  }
-  return ts.isPropertyAccessExpression(call.expression) &&
-    ts.isIdentifier(call.expression.expression)
-    ? call.expression.expression
-    : null;
-}
-
 export function isImportedUseCallback(call: ts.CallExpression): boolean {
   const imports = collectHookImports(call.getSourceFile());
-  const root = callRootIdentifier(call);
+  const root = calleeRootIdentifier(call.expression);
   return (
     root !== null &&
     !bindingIsShadowed(call, root.text) &&

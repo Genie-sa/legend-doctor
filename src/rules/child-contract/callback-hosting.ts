@@ -1,7 +1,10 @@
-import { bindingDeclarationCount, hookCallName } from "../../core/analysis-ast.js";
+import {
+  bindingDeclarationCount,
+  hookCallName,
+  outermostTransparentParent,
+} from "../../core/analysis-ast.js";
 import { findAncestor, nodeWithin } from "../../core/ast.js";
 import type { ChildComponentSource } from "./model.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import ts from "typescript";
 
 export function callbackBindingName(
@@ -18,7 +21,7 @@ export function callbackBindingName(
   if (!call) {
     return null;
   }
-  const expression = climbTransparentExpression(call);
+  const expression = outermostTransparentParent(call);
   const declaration = expression.parent;
   return ts.isVariableDeclaration(declaration) &&
     declaration.initializer === expression &&
@@ -41,7 +44,7 @@ function memoizedCallbackIdentityCall(
   ) {
     return direct;
   }
-  const returned = climbTransparentExpression(callback);
+  const returned = outermostTransparentParent(callback);
   const factory = returned.parent;
   if (!ts.isArrowFunction(factory) || factory.body !== returned) {
     return null;

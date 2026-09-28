@@ -19,14 +19,16 @@ import {
 import {
   bindingDeclarationCount,
   isNonValueIdentifier,
+  outermostTransparentParent,
+  propertyNameText,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
-import { boundPropIdentifier, isBindingName, propertyName } from "./prop-bindings.js";
-import { climbTransparentExpression, constArrayBinding } from "./carried-values.js";
+import { boundPropIdentifier, isBindingName } from "./prop-bindings.js";
 import { findAncestorUntil, nearestNestedFunction, visit } from "../../core/ast.js";
 import { callbackInvocationIsDeferred } from "./invocation-trace.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
 import { commandItemEventIsDeferred } from "./command-item-events.js";
+import { constArrayBinding } from "./carried-values.js";
 import ts from "typescript";
 
 /**
@@ -213,10 +215,10 @@ function arrayItemCallbackPublication(
   ) {
     return null;
   }
-  const callbackProperty = propertyName(property.name);
+  const callbackProperty = propertyNameText(property.name);
   const object = property.parent;
   const carriedObject = ts.isObjectLiteralExpression(object)
-    ? climbTransparentExpression(object)
+    ? outermostTransparentParent(object)
     : null;
   const array = carriedObject?.parent;
   if (
@@ -229,7 +231,7 @@ function arrayItemCallbackPublication(
     object.properties.filter(
       (member) =>
         (ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member)) &&
-        propertyName(member.name) === callbackProperty,
+        propertyNameText(member.name) === callbackProperty,
     ).length !== 1
   ) {
     return null;

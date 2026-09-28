@@ -4,10 +4,13 @@ import {
   isAssignmentOperator,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
-import { visit, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
+import {
+  calleeRootIdentifier,
+  visit,
+  visitSkippingNestedRuntimeFunctions,
+} from "../../core/ast.js";
 import type { CommittedRefContext } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { calleeRootIdentifier } from "./callback-shape.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import ts from "typescript";
 

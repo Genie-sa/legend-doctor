@@ -2,6 +2,7 @@ import {
   bindingDeclarationCount,
   isDeclarationName,
   isNonValueIdentifier,
+  outermostTransparentParent,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { collectHookImports, isImportedHookCall } from "../../core/imports.js";
@@ -10,7 +11,6 @@ import type { ChildComponentSource } from "./model.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { boundPropIdentifier } from "./prop-bindings.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import ts from "typescript";
 
 /** Whether a component invokes this callback prop only from host event props, without deferring it. */
@@ -123,7 +123,7 @@ function functionRunsOnlyInHostEvents(owner: RuntimeFunctionLike, trace: HostEve
 }
 
 function valueRunsOnlyInHostEvents(value: ts.Expression, trace: HostEventTrace): boolean {
-  const expression = climbTransparentExpression(value);
+  const expression = outermostTransparentParent(value);
   const { parent } = expression;
   if (ts.isJsxExpression(parent) && ts.isJsxAttribute(parent.parent)) {
     return attributeDispatchesHostEvent(parent.parent, trace);

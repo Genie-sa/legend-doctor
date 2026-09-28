@@ -1,12 +1,9 @@
 import type { ObservableReadScan, UseValueDeclaration } from "./model.js";
 import type { SelectorModelBlocker, SelectorSubscription } from "./selector-subscriptions.js";
 import { findAncestor, isRuntimeFunctionLike } from "../../core/ast.js";
-import {
-  identifiedUseValueDeclaration,
-  outermostTransparentParent,
-  provenObservablePath,
-} from "./observable-paths.js";
+import { identifiedUseValueDeclaration, provenObservablePath } from "./observable-paths.js";
 import { isSelectorFunction, selectorModel } from "./selector-subscriptions.js";
+import { outermostTransparentParent } from "../../core/analysis-ast.js";
 import ts from "typescript";
 
 export type UseValueBindingBlocker =

@@ -3,6 +3,7 @@ import {
   bindingDeclarationCount,
   isAssignmentOperator,
   isNonValueIdentifier,
+  propertyNameText,
 } from "../../core/analysis-ast.js";
 import { isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import ts from "typescript";
@@ -60,7 +61,7 @@ export function bindCallbackPath(
 
 export function bindingElementPropertyName(element: ts.BindingElement): string | null {
   if (element.propertyName) {
-    return propertyName(element.propertyName);
+    return propertyNameText(element.propertyName);
   }
   return ts.isIdentifier(element.name) ? element.name.text : null;
 }
@@ -84,12 +85,6 @@ export function objectBindingOmitsProperty(binding: ts.BindingName, property: st
       (element) => element.dotDotDotToken || bindingElementPropertyName(element) === property,
     )
   );
-}
-
-export function propertyName(name: ts.PropertyName): string | null {
-  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
-    ? name.text
-    : null;
 }
 
 function destructuredSourceName(element: ts.BindingElement): string | null {

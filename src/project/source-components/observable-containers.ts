@@ -1,12 +1,9 @@
 import type { ResolvedSymbol, SourceIndexState } from "./model.js";
-import {
-  isAssignmentOperator,
-  isDeclarationName,
-  isNonValueIdentifier,
-} from "../../core/analysis-ast.js";
+import { isDeclarationName, isNonValueIdentifier } from "../../core/analysis-ast.js";
 import { identifiersNamed } from "../../core/ast.js";
 import { isInsideModuleDeclaration } from "./declaration-shapes.js";
 import { normalizeFile } from "./module-resolution.js";
+import { propertyAccessIsWritten } from "../../core/binding-references.js";
 import { resolvedFor } from "./symbol-resolution.js";
 import ts from "typescript";
 
@@ -143,19 +140,4 @@ function observableContainerReferencesAreStable(
     }
   }
   return true;
-}
-
-function propertyAccessIsWritten(access: ts.PropertyAccessExpression): boolean {
-  const { parent } = access;
-  return (
-    (ts.isBinaryExpression(parent) &&
-      parent.left === access &&
-      isAssignmentOperator(parent.operatorToken.kind)) ||
-    (ts.isPrefixUnaryExpression(parent) &&
-      parent.operand === access &&
-      (parent.operator === ts.SyntaxKind.PlusPlusToken ||
-        parent.operator === ts.SyntaxKind.MinusMinusToken)) ||
-    (ts.isPostfixUnaryExpression(parent) && parent.operand === access) ||
-    (ts.isDeleteExpression(parent) && parent.expression === access)
-  );
 }

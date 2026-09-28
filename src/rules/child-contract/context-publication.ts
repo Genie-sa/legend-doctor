@@ -3,13 +3,13 @@ import {
   hookCallName,
   isDeclarationName,
   isNonValueIdentifier,
+  outermostTransparentParent,
+  propertyNameText,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
 import type { ChildComponentSource } from "./model.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import { jsxAttributeDirectlyCarries } from "./jsx-owner.js";
-import { propertyName } from "./prop-bindings.js";
 import ts from "typescript";
 
 interface ContextPublication {
@@ -31,7 +31,7 @@ function memoizedResultBinding(
   ) {
     return null;
   }
-  const carriedCall = climbTransparentExpression(call);
+  const carriedCall = outermostTransparentParent(call);
   const declaration = carriedCall.parent;
   if (
     !ts.isVariableDeclaration(declaration) ||
@@ -58,7 +58,7 @@ function memoizedObjectProperty(
   ) {
     return null;
   }
-  const name = propertyName(member.name);
+  const name = propertyNameText(member.name);
   const object = member.parent;
   if (!name || !ts.isObjectLiteralExpression(object)) {
     return null;

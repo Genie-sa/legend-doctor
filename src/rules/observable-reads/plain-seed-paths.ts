@@ -1,6 +1,6 @@
 import { propertyNameText, unwrapTransparentExpression } from "../../core/analysis-ast.js";
-import { collectHookImports } from "../../core/imports.js";
 import { hasSoleSourceBinding } from "./independent-subscription-bindings.js";
+import { isDirectValueFactory } from "../../core/imports.js";
 import ts from "typescript";
 
 const NO_CONSTANTS: ReadonlySet<string> = new Set();
@@ -22,7 +22,7 @@ export function plainSeedPaths(
     call &&
     ts.isCallExpression(call) &&
     call.arguments.length === 1 &&
-    isValueFactory(call)
+    isDirectValueFactory(call)
   ) {
     collectPlainPaths(call.arguments[0]!, "", { paths, plainConstants });
   }
@@ -57,15 +57,6 @@ export function isPlainConstantDeclaration(
     (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
     declaration.initializer !== undefined &&
     isPlainScalar(unwrapTransparentExpression(declaration.initializer), NO_CONSTANTS)
-  );
-}
-
-function isValueFactory(call: ts.CallExpression): boolean {
-  const imports = collectHookImports(call.getSourceFile());
-  return (
-    ts.isIdentifier(call.expression) &&
-    (imports.observable.has(call.expression.text) ||
-      imports.useObservable.has(call.expression.text))
   );
 }
 

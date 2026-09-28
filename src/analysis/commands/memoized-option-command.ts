@@ -4,6 +4,7 @@ import {
   isDeclarationName,
   isDirectJsxAttributeExpression,
   isNonValueIdentifier,
+  propertyNameText,
 } from "../../core/analysis-ast.js";
 import {
   setterCallsAssignBooleanLiterals,
@@ -95,7 +96,7 @@ function memoizedOptionCallbackFor(
   );
   const factory = containingMemo?.arguments[0];
   const property = factory ? findAncestorUntil(setter, ts.isPropertyAssignment, factory) : null;
-  const propertyName = property ? staticPropertyName(property.name) : null;
+  const propertyName = property ? propertyNameText(property.name) : null;
   const callback = property ? nearestNestedFunction(setter, owner) : null;
   if (
     !containingMemo ||
@@ -192,10 +193,4 @@ function jsxTransportSiteFor(
   }
   const target = jsxOpeningForAttribute(attribute)?.tagName.getText() ?? null;
   return target ? { prop: attribute.name.getText(), target } : null;
-}
-
-export function staticPropertyName(name: ts.PropertyName): string | null {
-  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
-    ? name.text
-    : null;
 }

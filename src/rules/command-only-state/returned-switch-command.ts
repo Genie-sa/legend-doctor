@@ -1,7 +1,6 @@
 import {
   bindingDeclarationCount,
   callRootIdentifier,
-  collectBindingNames,
   isDeclarationName,
   isNonValueIdentifier,
   unwrapTransparentExpression,
@@ -9,6 +8,7 @@ import {
 import { nearestNestedFunction, visit } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { parameterBindingNames } from "../../core/binding-references.js";
 import ts from "typescript";
 
 const MINIMUM_COMMAND_SWITCH_CLAUSES = 2;
@@ -103,7 +103,7 @@ function guardedFallbackIsCommandOnly(clause: ts.DefaultClause, state: StateCand
     return false;
   }
   const condition = unwrapTransparentExpression(guard.expression);
-  if (!ts.isIdentifier(condition) || !ownerParameterNames(state.owner).has(condition.text)) {
+  if (!ts.isIdentifier(condition) || !parameterBindingNames(state.owner).has(condition.text)) {
     return false;
   }
   const branch = guard.thenStatement;
@@ -122,14 +122,6 @@ function isImportedCommandStatement(statement: ts.Statement, state: StateCandida
   }
   const expression = unwrapTransparentExpression(statement.expression);
   return ts.isCallExpression(expression) && callRootIsImported(expression, state);
-}
-
-function ownerParameterNames(owner: RuntimeFunctionLike): ReadonlySet<string> {
-  const names = new Set<string>();
-  for (const parameter of owner.parameters) {
-    collectBindingNames(parameter.name, names);
-  }
-  return names;
 }
 
 function callRootIsImported(call: ts.CallExpression, state: StateCandidate): boolean {

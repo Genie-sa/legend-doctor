@@ -7,24 +7,27 @@ import type {
 } from "./model.js";
 import { atJsxInvocation, jsxOwnerIsDeferredEventTarget, jsxOwnerTarget } from "./jsx-owner.js";
 import { callbackInvocationIsDeferred, callbackIsDeferredByJsx } from "./invocation-trace.js";
-import { climbTransparentExpression, directConstAlias } from "./carried-values.js";
 import {
   directCallArgument,
   forwardedObjectCall,
   returnedCallbackPath,
 } from "./hook-boundary-paths.js";
 import { findAncestorUntil, nearestNestedFunction, nodeWithin } from "../../core/ast.js";
+import {
+  outermostTransparentParent,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
 import { baseUiRenderEventStage } from "./base-ui-render-events.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
 import { commandItemEventIsDeferred } from "./command-item-events.js";
 import { contextPropertyConsumersAreDeferred } from "./context-consumers.js";
 import { deeperTrace } from "./model.js";
 import { deferredArrayItemCallbackPublication } from "./array-item-callbacks.js";
+import { directConstAlias } from "./carried-values.js";
 import { isHookDependencyReference } from "../state-proofs/callback-sites.js";
 import { jsxAttributeCarriesCallbackIdentity } from "./jsx-event-attributes.js";
 import { memoizedContextPublication } from "./context-publication.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 function constAliasStage(probe: CallbackExpressionProbe): boolean | null {
   const { expression: value, path, source, trace } = probe;
@@ -269,7 +272,7 @@ const CALLBACK_EXPRESSION_STAGES: readonly ((probe: CallbackExpressionProbe) => 
 
 export function callbackPathExpressionIsDeferred(probe: CallbackExpressionProbe): boolean {
   const resolved: CallbackExpressionProbe = {
-    expression: climbTransparentExpression(probe.expression),
+    expression: outermostTransparentParent(probe.expression),
     path: probe.path,
     source: probe.source,
     trace: probe.trace,
@@ -288,7 +291,7 @@ function callResultCallbackIsDeferred(
   path: readonly string[],
   trace: CallbackTrace,
 ): boolean {
-  const expression = climbTransparentExpression(target.call);
+  const expression = outermostTransparentParent(target.call);
   const alias = directConstAlias(expression, target.source.owner);
   return (
     alias !== null && trace.deferral.trackedPath(target.source, { name: alias.text, path }, trace)

@@ -1,6 +1,6 @@
-import { identifiersNamed, scriptKindForFile, visit } from "../core/ast.js";
+import { scriptKindForFile, visit } from "../core/ast.js";
 import { collectSourceFiles } from "./analyze-path/analysis-context.js";
-import { isDeclarationName } from "../core/analysis-ast.js";
+import { isBoundOnlyByImport } from "../core/use-value-import.js";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
@@ -125,10 +125,6 @@ function rootModuleBindings(sourceFile: ts.SourceFile): RootModuleBindings {
       ) || sourceFile.statements.some(exposesLegacyModule),
     legacyNamespaces: new Set(legacy.flatMap(({ clause }) => namespaceBindings(clause))),
   };
-}
-
-function isBoundOnlyByImport(sourceFile: ts.SourceFile, name: string): boolean {
-  return identifiersNamed(sourceFile, name).every((identifier) => !isDeclarationName(identifier));
 }
 
 function valueImport(declaration: ts.ImportDeclaration): ValueImport[] {

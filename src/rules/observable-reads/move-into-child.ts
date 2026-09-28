@@ -2,13 +2,13 @@ import type { ObservableReadScan, UseValueDeclaration } from "./model.js";
 import {
   bindingDeclarationCount,
   isDeclarationName,
+  outermostTransparentParent,
   staticPropertyPath,
 } from "../../core/analysis-ast.js";
 import {
   directGetReceiver,
   identifiedUseValueDeclaration,
   isValueReferenceTo,
-  outermostTransparentParent,
   provenObservablePath,
 } from "./observable-paths.js";
 import {

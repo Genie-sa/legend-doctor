@@ -4,9 +4,11 @@ import {
   isDirectJsxAttributeExpression,
   isInsideJsxAttribute,
   isValueTransitionProp,
+  propertyNameText,
 } from "../../core/analysis-ast.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { jsxOpeningForAttribute } from "../../analysis/callbacks/local-callbacks.js";
 import ts from "typescript";
 
 export function allSetterReferencesAreEventBoundaries(
@@ -76,7 +78,7 @@ function isDeferredArrayItemCallbackProperty(
   const property = findAncestorUntil(node, ts.isPropertyAssignment, query.attribute);
   const opening = jsxOpeningForAttribute(query.attribute);
   const target = opening?.tagName.getText() ?? null;
-  const callbackProperty = property ? staticPropertyName(property.name) : null;
+  const callbackProperty = property ? propertyNameText(property.name) : null;
   return (
     property !== null &&
     property.initializer === node &&
@@ -109,17 +111,4 @@ function jsxAttributeHasProvenEventContract(
     childContracts?.frameworkEventComponent(target) === true ||
     childContracts?.componentCallbackPropIsDeferred(target, propName) === true
   );
-}
-
-function jsxOpeningForAttribute(
-  attribute: ts.JsxAttribute,
-): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  const opening = attribute.parent.parent;
-  return ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening) ? opening : null;
-}
-
-function staticPropertyName(name: ts.PropertyName): string | null {
-  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
-    ? name.text
-    : null;
 }

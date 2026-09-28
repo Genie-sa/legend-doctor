@@ -1,13 +1,9 @@
-import { findAncestorUntil, visit } from "../../core/ast.js";
-import {
-  isDeclarationName,
-  isNonValueIdentifier,
-  isPureExpression,
-  unwrapTransparentExpression,
-} from "../../core/analysis-ast.js";
+import { isPureExpression, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { bindingIsReferenced } from "../../core/binding-references.js";
+import { findAncestorUntil } from "../../core/ast.js";
 import ts from "typescript";
 
 export interface PropertyWrite {
@@ -147,19 +143,4 @@ function openingReadsProperty(
       access.name.text === property
     );
   });
-}
-
-function bindingIsReferenced(node: ts.Node, name: string): boolean {
-  let referenced = false;
-  visit(node, (candidate) => {
-    if (
-      ts.isIdentifier(candidate) &&
-      candidate.text === name &&
-      !isDeclarationName(candidate) &&
-      !isNonValueIdentifier(candidate)
-    ) {
-      referenced = true;
-    }
-  });
-  return referenced;
 }

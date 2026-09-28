@@ -1,6 +1,6 @@
 import { parse as parseYaml } from "yaml";
 import path from "node:path";
-import { readFile } from "node:fs/promises";
+import { readOptionalText } from "../read-optional-text.js";
 
 /** Which dependency specifiers a workspace's package manager installs as a link to the sibling package. */
 export interface WorkspaceLinkPolicy {
@@ -53,7 +53,7 @@ export function workspaceLinkPolicy(tool: string, rootDir: string): Promise<Work
 async function bunPolicy(rootDir: string): Promise<WorkspaceLinkPolicy> {
   const [npmrc, bunfig] = await Promise.all([
     npmrcSetting(rootDir, NPMRC_LINK_KEY),
-    readText(path.join(rootDir, "bunfig.toml")),
+    readOptionalText(path.join(rootDir, "bunfig.toml")),
   ]);
   const bunfigSettings = [...(bunfig ?? "").matchAll(BUNFIG_LINK_SETTING)].map((match) =>
     linkSetting(match.groups?.["value"]),
@@ -83,7 +83,7 @@ async function pnpmPolicy(rootDir: string): Promise<WorkspaceLinkPolicy> {
 async function yarnPolicy(rootDir: string): Promise<WorkspaceLinkPolicy> {
   const [major, yarnrc] = await Promise.all([
     packageManagerMajor(rootDir, "yarn"),
-    readText(path.join(rootDir, ".yarnrc.yml")),
+    readOptionalText(path.join(rootDir, ".yarnrc.yml")),
   ]);
   const berry = major === null ? yarnrc !== null : major >= FIRST_YARN_WITH_PROTOCOL;
   if (!berry) {
@@ -104,7 +104,10 @@ function linkSetting(value: JsonValue | undefined): boolean | null {
 }
 
 async function packageManagerMajor(rootDir: string, name: string): Promise<number | null> {
-  const manifest = parseDocument(await readText(path.join(rootDir, "package.json")), JSON.parse);
+  const manifest = parseDocument(
+    await readOptionalText(path.join(rootDir, "package.json")),
+    JSON.parse,
+  );
   const declared = objectField(manifest, "packageManager");
   const groups = isJsonString(declared) ? PACKAGE_MANAGER.exec(declared)?.groups : undefined;
   return groups?.["name"] === name ? Number(groups["major"]) : null;
@@ -112,7 +115,7 @@ async function packageManagerMajor(rootDir: string, name: string): Promise<numbe
 
 /** In the ini format a later assignment overrides an earlier one. */
 async function npmrcSetting(rootDir: string, key: string): Promise<boolean | null> {
-  const text = await readText(path.join(rootDir, ".npmrc"));
+  const text = await readOptionalText(path.join(rootDir, ".npmrc"));
   const values = (text ?? "")
     .split(/\r?\n/u)
     .map((line) => INI_ENTRY.exec(line)?.groups)
@@ -126,7 +129,7 @@ function objectField(document: JsonValue, key: string): JsonValue | undefined {
 }
 
 async function readYaml(filePath: string): Promise<JsonValue> {
-  return parseDocument(await readText(filePath), parseYaml);
+  return parseDocument(await readOptionalText(filePath), parseYaml);
 }
 
 function parseDocument(text: string | null, parseText: (text: string) => JsonValue): JsonValue {
@@ -134,15 +137,6 @@ function parseDocument(text: string | null, parseText: (text: string) => JsonVal
     return text === null ? null : parseText(text);
   } catch {
     // A malformed settings file declares nothing, which leaves the manager's default.
-    return null;
-  }
-}
-
-async function readText(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch {
-    // An unreadable settings file declares nothing, which leaves the manager's default.
     return null;
   }
 }

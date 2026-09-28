@@ -2,11 +2,11 @@ import type { CallbackExpressionProbe, ChildComponentSource } from "./model.js";
 import {
   bindingDeclarationCount,
   isNonValueIdentifier,
+  outermostTransparentParent,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { bindingElementPropertyName, isBindingName } from "./prop-bindings.js";
 import { identifiersNamed, nearestNestedFunction } from "../../core/ast.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import ts from "typescript";
 import { uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 
@@ -180,7 +180,7 @@ function optionFields(
 }
 
 function mergeReachesHost(merge: ts.CallExpression, source: ChildComponentSource): boolean {
-  const props = climbTransparentExpression(merge);
+  const props = outermostTransparentParent(merge);
   const property = props.parent;
   const options = property.parent;
   return (

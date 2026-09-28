@@ -41,7 +41,7 @@ export function stateMayHoldCallable(state: StateCandidate): boolean {
   return callable;
 }
 
-export function stateTypeMayBeCallable(
+function stateTypeMayBeCallable(
   type: ts.TypeNode,
   sourceFile: ts.SourceFile = type.getSourceFile(),
   seen: ReadonlySet<string> = new Set(),

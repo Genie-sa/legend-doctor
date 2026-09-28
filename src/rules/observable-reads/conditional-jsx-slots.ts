@@ -7,7 +7,7 @@ import {
 import { visit, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { bindingContainsName } from "../state-proofs/binding-lookup.js";
+import { bindingContainsName } from "../../core/binding-references.js";
 import { hasUnstableSubtreeLifetime } from "../state-proofs/jsx-subtrees.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import { isUseValueCall } from "./observable-paths.js";

@@ -28,6 +28,23 @@ export const SOURCE_FILE_OPTIONS: ts.CreateSourceFileOptions = {
   languageVersion: ts.ScriptTarget.Latest,
 };
 
+export function calleeRootIdentifier(expression: ts.Expression): ts.Identifier | null {
+  if (ts.isIdentifier(expression)) {
+    return expression;
+  }
+  if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) {
+    return expression.expression;
+  }
+  return null;
+}
+
+export function calleeName(expression: ts.Expression): string | null {
+  if (ts.isIdentifier(expression)) {
+    return expression.text;
+  }
+  return ts.isPropertyAccessExpression(expression) ? expression.name.text : null;
+}
+
 export function findAncestor<TNode extends ts.Node>(
   node: ts.Node,
   predicate: (candidate: ts.Node) => candidate is TNode,
@@ -105,6 +122,10 @@ export function nearestNestedFunction(
     }
   }
   return null;
+}
+
+export function lineOf(node: ts.Node, sourceFile: ts.SourceFile = node.getSourceFile()): number {
+  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
 }
 
 export function nodeWithin(node: ts.Node, ancestor: ts.Node): boolean {

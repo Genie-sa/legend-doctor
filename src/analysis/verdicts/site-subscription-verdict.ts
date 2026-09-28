@@ -16,13 +16,13 @@ import {
   hasOnlyEventCommandReads,
   stateMayHoldCallable,
 } from "../../rules/state-proofs/state-proofs.js";
+import { isCustomHookOwner, jsxTargetName } from "../ast-helpers.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { HostTagImports } from "../../core/imports.js";
 import { MAX_LEAF_SUBTREE_RATIO } from "../constants.js";
 import type { MaterialityPolicy } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
-import { isCustomHookOwner } from "../ast-helpers.js";
 import { isHostTag } from "../../core/imports.js";
 import { isImportedTranslationCall } from "../../rules/effects/command-support-calls.js";
 import { isSafeProjectionExpression } from "../../rules/deferred-reveal/safe-projections.js";
@@ -125,7 +125,7 @@ interface SiteSubscriptionGates {
   readonly materiality: MaterialityPolicy;
 }
 
-export function stateQualifiesForSiteSubscriptions(
+function stateQualifiesForSiteSubscriptions(
   state: StateCandidate,
   usage: StateUsage,
   { hasCompanionWrites, hasDetachedEffectWrites, materiality }: SiteSubscriptionGates,
@@ -250,7 +250,7 @@ function renderReadSite(read: ts.Identifier, scope: SiteScope): SubscriptionSite
 }
 
 function attributeSite(attribute: ts.JsxAttribute, scope: SiteScope): SubscriptionSite | null {
-  const tag = attributeTagName(attribute);
+  const tag = jsxTargetName(attribute);
   if (tag === null || !rendersWithoutSideEffects(attribute, scope)) {
     return null;
   }
@@ -347,7 +347,7 @@ function transportAttributes(state: StateCandidate): readonly ts.JsxAttribute[] 
       node.initializer.expression.text === state.valueName &&
       isDirectJsxAttributeExpression(node, node.initializer.expression)
     ) {
-      const tag = attributeTagName(node);
+      const tag = jsxTargetName(node);
       if (tag !== null && !/^[a-z]/u.test(tag)) {
         attributes.push(node);
       }
@@ -357,7 +357,7 @@ function transportAttributes(state: StateCandidate): readonly ts.JsxAttribute[] 
 }
 
 function transportSite(attribute: ts.JsxAttribute, scope: SiteScope): SubscriptionSite | null {
-  const tag = attributeTagName(attribute);
+  const tag = jsxTargetName(attribute);
   if (
     tag === null ||
     nearestNestedFunction(attribute, scope.state.owner) !== null ||
@@ -369,13 +369,6 @@ function transportSite(attribute: ts.JsxAttribute, scope: SiteScope): Subscripti
   return scope.allowUnresolvedComponentCallSite ||
     scope.childContracts?.componentPropIsLeafRenderConsumer(tag, propName) === true
     ? { kind: "leaf-wrapper", label: `<${tag}> call site`, node: attribute.parent.parent }
-    : null;
-}
-
-function attributeTagName(attribute: ts.JsxAttribute): string | null {
-  const opening = attribute.parent.parent;
-  return ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)
-    ? opening.tagName.getText()
     : null;
 }
 

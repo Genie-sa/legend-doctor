@@ -1,5 +1,6 @@
 import { COMPACT_OWNER_JSX_ELEMENTS, LARGE_OWNER_LINE_SPAN } from "../constants.js";
 import type { SetterMutation, StateCandidate, StateCluster, StateUsage } from "../model.js";
+import { groupStatesByOwner, ownerLineSpan } from "../ast-helpers.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import { DisjointSet } from "./disjoint-set.js";
 import type { MaterialityPolicy } from "../constants.js";
@@ -13,7 +14,6 @@ import { normalizeObservableDialogClusterMembers } from "./dialog-cluster.js";
 import { normalizeObservableSelectionClusterMembers } from "./selection-cluster.js";
 import { normalizeObservableTextDraftClusterMembers } from "./text-draft-cluster.js";
 import { normalizePersistentScalarDialogClusterMembers } from "./scalar-dialog-cluster.js";
-import { ownerLineSpan } from "../ast-helpers.js";
 import { stateHasBoundedDialogGate } from "../dialog/dialog-gates.js";
 import type ts from "typescript";
 
@@ -103,18 +103,6 @@ export interface ClusterAnalysisContext {
 
 export interface ClusterMemberContext extends ClusterAnalysisContext {
   readonly mutations: readonly SetterMutation[];
-}
-
-export function groupStatesByOwner(
-  states: readonly StateCandidate[],
-): ReadonlyMap<RuntimeFunctionLike, StateCandidate[]> {
-  const byOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
-  for (const state of states) {
-    const ownerStates = byOwner.get(state.owner) ?? [];
-    ownerStates.push(state);
-    byOwner.set(state.owner, ownerStates);
-  }
-  return byOwner;
 }
 
 function coexecutingStateComponents(

@@ -13,6 +13,7 @@ import {
 import { isJsxNode, isSynchronousRenderCallback } from "../state-proofs/callback-sites.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { hasAncestorInSet } from "../../analysis/ast-helpers.js";
 import { isInsideJsxEventCallback } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
@@ -194,13 +195,4 @@ export function localCallableByName(
     }
   });
   return callback;
-}
-
-function hasAncestorInSet(node: ts.Node, ancestors: ReadonlySet<ts.Node>): boolean {
-  for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
-    if (ancestors.has(current)) {
-      return true;
-    }
-  }
-  return false;
 }

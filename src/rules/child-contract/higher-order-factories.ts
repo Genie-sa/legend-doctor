@@ -7,14 +7,11 @@ import {
   bindingDeclarationCount,
   hookCallName,
   isNonValueIdentifier,
+  outermostTransparentParent,
+  propertyNameText,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
-import { bindingElementPropertyName, isBindingName, propertyName } from "./prop-bindings.js";
-import {
-  climbTransparentExpression,
-  isNullishExpression,
-  objectLiteralPropertyValue,
-} from "./carried-values.js";
+import { bindingElementPropertyName, isBindingName } from "./prop-bindings.js";
 import {
   findAncestor,
   findAncestorUntil,
@@ -23,6 +20,7 @@ import {
   nodeWithin,
   visit,
 } from "../../core/ast.js";
+import { isNullishExpression, objectLiteralPropertyValue } from "./carried-values.js";
 import { MAX_CALLBACK_PATH_DEPTH } from "./model.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
 import { jsxAttributeDirectlyCarries } from "./jsx-owner.js";
@@ -77,7 +75,7 @@ function deferredEventResultExpression(
   call: ts.CallExpression,
   source: ChildComponentSource,
 ): ts.Expression | null {
-  const result = climbTransparentExpression(call);
+  const result = outermostTransparentParent(call);
   const { parent } = result;
   if (
     !ts.isConditionalExpression(parent) ||
@@ -148,7 +146,7 @@ function returnedObjectPropertyValue(
   const matches = returned.properties.filter(
     (member) =>
       (ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member)) &&
-      propertyName(member.name) === property,
+      propertyNameText(member.name) === property,
   );
   const match = matches.length === 1 ? matches[0] : null;
   const value = objectLiteralPropertyValue(match);

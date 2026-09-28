@@ -1,5 +1,6 @@
-import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { readOptionalText } from "./read-optional-text.js";
+import { readdir } from "node:fs/promises";
 
 const NATIVE_PLATFORMS = ["android", "ios", "macos", "windows"] as const;
 const EXPO_MANAGED_PLATFORMS: readonly NativePlatform[] = ["android", "ios"];
@@ -66,7 +67,7 @@ async function platformRunsNewArchitecture(
 ): Promise<boolean> {
   const platformDirectory = path.join(directory, platform);
   if (platform === "android") {
-    const properties = await readText(path.join(platformDirectory, "gradle.properties"));
+    const properties = await readOptionalText(path.join(platformDirectory, "gradle.properties"));
     return NEW_ARCH_FLAG.exec(properties ?? "")?.groups?.["enabled"] === "true";
   }
   return platform !== "windows" && applePlatformRunsNewArchitecture(platformDirectory);
@@ -75,8 +76,8 @@ async function platformRunsNewArchitecture(
 /** CocoaPods settings must enable it, and no app delegate may switch it back off. */
 async function applePlatformRunsNewArchitecture(platformDirectory: string): Promise<boolean> {
   const [podfile, podProperties, delegates] = await Promise.all([
-    readText(path.join(platformDirectory, "Podfile")),
-    readText(path.join(platformDirectory, "Podfile.properties.json")),
+    readOptionalText(path.join(platformDirectory, "Podfile")),
+    readOptionalText(path.join(platformDirectory, "Podfile.properties.json")),
     appDelegateSources(platformDirectory),
   ]);
   if (delegates.some((source) => APP_DELEGATE_LEGACY_OVERRIDE.test(source))) {
@@ -114,19 +115,19 @@ async function appDelegateSources(platformDirectory: string): Promise<string[]> 
       path.relative(platformDirectory, entry.parentPath).split(path.sep).length <= 1,
   );
   const sources = await Promise.all(
-    delegates.map((entry) => readText(path.join(entry.parentPath, entry.name))),
+    delegates.map((entry) => readOptionalText(path.join(entry.parentPath, entry.name))),
   );
   return sources.filter((source) => source !== null);
 }
 
 /** An app.json counts only with an `expo` key; any app.config script is an Expo config. */
 async function readExpoConfig(directory: string): Promise<string | null> {
-  const appJson = await readText(path.join(directory, "app.json"));
+  const appJson = await readOptionalText(path.join(directory, "app.json"));
   if (appJson !== null && hasExpoKey(appJson)) {
     return appJson;
   }
   const scripts = await Promise.all(
-    EXPO_CONFIG_SCRIPTS.map((name) => readText(path.join(directory, name))),
+    EXPO_CONFIG_SCRIPTS.map((name) => readOptionalText(path.join(directory, name))),
   );
   return scripts.find((script) => script !== null) ?? null;
 }
@@ -138,14 +139,5 @@ function hasExpoKey(appJson: string): boolean {
   } catch {
     // A malformed app.json configures nothing.
     return false;
-  }
-}
-
-async function readText(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch {
-    // A missing file declares no configuration.
-    return null;
   }
 }

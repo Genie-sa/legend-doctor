@@ -4,6 +4,7 @@ import type { FindingsScope } from "./finding-clusters.js";
 import type { HookFinding } from "../core/types.js";
 import type { StateFlowIndex } from "../project/state-flow/state-flow.js";
 import type { StateTransitionEvidence } from "../core/state-transitions.js";
+import { lineOf } from "../core/ast.js";
 import { runtimeFunctionName } from "./ast-helpers.js";
 import ts from "typescript";
 
@@ -67,10 +68,6 @@ function writeSite(
     line: position.line + 1,
     state: mutation.state.valueName,
   };
-}
-
-function lineOf(node: ts.Node, sourceFile: ts.SourceFile): number {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
 }
 
 function controlSites(
