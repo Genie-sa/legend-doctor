@@ -20,6 +20,7 @@ import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import type { UnrenderedUseValueGate } from "../../core/subscriptions.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import { ownerLevelReferences } from "../../core/scope-references.js";
 import ts from "typescript";
@@ -31,18 +32,29 @@ type UnrenderedRead =
   | { readonly kind: "command"; readonly node: ts.Identifier }
   | { readonly kind: "callback-dependency"; readonly node: ts.Identifier };
 
-interface PlainSeedSubscription {
+interface ProvenSubscription {
   /** The callee as the source spells it: `useValue`, `use$`, `useSelector`, or an alias. */
   readonly hook: string;
   readonly observable: string;
 }
 
-interface UnrenderedSubscription extends PlainSeedSubscription {
+interface UnrenderedSubscription extends ProvenSubscription {
   readonly fallback: string | null;
   readonly localName: string;
   readonly owner: RuntimeFunctionLike;
   readonly reads: readonly UnrenderedRead[];
 }
+
+interface SnapshotCandidate {
+  readonly fallback: ts.Expression | null;
+  readonly name: ts.Identifier;
+  readonly owner: RuntimeFunctionLike;
+  readonly subscription: ProvenSubscription;
+}
+
+type UnrenderedEvaluation =
+  | { readonly kind: "proven"; readonly subscription: UnrenderedSubscription }
+  | { readonly kind: "blocked"; readonly gate: UnrenderedUseValueGate };
 
 /**
  * A subscription binding that no render reads: every update rerenders the owner for nothing. The
@@ -52,35 +64,80 @@ export function unrenderedUseValueFinding(
   declaration: ts.VariableDeclaration,
   scan: ObservableReadScan,
 ): LegendPracticeFinding | null {
-  const subscription = unrenderedSubscription(declaration, scan);
-  return subscription ? unrenderedFinding(declaration, subscription, scan) : null;
+  const evaluation = unrenderedEvaluation(declaration, scan);
+  return evaluation.kind === "proven"
+    ? unrenderedFinding(declaration, evaluation.subscription, scan)
+    : null;
 }
 
-function unrenderedSubscription(
+/** The first gate at which `unrenderedUseValueFinding` abstains, or null when it proves the edit. */
+export function unrenderedUseValueGate(
   declaration: ts.VariableDeclaration,
   scan: ObservableReadScan,
-): UnrenderedSubscription | null {
+): UnrenderedUseValueGate | null {
+  const evaluation = unrenderedEvaluation(declaration, scan);
+  return evaluation.kind === "blocked" ? evaluation.gate : null;
+}
+
+function blocked(gate: UnrenderedUseValueGate): UnrenderedEvaluation {
+  return { kind: "blocked", gate };
+}
+
+function unrenderedEvaluation(
+  declaration: ts.VariableDeclaration,
+  scan: ObservableReadScan,
+): UnrenderedEvaluation {
   const owner = topLevelOwner(declaration);
+  if (!owner || !ts.isIdentifier(declaration.name)) {
+    return blocked("binding-not-owner-level-const");
+  }
   const result = declaration.initializer && wrappedUseValueResult(declaration.initializer);
-  const subscription = result && plainSeedSubscription(result.call, scan);
-  if (!owner || !result || !subscription || !ts.isIdentifier(declaration.name)) {
-    return null;
+  const subscription = result && provenSubscription(result.call, scan);
+  if (!result || !subscription) {
+    return blocked("subscription-call-not-proven");
   }
-  const reads = unrenderedReads(owner, declaration.name, scan.imports);
-  if (
-    !reads ||
-    (result.fallback && !fallbackSurvivesRewrite(result.fallback, reads)) ||
-    renderMayReadUntrackedState(owner, scan)
-  ) {
-    return null;
+  return snapshotEvaluation(
+    { fallback: result.fallback, name: declaration.name, owner, subscription },
+    scan,
+  );
+}
+
+/** A plain-data seed proves the subscription activates no lazy source that `peek()` would defer. */
+function snapshotEvaluation(
+  candidate: SnapshotCandidate,
+  scan: ObservableReadScan,
+): UnrenderedEvaluation {
+  if (!scan.plainSeedPaths?.has(candidate.subscription.observable)) {
+    return blocked("plain-seed-not-proven");
   }
-  return {
-    ...subscription,
-    fallback: result.fallback?.getText(scan.sourceFile) ?? null,
-    localName: declaration.name.text,
-    owner,
-    reads,
-  };
+  const reads = unrenderedReads(candidate.owner, candidate.name, scan.imports);
+  if (!reads) {
+    return blocked("read-not-snapshot-safe");
+  }
+  const gate = rewriteGate(candidate, reads, scan);
+  return gate
+    ? blocked(gate)
+    : {
+        kind: "proven",
+        subscription: {
+          ...candidate.subscription,
+          fallback: candidate.fallback?.getText(scan.sourceFile) ?? null,
+          localName: candidate.name.text,
+          owner: candidate.owner,
+          reads,
+        },
+      };
+}
+
+function rewriteGate(
+  { fallback, owner }: SnapshotCandidate,
+  reads: readonly UnrenderedRead[],
+  scan: ObservableReadScan,
+): UnrenderedUseValueGate | null {
+  if (fallback && !fallbackSurvivesRewrite(fallback, reads)) {
+    return "fallback-not-rewritable";
+  }
+  return renderMayReadUntrackedState(owner, scan) ? "render-reads-untracked-state" : null;
 }
 
 /**
@@ -94,19 +151,19 @@ function fallbackSurvivesRewrite(
   return reads.length === 0 ? isInertFallback(fallback) : isInvariantFallback(fallback);
 }
 
-/** A plain-data seed proves the subscription activates no lazy source that `peek()` would defer. */
-function plainSeedSubscription(
+function provenSubscription(
   call: ts.CallExpression,
   scan: ObservableReadScan,
-): PlainSeedSubscription | null {
+): ProvenSubscription | null {
   if (call.arguments.length !== 1 || !isUseValueCall(call, scan.imports)) {
     return null;
   }
-  const path = provenObservablePath(call.arguments[0]!, scan.observableBindings)?.getText(
-    scan.sourceFile,
-  );
-  return path && scan.plainSeedPaths?.has(path)
-    ? { hook: call.expression.getText(scan.sourceFile), observable: path }
+  const path = provenObservablePath(call.arguments[0]!, scan.observableBindings);
+  return path
+    ? {
+        hook: call.expression.getText(scan.sourceFile),
+        observable: path.getText(scan.sourceFile),
+      }
     : null;
 }
 

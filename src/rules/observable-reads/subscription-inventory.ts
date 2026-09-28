@@ -1,6 +1,7 @@
 import type {
   SubscriptionInventory,
   SubscriptionInventoryReason,
+  SubscriptionRuleGate,
 } from "../../core/subscriptions.js";
 import { hasAncestorUseValueSubscription, otherSubscriptionTracksAncestor } from "./move-down.js";
 import { subscriptionLocation, subscriptionOwner } from "./subscription-cut.js";
@@ -13,6 +14,7 @@ import { isUseValueCall } from "./observable-paths.js";
 import { staticMemberPrefix } from "./selector-expressions.js";
 import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
+import { unrenderedUseValueGate } from "./unrendered-subscriptions.js";
 import { useValueBinding } from "./use-value-bindings.js";
 import { visit } from "../../core/ast.js";
 import { wrappedResultDeclaration } from "./wrapped-use-value-results.js";
@@ -56,6 +58,7 @@ function inventoryEntry(
     observable: inventoryObservable(binding, scan),
     status: inventoryStatus(finding),
     reasons: finding ? [] : inventoryReasons(analysis, scan),
+    ruleGates: finding ? [] : ruleGates(declaration, scan),
     reads:
       flow?.reads.map((read) => ({
         location: subscriptionLocation(read.node, scan),
@@ -76,6 +79,17 @@ function inventoryEntry(
     };
   }
   return entry;
+}
+
+/** Where each binding-scoped practice rule abstained, so a replay miss names the rule's own cause. */
+function ruleGates(
+  declaration: ts.VariableDeclaration | null,
+  scan: ObservableReadScan,
+): SubscriptionRuleGate[] {
+  const gate = declaration
+    ? unrenderedUseValueGate(declaration, scan)
+    : "binding-not-owner-level-const";
+  return gate ? [{ action: "peek-unrendered-use-value", gate }] : [];
 }
 
 function inventoryObservable(binding: UseValueBinding, scan: ObservableReadScan): string | null {
