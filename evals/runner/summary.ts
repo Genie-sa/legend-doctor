@@ -2,7 +2,7 @@ import type { ActionScore, Evaluation, HookScore, Tally } from "./model.js";
 import { abstentionSummaryLines } from "./abstentions.js";
 import { hookCoverageSummaryLines } from "./hook-coverage.js";
 
-function percentage(ratio: number): string {
+export function percentage(ratio: number): string {
   return (ratio * 100).toFixed(1);
 }
 
