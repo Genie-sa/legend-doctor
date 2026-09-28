@@ -27,10 +27,12 @@ import { effectFindingFor } from "./effect-findings.js";
 import { hasLazyStateInitializer } from "../rules/effect-drafts/effect-drafts.js";
 import { omittedValueSetterName } from "./candidates.js";
 import { resolveStateClassification } from "./assumptions/review-assumptions.js";
+import { splitCommitVerdict } from "./verdicts/split-commit-verdict.js";
 import type ts from "typescript";
 import { verificationFor } from "./assumptions/verification.js";
 import { withReviewGuidance } from "./review-guidance.js";
 import { withTransitionEvidence } from "./transition-evidence.js";
+import { withoutCompanionWrites } from "./verdicts/classification-context.js";
 
 export function buildFindings(result: StateAnalysisResult): HookFinding[] {
   const { analysis } = result;
@@ -109,6 +111,7 @@ function stateClassificationInputs(
     ownerIsCommitSensitive: analysis.commitSensitiveOwners.has(state.owner),
     siblingRenderCut: clusters.siblingRenderCuts.get(state) ?? null,
     ...sourceInputs(analysis),
+    splitCommitCompanions: ownership.splitCommitCompanions.get(state) ?? [],
     state,
     subtree: commands.subtreeByState.get(state) ?? null,
     usage,
@@ -125,11 +128,7 @@ function classifyStateAlone(state: StateCandidate, result: StateAnalysisResult):
       message: "",
     };
   }
-  return classifyState({
-    ...stateClassificationInputs(state, usage, result),
-    hasCompanionWrites: false,
-    hasNonClosingCompanionWrites: false,
-  });
+  return classifyState(withoutCompanionWrites(stateClassificationInputs(state, usage, result)));
 }
 
 function sourceInputs(
@@ -174,7 +173,7 @@ function baseStateClassification(
   return (
     harnessStateClassification(state, analysis.nonProductionHarness) ??
     unreferencedOwnerStateClassification(state, analysis) ??
-    clusterStateClassification(stateClusterFor(state, result), state) ??
+    splitClusterClassification(state, inputs, stateClusterFor(state, result)) ??
     effectDraftStateClassification(
       state,
       clusters.effectDrafts.singletons.has(state),
@@ -184,6 +183,22 @@ function baseStateClassification(
     effectProofs.legendValueMirrors.get(state) ??
     classifyState(inputs)
   );
+}
+
+/**
+ * A cluster converts its members together, so a member written in the same stretch commits with
+ * the converted state; a member written in another stretch still commits separately.
+ */
+function splitClusterClassification(
+  state: StateCandidate,
+  { splitCommitCompanions }: StateClassificationInputs,
+  cluster: StateCluster | undefined,
+): ClassifiedState | null {
+  const clustered = clusterStateClassification(cluster, state);
+  const apart = splitCommitCompanions.filter(
+    (companion) => !companion.sameStretch || !cluster?.members.includes(companion.state),
+  );
+  return clustered && splitCommitVerdict(clustered, state, apart);
 }
 
 interface StateVerdictResolution extends ResolvedStateClassification {

@@ -6,6 +6,7 @@ import type {
   EffectCandidate,
   EffectStateScope,
   SiblingRenderCut,
+  SplitCommitCompanion,
   StateCandidate,
   StateCluster,
   StateSubtree,
@@ -38,6 +39,7 @@ export interface ParsedSourceAnalysisOptions {
   readonly materiality?: MaterialityPolicy;
   readonly sourceComponents: ReadonlySet<string>;
   readonly stateFlow: StateFlowIndex;
+  readonly syncLaneRendersAlone?: boolean;
 }
 
 export interface SourceAnalysis {
@@ -70,6 +72,7 @@ export interface SourceAnalysis {
   readonly states: readonly StateCandidate[];
   /** The callee instructions for a new subscription in this file name. */
   readonly subscriptionHook: string;
+  readonly syncLaneRendersAlone: boolean;
   readonly unmatchedStateCalls: readonly ts.CallExpression[];
   readonly usageByState: ReadonlyMap<StateCandidate, StateUsage>;
   readonly useObservableBindingsByOwner: ReadonlyMap<RuntimeFunctionLike, ReadonlySet<string>>;
@@ -100,6 +103,7 @@ export interface OwnershipProofs {
   readonly effectStateScopes: ReadonlyMap<RuntimeFunctionLike, EffectStateScope>;
   readonly observableSelectionOwners: ReadonlySet<RuntimeFunctionLike>;
   readonly propertyLocalObjectDrafts: ReadonlySet<StateCandidate>;
+  readonly splitCommitCompanions: ReadonlyMap<StateCandidate, readonly SplitCommitCompanion[]>;
   readonly statesWithCompanionWrites: ReadonlySet<StateCandidate>;
 }
 

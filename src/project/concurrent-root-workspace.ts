@@ -22,6 +22,8 @@ const FIRST_CLIENT_ROOT_DOM: Version = { major: 18, minor: 0 };
  * fell back to `ReactDOM.render` without a React 18 build flag.
  */
 const FIRST_CLIENT_ROOT_NEXT: Version = { major: 13, minor: 1 };
+/** React 19 renders a store notification's sync lane together with every pending default-lane update. */
+const FIRST_UNIFIED_LANES_REACT: Version = { major: 19, minor: 0 };
 const RENDERER_FLOORS: ReadonlyMap<string, Version> = new Map([
   ["react-dom", FIRST_CONCURRENT_ONLY_DOM],
   ["react-native", FIRST_CONCURRENT_ONLY_NATIVE],
@@ -115,6 +117,34 @@ export class ConcurrentRootResolver {
     this.workspaces.set(workspace.rootDir, result);
     return result;
   }
+}
+
+/** The files whose workspace installs a React below 19, which renders the sync lane alone. */
+export async function filesRenderingSyncLaneAlone(
+  files: readonly string[],
+): Promise<ReadonlySet<string>> {
+  const verdicts = new Map<string, Promise<boolean>>();
+  const alone = await Promise.all(
+    files.map(async (file) => {
+      const directory = path.dirname(path.resolve(file));
+      const verdict = verdicts.get(directory) ?? directoryRendersSyncLaneAlone(directory);
+      verdicts.set(directory, verdict);
+      return (await verdict) ? [file] : [];
+    }),
+  );
+  return new Set(alone.flat());
+}
+
+async function directoryRendersSyncLaneAlone(directory: string): Promise<boolean> {
+  const workspace = await workspaceOf(directory);
+  if (workspace === null) {
+    return false;
+  }
+  const catalogs = await workspaceCatalogs(workspace.rootDir);
+  return workspace.packages.some((pkg) => {
+    const minimum = localMinimumVersion(pkg, "react", catalogs);
+    return minimum !== null && compareVersions(minimum, FIRST_UNIFIED_LANES_REACT) < 0;
+  });
 }
 
 interface Workspace {

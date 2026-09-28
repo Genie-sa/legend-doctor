@@ -94,7 +94,8 @@ reviews and the three batch labels it retired. The [lockfile version audit](audi
 records the Legend State version each checkout pins and the `replace-legacy-use-value` labels it retired. The [in-place memo key audit](audit-2026-09-28-in-place-memo-keys.md) records the runtime and replay
 evidence behind `snapshot-mutated-use-value` and its two non-enforced legend-music candidates. The [legacy-root handler audit](audit-2026-09-28-legacy-root-handlers.md) records the runtime proof that React event
 handlers already render transaction writes once on legacy roots, and the three batch labels it retired. The [Slides parent-tree audit](audit-2026-09-28-slides-parent-tree.md)
-records the runtime evidence behind the 17 Slides replay labels it moved to non-enforced. The [replay sweep audit](audit-2026-09-28-replay-sweep.md)
+records the runtime evidence behind the 17 Slides replay labels it moved to non-enforced. The [split-commit audit](audit-2026-09-28-split-commits.md) records the renderer
+proof behind cross-microtask atomic-transition reviews and the three formbricks labels it moved to review. The [replay sweep audit](audit-2026-09-28-replay-sweep.md)
 re-audits every remaining replay miss, moves four labels whose edit saves nothing alone to non-enforced, and records the
 yield of each candidate proof. A red corpus job remains a real gate; unit-suite success does not override it.
 

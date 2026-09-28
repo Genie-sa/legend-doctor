@@ -53,6 +53,7 @@ export interface SourceTextAnalysisOptions {
   readonly legendState?: InstalledLegendState | null;
   readonly materiality?: MaterialityPolicy;
   readonly sourceComponents?: ReadonlySet<string>;
+  readonly syncLaneRendersAlone?: boolean;
 }
 
 export function analyzeSourceWith(
@@ -63,6 +64,7 @@ export function analyzeSourceWith(
     legendState = null,
     materiality = DEFAULT_MATERIALITY,
     sourceComponents = new Set(),
+    syncLaneRendersAlone = false,
   }: SourceTextAnalysisOptions,
 ): HookFinding[] {
   const sourceFile = ts.createSourceFile(
@@ -81,6 +83,7 @@ export function analyzeSourceWith(
     materiality,
     sourceComponents,
     stateFlow: new StateFlowIndex(),
+    syncLaneRendersAlone,
   });
 }
 
@@ -97,6 +100,7 @@ export interface SourceAnalysisRequest {
   readonly reportFileName: string;
   readonly sourceComponents?: ReadonlySet<string>;
   readonly stateFlow?: StateFlowIndex;
+  readonly syncLaneRendersAlone?: boolean;
 }
 
 export function analyzeSourceFile({
@@ -112,6 +116,7 @@ export function analyzeSourceFile({
   reportFileName,
   sourceComponents = new Set(),
   stateFlow = new StateFlowIndex(),
+  syncLaneRendersAlone = false,
 }: SourceAnalysisRequest): HookFinding[] {
   return analyzeParsedSource(file.sourceFile, reportFileName, {
     analysisRoot,
@@ -124,6 +129,7 @@ export function analyzeSourceFile({
     materiality,
     sourceComponents,
     stateFlow,
+    syncLaneRendersAlone,
   });
 }
 
@@ -209,6 +215,7 @@ function sourceAnalysisBase(
     stateFlow,
     states,
     subscriptionHook: subscriptionHookCallee(sourceFile, legendState),
+    syncLaneRendersAlone: options.syncLaneRendersAlone ?? false,
     unmatchedStateCalls,
     usageByState,
   };

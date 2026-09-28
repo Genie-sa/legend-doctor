@@ -1,6 +1,10 @@
 import type { ClassifiedState, StateCandidate } from "../model.js";
 import type { HookFinding, StateAssumption } from "../../core/types.js";
 import { cowrittenGroup, groupAssumption } from "./group-assumptions.js";
+import {
+  hasOnlySplitCommitCompanions,
+  withoutCompanionWrites,
+} from "../verdicts/classification-context.js";
 import type { FindingsScope } from "../finding-clusters.js";
 import type { GroupAssumptionResult } from "./group-assumptions.js";
 import type { StateClassificationInputs } from "../verdicts/classification-context.js";
@@ -71,7 +75,7 @@ function chainedAssumption(
 ): ResolvedStateClassification {
   return singleAssumption({
     classified: remaining,
-    inputs: { ...inputs, hasCompanionWrites: false, hasNonClosingCompanionWrites: false },
+    inputs: withoutCompanionWrites(inputs),
     partners: [],
     result,
   });
@@ -132,7 +136,10 @@ export function resolveStateClassification(
   if (!isReview(classified)) {
     return unchanged(classified);
   }
-  if (classified.abstentionReason === "atomic-transition-unproven") {
+  if (
+    classified.abstentionReason === "atomic-transition-unproven" &&
+    !hasOnlySplitCommitCompanions(inputs)
+  ) {
     return cowrittenAssumption(classified, inputs, result);
   }
   return singleAssumption({ classified, inputs, partners: [], result });

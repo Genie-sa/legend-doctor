@@ -55,6 +55,7 @@ import { stateCommandSnapshotEvidence, stateRenderCutEvidence } from "./classifi
 import type { ClassifiedState } from "../model.js";
 import { ownerHasMutableRenderRead } from "../../rules/state-proofs/render-purpose.js";
 import { siteSubscriptionVerdict } from "./site-subscription-verdict.js";
+import { splitCommitVerdict } from "./split-commit-verdict.js";
 
 const STATE_VERDICTS: readonly StateVerdict[] = [
   intrinsicStateVerdict,
@@ -96,6 +97,10 @@ const STATE_VERDICTS: readonly StateVerdict[] = [
 ];
 
 export function classifyState(inputs: StateClassificationInputs): ClassifiedState {
+  return splitCommitVerdict(firstStateVerdict(inputs), inputs.state, inputs.splitCommitCompanions);
+}
+
+function firstStateVerdict(inputs: StateClassificationInputs): ClassifiedState {
   const context: StateClassificationContext = {
     ...inputs,
     commandSnapshot: stateCommandSnapshotEvidence(inputs),

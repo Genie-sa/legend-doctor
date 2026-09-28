@@ -139,6 +139,13 @@ export interface SetterMutation {
   state: StateCandidate;
 }
 
+/** A rendered React state the renderer may commit apart from an observable conversion. */
+export interface SplitCommitCompanion {
+  /** Written in the converted state's synchronous stretch, so converting both together fixes it. */
+  readonly sameStretch: boolean;
+  readonly state: StateCandidate;
+}
+
 export interface CoexecutionScope {
   readonly region: RuntimeFunctionLike;
   readonly stateFlow: StateFlowIndex;

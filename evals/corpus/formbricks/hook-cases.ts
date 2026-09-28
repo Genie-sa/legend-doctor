@@ -3,13 +3,15 @@ import type { HookAction } from "../../../src/core/types.js";
 
 export const formbricksHookCases = [
   {
-    action: "use-observable",
+    abstentionReason: "atomic-transition-unproven",
+    action: "review-state",
+    assumption: { ifConfirmed: "use-observable" },
     file: "webhook-settings-tab.tsx",
     hook: "useState",
     line: 55,
     name: "endpointAccessible",
     rationale:
-      "The endpoint command clears hittingEndpoint then sets accessibility in both success and catch paths after the awaited request. One atomic model preserves those paired writes, while an always-mounted input subscriber owns the accessibility border and the pending button remains a separate leaf.",
+      "The endpoint command sets accessibility in its final stretch, and the awaiting submit command sets isUpdatingWebhook as soon as it resumes. React 19 commits an observable notification in the microtask before that resumption, so converting accessibility splits one React commit into two; only a human can confirm no reader needs both in the same commit.",
     target: "formbricks-webhook-settings",
   },
   {
@@ -240,13 +242,15 @@ export const formbricksHookCases = [
     target: "formbricks-webhook-settings",
   },
   {
-    action: "use-observable",
+    abstentionReason: "atomic-transition-unproven",
+    action: "review-state",
+    assumption: { ifConfirmed: "use-observable" },
     file: "webhook-settings-tab.tsx",
     hook: "useState",
     line: 56,
     name: "hittingEndpoint",
     rationale:
-      "Endpoint testing starts one pending transition before suspension; the button leaf can subscribe while completion updates remain in the existing command.",
+      "Endpoint testing clears the pending flag in its final stretch, and the awaiting submit command sets isUpdatingWebhook as soon as it resumes. React 19 commits an observable notification in the microtask before that resumption, so converting the flag splits one React commit into two; only a human can confirm no reader needs both in the same commit.",
     target: "formbricks-webhook-settings",
   },
   {
@@ -837,28 +841,28 @@ export const formbricksHookCases = [
       "The editable segment drives validation, filter cardinality, multiple fields, and update payloads across the owner rather than one status leaf.",
     target: "formbricks-segment-settings",
   },
-  ...[
-    [
-      56,
-      "hittingEndpoint",
-      "use-observable",
-      "The endpoint command is reachable from both a direct test event and a proven React Hook Form submit adapter; its pending transition reaches suspension before other React state writes.",
-    ],
-    [
-      61,
-      "creatingWebhook",
-      "review-state",
-      "Creation validates several owner fields and invokes endpoint testing, which changes other React state before its first await; this is a coupled workflow status, not an isolated pending leaf.",
-    ],
-  ].map(([line, name, action, rationale]) => ({
-    action: action as "review-state" | "use-observable",
+  {
+    abstentionReason: "atomic-transition-unproven",
+    action: "review-state",
+    assumption: { ifConfirmed: "use-observable" },
     file: "add-webhook-modal.tsx",
-    hook: "useState" as const,
-    line: line as number,
-    name: name as string,
-    rationale: rationale as string,
+    hook: "useState",
+    line: 56,
+    name: "hittingEndpoint",
+    rationale:
+      "A failed endpoint test clears the pending flag in the command's final stretch, and the awaiting creation command clears creatingWebhook in its finally block as soon as it resumes. React 19 commits an observable notification in the microtask before that resumption, so converting the flag splits one React commit into two; only a human can confirm no reader needs both in the same commit.",
     target: "formbricks-add-webhook",
-  })),
+  },
+  {
+    action: "review-state",
+    file: "add-webhook-modal.tsx",
+    hook: "useState",
+    line: 61,
+    name: "creatingWebhook",
+    rationale:
+      "Creation validates several owner fields and invokes endpoint testing, which changes other React state before its first await; this is a coupled workflow status, not an isolated pending leaf.",
+    target: "formbricks-add-webhook",
+  },
   {
     action: "use-ref",
     file: "add-webhook-modal.tsx",
