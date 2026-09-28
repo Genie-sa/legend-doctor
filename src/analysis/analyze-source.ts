@@ -129,7 +129,16 @@ export function analyzeSourceFile({
 
 export function findingHookImports(file: AnalysisFile): HookImports | null {
   const imports = collectHookImports(file.sourceFile);
-  return containsFindingHookCall(file.sourceFile, imports) ? imports : null;
+  return canCallFindingHook(imports) && containsFindingHookCall(file.sourceFile, imports)
+    ? imports
+    : null;
+}
+
+/** A finding hook call names a `useState` or `useEffect` import, or a member of a React namespace. */
+function canCallFindingHook(imports: HookImports): boolean {
+  return (
+    imports.useState.size > 0 || imports.useEffect.size > 0 || imports.reactNamespaces.size > 0
+  );
 }
 
 function containsFindingHookCall(node: ts.Node, imports: HookImports): boolean {

@@ -21,6 +21,7 @@ import { ConcurrentRootResolver } from "../concurrent-root-workspace.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import type { FileCapabilities } from "../capabilities.js";
 import type { FunctionCoverageEntry } from "./coverage-stages.js";
+import type { HookImports } from "../../core/imports.js";
 import { InstalledLegendStateResolver } from "../installed-legend-state-resolver.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
 import { ReactCompilerResolver } from "../react-compiler-package.js";
@@ -29,10 +30,12 @@ import { StateFlowIndex } from "../state-flow/state-flow.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
 import { analyzeLegendPracticesFile } from "../../practices/analyze-legend-practices.js";
 import { buildSubscriptionAnalysis } from "../../report/subscription-plans.js";
+import { collectHookImports } from "../../core/imports.js";
 import { createChildContractResolver } from "./child-contracts.js";
 import { disabledEffectRules } from "../../rules/effects/browser-storage-persistence.js";
 import { disabledPracticeRules } from "../../practices/practice-rules.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
+import { mayCallUseValue } from "../../rules/observable-reads/observable-paths.js";
 import path from "node:path";
 import { rankedQuestions } from "../../analysis/assumptions/ranked-questions.js";
 import { relativeInPlaceWrites } from "../source-components/observable-in-place-writes.js";
@@ -215,7 +218,9 @@ function analyzeSupportedFileEntry(entry: SupportedAnalysisFileEntry, pass: Anal
   const childContracts =
     analyzeHooks || analyzePractices ? createChildContractResolver(pass.context, entry.file) : null;
   if (analyzeHooks) {
-    pass.accumulator.findings.push(...hookFindings(entry, pass, { childContracts, stateFlow }));
+    pass.accumulator.findings.push(
+      ...hookFindings(entry, pass, { childContracts, hookImports, stateFlow }),
+    );
   }
   if (analyzePractices) {
     pass.accumulator.practices.push(...legendPracticeFindings(entry, pass, childContracts));
@@ -225,13 +230,14 @@ function analyzeSupportedFileEntry(entry: SupportedAnalysisFileEntry, pass: Anal
 
 interface HookFindingScope {
   readonly childContracts: ChildContractResolver | null;
+  readonly hookImports: HookImports | null;
   readonly stateFlow: StateFlowIndex;
 }
 
 function hookFindings(
   entry: SupportedAnalysisFileEntry,
   pass: AnalysisPass,
-  { childContracts, stateFlow }: HookFindingScope,
+  { childContracts, hookImports, stateFlow }: HookFindingScope,
 ): readonly HookFinding[] {
   const { legendState } = fileCapabilities(entry, pass);
   recordDisabledRules(pass.accumulator.disabledRules, disabledEffectRules(legendState));
@@ -244,7 +250,7 @@ function hookFindings(
     childContracts,
     legendValueBridges: pass.context.sourceIndex.legendValueBridgesFor(entry.file),
     deferredCallbackHooks: pass.context.sourceIndex.deferredCallbackHooksFor(entry.file),
-    hookImports: findingHookImports(entry.analysisFile),
+    hookImports,
     materiality: pass.materiality,
     confirmations: pass.confirmations,
     analysisRoot: pass.analysisRoot,
@@ -278,6 +284,9 @@ function legendPracticeFindings(
   );
   if (includeFindings) {
     recordDisabledRules(pass.accumulator.disabledRules, disabledPracticeRules(capabilities));
+  } else if (!mayCallUseValue(collectHookImports(entry.analysisFile.sourceFile))) {
+    // An ineligible file contributes only its subscription inventory, which needs a useValue call.
+    return [];
   }
   return analyzeLegendPracticesFile({
     subscriptionInventory: pass.accumulator.subscriptions,

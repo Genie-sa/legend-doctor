@@ -67,6 +67,10 @@ function bunLockVersions(text: string): readonly string[] {
 }
 
 function pnpmLockVersions(text: string): readonly string[] {
+  // A YAML key spells its characters out or escapes them in double quotes; parsing is the slow part.
+  if (!text.includes(PACKAGE_NAME) && !text.includes("\\")) {
+    return [];
+  }
   const lock = parseDocument(text, parseYaml);
   const packages = isJsonObject(lock) ? lock["packages"] : null;
   if (!isJsonObject(packages)) {
