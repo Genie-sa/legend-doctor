@@ -151,6 +151,9 @@ export function localDeclarationPaths(
   pathsOf: (declaration: ts.VariableDeclaration) => ReadonlySet<string>,
 ): ReadonlySet<string> {
   const paths = new Set<string>();
+  if (bindings.size === 0) {
+    return paths;
+  }
   visit(sourceFile, (node) => {
     if (
       !ts.isVariableDeclaration(node) ||
