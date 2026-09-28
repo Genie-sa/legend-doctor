@@ -14,10 +14,11 @@ whatever it currently prints.
   finding is a failure, so practice precision is measured over everything the tool prints. A manually audited optional
   `disposition` label also rejects the right action with an incorrect cost classification; omitted dispositions retain
   action-only matching.
-- **Expert replay.** Performance commits by Legend State's author are ground truth for what an expert changes. Each
-  hunk is labeled at its line in the commit's first parent: `enforced` when a sound static proof shows the edit removes
-  a render or lifecycle cost without changing behavior, `non-enforced` when it changes timing or dependencies or rests
-  on an unprovable fact, and `excluded` when it removes no such cost (logging, UX, refactors, bug fixes).
+- **Expert replay.** Performance commits by Legend State's author and by application maintainers are ground truth for
+  what an expert changes. Each hunk is labeled at its line in the commit's first parent: `enforced` when a sound static
+  proof shows the edit removes a render or lifecycle cost without changing behavior, `non-enforced` when it changes
+  timing or dependencies or rests on an unprovable fact, and `excluded` when it removes no such cost (logging, UX,
+  refactors, bug fixes).
 
 The primary metric is precision among non-review recommendations. Recall is reported globally and per action so
 abstention cannot masquerade as accuracy. The runner also prints a deterministic abstention-reason histogram globally
@@ -95,21 +96,35 @@ evidence behind `snapshot-mutated-use-value` and its two non-enforced legend-mus
 
 ### Expert replay
 
-`evals/corpus/*/replay-commits.ts` pins each replayed commit and its first parent. For every supplied repository, the
-runner extracts the parent tree from the checkout's object store with `git archive` into a temporary directory, scans
-its source root, and prints `Expert replay recall: x/y`: enforced cases where a proven `change` finding at the labeled
-line carries the expert's action or a listed equivalent. Each miss names what the analyzer reported there, including
-abstention reasons, subscription-inventory blockers, and the gate at which the targeted rule abstained (`ruleGates`).
-Non-enforced cases are reported separately and list any proven change the analyzer makes there, since that contradicts
-the audit; neither misses nor non-enforced flags fail the run.
-A label whose parent line no longer contains its `source` text fails, as does a parent missing from the checkout. A
-full-history clone contains every parent; for a shallow checkout, fetch each one by SHA:
+`evals/corpus/*/replay-commits.ts` and `evals/corpus/legend-apps/replay-*.ts` pin each replayed commit and its first
+parent. Every hook-level edit in a replayed commit is labeled, including the ones a static analyzer cannot or should not
+recommend:
+
+| Repository                | Commits | Scope                                                                                                                                | Enforced | Non-enforced | Excluded |
+| ------------------------- | ------: | ------------------------------------------------------------------------------------------------------------------------------------ | -------: | -----------: | -------: |
+| `LegendApp/legend-apps`   |      41 | Jay Meistrich's July and September 2026 performance sweeps in Music, Slides, Markdown, Code, Chat History, Diff, and shared packages |       64 |           83 |      115 |
+| `LegendApp/legend-music`  |      11 | Jay Meistrich's subscription, observer, and timer commits                                                                            |       16 |           25 |       30 |
+| `LegendApp/legend-photos` |       4 | Jay Meistrich's selection, image, plugin, and filmstrip commits                                                                      |        1 |            0 |        5 |
+| `nonbili/NouTube`         |       1 | The maintainer's feed and library modal commit                                                                                       |        3 |            1 |        8 |
+| `nonbili/Nori`            |       1 | The maintainer's bookmark drawer commit                                                                                              |        0 |            0 |        1 |
+
+A deletion that stops subscribing to a lazily synced store, such as a `synced()` persisted store, is non-enforced: the
+subscription is what activates the load, so a later `peek()` can read the default instead of the persisted value.
+
+For every supplied repository, the runner extracts the parent tree from the checkout's object store with `git archive`
+into a temporary directory, scans its source root, and prints `Expert replay recall: x/y`: enforced cases where a
+proven `change` finding at the labeled line carries the expert's action or a listed equivalent. Recall on September 28,
+2026 is 22/84. Each miss names what the analyzer reported there, including abstention reasons, subscription-inventory
+blockers, and the gate at which the targeted rule abstained (`ruleGates`). Non-enforced cases are reported separately
+and list any proven change the analyzer makes there, since that contradicts the audit; neither misses nor non-enforced
+flags fail the run. A label whose parent line no longer contains its `source` text fails, as does a parent missing
+from the checkout. A full-history clone contains every parent; for a shallow checkout, fetch each one by SHA:
 
 ```bash
 git -C /path/to/legend-music fetch --depth=1 https://github.com/LegendApp/legend-music.git <parent>
 ```
 
-CI fetches the parents the same way after the pinned commits, so the cost is one shallow fetch per replayed commit.
+CI fetches the parents the same way after the pinned commits, so the cost is one shallow fetch per distinct parent.
 
 `npm run eval:runtime` runs the executable migration contracts under jsdom with pinned React and Legend State: form
 submission snapshots, keyed selection and draft identity, independent hook lifetimes, atomic dialog publication,

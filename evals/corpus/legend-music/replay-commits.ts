@@ -666,6 +666,45 @@ const hoverGatedTime = {
   root,
 } as const satisfies ReplayCommit;
 
+const skiaPlaybackTime = {
+  cases: [
+    {
+      expected: "excluded",
+      file: "components/PlaybackArea.tsx",
+      line: 30,
+      rationale:
+        "Replaces the hover-gated native time readout with an always-visible Skia text fed by onChange; both the renderer and the visibility change.",
+      source: "useObserveEffect(() => {",
+    },
+    {
+      expected: "excluded",
+      file: "components/PlaybackArea.tsx",
+      line: 78,
+      rationale:
+        "The duration now reaches a Skia text through an observable and onChange instead of a render; routing text through an imperative renderer is not a static recommendation.",
+      source: "use$(localPlayerState$.duration)",
+    },
+    {
+      expected: "excluded",
+      file: "components/PlaybackArea.tsx",
+      line: 79,
+      rationale: "Drops hover gating so the duration is always visible, a UX change.",
+      source: "use$(isSliderHovered$)",
+    },
+    {
+      expected: "excluded",
+      file: "components/PlaybackArea.tsx",
+      line: 118,
+      rationale: "Deletes the hover-reset effect together with the hover feature.",
+      source: effect,
+    },
+  ],
+  commit: "bd80f99ae43e866ab5a34541a9e1e9f2f565aeed",
+  parent: "74f62df8ef5f1b83dae3f343e078672e66447c89",
+  repository,
+  root,
+} as const satisfies ReplayCommit;
+
 const windowHoverTimeline = {
   cases: [
     {
@@ -688,6 +727,7 @@ export const legendMusicReplayCommits: readonly ReplayCommit[] = [
   playlistSubscriptions,
   playbackTimeMemo,
   hoverGatedTime,
+  skiaPlaybackTime,
   observeEffectConversions,
   deadUseValueCleanup,
   emptyEffectMounts,
