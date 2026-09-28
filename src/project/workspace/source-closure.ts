@@ -3,7 +3,7 @@ import {
   normalizeFile,
   resolveSourceModule,
 } from "../source-components/module-resolution.js";
-import { isWithin, workspaceLinks, workspacePackages } from "./packages.js";
+import { isWithin, loadWorkspace, workspaceLinks } from "./packages.js";
 import type { SourceResolutionContext } from "../source-components/module-resolution.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
 import path from "node:path";
@@ -20,17 +20,20 @@ export async function loadWorkspaceSources(
   root: string,
   sources: Map<string, string>,
 ): Promise<ts.ModuleResolutionHost> {
-  const packages = await workspacePackages(root);
+  const workspace = await loadWorkspace(root);
   const base = cachedModuleResolutionHost(new Set(sources.keys()));
-  if (packages.length === 0) {
+  if (workspace === null) {
     return base;
   }
-  const host = workspaceResolutionHost(base, workspaceLinks(packages));
+  const host = workspaceResolutionHost(base, workspaceLinks(workspace));
   const context: SourceClosureContext = {
     root,
     sources,
     loaded: new Set([...sources.keys()].map((file) => sourceIdentity(host, file))),
-    directories: packages.flatMap((pkg) => [pkg.dir, ts.sys.realpath?.(pkg.dir) ?? pkg.dir]),
+    directories: workspace.packages.flatMap((pkg) => [
+      pkg.dir,
+      ts.sys.realpath?.(pkg.dir) ?? pkg.dir,
+    ]),
     moduleResolutionHost: host,
     compilerContexts: new Map(),
     compilerContextsByImporter: new Map(),

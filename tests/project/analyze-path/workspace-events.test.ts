@@ -24,6 +24,17 @@ import { mergeProps } from "@base-ui/react/merge-props";
 export function Button({ render, ...props }) {
   return useRender({ defaultTagName: "button", props: mergeProps({}, props), render });
 }`;
+const PNPM_WORKSPACE = [
+  ["pnpm-workspace.yaml", "packages:\n  - apps/*\n  - packages/*\n"],
+] as const;
+const BUN_WORKSPACE = [
+  ["package.json", '{"name":"fixture","private":true,"workspaces":["apps/*","packages/*"]}'],
+  ["bun.lock", "{}"],
+] as const;
+const NPM_WORKSPACE = [
+  ["package.json", '{"name":"fixture","private":true,"workspaces":["apps/*","packages/*"]}'],
+  ["package-lock.json", "{}"],
+] as const;
 const CASES = [
   {
     name: "declared workspace export",
@@ -45,6 +56,38 @@ const CASES = [
     dependency: "^1.0.0",
     button: BUTTON,
     action: "review-state",
+  },
+  {
+    name: "Bun version satisfied by the workspace",
+    exports: { "./button": "./src/button.tsx" },
+    dependency: "1.0.0",
+    button: BUTTON,
+    action: "use-observable",
+    workspaceFiles: BUN_WORKSPACE,
+  },
+  {
+    name: "Bun version the workspace does not satisfy",
+    exports: { "./button": "./src/button.tsx" },
+    dependency: "^2.0.0",
+    button: BUTTON,
+    action: "review-state",
+    workspaceFiles: BUN_WORKSPACE,
+  },
+  {
+    name: "npm version satisfied by the workspace",
+    exports: { "./button": "./src/button.tsx" },
+    dependency: "^1.0.0",
+    button: BUTTON,
+    action: "use-observable",
+    workspaceFiles: NPM_WORKSPACE,
+  },
+  {
+    name: "npm rejects the workspace protocol",
+    exports: { "./button": "./src/button.tsx" },
+    dependency: "workspace:*",
+    button: BUTTON,
+    action: "review-state",
+    workspaceFiles: NPM_WORKSPACE,
   },
   {
     name: "declaration-only export",
@@ -196,10 +239,11 @@ for (const scenario of CASES) {
     context.after(() => rm(root, { recursive: true, force: true }));
     const extraFiles: readonly (readonly [string, string])[] = [];
     const extraLinks: readonly (readonly [string, string])[] = [];
-    const variant = { extraFiles, extraLinks, ...scenario };
+    const workspaceFiles: readonly (readonly [string, string])[] = PNPM_WORKSPACE;
+    const variant = { extraFiles, extraLinks, workspaceFiles, ...scenario };
     const files = new Map([
       ["package.json", JSON.stringify({ name: "fixture", private: true })],
-      ["pnpm-workspace.yaml", "packages:\n  - apps/*\n  - packages/*\n"],
+      ...variant.workspaceFiles,
       [
         "apps/web/package.json",
         JSON.stringify({
@@ -210,7 +254,7 @@ for (const scenario of CASES) {
       ["apps/web/src/Screen.tsx", SCREEN],
       [
         "packages/ui/package.json",
-        JSON.stringify({ name: "@fixture/ui", exports: scenario.exports }),
+        JSON.stringify({ name: "@fixture/ui", version: "1.0.0", exports: scenario.exports }),
       ],
       ["packages/ui/src/button.tsx", scenario.button],
       ["packages/ui/src/button.d.ts", "export declare function Button(props: any): any;"],
@@ -244,6 +288,8 @@ for (const scenario of CASES) {
     const expectedReason = new Map([
       ["private source", "module-unresolved"],
       ["registry version", "module-unresolved"],
+      ["Bun version the workspace does not satisfy", "module-unresolved"],
+      ["npm rejects the workspace protocol", "module-unresolved"],
       ["declaration-only export", "declaration-only"],
       ["types condition wins", "declaration-only"],
       ["null export", "module-unresolved"],
