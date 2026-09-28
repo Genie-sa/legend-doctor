@@ -3,6 +3,7 @@ import {
   findAncestor,
   identifiersNamed,
   isRuntimeFunctionLike,
+  lineOf,
   nodeWithin,
 } from "../../core/ast.js";
 import {
@@ -90,10 +91,6 @@ export function visitValueReferences(
     return;
   }
   node.forEachChild((child) => visitValueReferences(child, visitor));
-}
-
-export function lineOf(node: ts.Node, sourceFile: ts.SourceFile): number {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
 }
 
 function classify(identifier: ts.Identifier, context: ClassifierContext): ValueChange | null {

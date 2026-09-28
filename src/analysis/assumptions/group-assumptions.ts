@@ -13,7 +13,7 @@ import type { FindingsScope } from "../finding-clusters.js";
 import type { StateClassificationInputs } from "../verdicts/classification-context.js";
 import { cowrittenGroupIntro } from "../clusters/cowritten-clusters.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
-import type ts from "typescript";
+import { lineOf } from "../../core/ast.js";
 
 /** Every state reachable from one member through the co-write relation, in source order. */
 export function cowrittenGroup(
@@ -61,10 +61,6 @@ type GroupConversion = Exclude<
 
 const GROUP_REASON = "atomic-transition-unproven";
 
-function lineOf(node: ts.Node, sourceFile: ts.SourceFile): number {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-}
-
 function quotedList(names: readonly string[]): string {
   const quoted = names.map((name) => `\`${name}\``);
   return quoted.length <= 1
@@ -105,11 +101,7 @@ function outcomeLabel(outcome: GroupOutcome): AssumptionGroupMember {
     : { name: member.valueName, outcome: "review-state" };
 }
 
-export function groupId(
-  reportFile: string,
-  owner: string,
-  members: readonly StateCandidate[],
-): string {
+function groupId(reportFile: string, owner: string, members: readonly StateCandidate[]): string {
   const names = members.map((member) => member.valueName).join(",");
   return `${reportFile}::${owner}::{${names}}::${GROUP_REASON}`;
 }

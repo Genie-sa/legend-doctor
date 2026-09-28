@@ -1,15 +1,14 @@
 import type { StateCandidate, StateUsage } from "../../analysis/model.js";
 import { hasIndependentSinkWitness, independentDraftSinks } from "./independent-sinks.js";
 import { hasOnlyEventCommandReads, stateMayHoldCallable } from "../state-proofs/state-proofs.js";
-import { isDeclarationName, isNonValueIdentifier } from "../../core/analysis-ast.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { PropertyWrite } from "./property-writes.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { exactPropertyWrite } from "./property-writes.js";
 import { jsxElementCount } from "../state-proofs/jsx-subtrees.js";
+import { stateValueReferences } from "../../analysis/ast-helpers.js";
 import ts from "typescript";
 import { typedStringDraftProperties } from "./typed-draft-seed.js";
-import { visit } from "../../core/ast.js";
 
 export interface ObjectDraftProofs {
   childContracts: ChildContractResolver | null;
@@ -99,7 +98,7 @@ function readsAreDirectPropertyAccesses(
   state: StateCandidate,
   properties: ReadonlySet<string>,
 ): boolean {
-  const references = stateReferences(state);
+  const references = stateValueReferences(state);
   return (
     references.length > 0 &&
     !references.some((reference) => {
@@ -107,22 +106,6 @@ function readsAreDirectPropertyAccesses(
       return !access || !properties.has(access.name.text);
     })
   );
-}
-
-function stateReferences(state: StateCandidate): ts.Identifier[] {
-  const references: ts.Identifier[] = [];
-  visit(state.owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node.text === state.valueName &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node) &&
-      node.parent !== state.call.parent
-    ) {
-      references.push(node);
-    }
-  });
-  return references;
 }
 
 function directPropertyAccess(node: ts.Identifier): ts.PropertyAccessExpression | null {

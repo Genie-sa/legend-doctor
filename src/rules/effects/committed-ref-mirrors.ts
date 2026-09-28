@@ -1,7 +1,6 @@
 import type { EffectCandidate, StateCandidate } from "../../analysis/model.js";
 import {
   bindingDeclarationCount,
-  collectBindingNames,
   isPureExpression,
   localBindingNames,
   unwrapTransparentExpression,
@@ -13,6 +12,7 @@ import {
 import type { CommittedRefContext } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isImportedHookCall } from "../../core/imports.js";
+import { parameterBindingNames } from "../../core/binding-references.js";
 import { soleExpressionStatementBody } from "./callback-shape.js";
 import ts from "typescript";
 
@@ -67,14 +67,6 @@ function refCurrentSetterArgument(
     return null;
   }
   return unwrapTransparentExpression(expression.arguments[0]!);
-}
-
-function parameterBindingNames(owner: RuntimeFunctionLike): ReadonlySet<string> {
-  const names = new Set<string>();
-  for (const parameter of owner.parameters) {
-    collectBindingNames(parameter.name, names);
-  }
-  return names;
 }
 
 export function isExactLatestValueRefMirror(

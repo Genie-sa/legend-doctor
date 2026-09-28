@@ -6,6 +6,7 @@ import type { ObservableContextReader } from "../../project/source-components/ob
 import type { ValueDomain } from "./value-domains.js";
 import { declaredObservablePropType } from "../../practices/observable-prop-types.js";
 import { hasSoleSourceBinding } from "../observable-reads/independent-subscription-bindings.js";
+import { isConstDeclaration } from "../../core/binding-references.js";
 import { staticPropertyName } from "../child-contract/declared-prop-types.js";
 import ts from "typescript";
 
@@ -211,13 +212,6 @@ function observableArgument(
 
 function declaredDomain(type: ts.TypeNode | null, members: readonly string[]): ValueDomain | null {
   return type ? typeValueDomain(type, members) : null;
-}
-
-function isConstDeclaration(declaration: ts.VariableDeclaration): boolean {
-  return (
-    ts.isVariableDeclarationList(declaration.parent) &&
-    (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-  );
 }
 
 function soleDeclarationName(sourceFile: ts.SourceFile, name: string): DeclarationName | null {

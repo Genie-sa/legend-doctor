@@ -9,11 +9,15 @@ import type {
 } from "./model.js";
 import { MAX_CALLBACK_PATH_DEPTH, deeperTrace } from "./model.js";
 import { bindCallbackPath, isBindingName } from "./prop-bindings.js";
-import { bindingDeclarationCount, isNonValueIdentifier } from "../../core/analysis-ast.js";
-import { climbTransparentExpression, staticPropertyAccessFrom } from "./carried-values.js";
+import {
+  bindingDeclarationCount,
+  isNonValueIdentifier,
+  outermostTransparentParent,
+} from "../../core/analysis-ast.js";
 import { callbackPathExpressionIsDeferred } from "./expression-stages.js";
 import { destructuredCallbackPath } from "./hook-boundary-paths.js";
 import { identifiersNamed } from "../../core/ast.js";
+import { staticPropertyAccessFrom } from "./carried-values.js";
 import type ts from "typescript";
 
 export const PATH_DEFERRAL: CallbackDeferral = {
@@ -120,7 +124,7 @@ function nestedPathVerdict(options: {
 
 function callbackPathReferenceIsDeferred(probe: CallbackReferenceProbe): boolean {
   const { path, reference, source, trace } = probe;
-  const expression = climbTransparentExpression(reference);
+  const expression = outermostTransparentParent(reference);
   const [head] = path;
   const nested =
     head === undefined ? null : nestedPathVerdict({ expression, head, path, source, trace });

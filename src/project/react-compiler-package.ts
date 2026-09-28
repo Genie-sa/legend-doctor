@@ -1,5 +1,6 @@
-import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { readOptionalText } from "./read-optional-text.js";
+import { readdir } from "node:fs/promises";
 
 const COMPILER_PACKAGES = ["babel-plugin-react-compiler", "react-compiler-runtime"];
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies"];
@@ -76,7 +77,7 @@ interface ManifestFacts {
 }
 
 async function manifestDeclaresReactCompiler(manifestPath: string): Promise<boolean> {
-  const text = await readText(manifestPath);
+  const text = await readOptionalText(manifestPath);
   if (text === null) {
     return false;
   }
@@ -125,7 +126,7 @@ async function anyFileMarksCompiler(filePaths: readonly string[]): Promise<boole
   if (head === undefined) {
     return false;
   }
-  const text = await readText(head);
+  const text = await readOptionalText(head);
   if (text !== null && CONFIG_MARKER.test(text)) {
     return true;
   }
@@ -140,14 +141,6 @@ function parseJsonObject(text: string): ReadonlyMap<string, unknown> | null {
     }
     const entries: readonly (readonly [string, unknown])[] = Object.entries(parsed);
     return new Map(entries);
-  } catch {
-    return null;
-  }
-}
-
-async function readText(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
   } catch {
     return null;
   }

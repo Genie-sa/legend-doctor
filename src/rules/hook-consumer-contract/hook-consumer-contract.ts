@@ -7,6 +7,7 @@ import type {
 import {
   bindingDeclarationCount,
   isDeclarationName,
+  isIdentifierNamed,
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
@@ -122,11 +123,6 @@ function returnedPropertyName(property: ts.ObjectLiteralElementLike, name: strin
     return property.name.text;
   }
   return null;
-}
-
-function isIdentifierNamed(expression: ts.Expression, name: string): boolean {
-  const value = unwrapTransparentExpression(expression);
-  return ts.isIdentifier(value) && value.text === name;
 }
 
 export interface HookConsumerQuery {

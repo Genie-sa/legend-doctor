@@ -1,4 +1,5 @@
 import type { InPlaceMemoKeyScan, RawValueBinding, StaleMemo, WrittenBinding } from "./model.js";
+import { isIdentifierNamed, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import { visit, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import { writeChangesRead, writesBelow } from "./write-conflicts.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
@@ -8,7 +9,6 @@ import { isStableDependency } from "./memo-dependencies.js";
 import { memoReads } from "./memo-reads.js";
 import { rawValueBinding } from "./raw-value-bindings.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 const MEMO_ARGUMENT_COUNT = 2;
 
@@ -85,13 +85,8 @@ function memoDependencies(
   ) {
     return null;
   }
-  const keyed = list.elements.some((element) => isBindingReference(element, name));
-  return keyed ? list.elements.filter((element) => !isBindingReference(element, name)) : null;
-}
-
-function isBindingReference(expression: ts.Expression, name: string): boolean {
-  const value = unwrapTransparentExpression(expression);
-  return ts.isIdentifier(value) && value.text === name;
+  const keyed = list.elements.some((element) => isIdentifierNamed(element, name));
+  return keyed ? list.elements.filter((element) => !isIdentifierNamed(element, name)) : null;
 }
 
 function isInlineFunction(

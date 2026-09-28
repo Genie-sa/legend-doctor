@@ -1,12 +1,16 @@
 import type { ChildComponentSource, TrackedCallbackPath } from "./model.js";
-import { bindingElementPropertyName, propertyName } from "./prop-bindings.js";
 import {
   findAncestor,
   findAncestorUntil,
   isRuntimeFunctionLike,
   nodeWithin,
 } from "../../core/ast.js";
-import { hookCallName, unwrapTransparentExpression } from "../../core/analysis-ast.js";
+import {
+  hookCallName,
+  propertyNameText,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
+import { bindingElementPropertyName } from "./prop-bindings.js";
 import { expressionCarriesValue } from "./carried-values.js";
 import ts from "typescript";
 
@@ -52,7 +56,7 @@ function spreadMemberPath(returned: ReturnedMember): readonly string[] | "ignore
     .some(
       (candidate) =>
         (ts.isPropertyAssignment(candidate) || ts.isShorthandPropertyAssignment(candidate)) &&
-        propertyName(candidate.name) === head,
+        propertyNameText(candidate.name) === head,
     );
   return overridden ? "ignored" : path;
 }
@@ -65,7 +69,7 @@ function returnedMemberPath(returned: ReturnedMember): readonly string[] | "igno
   if (!ts.isPropertyAssignment(member) && !ts.isShorthandPropertyAssignment(member)) {
     return null;
   }
-  const property = propertyName(member.name);
+  const property = propertyNameText(member.name);
   return property ? [property, ...path] : null;
 }
 
@@ -123,7 +127,7 @@ function forwardedObjectCallTarget(
 ): { argumentIndex: number; call: ts.CallExpression; hookName: string; property: string } | null {
   const argumentIndex = call.arguments.findIndex((argument) => nodeWithin(object, argument));
   const hookName = hookCallName(call);
-  const property = propertyName(member.name);
+  const property = propertyNameText(member.name);
   return argumentIndex !== -1 && hookName && property
     ? { argumentIndex, call, hookName, property }
     : null;

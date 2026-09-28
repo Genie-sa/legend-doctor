@@ -81,7 +81,7 @@ function ownerLabel(inputs: StateClassificationInputs): string {
   return `anonymous@L${line.line + 1}`;
 }
 
-export function assumptionId(
+function assumptionId(
   reportFile: string,
   inputs: StateClassificationInputs,
   facts: readonly AbstentionReason[],

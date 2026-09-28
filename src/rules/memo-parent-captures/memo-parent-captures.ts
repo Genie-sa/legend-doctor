@@ -1,6 +1,6 @@
 import type { CapturedRead, MemoCaptureScan, MemoElement, StaleMemo } from "./model.js";
-import { captureClassifier, lineOf, visitValueReferences } from "./captured-values.js";
-import { findAncestor, isRuntimeFunctionLike, nodeWithin, visit } from "../../core/ast.js";
+import { captureClassifier, visitValueReferences } from "./captured-values.js";
+import { findAncestor, isRuntimeFunctionLike, lineOf, nodeWithin, visit } from "../../core/ast.js";
 import { renderIterationCall, renderOwnerOf } from "../observable-tracking/render-owners.js";
 import type { CaptureClassifier } from "./captured-values.js";
 import type { HookImports } from "../../core/imports.js";

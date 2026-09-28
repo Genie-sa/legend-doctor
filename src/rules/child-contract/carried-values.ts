@@ -1,4 +1,8 @@
-import { bindingDeclarationCount, unwrapTransparentExpression } from "../../core/analysis-ast.js";
+import {
+  bindingDeclarationCount,
+  outermostTransparentParent,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
 import type { ChildComponentSource } from "./model.js";
 import ts from "typescript";
 
@@ -6,7 +10,7 @@ export function constArrayBinding(
   array: ts.ArrayLiteralExpression,
   owner: ChildComponentSource["owner"],
 ): ts.Identifier | null {
-  const carriedArray = climbTransparentExpression(array);
+  const carriedArray = outermostTransparentParent(array);
   const declaration = carriedArray.parent;
   if (
     !ts.isVariableDeclaration(declaration) ||
@@ -78,21 +82,6 @@ export function directConstAlias(
     return null;
   }
   return declaration.name;
-}
-
-export function climbTransparentExpression(expression: ts.Expression): ts.Expression {
-  let current = expression;
-  while (
-    (ts.isParenthesizedExpression(current.parent) ||
-      ts.isAsExpression(current.parent) ||
-      ts.isTypeAssertionExpression(current.parent) ||
-      ts.isSatisfiesExpression(current.parent) ||
-      ts.isNonNullExpression(current.parent)) &&
-    current.parent.expression === current
-  ) {
-    current = current.parent;
-  }
-  return current;
 }
 
 export function isNullishExpression(

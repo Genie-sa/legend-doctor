@@ -1,6 +1,6 @@
 import { parse as parseYaml } from "yaml";
 import path from "node:path";
-import { readFile } from "node:fs/promises";
+import { readOptionalText } from "./read-optional-text.js";
 
 interface JsonObject {
   [key: string]: JsonValue;
@@ -34,7 +34,7 @@ export async function lockedLegendStateVersion(root: string): Promise<string | n
   const candidates = ancestorDirectories(path.resolve(root)).flatMap((directory) =>
     LOCKFILES.map(([fileName, parse]) => ({ filePath: path.join(directory, fileName), parse })),
   );
-  const texts = await Promise.all(candidates.map(({ filePath }) => readText(filePath)));
+  const texts = await Promise.all(candidates.map(({ filePath }) => readOptionalText(filePath)));
   const nearest = texts.findIndex((text) => text !== null);
   if (nearest === -1) {
     return null;
@@ -125,12 +125,4 @@ function isJsonObject(value: JsonValue | undefined): value is JsonObject {
 
 function isJsonString(value: JsonValue | undefined): value is string {
   return value?.constructor === String;
-}
-
-async function readText(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch {
-    return null;
-  }
 }

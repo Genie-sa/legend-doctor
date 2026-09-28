@@ -1,12 +1,12 @@
 import {
   bindingDeclarationCount,
   hookCallName,
+  outermostTransparentParent,
   staticPropertyPath,
 } from "../../core/analysis-ast.js";
 import {
   directGetReceiver,
   isTrackingHookCall,
-  outermostTransparentParent,
   provenObservablePath,
 } from "../observable-reads/observable-paths.js";
 import { earlyExitBefore, renderInitializerEdits } from "./render-read-edits.js";

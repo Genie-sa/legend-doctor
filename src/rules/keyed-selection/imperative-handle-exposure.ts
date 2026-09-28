@@ -4,7 +4,7 @@ import {
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
-import { findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
+import { calleeRootIdentifier, findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isImportedHookCall } from "../../core/imports.js";
@@ -106,7 +106,7 @@ export function isUnshadowedReactHookCall(check: ReactHookCallCheck): boolean {
   ) {
     return false;
   }
-  const root = hookCallRootIdentifier(call);
+  const root = calleeRootIdentifier(call.expression);
   return root !== null && bindingDeclarationCount(owner, root.text) === 0;
 }
 
@@ -129,14 +129,4 @@ function imperativeFactoryReturnsBinding(
           unwrapTransparentExpression(property.initializer) === reference),
     )
   );
-}
-
-function hookCallRootIdentifier(call: ts.CallExpression): ts.Identifier | null {
-  if (ts.isIdentifier(call.expression)) {
-    return call.expression;
-  }
-  return ts.isPropertyAccessExpression(call.expression) &&
-    ts.isIdentifier(call.expression.expression)
-    ? call.expression.expression
-    : null;
 }

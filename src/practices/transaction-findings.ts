@@ -1,9 +1,9 @@
 import type { ObservableWrite, TransactionRun, TransactionScan } from "./model.js";
 import type { LegendPracticeFinding } from "../core/types.js";
+import { expressionReferencesName } from "../core/binding-references.js";
 import { isEvaluationInert } from "../core/analysis-ast.js";
 import { runsOnlyInHostEvents } from "../rules/child-contract/host-event-dispatch.js";
 import ts from "typescript";
-import { visit } from "../core/ast.js";
 
 function hasDistinctNonOverlappingPaths(writes: readonly ObservableWrite[]): boolean {
   const paths = writes.map((write) => write.path);
@@ -179,20 +179,10 @@ function commonAssignTarget(writes: readonly ObservableWrite[]): string | null {
         ts.isArrowFunction(write.argument) ||
         ts.isFunctionExpression(write.argument) ||
         !isEvaluationInert(write.argument) ||
-        expressionReferencesIdentifier(write.argument, write.root),
+        expressionReferencesName(write.argument, write.root),
     )
   ) {
     return null;
   }
   return target;
-}
-
-function expressionReferencesIdentifier(expression: ts.Expression, name: string): boolean {
-  let found = false;
-  visit(expression, (node) => {
-    if (ts.isIdentifier(node) && node.text === name) {
-      found = true;
-    }
-  });
-  return found;
 }

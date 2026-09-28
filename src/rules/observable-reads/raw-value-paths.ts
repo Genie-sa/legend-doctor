@@ -1,5 +1,6 @@
-import { RESERVED_OBSERVABLE_MEMBERS, outermostTransparentParent } from "./observable-paths.js";
-import { isAssignmentOperator } from "../../core/analysis-ast.js";
+import { RESERVED_OBSERVABLE_MEMBERS } from "./observable-paths.js";
+import { outermostTransparentParent } from "../../core/analysis-ast.js";
+import { propertyAccessIsWritten } from "../../core/binding-references.js";
 import ts from "typescript";
 
 function rawValuePathTerminates(access: ts.PropertyAccessExpression): boolean {
@@ -112,20 +113,5 @@ function propertyAccessIsExecutable(access: ts.PropertyAccessExpression): boolea
     (ts.isCallExpression(parent) && parent.expression === access) ||
     (ts.isNewExpression(parent) && parent.expression === access) ||
     (ts.isTaggedTemplateExpression(parent) && parent.tag === access)
-  );
-}
-
-function propertyAccessIsWritten(access: ts.PropertyAccessExpression): boolean {
-  const { parent } = access;
-  return (
-    (ts.isBinaryExpression(parent) &&
-      parent.left === access &&
-      isAssignmentOperator(parent.operatorToken.kind)) ||
-    (ts.isPrefixUnaryExpression(parent) &&
-      parent.operand === access &&
-      (parent.operator === ts.SyntaxKind.PlusPlusToken ||
-        parent.operator === ts.SyntaxKind.MinusMinusToken)) ||
-    (ts.isPostfixUnaryExpression(parent) && parent.operand === access) ||
-    (ts.isDeleteExpression(parent) && parent.expression === access)
   );
 }

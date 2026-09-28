@@ -1,6 +1,9 @@
-import { collectBindingNames, unwrapTransparentExpression } from "../../core/analysis-ast.js";
+import {
+  collectBindingNames,
+  outermostTransparentParent,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
 import { hasSoleSourceBinding } from "./independent-subscription-bindings.js";
-import { outermostTransparentParent } from "./observable-paths.js";
 import { sourceHasRuntimeBinding } from "../state-proofs/binding-lookup.js";
 import ts from "typescript";
 

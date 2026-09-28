@@ -29,7 +29,7 @@ import ts from "typescript";
  */
 export type LeafRenderResolver = (file: string, name: string) => ChildComponentSource | null;
 
-export const MAX_LEAF_FORWARD_DEPTH = 3;
+const MAX_LEAF_FORWARD_DEPTH = 3;
 
 interface LeafRenderQuery {
   readonly depth: number;

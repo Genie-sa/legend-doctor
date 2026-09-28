@@ -1,6 +1,6 @@
 import { propertyNameText, unwrapTransparentExpression } from "../../core/analysis-ast.js";
-import { collectHookImports } from "../../core/imports.js";
 import { hasSoleSourceBinding } from "./independent-subscription-bindings.js";
+import { isDirectValueFactory } from "../../core/imports.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
@@ -14,7 +14,7 @@ export function primitiveDeclarationPaths(
   if (!call || !ts.isCallExpression(call)) {
     return paths;
   }
-  const direct = directValueFactory(call);
+  const direct = isDirectValueFactory(call);
   if (!direct && !forwardedGeneric) {
     return paths;
   }
@@ -29,15 +29,6 @@ function collectCallPaths(call: ts.CallExpression, paths: Set<string>, direct: b
   } else if (direct && call.arguments[0]) {
     collectLiteral(unwrapTransparentExpression(call.arguments[0]), "", paths);
   }
-}
-
-function directValueFactory(call: ts.CallExpression): boolean {
-  const imports = collectHookImports(call.getSourceFile());
-  return (
-    ts.isIdentifier(call.expression) &&
-    (imports.observable.has(call.expression.text) ||
-      imports.useObservable.has(call.expression.text))
-  );
 }
 
 function collectLiteral(value: ts.Expression, prefix: string, paths: Set<string>): void {

@@ -1,7 +1,11 @@
 import type { StateCandidate, StateUsage } from "../model.js";
-import { isRuntimeFunctionLike, nodeWithin, visitSkippingNestedFunctions } from "../../core/ast.js";
+import {
+  calleeName,
+  isRuntimeFunctionLike,
+  nodeWithin,
+  visitSkippingNestedFunctions,
+} from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { calleeName } from "../ast-helpers.js";
 import ts from "typescript";
 
 export interface ReactiveMutationPathCoverage {

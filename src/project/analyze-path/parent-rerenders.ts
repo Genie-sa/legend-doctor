@@ -1,10 +1,10 @@
 import {
   RESERVED_OBSERVABLE_MEMBERS,
   isUseValueCall,
-  outermostTransparentParent,
 } from "../../rules/observable-reads/observable-paths.js";
 import {
   bindingDeclarationCount,
+  outermostTransparentParent,
   rootIdentifier,
   staticPropertyPath,
   unwrapTransparentExpression,

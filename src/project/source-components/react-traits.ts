@@ -2,11 +2,11 @@ import {
   bindingDeclarationCount,
   isDeclarationName,
   isNonValueIdentifier,
+  unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { nodeWithin, visit } from "../../core/ast.js";
 import { REACT_EFFECT_HOOKS } from "./import-signals.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "./declaration-shapes.js";
 
 export function isReactContextInitializer(
   expression: ts.Expression,

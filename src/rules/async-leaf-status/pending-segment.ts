@@ -1,9 +1,5 @@
 import type { AsyncLeafCallSites, CommandRegion, PendingCommand } from "./model.js";
-import {
-  asyncCommandRegion,
-  isPromiseContinuationCallback,
-  nearestMutationFunction,
-} from "./pending-command.js";
+import { asyncCommandRegion, isPromiseContinuationCallback } from "./pending-command.js";
 import {
   findAncestorUntil,
   isRuntimeFunctionLike,
@@ -15,6 +11,7 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateUsage } from "../../analysis/model.js";
 import { containsOwnerStateWrite } from "./owner-state-writes.js";
 import { localFunctionBinding } from "../state-proofs/binding-lookup.js";
+import { nearestMutationFunction } from "../../analysis/mutations.js";
 import ts from "typescript";
 
 interface PendingSegmentProof {

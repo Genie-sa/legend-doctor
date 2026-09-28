@@ -15,6 +15,7 @@ import type { HookImports } from "../core/imports.js";
 import type { LegendPracticesRequest } from "./model.js";
 import type { ObservableContextReader } from "../project/source-components/observable-contexts.js";
 import { declaresObservableProp } from "./observable-prop-types.js";
+import { isConstDeclaration } from "../core/binding-references.js";
 import { isUseValueCall } from "../rules/observable-reads/observable-paths.js";
 import { staticPropertyName } from "../rules/child-contract/declared-prop-types.js";
 import ts from "typescript";
@@ -189,7 +190,7 @@ function recordVariableBinding(declaration: NamedVariableDeclaration, scan: Bind
   recordAnnotatedBinding(declaration, scan);
   if (
     declaration.initializer &&
-    declarationIsConst(declaration) &&
+    isConstDeclaration(declaration) &&
     readsObservableProp(declaration.initializer, name, scan)
   ) {
     proveDeclaration(scan, name, declaration);
@@ -197,7 +198,7 @@ function recordVariableBinding(declaration: NamedVariableDeclaration, scan: Bind
   if (declaration.initializer) {
     const alias = { declaration, initializer: declaration.initializer, name };
     scan.factoryCalls.push(alias);
-    if (!declaration.type && declarationIsConst(declaration)) {
+    if (!declaration.type && isConstDeclaration(declaration)) {
       scan.aliases.push(alias);
     }
   }
@@ -236,7 +237,7 @@ function destructuresObservableSource(element: NamedBindingElement, scan: Bindin
     !ts.isObjectBindingPattern(pattern) ||
     !ts.isVariableDeclaration(declaration) ||
     !declaration.initializer ||
-    !declarationIsConst(declaration)
+    !isConstDeclaration(declaration)
   ) {
     return false;
   }
@@ -435,11 +436,4 @@ function resolveTypeQueryCandidate(
 
 function recordDeclaration(counts: Map<string, number>, name: string): void {
   counts.set(name, (counts.get(name) ?? 0) + 1);
-}
-
-function declarationIsConst(declaration: ts.VariableDeclaration): boolean {
-  return (
-    ts.isVariableDeclarationList(declaration.parent) &&
-    (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-  );
 }

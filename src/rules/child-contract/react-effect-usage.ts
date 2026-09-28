@@ -1,11 +1,13 @@
 import { nearestNestedFunction, nodeWithin } from "../../core/ast.js";
+import {
+  outermostTransparentParent,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
 import type { ChildComponentSource } from "./model.js";
 import type { HookImports } from "../../core/imports.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 export function reactEffectCallbackUsage(
   reference: ts.Identifier,
@@ -47,7 +49,7 @@ function effectCallReferenceUsage(
   if (callbackReferenceIsObservationOnly(reference)) {
     return "observe";
   }
-  const expression = climbTransparentExpression(reference);
+  const expression = outermostTransparentParent(reference);
   return ts.isCallExpression(expression.parent) && expression.parent.expression === expression
     ? "invoke"
     : null;

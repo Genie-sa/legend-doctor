@@ -4,6 +4,7 @@ import { findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { nearestMutationFunction } from "../mutations.js";
+import { outermostTransparentParent } from "../../core/analysis-ast.js";
 import ts from "typescript";
 
 export function projectionSubtreeKind(
@@ -95,21 +96,6 @@ function sharedNestedCallback(
   return common;
 }
 
-function outermostTransparentExpression(expression: ts.Expression): ts.Expression {
-  let outermost = expression;
-  while (
-    (ts.isParenthesizedExpression(outermost.parent) ||
-      ts.isAsExpression(outermost.parent) ||
-      ts.isTypeAssertionExpression(outermost.parent) ||
-      ts.isSatisfiesExpression(outermost.parent) ||
-      ts.isNonNullExpression(outermost.parent)) &&
-    outermost.parent.expression === outermost
-  ) {
-    outermost = outermost.parent;
-  }
-  return outermost;
-}
-
 export function sharesJsxChildRenderCallback(
   nodes: readonly ts.Node[],
   owner: RuntimeFunctionLike,
@@ -118,7 +104,7 @@ export function sharesJsxChildRenderCallback(
   if (!common) {
     return false;
   }
-  const container = outermostTransparentExpression(common).parent;
+  const container = outermostTransparentParent(common).parent;
   return (
     ts.isJsxExpression(container) &&
     (ts.isJsxElement(container.parent) || ts.isJsxFragment(container.parent))

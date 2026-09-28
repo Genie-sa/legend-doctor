@@ -1,6 +1,7 @@
 import {
   bindingDeclarationCount,
   isAssignmentOperator,
+  outermostTransparentParent,
   rootIdentifier,
   staticPropertyPath,
   unwrapTransparentExpression,
@@ -11,7 +12,6 @@ import type { InlineEffectContext } from "./model.js";
 import type { PeekedRead } from "./effect-verdicts.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isSynchronousEffectCallback } from "./synchronous-dependency-reads.js";
-import { outermostTransparentParent } from "../observable-reads/observable-paths.js";
 import ts from "typescript";
 
 export interface ObservableReactionScope {

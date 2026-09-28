@@ -61,7 +61,7 @@ export function projectionSites(owner: RenderFunction, raw: ts.Identifier): Proj
     : null;
 }
 
-export function siteOperand(site: ProjectionSite): ts.Expression {
+function siteOperand(site: ProjectionSite): ts.Expression {
   return site.rawOnLeft ? site.comparison.right : site.comparison.left;
 }
 

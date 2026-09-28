@@ -1,8 +1,10 @@
 import type { HookImports, LegendReactComponent } from "../../core/imports.js";
+import {
+  outermostTransparentParent,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
 import type { TrackingScan } from "./model.js";
-import { outermostTransparentParent } from "../observable-reads/observable-paths.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import { visit } from "../../core/ast.js";
 
 type JsxTag = ts.JsxOpeningElement | ts.JsxSelfClosingElement;

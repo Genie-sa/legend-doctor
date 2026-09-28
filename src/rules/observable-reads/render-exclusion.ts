@@ -31,7 +31,7 @@ export function runsOutsideRender(
   return enclosedOutsideRender(node, { imports, owner, seen: new Set() });
 }
 
-export function isCommitCallback(callback: RuntimeFunctionLike, imports: HookImports): boolean {
+function isCommitCallback(callback: RuntimeFunctionLike, imports: HookImports): boolean {
   const call = callback.parent;
   if (!ts.isCallExpression(call) || call.arguments[0] !== callback) {
     return false;

@@ -62,21 +62,6 @@ export function isValueReferenceTo(
   );
 }
 
-export function outermostTransparentParent(expression: ts.Expression): ts.Expression {
-  let current = expression;
-  while (
-    (ts.isParenthesizedExpression(current.parent) ||
-      ts.isAsExpression(current.parent) ||
-      ts.isTypeAssertionExpression(current.parent) ||
-      ts.isSatisfiesExpression(current.parent) ||
-      ts.isNonNullExpression(current.parent)) &&
-    current.parent.expression === current
-  ) {
-    current = current.parent;
-  }
-  return current;
-}
-
 export function directObservableReadPath(
   expression: ts.Expression,
   observableBindings: ReadonlySet<string>,

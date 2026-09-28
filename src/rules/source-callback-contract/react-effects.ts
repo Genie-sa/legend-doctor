@@ -1,17 +1,10 @@
 import type { ReactHookImports, SourceHookDeclaration } from "./model.js";
+import { isPlainFunction } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
 const REACT_EFFECT_HOOKS = new Set(["useEffect", "useInsertionEffect", "useLayoutEffect"]);
 
 const reactHookImportsCache = new WeakMap<ts.SourceFile, ReactHookImports>();
-
-export function isTracedFunction(
-  node: ts.Node,
-): node is ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression {
-  return (
-    ts.isArrowFunction(node) || ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)
-  );
-}
 
 export function callbackIsWithinReactEffect(
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
@@ -23,7 +16,7 @@ export function callbackIsWithinReactEffect(
     current && current !== owner;
     current = current.parent
   ) {
-    if (isTracedFunction(current) && callbackIsReactEffectArgument(current, hooks)) {
+    if (isPlainFunction(current) && callbackIsReactEffectArgument(current, hooks)) {
       return true;
     }
   }

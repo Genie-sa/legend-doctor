@@ -9,15 +9,6 @@ export function calleeName(callee: ts.Expression): string {
   return ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
 }
 
-export function calleeRootIdentifier(callee: ts.Expression): ts.Identifier | null {
-  if (ts.isIdentifier(callee)) {
-    return callee;
-  }
-  return ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)
-    ? callee.expression
-    : null;
-}
-
 export function soleExpressionStatementBody(
   callback: ts.ArrowFunction | ts.FunctionExpression,
 ): ts.Expression | null {

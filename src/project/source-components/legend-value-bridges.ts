@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { unwrapTransparentExpression } from "./declaration-shapes.js";
+import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 export function directLegendValueHookObservable(
   declaration: ts.FunctionDeclaration,

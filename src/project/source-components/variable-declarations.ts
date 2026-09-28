@@ -5,9 +5,12 @@ import {
   hasExport,
   isComponentInitializer,
   isSemanticComponentName,
-  unwrapTransparentExpression,
 } from "./declaration-shapes.js";
-import { dataFieldKeys, exactObjectLiteralKeys } from "../../core/analysis-ast.js";
+import {
+  dataFieldKeys,
+  exactObjectLiteralKeys,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
 import { directObservableMembers, isObservableInitializer } from "./observable-declarations.js";
 import { directReactContextReader, isReactContextInitializer } from "./react-traits.js";
 import { declaredObservableContextType } from "./observable-contexts.js";

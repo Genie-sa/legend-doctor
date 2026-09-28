@@ -3,7 +3,7 @@ import type { SourceContextCoverage } from "./source-components/source-context.j
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public coverage protocol version.
 const COVERAGE_SCHEMA_VERSION = 2 as const;
 
-export const ANALYSIS_COVERAGE_STAGES = ["parser", "lowering", "detector"] as const;
+const ANALYSIS_COVERAGE_STAGES = ["parser", "lowering", "detector"] as const;
 
 export type AnalysisCoverageStage = (typeof ANALYSIS_COVERAGE_STAGES)[number];
 

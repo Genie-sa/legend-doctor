@@ -2,7 +2,7 @@ import type { ModuleRecord, ObservableContextType, SourceIndexState } from "./mo
 import { normalizeFile } from "./module-resolution.js";
 import { resolvedFor } from "./symbol-resolution.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "./declaration-shapes.js";
+import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 /** How a local name reads a context: the context object itself, or a hook that returns its value. */
 export interface ObservableContextReader extends ObservableContextType {

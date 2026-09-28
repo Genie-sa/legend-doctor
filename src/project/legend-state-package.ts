@@ -2,7 +2,7 @@ import type { InstalledLegendState, SyncExport, UseValueExport } from "../core/t
 import { lockedLegendState } from "./legend-state-versions.js";
 import { lockedLegendStateVersion } from "./legend-state-lockfile.js";
 import path from "node:path";
-import { readFile } from "node:fs/promises";
+import { readOptionalText } from "./read-optional-text.js";
 
 export type {
   InstalledLegendState,
@@ -76,7 +76,7 @@ async function resolveSyncExport(
   if (isJsonObject(exportsField)) {
     return Object.hasOwn(exportsField, SYNC_ENTRY) ? "available" : "missing";
   }
-  const declaration = await readText(path.join(packageDirectory, SYNC_DECLARATION_FILE));
+  const declaration = await readOptionalText(path.join(packageDirectory, SYNC_DECLARATION_FILE));
   return declaration === null ? "unknown" : "available";
 }
 
@@ -86,7 +86,7 @@ async function resolveUseValueExport(
 ): Promise<UseValueExport> {
   const candidates = [...reactTypesFromExports(manifest), ...REACT_TYPE_CANDIDATES];
   const declarations = await Promise.all(
-    candidates.map((candidate) => readText(path.join(packageDirectory, candidate))),
+    candidates.map((candidate) => readOptionalText(path.join(packageDirectory, candidate))),
   );
   const declaration = declarations.find((text) => text !== null && text.length > 0) ?? null;
   if (declaration === null) {
@@ -138,21 +138,13 @@ function isJsonString(value: JsonValue | undefined): value is string {
 }
 
 async function readJson(filePath: string): Promise<JsonValue> {
-  const text = await readText(filePath);
+  const text = await readOptionalText(filePath);
   if (!text) {
     return null;
   }
   try {
     const parsed: JsonValue = JSON.parse(text);
     return parsed;
-  } catch {
-    return null;
-  }
-}
-
-async function readText(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf8");
   } catch {
     return null;
   }

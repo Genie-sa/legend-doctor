@@ -292,6 +292,15 @@ export function collectHookImports(sourceFile: ts.SourceFile): HookImports {
   return sets;
 }
 
+export function isDirectValueFactory(call: ts.CallExpression): boolean {
+  const imports = collectHookImports(call.getSourceFile());
+  return (
+    ts.isIdentifier(call.expression) &&
+    (imports.observable.has(call.expression.text) ||
+      imports.useObservable.has(call.expression.text))
+  );
+}
+
 /**
  * Whether a JSX tag renders a host surface: an intrinsic element, an imported host component, or a
  * member of a host namespace such as `$React.input` or `RN.View`.

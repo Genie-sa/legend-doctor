@@ -1,4 +1,3 @@
-import { bindingContainsName, uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 import {
   collectBindingNames,
   isDeclarationName,
@@ -13,7 +12,9 @@ import {
 } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingContainsName } from "../../core/binding-references.js";
 import ts from "typescript";
+import { uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 
 type ReactHookImportName =
   | "startTransition"

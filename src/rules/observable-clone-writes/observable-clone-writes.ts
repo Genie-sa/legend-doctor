@@ -8,6 +8,7 @@ import { snapshotBindingIsReadOnly, snapshotTarget } from "./snapshot-bindings.j
 import type { ArrayOriginScan } from "./observable-targets.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "../observable-reads/observable-paths.js";
+import { expressionReferencesName } from "../../core/binding-references.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
@@ -250,16 +251,6 @@ function snapshotAppendValue(
     return null;
   }
   return appended;
-}
-
-function expressionReferencesName(expression: ts.Expression, name: string): boolean {
-  let found = false;
-  visit(expression, (node) => {
-    if (ts.isIdentifier(node) && node.text === name) {
-      found = true;
-    }
-  });
-  return found;
 }
 
 function safeDynamicKey(expression: ts.Expression): boolean {

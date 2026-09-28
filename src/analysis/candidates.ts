@@ -1,10 +1,9 @@
 import type { EffectCandidate, StateCandidate } from "./model.js";
 import { bindingDeclarationCount, unwrapTransparentExpression } from "../core/analysis-ast.js";
-import { findAncestor, isRuntimeFunctionLike } from "../core/ast.js";
+import { calleeRootIdentifier, findAncestor, isRuntimeFunctionLike } from "../core/ast.js";
 import { HOOK_CALL_ARITY } from "./constants.js";
 import type { HookImports } from "../core/imports.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
-import { calleeRootIdentifier } from "./ast-helpers.js";
 import { isImportedHookCall } from "../core/imports.js";
 import ts from "typescript";
 import { uniqueVariableDeclaration } from "../rules/state-proofs/binding-lookup.js";

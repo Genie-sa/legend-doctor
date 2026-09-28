@@ -2,6 +2,7 @@ import {
   bindingDeclarationCount,
   isDeclarationName,
   isNonValueIdentifier,
+  outermostTransparentParent,
   propertyNameText,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
@@ -9,7 +10,6 @@ import { findAncestor, identifiersNamed, isRuntimeFunctionLike } from "../../cor
 import { ANY_MEMBER } from "../../project/source-components/observable-in-place-writes.js";
 import type { MemoRead } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { outermostTransparentParent } from "../observable-reads/observable-paths.js";
 import ts from "typescript";
 
 /** Array and Map methods whose inline callback receives each element at this parameter index. */

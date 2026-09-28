@@ -1,8 +1,9 @@
 import type { ComponentFunction, ModuleRecordDraft, ModuleSignals } from "./model.js";
 import type { ReactComponentWrappers } from "../../core/react-component-wrappers.js";
+import { bindingContainsName } from "../../core/binding-references.js";
 import { isReactComponentWrapper } from "../../core/react-component-wrappers.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "./declaration-shapes.js";
+import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 const MAX_OBJECT_ASSIGN_ALIAS_DEPTH = 4;
 
@@ -229,7 +230,7 @@ function statementValueDeclarationCount(statement: ts.Statement, name: string): 
   }
   if (ts.isVariableStatement(statement)) {
     return statement.declarationList.declarations.filter((declaration) =>
-      bindingNameContains(declaration.name, name),
+      bindingContainsName(declaration.name, name),
     ).length;
   }
   return ts.isImportDeclaration(statement) ? importedBindingCount(statement, name) : 0;
@@ -245,15 +246,6 @@ function importedBindingCount(statement: ts.ImportDeclaration, name: string): nu
       ? bindings.elements.filter((element) => element.name.text === name).length
       : 0;
   return (clause?.name?.text === name ? 1 : 0) + namespace + named;
-}
-
-function bindingNameContains(binding: ts.BindingName, name: string): boolean {
-  if (ts.isIdentifier(binding)) {
-    return binding.text === name;
-  }
-  return binding.elements.some(
-    (element) => ts.isBindingElement(element) && bindingNameContains(element.name, name),
-  );
 }
 
 function reactWrappedComponentName(

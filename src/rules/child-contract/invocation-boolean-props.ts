@@ -2,12 +2,12 @@ import {
   bindingDeclarationCount,
   isAssignmentOperator,
   isNonValueIdentifier,
+  outermostTransparentParent,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { bindingElementPropertyName, isBindingName } from "./prop-bindings.js";
 import { isRuntimeFunctionLike, nodeWithin, visit } from "../../core/ast.js";
 import type { ChildComponentSource } from "./model.js";
-import { climbTransparentExpression } from "./carried-values.js";
 import ts from "typescript";
 
 function bindingIsWritten(
@@ -139,7 +139,7 @@ function spreadRestOnlyForwards(owner: ChildComponentSource, name: string): bool
     ) {
       return;
     }
-    const carried = climbTransparentExpression(node);
+    const carried = outermostTransparentParent(node);
     if (!ts.isJsxSpreadAttribute(carried.parent) || carried.parent.expression !== carried) {
       safe = false;
     }

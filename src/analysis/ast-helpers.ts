@@ -1,27 +1,15 @@
-import { findAncestorUntil, isRuntimeFunctionLike } from "../core/ast.js";
+import { findAncestorUntil, isRuntimeFunctionLike, visit } from "../core/ast.js";
+import {
+  isDeclarationName,
+  isInsideJsxAttribute,
+  isNonValueIdentifier,
+} from "../core/analysis-ast.js";
 import type { JsxSubtreeNode } from "../rules/deferred-reveal/jsx-subtrees.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
 import { STABLE_CALL_SITE_PAIR } from "./constants.js";
-import { isInsideJsxAttribute } from "../core/analysis-ast.js";
+import type { StateCandidate } from "./model.js";
 import { nearestRepeatedRenderCall } from "../rules/state-proofs/jsx-subtrees.js";
 import ts from "typescript";
-
-export function calleeRootIdentifier(expression: ts.Expression): ts.Identifier | null {
-  if (ts.isIdentifier(expression)) {
-    return expression;
-  }
-  if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) {
-    return expression.expression;
-  }
-  return null;
-}
-
-export function calleeName(expression: ts.Expression): string | null {
-  if (ts.isIdentifier(expression)) {
-    return expression.text;
-  }
-  return ts.isPropertyAccessExpression(expression) ? expression.name.text : null;
-}
 
 export function declaredBindingName(node: ts.Node): string | null {
   if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
@@ -249,6 +237,34 @@ export function hasAncestorInSet(node: ts.Node, ancestors: ReadonlySet<ts.Node>)
     }
   }
   return false;
+}
+
+export function stateValueReferences(state: StateCandidate): ts.Identifier[] {
+  const references: ts.Identifier[] = [];
+  visit(state.owner.body, (node) => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === state.valueName &&
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node) &&
+      node.parent !== state.call.parent
+    ) {
+      references.push(node);
+    }
+  });
+  return references;
+}
+
+export function groupStatesByOwner(
+  states: readonly StateCandidate[],
+): ReadonlyMap<RuntimeFunctionLike, StateCandidate[]> {
+  const byOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
+  for (const state of states) {
+    const ownerStates = byOwner.get(state.owner) ?? [];
+    ownerStates.push(state);
+    byOwner.set(state.owner, ownerStates);
+  }
+  return byOwner;
 }
 
 export function isInsideImportedCallback(node: ts.Node, hookNames: ReadonlySet<string>): boolean {

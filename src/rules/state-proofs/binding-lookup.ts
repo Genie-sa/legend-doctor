@@ -1,5 +1,6 @@
 import { visit, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingContainsName } from "../../core/binding-references.js";
 import { bindingDeclarationCount } from "../../core/analysis-ast.js";
 import ts from "typescript";
 
@@ -87,15 +88,6 @@ export function expressionDependsOnBinding(
     }
   });
   return found;
-}
-
-export function bindingContainsName(binding: ts.BindingName, name: string): boolean {
-  if (ts.isIdentifier(binding)) {
-    return binding.text === name;
-  }
-  return binding.elements.some(
-    (element) => ts.isBindingElement(element) && bindingContainsName(element.name, name),
-  );
 }
 
 export function uniqueVariableDeclaration(

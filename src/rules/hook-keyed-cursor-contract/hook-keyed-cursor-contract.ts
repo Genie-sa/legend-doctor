@@ -5,7 +5,6 @@ import {
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import {
-  bindingReferences,
   cursorEquality,
   declaresRuntimeBinding,
   isRuntimeOwner,
@@ -14,6 +13,7 @@ import {
 import { findAncestor, nodeWithin, visit } from "../../core/ast.js";
 import type { MemoizedRowRenderer } from "./memoized-row-renderer.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingReferences } from "../../core/binding-references.js";
 import { keyedListElementIsStable } from "./keyed-list-element.js";
 import { memoizedRowRenderer } from "./memoized-row-renderer.js";
 import ts from "typescript";

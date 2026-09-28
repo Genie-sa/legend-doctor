@@ -4,7 +4,7 @@ import {
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
-import { findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
+import { calleeName, findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
 import ts from "typescript";
@@ -60,13 +60,6 @@ const DEFERRED_BY_DEFINITION_HOOKS = new Set([
   "useInsertionEffect",
 ]);
 
-function calleeHookName(expression: ts.Expression): string | null {
-  if (ts.isIdentifier(expression)) {
-    return expression.text;
-  }
-  return ts.isPropertyAccessExpression(expression) ? expression.name.text : null;
-}
-
 function readEscapesThroughUnknownHook(node: ts.Identifier, scan: UnknownHookScan): boolean {
   for (
     let current: ts.Node | undefined = node.parent;
@@ -89,7 +82,7 @@ function unknownHookCallEscapes(
   node: ts.Identifier,
   scan: UnknownHookScan,
 ): boolean {
-  const hookName = calleeHookName(call.expression);
+  const hookName = calleeName(call.expression);
   if (
     !hookName ||
     !HOOK_NAME_PATTERN.test(hookName) ||

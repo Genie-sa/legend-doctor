@@ -1,7 +1,7 @@
 import type { CommandRegion, PendingCommand } from "./model.js";
 import type { StateCandidate, StateUsage } from "../../analysis/model.js";
-import { findAncestorUntil, isRuntimeFunctionLike } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { nearestMutationFunction } from "../../analysis/mutations.js";
 import ts from "typescript";
 
 export function pendingCommand(
@@ -76,13 +76,6 @@ export function asyncCommandRegion(
     region = nearestMutationFunction(region, owner);
   }
   return region;
-}
-
-export function nearestMutationFunction(
-  node: ts.Node,
-  owner: RuntimeFunctionLike,
-): RuntimeFunctionLike {
-  return findAncestorUntil(node, isRuntimeFunctionLike, owner) ?? owner;
 }
 
 export function isPromiseContinuationCallback(region: RuntimeFunctionLike): boolean {

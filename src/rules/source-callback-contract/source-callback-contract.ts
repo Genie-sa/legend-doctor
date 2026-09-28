@@ -16,7 +16,6 @@ import {
 import {
   callbackIsWithinReactEffect,
   isImportedReactEffect,
-  isTracedFunction,
   reactHookImports,
 } from "./react-effects.js";
 import {
@@ -27,6 +26,7 @@ import {
   storedCallbackRef,
 } from "./latest-callback-ref.js";
 import { findAncestorUntil, nearestNestedFunction, nodeWithin, visit } from "../../core/ast.js";
+import { isPlainFunction } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
 const MAX_CALLBACK_DEPTH = 8;
@@ -126,7 +126,7 @@ function callbackBindingOnlyDefers(
 function referenceExecutesDeferred(reference: ts.Identifier, trace: CallbackTrace): boolean {
   const callback = nearestNestedFunction(reference, trace.source.owner);
   const deeper: CallbackTrace = { ...trace, depth: trace.depth + 1 };
-  return callback && isTracedFunction(callback)
+  return callback && isPlainFunction(callback)
     ? callbackExecutesDeferred(callback, deeper)
     : referenceIsDirectDeferredHookArgument(reference, deeper);
 }
@@ -197,7 +197,7 @@ function localCallbackReferenceDefers(reference: ts.Identifier, trace: CallbackT
     return false;
   }
   const caller = nearestNestedFunction(reference, trace.source.owner);
-  if (!caller || !isTracedFunction(caller)) {
+  if (!caller || !isPlainFunction(caller)) {
     return false;
   }
   return callbackExecutesDeferred(caller, { ...trace, depth: trace.depth + 1 });
@@ -286,7 +286,7 @@ function storedRefCallDefers(access: ts.PropertyAccessExpression, trace: Callbac
     return false;
   }
   const callback = nearestNestedFunction(access, trace.source.owner);
-  if (!callback || !isTracedFunction(callback)) {
+  if (!callback || !isPlainFunction(callback)) {
     return false;
   }
   return callbackExecutesDeferred(callback, { ...trace, depth: trace.depth + 1 });

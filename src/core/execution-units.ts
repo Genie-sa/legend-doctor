@@ -1,4 +1,4 @@
-import { isRuntimeFunctionLike, visitSkippingNestedRuntimeFunctions } from "./ast.js";
+import { calleeName, isRuntimeFunctionLike, visitSkippingNestedRuntimeFunctions } from "./ast.js";
 import ts from "typescript";
 
 /** Callbacks these calls run before returning, so they share the caller's synchronous run. */
@@ -109,13 +109,6 @@ function runsSynchronouslyInCaller(callback: ts.Node): boolean {
   }
   const name = calleeName(call.expression);
   return name !== null && SYNCHRONOUS_CALLBACK_METHODS.has(name);
-}
-
-function calleeName(callee: ts.Expression): string | null {
-  if (ts.isIdentifier(callee)) {
-    return callee.text;
-  }
-  return ts.isPropertyAccessExpression(callee) ? callee.name.text : null;
 }
 
 function isSuspension(node: ts.Node): boolean {
