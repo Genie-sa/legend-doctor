@@ -173,6 +173,7 @@ function baseStateClassification(
   const { analysis, clusters, effectProofs } = result;
   return (
     harnessStateClassification(state, analysis.nonProductionHarness) ??
+    unreferencedOwnerStateClassification(state, analysis) ??
     clusterStateClassification(stateClusterFor(state, result), state) ??
     effectDraftStateClassification(
       state,
@@ -303,6 +304,20 @@ function harnessStateClassification(
     action: "keep-state",
     confidence: "certain",
     message: `Keep \`${state.valueName}\` in this test, story, or demo harness; production render-boundary migrations do not apply here.`,
+  };
+}
+
+function unreferencedOwnerStateClassification(
+  state: StateCandidate,
+  { childContracts }: SourceAnalysis,
+): ClassifiedState | null {
+  if (!childContracts?.componentIsUnreferenced(state.owner)) {
+    return null;
+  }
+  return {
+    action: "keep-state",
+    confidence: "certain",
+    message: `Keep \`${state.valueName}\`; no production source in this application package renders its component, so a render-boundary migration saves no render.`,
   };
 }
 

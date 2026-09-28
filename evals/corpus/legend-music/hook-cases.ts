@@ -22,13 +22,13 @@ export const legendMusicHookCases = [
     target: "legend-music",
   },
   {
-    action: "use-observable",
+    action: "keep-state",
     file: "components/PlaylistSelector.tsx",
     hook: "useState",
     line: 39,
     name: "layoutWidth",
     rationale:
-      "The deduplicated search branch is the only render consumer, so an owner-scoped observable can update one stable leaf without invalidating the playlist owner.",
+      "At this pin both JSX uses of PlaylistSelector, in MainContainer and PlaybackArea, are commented out and nothing else references it, so no render of the app runs this owner and moving its state saves nothing.",
     target: "legend-music",
   },
   {

@@ -122,6 +122,10 @@ export class AssumedLeafContracts implements ChildContractResolver {
     return this.#base.componentParentRerender(owner, paths);
   }
 
+  public componentIsUnreferenced(owner: RuntimeFunctionLike): boolean {
+    return this.#base.componentIsUnreferenced(owner);
+  }
+
   public contextConsumers(contextName: string): readonly ContextConsumerSource[] {
     return this.#base.contextConsumers(contextName);
   }

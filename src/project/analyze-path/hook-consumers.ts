@@ -50,10 +50,10 @@ export function findHookPresentationConsumer(
   ) {
     return null;
   }
-  const results = closure.consumers.map(({ file, hookBinding }) =>
+  const results = closure.consumers.map(({ file, localName }) =>
     hookPresentationConsumerResult({
       broadOwnerJsx: query.broadOwnerJsx,
-      hookBinding,
+      hookBinding: localName,
       members: query.members,
       pureProjectionImports: query.context.sourceIndex.pureProjectionsFor(file.identityPath),
       sourceFile: file.sourceFile,
