@@ -1,4 +1,4 @@
-import type { ReplayCommit } from "../contracts.js";
+import type { ReplayCommit, ScoredReplayCase } from "../contracts.js";
 
 const repository = "legend-music";
 const root = "src";
@@ -166,88 +166,135 @@ const observeEffectConversions = {
   root,
 } as const satisfies ReplayCommit;
 
+type SubscriptionLocation = Pick<ScoredReplayCase, "file" | "line" | "source">;
+
+function deadSubscription(
+  { file, line, source }: SubscriptionLocation,
+  binding: string,
+): ScoredReplayCase {
+  return {
+    action: "peek-unrendered-use-value",
+    expected: "enforced",
+    file,
+    line,
+    rationale: `After the observer conversion ${binding} has no read, so the subscription only re-renders its owner.`,
+    source,
+  };
+}
+
+function persistedSubscription(
+  { file, line, source }: SubscriptionLocation,
+  store: string,
+): ScoredReplayCase {
+  return {
+    action: "peek-unrendered-use-value",
+    expected: "non-enforced",
+    file,
+    line,
+    rationale: `${store} is a createJSONManager store, a synced observable with an async persist plugin that loads on first access. Deleting this unread subscription removes the mount-time activation, so the first later peek() starts the load and reads the default instead of the persisted value, as tests/runtime/lazy-persisted-subscription.test.ts reproduces.`,
+    source,
+  };
+}
+
 const deadUseValueCleanup = {
   cases: [
-    [
-      "components/DropdownMenu.tsx",
-      410,
-      "useValue(state$.activeSubmenuId)",
+    deadSubscription(
+      {
+        file: "components/DropdownMenu.tsx",
+        line: 410,
+        source: "useValue(state$.activeSubmenuId)",
+      },
       "Sub's activeSubmenuId",
-    ],
-    [
-      "components/DropdownMenu.tsx",
-      494,
-      "useValue(state$.activeSubmenuId)",
+    ),
+    deadSubscription(
+      {
+        file: "components/DropdownMenu.tsx",
+        line: 494,
+        source: "useValue(state$.activeSubmenuId)",
+      },
       "SubContent's activeSubmenuId",
-    ],
-    [
-      "media-library/MediaLibraryWindowManager.tsx",
-      30,
-      "useValue(stateSaved$.libraryIsOpen)",
-      "isOpen",
-    ],
-    [
-      "overlay/CurrentSongOverlayWindow.tsx",
-      91,
-      "useValue(currentSongOverlay$.isExiting)",
+    ),
+    persistedSubscription(
+      {
+        file: "media-library/MediaLibraryWindowManager.tsx",
+        line: 30,
+        source: "useValue(stateSaved$.libraryIsOpen)",
+      },
+      "stateSaved$",
+    ),
+    deadSubscription(
+      {
+        file: "overlay/CurrentSongOverlayWindow.tsx",
+        line: 91,
+        source: "useValue(currentSongOverlay$.isExiting)",
+      },
       "isOverlayExiting",
-    ],
-    [
-      "overlay/CurrentSongOverlayWindowManager.tsx",
-      33,
-      "useValue(currentSongOverlay$.isWindowOpen)",
+    ),
+    deadSubscription(
+      {
+        file: "overlay/CurrentSongOverlayWindowManager.tsx",
+        line: 33,
+        source: "useValue(currentSongOverlay$.isWindowOpen)",
+      },
       "isWindowOpen",
-    ],
-    [
-      "overlay/CurrentSongOverlayWindowManager.tsx",
-      34,
-      "useValue(currentSongOverlay$.isExiting)",
+    ),
+    deadSubscription(
+      {
+        file: "overlay/CurrentSongOverlayWindowManager.tsx",
+        line: 34,
+        source: "useValue(currentSongOverlay$.isExiting)",
+      },
       "isOverlayExiting",
-    ],
-    [
-      "overlay/CurrentSongOverlayWindowManager.tsx",
-      35,
-      "useValue(settings$.overlay.position)",
-      "overlayPosition, which feeds only unused derived constants,",
-    ],
-    [
-      "overlay/CurrentSongOverlayWindowManager.tsx",
-      36,
-      "useValue(currentSongOverlay$.windowHeight)",
+    ),
+    persistedSubscription(
+      {
+        file: "overlay/CurrentSongOverlayWindowManager.tsx",
+        line: 35,
+        source: "useValue(settings$.overlay.position)",
+      },
+      "settings$",
+    ),
+    deadSubscription(
+      {
+        file: "overlay/CurrentSongOverlayWindowManager.tsx",
+        line: 36,
+        source: "useValue(currentSongOverlay$.windowHeight)",
+      },
       "windowHeight",
-    ],
-    [
-      "overlay/CurrentSongOverlayWindowManager.tsx",
-      37,
-      "useValue(currentSongOverlay$.windowWidth)",
+    ),
+    deadSubscription(
+      {
+        file: "overlay/CurrentSongOverlayWindowManager.tsx",
+        line: 37,
+        source: "useValue(currentSongOverlay$.windowWidth)",
+      },
       "windowWidth",
-    ],
-    [
-      "visualizer/VisualizerWindowManager.tsx",
-      26,
-      "useValue(visualizerWindowState$.isOpen)",
+    ),
+    deadSubscription(
+      {
+        file: "visualizer/VisualizerWindowManager.tsx",
+        line: 26,
+        source: "useValue(visualizerWindowState$.isOpen)",
+      },
       "isOpen",
-    ],
-    [
-      "visualizer/VisualizerWindowManager.tsx",
-      27,
-      "useValue(visualizerPreferences$.window.autoClose)",
-      "autoClose",
-    ],
-    [
-      "visualizer/VisualizerWindowManager.tsx",
-      28,
-      "useValue(localPlayerState$.isPlaying)",
+    ),
+    persistedSubscription(
+      {
+        file: "visualizer/VisualizerWindowManager.tsx",
+        line: 27,
+        source: "useValue(visualizerPreferences$.window.autoClose)",
+      },
+      "visualizerPreferences$",
+    ),
+    deadSubscription(
+      {
+        file: "visualizer/VisualizerWindowManager.tsx",
+        line: 28,
+        source: "useValue(localPlayerState$.isPlaying)",
+      },
       "isPlaying",
-    ],
-  ].map(([file, line, source, binding]) => ({
-    action: "peek-unrendered-use-value" as const,
-    expected: "enforced" as const,
-    file: file as string,
-    line: line as number,
-    rationale: `After the observer conversion ${binding as string} has no read, so the subscription only re-renders its owner.`,
-    source: source as string,
-  })),
+    ),
+  ],
   commit: "9793642399ced24dc09f4bdb4dd742ef2a6b4406",
   parent: "0b8ab30c55da9e1f1577811d8148e99bb148a104",
   repository,
@@ -378,15 +425,14 @@ const effectMounts = {
         "Replaces a manual onChange subscription. The resubscription it saves depends on the caller's onOpenChange identity, and the observe-effect proof covers useValue snapshots, not listeners.",
       source: effect,
     },
-    {
-      action: "peek-unrendered-use-value",
-      expected: "enforced",
-      file: "components/MediaLibrary/LibraryTree.tsx",
-      line: 28,
-      rationale:
-        "The observer's local and LibraryTreeRow's own binding shadow selectedItem, so the owner binding has no read and every selection change re-renders the tree for nothing.",
-      source: "useValue(libraryUI$.selectedItem)",
-    },
+    persistedSubscription(
+      {
+        file: "components/MediaLibrary/LibraryTree.tsx",
+        line: 28,
+        source: "useValue(libraryUI$.selectedItem)",
+      },
+      "libraryUI$",
+    ),
     {
       expected: "excluded",
       file: "components/MediaLibrary/useLibraryTrackList.ts",

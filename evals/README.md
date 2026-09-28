@@ -111,8 +111,9 @@ git -C /path/to/legend-music fetch --depth=1 https://github.com/LegendApp/legend
 CI fetches the parents the same way after the pinned commits, so the cost is one shallow fetch per replayed commit.
 
 `npm run eval:runtime` runs the executable migration contracts under jsdom with pinned React and Legend State: form
-submission snapshots, keyed selection and draft identity, independent hook lifetimes, atomic dialog publication, and
-memoized snapshot identity, with and without StrictMode. They also run in `npm test`.
+submission snapshots, keyed selection and draft identity, independent hook lifetimes, atomic dialog publication,
+memoized snapshot identity, and the lazy load a persisted-store subscription starts, with and without StrictMode. They
+also run in `npm test`.
 
 ## Changing the corpus
 
