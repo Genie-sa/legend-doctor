@@ -254,15 +254,20 @@ work but does not reread or reparse files.
 | `other-action`     | A practice finding at this call proposes an edit other than a subscription cut       |
 | `unresolved`       | No finding at this call; `reasons` names every blocker the inventory could establish |
 
-| Read `kind`         | Where the owner evaluates the read                                                        |
-| ------------------- | ----------------------------------------------------------------------------------------- |
-| `render`            | A pure expression in the returned JSX                                                     |
-| `render-callback`   | A synchronous array callback or IIFE inside the returned JSX, run once per item           |
-| `memo`              | An owner-level `useMemo` callback or dependency list, rerun only when dependencies change |
-| `derivation`        | A pure `const` or `useMemo` projection whose own reads are followed in turn               |
-| `effect`            | A React effect callback                                                                   |
-| `event-or-callback` | An event handler or other callback that runs outside render                               |
-| `unknown`           | A position the analyzer cannot classify, such as a `key` or `ref` value or an impure slot |
+| Read `kind`         | Where the owner evaluates the read                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| `render`            | A pure expression in the returned JSX, or a render gate that selects the returned JSX           |
+| `render-callback`   | A synchronous array callback or IIFE inside the returned JSX, run once per item                 |
+| `memo`              | An owner-level `useMemo` callback or dependency list, rerun only when dependencies change       |
+| `derivation`        | A pure `const` or `useMemo` projection whose own reads are followed in turn                     |
+| `effect`            | A React effect callback or its dependency list                                                  |
+| `event-or-callback` | An event handler or other callback that runs outside render, or a `useCallback` dependency list |
+| `unknown`           | A position the analyzer cannot classify, such as a `key` or `ref` value or an impure slot       |
+
+A render gate is the condition of a conditional JSX child slot, of a conditional returned output, or of an
+early `return` of JSX or `null`. Its inputs are render-owned values with no call or write. A gate also
+decides what mounts, so a cut keeps it together with the complete conditional slot, and an owner-level
+gate leaves no smaller boundary to extract. A JSX tag name chosen by a gate stays `unknown`.
 
 | Selector `result` | What `useValue` compares                                                   |
 | ----------------- | -------------------------------------------------------------------------- |

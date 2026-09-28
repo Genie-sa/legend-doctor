@@ -8,10 +8,10 @@ import test from "node:test";
 
 const LEAVES = "<A/><B/><C/><D/><E/><F/><G/><H/><I/><J/><K/><L/>";
 
-async function inventory(
+async function inventoryOf(
   context: test.TestContext,
-  setup: string,
-  content: string,
+  source: string,
+  binding = "selected",
 ): Promise<{ entry: SubscriptionInventory; actions: string[] }> {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-read-kinds-"));
   context.after(() => rm(root, { recursive: true, force: true }));
@@ -19,18 +19,29 @@ async function inventory(
     path.join(root, "Screen.tsx"),
     `import { useObservable, useValue } from "@legendapp/state/react";
     import * as React from "react";
-    import { useMemo } from "react";
-    export function Screen({ items }: { items: string[] }) {
-      const state$ = useObservable({ selected: "" });
+    import { useCallback, useEffect, useMemo } from "react";
+    ${source}`,
+  );
+  const report = await analyzePath(root);
+  const entry = report.subscriptionAnalysis?.inventory.find((item) => item.binding === binding);
+  assert.ok(entry);
+  return { entry, actions: report.practices.map((finding) => finding.action) };
+}
+
+function inventory(
+  context: test.TestContext,
+  setup: string,
+  content: string,
+): Promise<{ entry: SubscriptionInventory; actions: string[] }> {
+  return inventoryOf(
+    context,
+    `export function Screen({ items }: { items: string[] }) {
+      const state$ = useObservable({ selected: "", track: { title: "" } });
       const selected = useValue(state$.selected);
       ${setup}
       return <main>${LEAVES}${content}</main>;
     }`,
   );
-  const report = await analyzePath(root);
-  const entry = report.subscriptionAnalysis?.inventory.find((item) => item.binding === "selected");
-  assert.ok(entry);
-  return { entry, actions: report.practices.map((finding) => finding.action) };
 }
 
 function kinds(entry: SubscriptionInventory): string[] {
@@ -82,5 +93,94 @@ test("deferred, eager, and returned callbacks keep their callback or unsupported
   ] as const) {
     const { entry } = await inventory(context, setup, content);
     assert.deepEqual(kinds(entry), [expected], setup || content);
+  }
+});
+
+test("dependency lists share the kind of the effect or callback they guard", async (context) => {
+  for (const [setup, expected] of [
+    ["useEffect(() => sync(), [selected]);", "effect"],
+    ["React.useLayoutEffect(() => sync(), [selected]);", "effect"],
+    ["const onSave = useCallback(() => save(), [selected]);", "event-or-callback"],
+    ['useHotkeys("mod+s", save, [selected]);', "unknown"],
+  ] as const) {
+    const { entry } = await inventory(context, setup, "");
+    assert.deepEqual(kinds(entry), [expected], setup);
+  }
+});
+
+test("a render gate over JSX is a render read; a read inside the selected element is not the gate", async (context) => {
+  for (const [content, expected] of [
+    ["{selected && <p/>}", ["render"]],
+    ["{selected ?? <p/>}", ["render"]],
+    ["{items.length > 1 || !selected ? <p/> : null}", ["render"]],
+    ["{items.length ? <p/> : selected ? <b/> : null}", ["render"]],
+    ["{selected && <p key={selected}/>}", ["render", "unknown"]],
+    ["{format(selected) && <p/>}", ["unknown"]],
+    ["{selected && <p/>}{(state$.track.title = selected) && <b/>}", ["render", "unknown"]],
+  ] as const) {
+    const { entry } = await inventory(context, "", content);
+    assert.deepEqual(kinds(entry), expected, content);
+  }
+});
+
+test("a JSX tag chosen by a gate controls mount identity and stays unsupported", async (context) => {
+  const { entry } = await inventoryOf(
+    context,
+    `export function Screen() {
+      const state$ = useObservable({ panel: null as null | (() => null) });
+      const Panel = useValue(state$.panel);
+      return <main>${LEAVES}{Panel ? <Panel/> : null}</main>;
+    }`,
+    "Panel",
+  );
+  assert.deepEqual(kinds(entry), ["render", "unknown"]);
+});
+
+test("early returns and returned conditionals that select JSX are render gates", async (context) => {
+  for (const [body, expected] of [
+    ["if (!selected) return null; return <main/>;", ["render"]],
+    ["if (selected === items[0]) { return <p/>; } return <main/>;", ["render"]],
+    ["return selected ? <p/> : null;", ["render"]],
+    ["return items.length > 0 && selected ? <p/> : <main/>;", ["render"]],
+    ["if (selected) { track(selected); } return <main/>;", ["unknown", "unknown"]],
+    ["if (!selected) { log(); return null; } return <main/>;", ["unknown"]],
+    ["if (!selected) return null; else log(); return <main/>;", ["unknown"]],
+    ["if (isValid(selected)) return null; return <main/>;", ["unknown"]],
+    ["if (!selected) return null; return items;", ["unknown"]],
+    ["return selected ? items : null;", ["unknown"]],
+  ] as const) {
+    const { entry } = await inventoryOf(
+      context,
+      `export function Screen({ items }: { items: string[] }) {
+        const state$ = useObservable({ selected: "" });
+        const selected = useValue(state$.selected);
+        ${body}
+      }`,
+    );
+    assert.deepEqual(kinds(entry), expected, body);
+  }
+});
+
+test("templates and comparisons are pure only when no operand can run conversion code", async (context) => {
+  for (const [binding, content, expected] of [
+    ["selected", `<p className={\`row \${selected ? "on" : "off"}\`}/>`, "render"],
+    ["selected", `<p title={\`\${selected}\`}/>`, "render"],
+    ["selected", "<p hidden={selected != null}/>", "render"],
+    ["selected", '<p hidden={selected < "m"}/>', "render"],
+    ["track", `<p title={\`\${track}\`}/>`, "unknown"],
+    ["track", "<p hidden={track > 0}/>", "unknown"],
+    ["track", "<p hidden={track == 0}/>", "unknown"],
+  ] as const) {
+    const { entry } = await inventoryOf(
+      context,
+      `export function Screen() {
+        const state$ = useObservable({ selected: "", track: { title: "" } });
+        const selected = useValue(state$.selected);
+        const track = useValue(state$.track);
+        return <main>${LEAVES}${content}</main>;
+      }`,
+      binding,
+    );
+    assert.deepEqual(kinds(entry), [expected], content);
   }
 });

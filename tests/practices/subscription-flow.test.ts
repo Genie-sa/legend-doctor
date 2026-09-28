@@ -216,3 +216,23 @@ for (const content of [
     );
   });
 }
+
+test("a derived value behind a JSX gate moves with the complete conditional slot", () => {
+  const result = moves(
+    "const raw = useValue(state$.count); const bins = raw ?? 64;",
+    "<section>{raw && <p>{bins}</p>}</section>",
+  );
+  assert.equal(result.length, 1);
+  assert.equal(result[0]!.subscription?.boundaries[0]?.kind, "conditional-child");
+});
+
+test("an early-return guard is a render read that no child boundary can take", () => {
+  assert.equal(
+    moves(
+      "const raw = useValue(state$.count); const bins = raw ?? 64;",
+      "<h1>{bins}</h1>",
+      "if (!raw) return null;",
+    ).length,
+    0,
+  );
+});
