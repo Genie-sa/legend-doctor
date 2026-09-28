@@ -2,13 +2,14 @@ import type { GoldHookCase } from "../contracts.js";
 
 export const openWebuiReactNativeHookCases = [
   {
-    action: "use-observable",
+    abstentionReason: "render-cut-unproven",
+    action: "review-state",
     file: "component.tsx",
     hook: "useState",
     line: 37,
     name: "isFocused",
     rationale:
-      "One deferred interaction callback writes the reveal flag without branching or suspension. The full AnimatedView gate can subscribe independently while preserving the original effect and conditional mount; bounded path analysis must not lose this ordinary case.",
+      "One deferred interaction callback writes the reveal flag once, and path analysis reaches the render cut. Outside the AnimatedView gate the owner renders only its root view, search input, and filter sheet; `renderItem` runs inside the list the gate mounts either way. Three saved element renders on a one-time write fall below the five-element minimum for an effect-written presentation cut.",
     target: "open-webui-search-archived-chats",
   },
   {

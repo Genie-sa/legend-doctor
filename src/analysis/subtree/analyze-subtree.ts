@@ -38,6 +38,7 @@ import type { MaterialityPolicy } from "../constants.js";
 import { closureConfinedReferences } from "./closure-confinement.js";
 import { commonRenderGateSubtree } from "../../rules/deferred-reveal/render-gates.js";
 import { effectSplitProjectionSubtree } from "./effect-split.js";
+import { extractedJsxElementCount } from "./extracted-render-work.js";
 import { hasAncestorInSet } from "../ast-helpers.js";
 import { isUniquelySelectedRepeatedProjection } from "../../rules/state-proofs/unique-repeated-selection.js";
 import { nearestNestedFunction } from "../../core/ast.js";
@@ -250,12 +251,14 @@ function boundedDirectSubtree(
   if (!direct) {
     return null;
   }
-  const subtreeJsx = jsxElementCountIn(direct);
   if (
     ownerJsx < materiality.broadOwnerJsx ||
-    subtreeJsx < MIN_LEAF_SUBTREE_ELEMENTS ||
-    subtreeJsx / ownerJsx > MAX_LEAF_SUBTREE_RATIO
+    jsxElementCountIn(direct) < MIN_LEAF_SUBTREE_ELEMENTS
   ) {
+    return null;
+  }
+  const extractedJsx = extractedJsxElementCount(direct, state.owner);
+  if (extractedJsx === null || extractedJsx / ownerJsx > MAX_LEAF_SUBTREE_RATIO) {
     return null;
   }
   return stateSubtreeResult("direct", direct, { movedDeclarations, renderNodes: nodes, state });
@@ -264,7 +267,6 @@ function boundedDirectSubtree(
 interface ProjectionSubtreeScope extends StateSubtreeOptions {
   readonly allowedProjectionCalls: ReadonlySet<string>;
   readonly effectWrittenPresentation: boolean;
-  readonly ownerJsx: number;
   readonly projectionNodes: readonly ts.Node[];
   readonly renderReadsInNestedCallbacks: boolean;
   readonly uniqueRepeatedProjection: boolean;
@@ -289,7 +291,6 @@ function projectionSubtreeFor(
   const {
     effectOwnedMemoizedCommand,
     effectWrittenPresentation,
-    ownerJsx,
     projectionAllowed,
     projectionNodes,
     renderReadsInNestedCallbacks,
@@ -304,7 +305,7 @@ function projectionSubtreeFor(
   const projection = gateProjection ?? lowestCommonJsxSubtree(projectionNodes, state.owner);
   if (
     !projection ||
-    !isMaterialStateSubtree(projection, ownerJsx, {
+    !isMaterialStateSubtree(projection, state.owner, {
       effectWrittenPresentation,
       materiality: scope.materiality,
       uniqueRepeatedProjection,

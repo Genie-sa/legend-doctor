@@ -1,9 +1,6 @@
 import type { CorpusRepository } from "../contracts.js";
 
-/**
- * The modal directory is scanned file by file. SettingsTree.tsx stays out until subtree materiality
- * counts the JSX that the extracted leaf reaches through the owner's `renderPage()` helper.
- */
+/** The modal directory is scanned file by file. */
 export const noutubeRepository = {
   commit: "8cb020814475ba5d3ad2499bf9d4a3dc128dc789",
   contextRoot: ".",
@@ -58,6 +55,12 @@ export const noutubeRepository = {
       states: 3,
     },
     { effects: 1, id: "noutube-url-modal", root: "components/modal/UrlModal.tsx", states: 1 },
+    {
+      effects: 2,
+      id: "noutube-settings-tree",
+      root: "components/modal/SettingsTree.tsx",
+      states: 5,
+    },
   ],
   url: "https://github.com/nonbili/NouTube.git",
 } as const satisfies CorpusRepository;
