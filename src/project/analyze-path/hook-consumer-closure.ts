@@ -12,21 +12,24 @@ import path from "node:path";
 import { pathIdentityKey } from "../../core/path-identity.js";
 import ts from "typescript";
 
-export interface ClosedHookBinding {
+export interface ClosedBinding {
   readonly file: AnalysisFile;
-  readonly hookBinding: string;
+  readonly localName: string;
 }
 
-export interface HookClosure {
-  /** Production source bindings of the hook, including its declaring file. */
-  readonly consumers: readonly ClosedHookBinding[];
-  /** Test and story files that import the hook or may reach it without a traceable binding. */
+export interface SymbolClosure {
+  /** Production source bindings of the symbol, including its declaring file. */
+  readonly consumers: readonly ClosedBinding[];
+  /** Test and story files that import the symbol or may reach it without a traceable binding. */
   readonly harnesses: readonly AnalysisFile[];
 }
+
+type SymbolResolver = (file: string, localName: string) => ResolvedSymbol | null;
 
 interface ClosureQuery {
   readonly declaration: ResolvedSymbol;
   readonly exposing: ReadonlySet<string>;
+  readonly resolve: SymbolResolver;
 }
 
 /**
@@ -39,7 +42,27 @@ interface ClosureQuery {
 export function closedHookConsumers(
   context: AnalysisContext,
   declaration: ResolvedSymbol,
-): HookClosure | null {
+): SymbolClosure | null {
+  return closedSymbolBindings(context, declaration, (file, localName) =>
+    context.sourceIndex.hookDeclarationFor(file, localName),
+  );
+}
+
+/** Every source binding of one component, under the same closed-world proof as a hook's. */
+export function closedComponentBindings(
+  context: AnalysisContext,
+  declaration: ResolvedSymbol,
+): SymbolClosure | null {
+  return closedSymbolBindings(context, declaration, (file, localName) =>
+    context.sourceIndex.componentDeclarationFor(file, localName),
+  );
+}
+
+function closedSymbolBindings(
+  context: AnalysisContext,
+  declaration: ResolvedSymbol,
+  resolve: SymbolResolver,
+): SymbolClosure | null {
   const declaringFile = context.project.getFile(declaration.file);
   const index = closureIndex(context);
   const scope =
@@ -52,6 +75,7 @@ export function closedHookConsumers(
   const query: ClosureQuery = {
     declaration,
     exposing: exposingModules(index, pathIdentityKey(declaration.file)),
+    resolve,
   };
   const opaque = [
     ...opaqueReaches(index, query),
@@ -60,21 +84,18 @@ export function closedHookConsumers(
       : outsideReaches(outsideRootSources(context, scope.outside), query)),
   ];
   const bindings = opaque.every((file) => isHarnessFile(file))
-    ? traceableBindings(context, index, query)
+    ? traceableBindings(index, query)
     : null;
   return (
     bindings &&
-    splitHarnesses(
-      [...bindings, { file: declaringFile, hookBinding: declaration.localName }],
-      opaque,
-    )
+    splitHarnesses([...bindings, { file: declaringFile, localName: declaration.localName }], opaque)
   );
 }
 
 function splitHarnesses(
-  bindings: readonly ClosedHookBinding[],
+  bindings: readonly ClosedBinding[],
   opaque: readonly AnalysisFile[],
-): HookClosure {
+): SymbolClosure {
   const traced = bindings.filter((binding) => isHarnessFile(binding.file));
   return {
     consumers: bindings.filter((binding) => !isHarnessFile(binding.file)),
@@ -152,31 +173,27 @@ function opaqueReaches(
       .map((load) => load.file),
     ...index.erroredFiles.filter((file) => file.sourceFile.text.includes(declaration.localName)),
     ...index.unresolvedImports
-      .filter((entry) => mayImportHook(entry, declaration))
+      .filter((entry) => mayImportSymbol(entry, declaration))
       .map((entry) => entry.file),
   ];
 }
 
 function traceableBindings(
-  context: AnalysisContext,
   index: ClosureIndex,
-  { declaration, exposing }: ClosureQuery,
-): ClosedHookBinding[] | null {
-  const bindings: ClosedHookBinding[] = [];
+  { declaration, exposing, resolve }: ClosureQuery,
+): ClosedBinding[] | null {
+  const bindings: ClosedBinding[] = [];
   for (const binding of index.bindings) {
     if (!exposing.has(binding.target)) {
       continue;
     }
-    const resolved = context.sourceIndex.hookDeclarationFor(
-      binding.file.identityPath,
-      binding.localName,
-    );
+    const resolved = resolve(binding.file.identityPath, binding.localName);
     // An export chain beyond the resolver's depth leaves a same-named import unresolved.
     if (resolved === null && binding.importedName === declaration.localName) {
       return null;
     }
     if (resolved && sameSymbol(resolved, declaration)) {
-      bindings.push({ file: binding.file, hookBinding: binding.localName });
+      bindings.push({ file: binding.file, localName: binding.localName });
     }
   }
   return bindings;
@@ -188,7 +205,7 @@ function sameSymbol(left: ResolvedSymbol, right: ResolvedSymbol): boolean {
   );
 }
 
-function mayImportHook(entry: UnresolvedImport, declaration: ResolvedSymbol): boolean {
+function mayImportSymbol(entry: UnresolvedImport, declaration: ResolvedSymbol): boolean {
   if (entry.importedNames.has(declaration.localName)) {
     return true;
   }

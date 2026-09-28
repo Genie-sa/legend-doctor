@@ -23,6 +23,8 @@ import {
 import type { AnalysisContext } from "./analysis-context.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceIndex } from "../source-components/source-components.js";
+import { cached } from "./contract-cache.js";
+import { componentIsUnreferenced } from "./unreferenced-components.js";
 import { componentParentRerender } from "./parent-rerenders.js";
 import { componentPropDataPath } from "./component-prop-data.js";
 import { componentPropRunsOnlyInHostEvents } from "../../rules/child-contract/host-event-dispatch.js";
@@ -30,16 +32,6 @@ import { importedHookConsumers } from "./hook-consumer-index.js";
 import { keyedCursorConsumerResult } from "../../rules/hook-keyed-cursor-contract/hook-keyed-cursor-contract.js";
 import { sourceHookDefersCallback } from "../../rules/source-callback-contract/source-callback-contract.js";
 import type ts from "typescript";
-
-function cached(cache: Map<string, boolean>, key: string, compute: () => boolean): boolean {
-  const hit = cache.get(key);
-  if (hit !== undefined) {
-    return hit;
-  }
-  const value = compute();
-  cache.set(key, value);
-  return value;
-}
 
 const PLATFORM_VARIANTS = ["", ".native", ".ios", ".android", ".web"] as const;
 
@@ -192,6 +184,10 @@ class ChildContracts implements ChildContractResolver {
     paths: readonly ts.Expression[],
   ): ParentRerenderProof {
     return componentParentRerender(this.context, owner, paths);
+  }
+
+  public componentIsUnreferenced(owner: RuntimeFunctionLike): boolean {
+    return componentIsUnreferenced(this.context, owner);
   }
 
   public componentPropCallbackIsDeferred(

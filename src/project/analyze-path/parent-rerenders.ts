@@ -91,7 +91,7 @@ export function componentParentRerender(
   return complete && sites.every((site) => site === "rerendering") ? "proven" : "possible";
 }
 
-function declaredComponent(owner: RuntimeFunctionLike): DeclaredComponent | null {
+export function declaredComponent(owner: RuntimeFunctionLike): DeclaredComponent | null {
   if (ts.isFunctionDeclaration(owner)) {
     return owner.name && isComponentName(owner.name.text)
       ? { mode: "always", target: componentTarget(owner.name) }
