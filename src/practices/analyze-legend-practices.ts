@@ -2,12 +2,12 @@ import {
   NO_OBSERVABLE_FIELD_FACTS,
   observableWriteGroups,
 } from "../rules/observable-reads/field-writes.js";
+import { SOURCE_FILE_OPTIONS, isNonProductionHarness, visit } from "../core/ast.js";
 import {
   dataFieldKeys,
   exactObjectLiteralKeys,
   unwrapTransparentExpression,
 } from "../core/analysis-ast.js";
-import { isNonProductionHarness, visit } from "../core/ast.js";
 import type { AnalysisFile } from "../project/analysis-project.js";
 import type { ChildContractResolver } from "../rules/child-contract/model.js";
 import type { FileCapabilities } from "../project/capabilities.js";
@@ -56,7 +56,7 @@ export function analyzeLegendPractices({
   const sourceFile = ts.createSourceFile(
     fileName,
     sourceText,
-    ts.ScriptTarget.Latest,
+    SOURCE_FILE_OPTIONS,
     true,
     fileName.endsWith(".tsx") || fileName.endsWith(".jsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );

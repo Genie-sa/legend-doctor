@@ -39,13 +39,13 @@ export async function createAnalysisContextFromFiles(
 ): Promise<AnalysisContext> {
   const sources = new Map<string, string>();
   await readSourceBatch(files, 0, sources);
-  const host = await loadWorkspaceSources(root, sources);
+  const resolution = await loadWorkspaceSources(root, sources);
   const project = new AnalysisProject(sources);
   return {
     installedLegendState: await resolveInstalledLegendState(root),
     project,
     root,
-    sourceIndex: buildSourceIndexFromFiles(root, project.files, host),
+    sourceIndex: buildSourceIndexFromFiles(root, project.files, resolution),
   };
 }
 

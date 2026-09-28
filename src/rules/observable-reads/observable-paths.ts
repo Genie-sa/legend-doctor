@@ -140,6 +140,15 @@ export function isUseValueCall(call: ts.CallExpression, imports: HookImports): b
   );
 }
 
+/** Whether any call in a file with these imports can satisfy `isUseValueCall`. */
+export function mayCallUseValue(imports: HookImports): boolean {
+  return (
+    imports.useValue.size > 0 ||
+    imports.legacyUseValue.size > 0 ||
+    imports.legendReactNamespaces.size > 0
+  );
+}
+
 /** Only the `useValue` name, for rewrites whose runtime contract was tested under that export. */
 export function isCanonicalUseValueCall(call: ts.CallExpression, imports: HookImports): boolean {
   return (

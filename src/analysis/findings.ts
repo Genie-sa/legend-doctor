@@ -34,7 +34,16 @@ import { withTransitionEvidence } from "./transition-evidence.js";
 
 export function buildFindings(result: StateAnalysisResult): HookFinding[] {
   const { analysis } = result;
-  const scope = findingsScope(result, (state) => classifyStateAlone(state, result));
+  const aloneByState = new Map<StateCandidate, ClassifiedState>();
+  const scope = findingsScope(result, (state) => {
+    const cached = aloneByState.get(state);
+    if (cached) {
+      return cached;
+    }
+    const alone = classifyStateAlone(state, result);
+    aloneByState.set(state, alone);
+    return alone;
+  });
   const stateFindings = new Map<StateCandidate, HookFinding>();
   for (const state of analysis.states) {
     const finding = stateFindingFor(state, scope);

@@ -1,7 +1,14 @@
+import {
+  buildSourceIndex,
+  buildSourceIndexFromFiles,
+} from "../../src/project/source-components/source-components.js";
+import { AnalysisProject } from "../../src/project/analysis-project.js";
+import type { SourceResolution } from "../../src/project/source-components/module-resolution.js";
 import assert from "node:assert/strict";
-import { buildSourceIndex } from "../../src/project/source-components/source-components.js";
+import { createCompilerContextCaches } from "../../src/project/source-components/module-resolution.js";
 import path from "node:path";
 import test from "node:test";
+import ts from "typescript";
 import { withProject } from "./with-project.js";
 
 test("resolves factory-created observables without a direct observable declaration", async () => {
@@ -97,6 +104,40 @@ test("new source indexes see local escapes and added aliases without changing th
       const aliased = buildSourceIndex(root, withAlias);
       assert.deepEqual([...aliased.observablePathsFor(consumer)], []);
       assert.deepEqual([...original.observablePathsFor(consumer)], ["store.value$"]);
+    },
+  );
+});
+
+test("source indexes sharing one resolution probe the file system for an import once", async () => {
+  await withProject(
+    {
+      "store.ts": "export const store = 1;",
+      "consumer.ts": 'import { store } from "./store";',
+    },
+    (root, sources) => {
+      let fileProbes = 0;
+      const resolution: SourceResolution = {
+        caches: createCompilerContextCaches(),
+        host: {
+          ...ts.sys,
+          fileExists: (file) => {
+            fileProbes += 1;
+            return ts.sys.fileExists(file);
+          },
+        },
+      };
+      const { files } = new AnalysisProject(sources);
+      const consumer = path.join(root, "consumer.ts");
+      const resolveStore = (): string | null =>
+        buildSourceIndexFromFiles(root, files, resolution).moduleFileFor(consumer, "./store");
+
+      const store = resolveStore();
+      assert.notEqual(store, null);
+      const probesForFirstIndex = fileProbes;
+      assert.ok(probesForFirstIndex > 0);
+
+      assert.equal(resolveStore(), store);
+      assert.equal(fileProbes, probesForFirstIndex);
     },
   );
 });

@@ -1,11 +1,11 @@
 import type { StateCandidate, StateUsage } from "./model.js";
+import { identifiersNamed, nodeWithin } from "../core/ast.js";
 import {
   isDeclarationName,
   isEvaluationInert,
   isNonValueIdentifier,
   unwrapTransparentExpression,
 } from "../core/analysis-ast.js";
-import { nodeWithin, visit } from "../core/ast.js";
 import { nearestMutationFunction } from "./mutations.js";
 import ts from "typescript";
 
@@ -51,24 +51,17 @@ export function stateReadsOnlyCalculateOwnSetter(
     return false;
   }
 
-  let reads = 0;
-  let safe = true;
-  visit(state.owner.body, (node) => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== state.valueName ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node)
-    ) {
-      return;
-    }
-    reads += 1;
-    safe = usage.setterCallNodes.some(
-      (call) => call.arguments[0] !== undefined && nodeWithin(node, call.arguments[0]),
-    );
-  });
-  return safe && reads > 0;
+  const reads = identifiersNamed(state.owner.body, state.valueName).filter(
+    (node) => !isDeclarationName(node) && !isNonValueIdentifier(node),
+  );
+  return (
+    reads.length > 0 &&
+    reads.every((node) =>
+      usage.setterCallNodes.some(
+        (call) => call.arguments[0] !== undefined && nodeWithin(node, call.arguments[0]),
+      ),
+    )
+  );
 }
 
 export function stateOnlyReceivesItsInitialPrimitive(

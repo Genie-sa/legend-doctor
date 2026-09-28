@@ -242,6 +242,9 @@ function indexRuntimeLoads(
   index: ClosureIndex,
   file: AnalysisFile,
 ): void {
+  if (!mayLoadModuleAtRuntime(file.sourceFile.text)) {
+    return;
+  }
   visit(file.sourceFile, (node) => {
     if (ts.isCallExpression(node)) {
       indexRuntimeLoad(context, index, { call: node, file });
@@ -315,6 +318,25 @@ const MODULE_MOCK_METHODS: ReadonlySet<string> = new Set([
   "unstable_mockModule",
 ]);
 const MODULE_MOCK_RECEIVERS: ReadonlySet<string> = new Set(["jest", "vi"]);
+
+/**
+ * Only whitespace (TypeScript's set, which adds U+0085 and U+200B to `\s`) or a comment can
+ * separate a dynamic `import` from its `(` or type arguments.
+ */
+const DYNAMIC_IMPORT_TEXT = /\bimport[\s\u0085\u200B]*[(</]/u;
+
+/**
+ * Every callee `runtimeModuleLoad` accepts spells its name in the source text unless an escape
+ * sequence hides it, so a file without those spellings needs no walk.
+ */
+export function mayLoadModuleAtRuntime(text: string): boolean {
+  return (
+    DYNAMIC_IMPORT_TEXT.test(text) ||
+    text.includes("\\") ||
+    text.includes("require") ||
+    [...MODULE_MOCK_METHODS].some((name) => text.includes(name))
+  );
+}
 
 /**
  * `import()`, `require()`, and the Jest or Vitest module registry load any specifier they are

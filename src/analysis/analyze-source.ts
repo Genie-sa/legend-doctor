@@ -2,6 +2,12 @@ import { DEFAULT_MATERIALITY, EMPTY_BINDINGS } from "./constants.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "./model.js";
 import type { HookFinding, InstalledLegendState } from "../core/types.js";
 import type { ParsedSourceAnalysisOptions, SourceAnalysis } from "./proofs/contracts.js";
+import {
+  SOURCE_FILE_OPTIONS,
+  isNonProductionHarness,
+  scriptKindForFile,
+  visit,
+} from "../core/ast.js";
 import { collectHookImports, isImportedHookCall } from "../core/imports.js";
 import { collectLocalComponents, collectPureProjectionImports } from "./owner-scan.js";
 import {
@@ -12,7 +18,6 @@ import {
   collectUseValueBindings,
 } from "./owner-bindings.js";
 import { effectCandidate, stateCandidate } from "./candidates.js";
-import { isNonProductionHarness, scriptKindForFile, visit } from "../core/ast.js";
 import type { AnalysisFile } from "../project/analysis-project.js";
 import type { ChildContractResolver } from "../rules/child-contract/model.js";
 import type { ConfirmationSet } from "./assumptions/confirmations.js";
@@ -63,7 +68,7 @@ export function analyzeSourceWith(
   const sourceFile = ts.createSourceFile(
     fileName,
     sourceText,
-    ts.ScriptTarget.Latest,
+    SOURCE_FILE_OPTIONS,
     true,
     scriptKindForFile(fileName),
   );
@@ -124,7 +129,16 @@ export function analyzeSourceFile({
 
 export function findingHookImports(file: AnalysisFile): HookImports | null {
   const imports = collectHookImports(file.sourceFile);
-  return containsFindingHookCall(file.sourceFile, imports) ? imports : null;
+  return canCallFindingHook(imports) && containsFindingHookCall(file.sourceFile, imports)
+    ? imports
+    : null;
+}
+
+/** A finding hook call names a `useState` or `useEffect` import, or a member of a React namespace. */
+function canCallFindingHook(imports: HookImports): boolean {
+  return (
+    imports.useState.size > 0 || imports.useEffect.size > 0 || imports.reactNamespaces.size > 0
+  );
 }
 
 function containsFindingHookCall(node: ts.Node, imports: HookImports): boolean {
