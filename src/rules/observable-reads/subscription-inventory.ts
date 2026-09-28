@@ -1,13 +1,23 @@
-import { identifiedUseValueDeclaration, isUseValueCall } from "./observable-paths.js";
+import { hasAncestorUseValueSubscription, otherSubscriptionTracksAncestor } from "./move-down.js";
 import { subscriptionLocation, subscriptionOwner } from "./subscription-cut.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
+import type { SubscriptionFlow } from "./subscription-flow.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
-import { hasAncestorUseValueSubscription } from "./move-down.js";
+import type { UseValueBinding } from "./use-value-bindings.js";
 import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
+import { isUseValueCall } from "./observable-paths.js";
+import { staticMemberPrefix } from "./selector-expressions.js";
 import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
+import { useValueBinding } from "./use-value-bindings.js";
 import { visit } from "../../core/ast.js";
+
+type ProvenBinding = Exclude<UseValueBinding, { kind: "unproven" }>;
+
+type BindingAnalysis =
+  | { readonly binding: ProvenBinding; readonly flow: SubscriptionFlow }
+  | { readonly binding: Extract<UseValueBinding, { kind: "unproven" }>; readonly flow: null };
 
 export function subscriptionInventory(
   scan: ObservableReadScan,
@@ -28,19 +38,20 @@ function inventoryEntry(
   findings: readonly LegendPracticeFinding[],
 ): SubscriptionInventory {
   const declaration = ts.isVariableDeclaration(call.parent) ? call.parent : null;
-  const use = declaration ? identifiedUseValueDeclaration(declaration, scan) : null;
+  const analysis = bindingAnalysis(call, scan);
+  const { binding, flow } = analysis;
+  const use = flow?.use;
   const location = subscriptionLocation(declaration ?? call, scan);
   const finding = findings.find(
     (item) => item.location.line === location.line && item.location.column === location.column,
   );
-  const flow = use ? subscriptionFlow(use, scan) : null;
-  return {
+  const entry: SubscriptionInventory = {
     location,
     owner: use ? subscriptionOwner(use) : "unresolved",
     binding: use?.localName ?? null,
-    observable: use?.observable.getText() ?? null,
+    observable: inventoryObservable(binding, scan),
     status: inventoryStatus(finding),
-    reasons: finding ? [] : inventoryReasons(flow, scan),
+    reasons: finding ? [] : inventoryReasons(analysis, scan),
     reads:
       flow?.reads.map((read) => ({
         location: subscriptionLocation(read.node, scan),
@@ -54,26 +65,60 @@ function inventoryEntry(
         kind: item.kind,
       })) ?? [],
   };
+  if (binding.kind === "selector") {
+    entry.selector = {
+      tracks: binding.selector.tracked.map((path) => path.getText(scan.sourceFile)),
+      result: binding.selector.result,
+    };
+  }
+  return entry;
 }
 
-function inventoryReasons(
-  flow: ReturnType<typeof subscriptionFlow> | null,
-  scan: ObservableReadScan,
-): string[] {
-  if (!flow) {
-    return ["selector-options-or-binding-not-proven"];
+function inventoryObservable(binding: UseValueBinding, scan: ObservableReadScan): string | null {
+  if (binding.kind === "observable") {
+    return binding.use.observable.getText();
   }
-  const reasons = new Set(flow.blockers);
-  if (hasUnprovenOwnerWork(flow.use.owner, scan)) {
-    reasons.add("owner-commit-or-snapshot-work");
+  const [sole, ...others] = binding.kind === "selector" ? binding.selector.tracked : [];
+  return sole && others.length === 0 ? sole.getText(scan.sourceFile) : null;
+}
+
+function bindingAnalysis(call: ts.CallExpression, scan: ObservableReadScan): BindingAnalysis {
+  const binding = useValueBinding(call, scan);
+  return binding.kind === "unproven"
+    ? { binding, flow: null }
+    : { binding, flow: subscriptionFlow(binding.use, scan) };
+}
+
+function inventoryReasons(analysis: BindingAnalysis, scan: ObservableReadScan): string[] {
+  if (!analysis.flow) {
+    return [analysis.binding.blocker];
   }
-  if (hasAncestorUseValueSubscription(flow.use.call, flow.use.owner, scan)) {
-    reasons.add("overlapping-parent-subscription");
-  }
+  const reasons = new Set([...analysis.flow.blockers, ...ownerReasons(analysis, scan)]);
   if (reasons.size === 0) {
     reasons.add("stable-material-render-cut-not-proven");
   }
   return [...reasons].toSorted();
+}
+
+function ownerReasons(
+  analysis: Extract<BindingAnalysis, { flow: SubscriptionFlow }>,
+  scan: ObservableReadScan,
+): string[] {
+  const facts: readonly (readonly [boolean, string])[] = [
+    [hasUnprovenOwnerWork(analysis.flow.use.owner, scan), "owner-commit-or-snapshot-work"],
+    [overlapsOwnerSubscription(analysis.binding, scan), "overlapping-parent-subscription"],
+  ];
+  return facts.filter(([holds]) => holds).map(([, reason]) => reason);
+}
+
+function overlapsOwnerSubscription(binding: ProvenBinding, scan: ObservableReadScan): boolean {
+  if (binding.kind === "observable") {
+    return hasAncestorUseValueSubscription(binding.use.call, binding.use.owner, scan);
+  }
+  return binding.selector.tracked.some((path) => {
+    const prefix = staticMemberPrefix(path);
+    return prefix === null || otherSubscriptionTracksAncestor(binding.use, prefix, scan);
+  });
 }
 
 function inventoryStatus(
