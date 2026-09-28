@@ -238,8 +238,8 @@ delays a lazy `synced` or computed source. A persisted store is lazy: its first 
 out of scope. The result may sit behind `!`, a type assertion, or `?? fallback`; each rewritten read keeps the
 fallback, which must be a literal or a module `const`. The action abstains when a render reads a ref, `peek()`,
 or an untracked `get()` that could depend on the forced rerender, and when a read is awaited, deferred, or captured
-by a callback that omits the value from its dependencies. A `path$.get()` directly inside a Legend selector callback
-is tracked by that selector and does not block it.
+by a callback that omits the value from its dependencies. A `path$.get()` directly inside the synchronous selector of
+`useValue`, `use$`, or `useSelector` is tracked by that hook and does not block it.
 
 ### Split unrelated leaves
 
