@@ -87,7 +87,8 @@ jobs:
           key: public-corpus-v1-${{ runner.os }}-${{ hashFiles('evals/corpus/**/repository.ts', 'evals/corpus/repositories.ts', 'evals/corpus/**/replay-commits.ts') }}
 
       # Expert replays scan each commit's parent tree, so fetch those parents by SHA as well;
-      # a shallow fetch per parent avoids cloning full history.
+      # a shallow fetch per parent avoids cloning full history. Automatic maintenance stays off:
+      # a detached run left by one fetch rewrites .git/shallow while the next fetch reads it.
       - name: Fetch exact public pins and replay parents
         env:
           CORPUS_DIRECTORY: ${{ runner.temp }}/legend-doctor-corpus
@@ -98,7 +99,10 @@ jobs:
           import path from 'node:path';
           import { replayCommits } from './dist/evals/corpus/replay-commits.js';
           import { repositories } from './dist/evals/corpus/repositories.js';
-          const git = (root, args) => execFileSync('git', ['-C', root, ...args], { stdio: 'inherit' });
+          const git = (root, args) =>
+            execFileSync('git', ['-C', root, '-c', 'maintenance.auto=false', '-c', 'gc.auto=0', ...args], {
+              stdio: 'inherit',
+            });
           for (const repository of repositories) {
             const root = path.join(process.env.CORPUS_DIRECTORY, repository.name);
             mkdirSync(root, { recursive: true });
