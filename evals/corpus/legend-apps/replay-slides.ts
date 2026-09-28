@@ -421,11 +421,11 @@ const runtimeFieldSubscriptions = {
     })),
     {
       action: "narrow-use-value-subscription",
-      expected: "enforced",
+      expected: "non-enforced",
       file: "src/DeckRenderer.tsx",
       line: 253,
       rationale:
-        "SlideCanvas reads currentSlide only in targetIndex ?? currentSlide, so a fixed preview with a targetIndex re-rendered on every live slide change; selecting the coalesced index keeps the same prop.",
+        "SlideCanvas reads currentSlide only in targetIndex ?? currentSlide, but the only canvases with a targetIndex are the presenter previews, whose PresenterDeckContent subscribes to currentSlide and re-renders both previews on every slide change; the live preview's index is currentSlide itself and the next preview's follows it.",
       source: "useValue(slidesState$.currentSlide)",
     },
     {

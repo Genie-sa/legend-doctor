@@ -483,20 +483,20 @@ const codeDocumentSessions = {
     },
     {
       action: "move-use-value-down",
-      expected: "enforced",
+      expected: "non-enforced",
       file: "CodeViewerWindow.tsx",
       line: 132,
       rationale:
-        "The styles are read only to build tokenStyleById for renderLine's rows, so each style update re-rendered the window and the document view; a shared computed map with a per-row subscription leaves only the rows rendering.",
+        "The styles are read only to build tokenStyleById for renderLine's rows, but one metadata$.set writes styles and timing together and notifies both on a snapshot's first write, so moving styles alone leaves the window rendering through sourceTiming; the expert moved both.",
       source: "useValue(sourceRows.styles$)",
     },
     {
-      action: "move-use-value-into-child",
-      expected: "enforced",
+      action: "move-use-value-down",
+      expected: "non-enforced",
       file: "CodeViewerWindow.tsx",
       line: 133,
       rationale:
-        "sourceTiming renders only in the subtitle text, so each timing update re-rendered the window; a subtitle leaf subscribing to timing$ keeps the text and removes that render.",
+        "sourceTiming renders only in the host subtitle text, but one metadata$.set writes timing and styles together and notifies both on a snapshot's first write, so a subtitle leaf alone leaves the window rendering through stylesForState; the expert moved both.",
       source: "useValue(sourceRows.timing$)",
     },
     {

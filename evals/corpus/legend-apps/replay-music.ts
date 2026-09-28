@@ -338,11 +338,11 @@ const songRowIsolation = {
   cases: [
     {
       action: "narrow-use-value-subscription",
-      expected: "enforced",
+      expected: "non-enforced",
       file: "components/MediaLibrary/TrackList.tsx",
       line: 77,
       rationale:
-        "playlists feeds only a memo that finds the selected playlist and yields null outside the playlist view, so any playlist edit re-rendered the track list for an unchanged result; a selector returning the found playlist keeps every read.",
+        "playlists feeds only a memo that finds the selected playlist, but TrackList also calls useLibraryTrackList, which subscribes the same component to localMusicState$.playlists, so narrowing this call alone still re-renders on every playlist edit; the saving needs this commit's change inside the hook.",
       source: "useValue(localMusicState$.playlists)",
     },
     {
