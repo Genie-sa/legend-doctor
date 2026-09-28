@@ -106,6 +106,8 @@ export interface ChildContractResolver {
   contextProviderSites: (contextName: string) => number;
   /** Whether a platform-specific sibling (`.native`, `.ios`, `.android`, `.web`) shadows this file. */
   hasPlatformVariant: () => boolean;
+  /** Whether this module declares or imports an observable under this name. */
+  isObservableBinding: (name: string) => boolean;
   frameworkEventComponent: (componentName: string) => boolean;
   pureProjectionBindings: () => ReadonlySet<string>;
   resolveComponent: (name: string) => ChildComponentSource | null;

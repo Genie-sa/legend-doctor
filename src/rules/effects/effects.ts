@@ -16,41 +16,34 @@ import {
   keepExternalIntegrationEffect,
   keepLifecycleEffect,
   keepPairedMountEffect,
-  keepParentRenderedReactionEffect,
-  keepRenderedReactionEffect,
   keepStateIndependentEffect,
   keepStateSnapshotEffect,
-  observeEffect,
   ownershipDirectiveEffect,
   reviewCausalOwnerEffect,
   reviewEmptyDependencySetupEffect,
-  reviewParentRenderedReactionEffect,
   reviewStateReactionEffect,
   reviewStateWritingEffect,
   unmountEffect,
   unresolvedCallbackEffect,
   useMountEffect,
 } from "./effect-verdicts.js";
-import { findAncestorUntil, identifiersNamed, nodeWithin } from "../../core/ast.js";
 import {
   isCommittedPropRefSnapshot,
   isExactCommittedPreviousValueGuard,
   isExactLatestValueRefMirror,
 } from "./committed-ref-mirrors.js";
-import {
-  isDeclarationName,
-  isNonValueIdentifier,
-  unwrapTransparentExpression,
-} from "../../core/analysis-ast.js";
 import type { EffectStateDependency } from "./state-independent-effects.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { analyzeEffectStateDependencies } from "./state-independent-effects.js";
 import { callbackIsCommittedRefIntegration } from "./committed-ref-integration.js";
 import { callbackReadsSynchronously } from "./synchronous-dependency-reads.js";
+import { findAncestorUntil } from "../../core/ast.js";
 import { findMutationSiteReset } from "./mutation-site-resets.js";
 import { findPureDerivedSetter } from "./derived-setters.js";
 import { isDependencyDrivenExternalCommandEffect } from "./external-command-effects.js";
+import { observableReactionClassification } from "./observable-reactions.js";
 import ts from "typescript";
+import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 const REACT_EFFECT_DIRECTIVE_PATTERN =
   /^(?:react-effect-allow\b|legend-doctor\s+keep-react-effect\b)/u;
@@ -179,7 +172,7 @@ function dependencyEffectClassification(
   if (isObservableSourcedReaction(effect, callback, inline)) {
     return (
       persistedObservableClassification(effect, inline) ??
-      observableReactionClassification(effect, inline)
+      observableReactionClassification(effect, callback, inline)
     );
   }
   if (inline.hasCleanup) {
@@ -278,65 +271,6 @@ function isObservableSourcedReaction(
       (name) => inline.useValueBindings.has(name) || inline.useObservableBindings.has(name),
     ) &&
     directUseValueDependencies.every((name) => callbackReadsSynchronously(callback, name))
-  );
-}
-
-function observableReactionClassification(
-  effect: EffectCandidate,
-  inline: InlineEffectContext,
-): ClassifiedEffect {
-  if (!effect.owner || !useValueDependenciesAreEffectOnly(effect, inline)) {
-    return keepRenderedReactionEffect();
-  }
-  const parentRerender =
-    inline.childContracts?.componentParentRerender(
-      effect.owner,
-      useValueDependencySources(effect, effect.owner, inline),
-    ) ?? "absent";
-  if (parentRerender === "proven") {
-    return keepParentRenderedReactionEffect();
-  }
-  return parentRerender === "possible" ? reviewParentRenderedReactionEffect() : observeEffect();
-}
-
-/** The observable argument of each `useValue` call whose result the effect lists as a dependency. */
-function useValueDependencySources(
-  effect: EffectCandidate,
-  owner: RuntimeFunctionLike,
-  inline: InlineEffectContext,
-): ts.Expression[] {
-  return (effect.dependencies?.elements ?? []).flatMap((element) => {
-    if (!ts.isIdentifier(element) || !inline.useValueBindings.has(element.text)) {
-      return [];
-    }
-    const declaration = identifiersNamed(owner.body, element.text).find((reference) =>
-      isDeclarationName(reference),
-    )?.parent;
-    const call =
-      declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer : null;
-    const source = call && ts.isCallExpression(call) ? call.arguments[0] : undefined;
-    return source ? [source] : [];
-  });
-}
-
-function useValueDependenciesAreEffectOnly(
-  effect: EffectCandidate,
-  inline: InlineEffectContext,
-): boolean {
-  const { call, dependencies, owner } = effect;
-  if (!owner || !dependencies) {
-    return false;
-  }
-  return dependencies.elements.every(
-    (element) =>
-      !ts.isIdentifier(element) ||
-      !inline.useValueBindings.has(element.text) ||
-      identifiersNamed(owner.body, element.text).every(
-        (reference) =>
-          isDeclarationName(reference) ||
-          isNonValueIdentifier(reference) ||
-          nodeWithin(reference, call),
-      ),
   );
 }
 

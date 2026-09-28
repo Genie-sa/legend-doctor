@@ -249,6 +249,10 @@ class ChildContracts implements ChildContractResolver {
     });
   }
 
+  public isObservableBinding(name: string): boolean {
+    return this.context.sourceIndex.observableDeclarationFor(this.importerFile, name) !== null;
+  }
+
   public frameworkEventComponent(componentName: string): boolean {
     return this.context.sourceIndex.frameworkEventComponentFor(this.importerFile, componentName);
   }
