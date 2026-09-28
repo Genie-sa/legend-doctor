@@ -301,6 +301,19 @@ gate leaves no smaller boundary to extract. A JSX tag name chosen by a gate stay
 | `use-value-options`                      | The call has no argument or passes options                                                         |
 | `wrapped-result`                         | The result is wrapped in another expression before it is bound                                     |
 
+Inventory `reasons` describe the binding. `ruleGates` says why a binding-scoped practice rule made no finding
+there: each entry names the rule's `action` and the first `gate` it failed. It is empty when a finding sits at
+the call. Expert replay prints the targeted rule's gate in each miss line.
+
+| `peek-unrendered-use-value` gate | The rule abstained because                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| `binding-not-owner-level-const`  | The result is not bound to an identifier `const` directly in the owner body                  |
+| `subscription-call-not-proven`   | The call, after transparent wrappers, is not a one-argument hook on a proven observable path |
+| `plain-seed-not-proven`          | The path is not seeded with plain data, so the subscription may activate a lazy source       |
+| `read-not-snapshot-safe`         | A read is not a hook initial value or a synchronous event-rooted command                     |
+| `fallback-not-rewritable`        | The `?? fallback` is not inert, or reads would repeat a fallback that is not invariant       |
+| `render-reads-untracked-state`   | The render reads a ref, `peek()`, or an untracked `get()` that may need the forced rerender  |
+
 A practice finding with a coordinated cut also has `subscription` metadata. Report filters remove matching
 plans and mark filtered inventory entries `excluded-by-report-filter`, so ignored actions do not reappear
 as implementation instructions. Filtering away any part of a plan also removes its runtime measurement;

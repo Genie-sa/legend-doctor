@@ -15,6 +15,7 @@ import {
   SUBSCRIPTION_INVENTORY_REASONS,
   SUBSCRIPTION_INVENTORY_STATUSES,
   SUBSCRIPTION_READ_KINDS,
+  UNRENDERED_USE_VALUE_GATES,
 } from "../../src/core/subscriptions.js";
 import { existsSync, readFileSync } from "node:fs";
 import { FAILURE_REASONS } from "../../src/cli/failures.js";
@@ -49,6 +50,11 @@ const TABLE_SETS: readonly DocumentedSet[] = [
   { document: "REPORT.md", header: "Read `kind`", values: SUBSCRIPTION_READ_KINDS },
   { document: "REPORT.md", header: "Selector `result`", values: SELECTOR_RESULTS },
   { document: "REPORT.md", header: "Inventory reason", values: SUBSCRIPTION_INVENTORY_REASONS },
+  {
+    document: "REPORT.md",
+    header: "`peek-unrendered-use-value` gate",
+    values: UNRENDERED_USE_VALUE_GATES,
+  },
   { document: "REPORT.md", header: "Unavailable `reason`", values: UNAVAILABLE_SOURCE_REASONS },
 ];
 

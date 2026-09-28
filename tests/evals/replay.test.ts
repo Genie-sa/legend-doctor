@@ -97,6 +97,7 @@ function report(findings: HookFinding[], practices: LegendPracticeFinding[] = []
           owner: "Button",
           reads: [],
           reasons: ["no-render-consumer", "shadowed-or-reassigned-binding"],
+          ruleGates: [{ action: "peek-unrendered-use-value", gate: "plain-seed-not-proven" }],
           status: "unresolved",
         },
       ],
@@ -142,6 +143,19 @@ test("received names every finding and subscription blocker at the location, and
   ]);
   const excluded: ReplayCase = { ...enforced, expected: "excluded" };
   assert.equal(flags([hookFinding("use-unmount", "change")], excluded), false);
+});
+
+test("received names the targeted rule's own gate beside the inventory blockers", () => {
+  const unrendered: ReplayCase = { ...enforced, action: "peek-unrendered-use-value" };
+  assert.deepEqual(scoreReplayCase(report([]), commit, unrendered).received, [
+    "subscription unresolved (no-render-consumer, shadowed-or-reassigned-binding)",
+    "peek-unrendered-use-value abstained (plain-seed-not-proven)",
+  ]);
+  const equivalent: ReplayCase = { ...enforced, equivalents: ["peek-unrendered-use-value"] };
+  assert.match(
+    scoreReplayCase(report([]), commit, equivalent).received.join("; "),
+    /peek-unrendered-use-value abstained \(plain-seed-not-proven\)/u,
+  );
 });
 
 test("label drift fails a case whose parent line no longer holds its source text", () => {

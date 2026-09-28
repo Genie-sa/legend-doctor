@@ -43,6 +43,24 @@ export const SUBSCRIPTION_INVENTORY_REASONS = [
 
 export type SubscriptionInventoryReason = (typeof SUBSCRIPTION_INVENTORY_REASONS)[number];
 
+/** Each gate of `peek-unrendered-use-value`, in the order the rule checks them. */
+export const UNRENDERED_USE_VALUE_GATES = [
+  "binding-not-owner-level-const",
+  "subscription-call-not-proven",
+  "plain-seed-not-proven",
+  "read-not-snapshot-safe",
+  "fallback-not-rewritable",
+  "render-reads-untracked-state",
+] as const;
+
+export type UnrenderedUseValueGate = (typeof UNRENDERED_USE_VALUE_GATES)[number];
+
+/** The first gate a binding-scoped practice rule failed, so a missing finding names its own cause. */
+export interface SubscriptionRuleGate {
+  action: "peek-unrendered-use-value";
+  gate: UnrenderedUseValueGate;
+}
+
 export interface SubscriptionBoundary {
   location: SourceLocation;
   start: number;
@@ -73,6 +91,8 @@ export interface SubscriptionInventory {
   selector?: { tracks: string[]; result: (typeof SELECTOR_RESULTS)[number] };
   status: (typeof SUBSCRIPTION_INVENTORY_STATUSES)[number];
   reasons: SubscriptionInventoryReason[];
+  /** Where each binding-scoped practice rule abstained; empty unless no finding sits at this call. */
+  ruleGates: SubscriptionRuleGate[];
   reads: {
     location: SourceLocation;
     name: string;

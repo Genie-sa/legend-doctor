@@ -1,5 +1,6 @@
 import type { AnalysisReport, SourceLocation } from "../../src/core/types.js";
 import type { ReplayCase, ReplayCommit } from "../corpus/contracts.js";
+import type { SubscriptionInventory } from "../../src/core/subscriptions.js";
 import path from "node:path";
 
 export interface ReplayOutcome {
@@ -41,10 +42,25 @@ function receivedAt(report: AnalysisReport, replayCase: ReplayCase): string[] {
   const practices = report.practices
     .filter((finding) => isAt(finding.location, replayCase))
     .map((finding) => `${finding.action} [${finding.disposition}]`);
-  const subscriptions = (report.subscriptionAnalysis?.inventory ?? [])
-    .filter((entry) => isAt(entry.location, replayCase))
-    .map((entry) => withDetail(`subscription ${entry.status}`, entry.reasons));
-  return [...hooks, ...practices, ...subscriptions];
+  const entries = (report.subscriptionAnalysis?.inventory ?? []).filter((entry) =>
+    isAt(entry.location, replayCase),
+  );
+  const subscriptions = entries.map((entry) =>
+    withDetail(`subscription ${entry.status}`, entry.reasons),
+  );
+  return [...hooks, ...practices, ...subscriptions, ...targetedGates(entries, replayCase)];
+}
+
+/** The inventory blockers describe the binding; the targeted rule's own gate says why it abstained. */
+function targetedGates(
+  entries: readonly SubscriptionInventory[],
+  replayCase: ReplayCase,
+): string[] {
+  const accepted = new Set<string>(acceptedActions(replayCase));
+  return entries
+    .flatMap((entry) => entry.ruleGates)
+    .filter((ruleGate) => accepted.has(ruleGate.action))
+    .map((ruleGate) => `${ruleGate.action} abstained (${ruleGate.gate})`);
 }
 
 export function acceptedActions(replayCase: ReplayCase): readonly string[] {

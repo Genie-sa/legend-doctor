@@ -99,8 +99,9 @@ evidence behind `snapshot-mutated-use-value` and its two non-enforced legend-mus
 runner extracts the parent tree from the checkout's object store with `git archive` into a temporary directory, scans
 its source root, and prints `Expert replay recall: x/y`: enforced cases where a proven `change` finding at the labeled
 line carries the expert's action or a listed equivalent. Each miss names what the analyzer reported there, including
-abstention reasons and subscription-inventory blockers. Non-enforced cases are reported separately and list any proven
-change the analyzer makes there, since that contradicts the audit; neither misses nor non-enforced flags fail the run.
+abstention reasons, subscription-inventory blockers, and the gate at which the targeted rule abstained (`ruleGates`).
+Non-enforced cases are reported separately and list any proven change the analyzer makes there, since that contradicts
+the audit; neither misses nor non-enforced flags fail the run.
 A label whose parent line no longer contains its `source` text fails, as does a parent missing from the checkout. A
 full-history clone contains every parent; for a shallow checkout, fetch each one by SHA:
 
