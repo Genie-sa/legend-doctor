@@ -61,12 +61,16 @@ export function jsxSubtreeForOpening(
   return ts.isJsxOpeningElement(opening) ? opening.parent : opening;
 }
 
-export function subtreeClusterOwnership(repeated: boolean, needsObservable: boolean): string {
+export function subtreeClusterOwnership(
+  repeated: boolean,
+  needsObservable: boolean,
+  subscriptionHook: string,
+): string {
   if (repeated) {
-    return "replace them with one component-lifetime observable model and subscribe with per-item `useValue` selectors in the repeated row leaf";
+    return `replace them with one component-lifetime observable model and subscribe with per-item \`${subscriptionHook}\` selectors in the repeated row leaf`;
   }
   if (needsObservable) {
-    return "replace them with one component-lifetime observable model and subscribe in the extracted leaf with `useValue`";
+    return `replace them with one component-lifetime observable model and subscribe in the extracted leaf with \`${subscriptionHook}\``;
   }
   return "move their ownership into the extracted leaf component";
 }

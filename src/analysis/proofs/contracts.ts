@@ -68,6 +68,8 @@ export interface SourceAnalysis {
   readonly sourceFile: ts.SourceFile;
   readonly stateFlow: StateFlowIndex;
   readonly states: readonly StateCandidate[];
+  /** The callee instructions for a new subscription in this file name. */
+  readonly subscriptionHook: string;
   readonly unmatchedStateCalls: readonly ts.CallExpression[];
   readonly usageByState: ReadonlyMap<StateCandidate, StateUsage>;
   readonly useObservableBindingsByOwner: ReadonlyMap<RuntimeFunctionLike, ReadonlySet<string>>;

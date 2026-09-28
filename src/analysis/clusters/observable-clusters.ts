@@ -44,34 +44,50 @@ function observableClusterKind(members: ObservableClusterMembers): ObservableClu
   return members.hasBoundedDialogGate ? "persistent-dialog" : "dialog";
 }
 
-function stateClusterMessage(
-  kind: ObservableClusterKind,
-  names: readonly string[],
-  targets: ReadonlySet<string>,
-): string {
+interface ClusterMessageInputs {
+  readonly kind: ObservableClusterKind;
+  readonly names: readonly string[];
+  readonly subscriptionHook: string;
+  readonly targets: ReadonlySet<string>;
+}
+
+interface DialogMessageInputs {
+  readonly kind: ObservableClusterKind;
+  readonly quoted: string;
+  readonly subscriptionHook: string;
+  readonly targetList: string;
+}
+
+function stateClusterMessage({
+  kind,
+  names,
+  subscriptionHook,
+  targets,
+}: ClusterMessageInputs): string {
   const quoted = names.map((name) => `\`${name}\``).join(", ");
   const targetList = [...targets].toSorted().join(", ");
   if (kind === "selection") {
-    return `Replace the co-written selection mode (${quoted}) with one component-lifetime observable object; preserve mode-and-clear transitions with atomic \`assign\` calls, keep independent collection edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at header, control, and keyed-row leaves.`;
+    return `Replace the co-written selection mode (${quoted}) with one component-lifetime observable object; preserve mode-and-clear transitions with atomic \`assign\` calls, keep independent collection edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`${subscriptionHook}\` only at header, control, and keyed-row leaves.`;
   }
   if (kind === "gated-feedback") {
     return `Replace the payload and timed feedback state (${quoted}) with one component-lifetime observable model; preserve the timer and command timing, batch the paired reset, read the payload command with \`peek\`, subscribe to the payload-gated content at its stable call site, and subscribe to feedback again only in its nested feedback leaf.`;
   }
-  return dialogClusterMessage(kind, quoted, targetList);
+  return dialogClusterMessage({ kind, quoted, subscriptionHook, targetList });
 }
 
-function dialogClusterMessage(
-  kind: ObservableClusterKind,
-  quoted: string,
-  targetList: string,
-): string {
+function dialogClusterMessage({
+  kind,
+  quoted,
+  subscriptionHook,
+  targetList,
+}: DialogMessageInputs): string {
   if (kind === "text-draft") {
-    return `Replace the co-written editable draft (${quoted}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`useValue\` only at the rendered row or control leaves.`;
+    return `Replace the co-written editable draft (${quoted}) with one component-lifetime observable object; preserve cursor-and-name transitions with atomic \`assign\` calls, keep controlled name edits as leaf writes, snapshot command reads with \`peek\`, and subscribe with \`${subscriptionHook}\` only at the rendered row or control leaves.`;
   }
   if (kind === "persistent-dialog") {
-    return `Replace the persistent dialog state (${quoted}) with one component-lifetime observable model; atomically assign the payload and open flag, keep close transitions as leaf writes, and move the complete payload gate plus ${targetList} into one always-mounted stable leaf wrapper. Subscribe there with \`useValue\` so the existing payload gate and dialog mount behavior stay unchanged.`;
+    return `Replace the persistent dialog state (${quoted}) with one component-lifetime observable model; atomically assign the payload and open flag, keep close transitions as leaf writes, and move the complete payload gate plus ${targetList} into one always-mounted stable leaf wrapper. Subscribe there with \`${subscriptionHook}\` so the existing payload gate and dialog mount behavior stay unchanged.`;
   }
-  return `Replace the co-written React state cluster (${quoted}) with one component-lifetime observable dialog model; preserve paired payload/open transitions with atomic \`assign\` calls, keep independent close updates as leaf writes, and subscribe with \`useValue\` only inside ${targetList}.`;
+  return `Replace the co-written React state cluster (${quoted}) with one component-lifetime observable dialog model; preserve paired payload/open transitions with atomic \`assign\` calls, keep independent close updates as leaf writes, and subscribe with \`${subscriptionHook}\` only inside ${targetList}.`;
 }
 
 export interface ClusterAnalysisContext {
@@ -80,6 +96,8 @@ export interface ClusterAnalysisContext {
   readonly materiality: MaterialityPolicy;
   readonly sourceFile: ts.SourceFile;
   readonly stateFlow: StateFlowIndex;
+  /** The callee instructions for a new subscription in this file name. */
+  readonly subscriptionHook: string;
   readonly usageByState: ReadonlyMap<StateCandidate, StateUsage>;
 }
 
@@ -288,18 +306,19 @@ interface ObservableClusterScope extends ClusterMemberContext {
 function observableClusterFor(
   sortedMembers: readonly StateCandidate[],
   primary: StateCandidate,
-  { normalized, owner, sourceFile, usageByState }: ObservableClusterScope,
+  { normalized, owner, sourceFile, subscriptionHook, usageByState }: ObservableClusterScope,
 ): StateCluster {
   const names = sortedMembers.map((state) => state.valueName);
   return {
     action: "use-observable",
     id: `state-cluster:${owner.getStart(sourceFile)}:${names.join(",")}`,
     members: sortedMembers,
-    message: stateClusterMessage(
-      observableClusterKind(normalized),
+    message: stateClusterMessage({
+      kind: observableClusterKind(normalized),
       names,
-      transportTargetsOf(sortedMembers, usageByState),
-    ),
+      subscriptionHook,
+      targets: transportTargetsOf(sortedMembers, usageByState),
+    }),
     primary,
   };
 }

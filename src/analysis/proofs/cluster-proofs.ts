@@ -22,6 +22,7 @@ export function collectClusterProofs(
     sourceFile,
     stateFlow,
     states,
+    subscriptionHook,
     usageByState,
   } = analysis;
   const {
@@ -50,10 +51,11 @@ export function collectClusterProofs(
       materiality,
       sourceFile,
       stateFlow,
+      subscriptionHook,
       usageByState,
     }),
     siblingRenderCuts,
-    subtreeClusters: findStateSubtreeClusters(subtreeByState, companionWrites),
+    subtreeClusters: findStateSubtreeClusters(subtreeByState, companionWrites, subscriptionHook),
   };
 }
 

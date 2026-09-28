@@ -26,6 +26,8 @@ export interface EffectClassificationContext extends CommittedRefContext {
   readonly moduleScopeBindings: ReadonlySet<string>;
   readonly stateBySetter: ReadonlyMap<string, StateCandidate>;
   readonly stateByValue: ReadonlyMap<string, StateCandidate>;
+  /** The subscription hook this file calls, named in instructions about its dependencies. */
+  readonly subscriptionHook: string;
   readonly usageBySetter: ReadonlyMap<string, StateUsage>;
   readonly useObservableBindings: ReadonlySet<string>;
   readonly useValueBindings: ReadonlySet<string>;

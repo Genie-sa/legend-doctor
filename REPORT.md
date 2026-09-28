@@ -214,7 +214,10 @@ a type assertion, when a render read follows an early return or sits in JSX, a b
 when only a new import declaration would bring the hook into scope, when a render read would reuse a legacy
 binding that the file's legacy migration removes, when a destructure is annotated or its call has type arguments,
 when a legacy binding is referenced other than by a reported call, and when a `Memo` import swap would touch the
-specifier another rule adds `useValue` beside. Hoisting instructions, `move-*`, `split-*`, and batching stay prose.
+specifier another rule adds `useValue` beside. Hoisting instructions, `move-*`, `split-*`, and batching stay prose;
+a render initializer below an early return or `throw` is told to move above it. Every other instruction that names a
+subscription hook, including `useState` and `useEffect` findings, follows the same choice. An instruction for other
+files, such as the consumers of a context, names `useValue`, or `useSelector` when the package lacks `useValue`.
 
 The unit suite applies each supported edit and typechecks the result against the installed `@legendapp/state`
 and React types. The corpus eval applies every emitted edit in memory, per finding and per file, and fails when a

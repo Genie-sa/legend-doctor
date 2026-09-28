@@ -32,6 +32,7 @@ import { collectOwnershipProofs } from "./proofs/ownership-proofs.js";
 import { collectReactCommitContext } from "../rules/react-commit-sensitivity/react-commit-sensitivity.js";
 import { collectStateUsage } from "./state-usage.js";
 import { persistenceSinkEffects } from "../rules/effects/browser-storage-persistence.js";
+import { subscriptionHookCallee } from "../core/use-value-import.js";
 import ts from "typescript";
 
 export function analyzeSource(
@@ -193,6 +194,7 @@ function sourceAnalysisBase(
     sourceFile,
     stateFlow,
     states,
+    subscriptionHook: subscriptionHookCallee(sourceFile, legendState),
     unmatchedStateCalls,
     usageByState,
   };

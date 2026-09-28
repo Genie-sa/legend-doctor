@@ -133,6 +133,7 @@ function sourceInputs(
   | "pureProjectionImports"
   | "sourceComponents"
   | "sourceFile"
+  | "subscriptionHook"
 > {
   return {
     hostTags: analysis.imports,
@@ -141,6 +142,7 @@ function sourceInputs(
     pureProjectionImports: analysis.pureProjectionImports,
     sourceComponents: analysis.sourceComponents,
     sourceFile: analysis.sourceFile,
+    subscriptionHook: analysis.subscriptionHook,
   };
 }
 

@@ -311,7 +311,7 @@ function renderCutHypothesis(scope: HypothesisScope): Hypothesis | null {
       message:
         `Replace \`${state.valueName}\` with a component-lifetime observable and wrap each of its ` +
         `${sites} render read sites in a leaf subscriber (a \`Memo\` block or a small wrapper ` +
-        `component calling \`useValue\`), leaving the rest of ${owner} unsubscribed.`,
+        `component calling \`${inputs.subscriptionHook}\`), leaving the rest of ${owner} unsubscribed.`,
     },
     inputs,
     question:
@@ -361,7 +361,7 @@ export function leafWrapHypothesis(scope: HypothesisScope): Hypothesis | null {
       message:
         `Replace \`${state.valueName}\` with a component-lifetime observable and wrap each of its ` +
         `${sites.join(" and ")} in a leaf subscriber (a \`Memo\` block or a small wrapper component ` +
-        `calling \`useValue\` and passing the plain value on), leaving the rest of ${owner} unsubscribed.`,
+        `calling \`${inputs.subscriptionHook}\` and passing the plain value on), leaving the rest of ${owner} unsubscribed.`,
     },
     inputs,
     question:

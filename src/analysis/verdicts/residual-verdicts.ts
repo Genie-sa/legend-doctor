@@ -1,4 +1,4 @@
-import type { ClassifiedState, StateCandidate, StateUsage } from "../model.js";
+import type { ClassifiedState, StateUsage } from "../model.js";
 import {
   callSiteIsKeyed,
   directUniqueReturnCallSite,
@@ -218,7 +218,7 @@ export function broadTransportVerdict(context: StateClassificationContext): Clas
       return {
         action: "use-observable",
         confidence: "probable",
-        message: leafTransportMessage(state, leafProp, forwardedSetter),
+        message: leafTransportMessage(context, leafProp, forwardedSetter),
       };
     }
   }
@@ -226,14 +226,14 @@ export function broadTransportVerdict(context: StateClassificationContext): Clas
 }
 
 function leafTransportMessage(
-  state: StateCandidate,
+  { state, subscriptionHook }: StateClassificationContext,
   leafProp: VerifiedLeafRenderProp,
   forwardedSetter: ForwardedSetterProp | null,
 ): string {
   const forwarding = forwardedSetter
     ? ` Forward the setter through the wrapper as \`${forwardedSetter.propName}={(next) => ${state.valueName}$.set(next)}\`; the child only calls it after render.`
     : "";
-  return `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${leafProp.target}\` call site in a leaf subscriber; subscribe once with \`useValue\`, pass the same plain value, and leave the child API unchanged.${forwarding} The child contract is verified: \`${leafProp.target}\` renders the \`${leafProp.propName}\` value directly and owns none of its lifecycle.`;
+  return `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${leafProp.target}\` call site in a leaf subscriber; subscribe once with \`${subscriptionHook}\`, pass the same plain value, and leave the child API unchanged.${forwarding} The child contract is verified: \`${leafProp.target}\` renders the \`${leafProp.propName}\` value directly and owns none of its lifecycle.`;
 }
 
 export function residualStateVerdict(context: StateClassificationContext): ClassifiedState {

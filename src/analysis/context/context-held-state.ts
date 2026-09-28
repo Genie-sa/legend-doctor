@@ -9,6 +9,7 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceAnalysis } from "../proofs/contracts.js";
 import { groupSettableStatesByOwner } from "../companion-writes.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
+import { subscriptionHookExport } from "../../core/use-value-import.js";
 import ts from "typescript";
 
 const MAX_LISTED_CONSUMER_FILES = 4;
@@ -43,7 +44,7 @@ interface ProviderScope {
 }
 
 interface ClusterMessageScope {
-  readonly sourceFile: ts.SourceFile;
+  readonly analysis: SourceAnalysis;
   readonly survey: ConsumerSurvey;
 }
 
@@ -92,7 +93,7 @@ function providerCluster(
   if (!survey || survey.reads === 0) {
     return null;
   }
-  return contextCluster(provider, held, { sourceFile: analysis.sourceFile, survey });
+  return contextCluster(provider, held, { analysis, survey });
 }
 
 function providersIn(owner: RuntimeFunctionLike): ContextProvider[] {
@@ -416,7 +417,7 @@ function identifierUses(owner: RuntimeFunctionLike, binding: ts.Identifier): num
 function contextCluster(
   provider: ContextProvider,
   held: readonly HeldState[],
-  { sourceFile, survey }: ClusterMessageScope,
+  scope: ClusterMessageScope,
 ): StateCluster {
   const members = held
     .map((entry) => entry.state)
@@ -425,18 +426,20 @@ function contextCluster(
   const names = members.map((state) => state.valueName);
   return {
     action: "use-observable",
-    id: `state-cluster:context:${primary!.owner.getStart(sourceFile)}:${provider.contextName}:${names.join(",")}`,
+    id: `state-cluster:context:${primary!.owner.getStart(scope.analysis.sourceFile)}:${provider.contextName}:${names.join(",")}`,
     members,
-    message: contextMessage(provider.contextName, names, survey),
+    message: contextMessage(provider.contextName, names, scope),
     primary: primary!,
   };
 }
 
+/** Consumer files' imports are unknown here, so their instruction names the hook the package exports. */
 function contextMessage(
   contextName: string,
   names: readonly string[],
-  survey: ConsumerSurvey,
+  { analysis, survey }: ClusterMessageScope,
 ): string {
+  const subscriptionHook = subscriptionHookExport(analysis.legendState);
   const quoted = names.map((name) => `\`${name}\``).join(", ");
   const observables = names.map((name) => `\`${name}$\``).join(", ");
   const listed = survey.files
@@ -446,7 +449,7 @@ function contextMessage(
   const hidden = survey.files.length - MAX_LISTED_CONSUMER_FILES;
   const more = hidden > 0 ? ` and ${hidden} more` : "";
   const plural = survey.files.length === 1 ? "" : "s";
-  return `Replace the context-held React state (${quoted}) with observables published through \`${contextName}\`: create ${observables} with \`useObservable\` in the provider, put the observables themselves in the provider value so its identity no longer changes on writes, and turn each setter into the observable's \`set\`. In the ${survey.files.length} consumer file${plural} (${listed}${more}) replace each destructured field with \`useValue\` on that observable at the same statement, so a consumer re-renders only for the fields it reads and writers never subscribe; the provider stops rendering on these writes.`;
+  return `Replace the context-held React state (${quoted}) with observables published through \`${contextName}\`: create ${observables} with \`useObservable\` in the provider, put the observables themselves in the provider value so its identity no longer changes on writes, and turn each setter into the observable's \`set\`. In the ${survey.files.length} consumer file${plural} (${listed}${more}) replace each destructured field with \`${subscriptionHook}\` on that observable at the same statement, so a consumer re-renders only for the fields it reads and writers never subscribe; the provider stops rendering on these writes.`;
 }
 
 function shortFileName(file: string): string {

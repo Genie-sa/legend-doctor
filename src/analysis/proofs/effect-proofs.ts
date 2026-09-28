@@ -43,6 +43,7 @@ function classifyEffectFor(
     legendState,
     moduleScopeBindings,
     nonProductionHarness,
+    subscriptionHook,
     useObservableBindingsByOwner,
     useValueBindingsByOwner,
   } = analysis;
@@ -51,6 +52,7 @@ function classifyEffectFor(
     effect,
     stateBySetter: scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
     stateByValue: scope?.byValue ?? EMPTY_STATE_CANDIDATES,
+    subscriptionHook,
     usageBySetter: scope?.usageBySetter ?? EMPTY_STATE_USAGES,
     useValueBindings: effect.owner
       ? (useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)

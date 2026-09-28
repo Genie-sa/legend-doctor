@@ -79,6 +79,8 @@ export interface StateClassificationInputs {
   readonly sourceComponents: ReadonlySet<string>;
   readonly sourceFile: ts.SourceFile;
   readonly state: StateCandidate;
+  /** The callee instructions for a new subscription in this file name. */
+  readonly subscriptionHook: string;
   readonly subtree: StateSubtree | null;
   readonly usage: StateUsage;
 }

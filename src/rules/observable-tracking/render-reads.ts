@@ -9,13 +9,13 @@ import {
   outermostTransparentParent,
   provenObservablePath,
 } from "../observable-reads/observable-paths.js";
+import { earlyExitBefore, renderInitializerEdits } from "./render-read-edits.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { RenderOwner } from "./render-owners.js";
 import type { TrackingScan } from "./model.js";
 import { eagerReactiveInput } from "./reactive-inputs.js";
 import { hasCoveringSubscription } from "./subscription-coverage.js";
-import { renderInitializerEdits } from "./render-read-edits.js";
 import { renderOwnerOf } from "./render-owners.js";
 import { subscriptionHookCallee } from "../../core/use-value-import.js";
 import ts from "typescript";
@@ -115,6 +115,34 @@ function suggestedBindingName(read: RenderRead): string {
   return bindingDeclarationCount(read.owner.owner, name) === 0 ? name : `${name}Value`;
 }
 
+interface RenderReadRewrite {
+  readonly hook: string;
+  readonly initializer: ts.VariableStatement | null;
+  readonly path: string;
+}
+
+/**
+ * An in-place rewrite only for a render-body initializer that every render reaches; below an early exit the
+ * new hook would run on some renders only, so the declaration moves above that exit.
+ */
+function renderReadInstruction(
+  read: RenderRead,
+  { hook, initializer, path }: RenderReadRewrite,
+  sourceFile: ts.SourceFile,
+): string {
+  const subscription = `${hook}(${path})`;
+  if (!initializer) {
+    const binding = suggestedBindingName(read);
+    return `Subscribe with \`const ${binding} = ${subscription}\` at the top of \`${read.owner.name}\` and read \`${binding}\` here`;
+  }
+  const exit = earlyExitBefore(initializer);
+  if (!exit) {
+    return `Replace \`${path}.get()\` with \`${subscription}\``;
+  }
+  const exitLine = sourceFile.getLineAndCharacterOfPosition(exit.getStart(sourceFile)).line + 1;
+  return `Move this declaration above the early exit at line ${exitLine} and replace \`${path}.get()\` with \`${subscription}\` there, so the hook runs on every render`;
+}
+
 function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPracticeFinding {
   const { call, observable, owner } = read;
   const { line, character } = scan.sourceFile.getLineAndCharacterOfPosition(
@@ -126,9 +154,7 @@ function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPractic
   const consequence = `the read runs in \`${owner.name}\` outside a tracking context (a subscription hook, observer, or a reactive component), so ${subject} never re-render${owner.kind === "component" ? "s" : ""} when \`${path}\` changes`;
   const initializer = directRenderInitializer(read);
   const hook = subscriptionHookCallee(scan.sourceFile, scan.installedLegendState);
-  const instruction = initializer
-    ? `Replace \`${path}.get()\` with \`${hook}(${path})\``
-    : `Subscribe with \`const ${suggestedBindingName(read)} = ${hook}(${path})\` at the top of \`${owner.name}\` and read \`${suggestedBindingName(read)}\` here`;
+  const instruction = renderReadInstruction(read, { hook, initializer, path }, scan.sourceFile);
   return withEdits(
     {
       action: "use-value-for-render-read",
