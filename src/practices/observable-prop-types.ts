@@ -3,6 +3,7 @@ import {
   staticPropertyName,
 } from "../rules/child-contract/declared-prop-types.js";
 import ts from "typescript";
+import { typeNamesObservable } from "./observable-paths.js";
 
 type MemberVerdict = "absent" | "observable" | "other";
 
@@ -63,9 +64,8 @@ function literalMemberVerdict(
   }
   return matches.length === 1 &&
     ts.isPropertySignature(member) &&
-    !member.questionToken &&
     member.type &&
-    namesObservableType(member.type, query.observableTypes)
+    typeNamesObservable(member.type, query.observableTypes)
     ? "observable"
     : "other";
 }
@@ -139,14 +139,5 @@ function importsName(sourceFile: ts.SourceFile, name: string): boolean {
       statement.importClause?.namedBindings !== undefined &&
       ts.isNamedImports(statement.importClause.namedBindings) &&
       statement.importClause.namedBindings.elements.some((element) => element.name.text === name),
-  );
-}
-
-function namesObservableType(type: ts.TypeNode, observableTypes: ReadonlySet<string>): boolean {
-  const value = ts.isParenthesizedTypeNode(type) ? type.type : type;
-  return (
-    ts.isTypeReferenceNode(value) &&
-    ts.isIdentifier(value.typeName) &&
-    observableTypes.has(value.typeName.text)
   );
 }

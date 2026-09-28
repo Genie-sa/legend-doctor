@@ -99,3 +99,83 @@ test("does not propagate observable provenance through shadowed roots or factori
     false,
   );
 });
+
+const PROFILE = "{ name: string; email: string }";
+
+function typedProfileActions(declaration: string): string[] {
+  return analyzeLegendPractices({
+    sourceText: `
+    import type { Observable, ObservableParam } from "@legendapp/state";
+    import { observable } from "@legendapp/state";
+    import { useObservable, useValue } from "@legendapp/state/react";
+    const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    ${declaration}
+  `,
+    fileName: "fixture.tsx",
+  }).map((finding) => finding.action);
+}
+
+test("does not prove observables through maybe-observable, nullable, or optional annotations", () => {
+  for (const declaration of [
+    `export function Name(value$: Observable<${PROFILE}> | ${PROFILE}) {
+      const profile = useValue(value$);
+      return <span>{profile.name}</span>;
+    }`,
+    `export function Name(value$: Observable<${PROFILE}> | undefined) {
+      const profile = useValue(value$);
+      return <span>{profile?.name}</span>;
+    }`,
+    `export function Name(value$: (null | ObservableParam<${PROFILE}>)) {
+      const profile = useValue(value$);
+      return <span>{profile?.name}</span>;
+    }`,
+    `export function Name(value$?: Observable<${PROFILE}>) {
+      const profile = useValue(value$);
+      return <span>{profile?.name}</span>;
+    }`,
+    `export function Name(value$?: typeof profile$) {
+      const profile = useValue(value$);
+      return <span>{profile?.name}</span>;
+    }`,
+    `declare function pick(): Observable<${PROFILE}> | ${PROFILE};
+    const picked$ = pick();
+    export function Name() {
+      const profile = useValue(picked$);
+      return <span>{profile.name}</span>;
+    }`,
+    `export function Name(name$: Observable<string> | string) {
+      const local$ = useObservable(name$);
+      return <span>{useValue(local$)}</span>;
+    }`,
+    `export function Name(name$?: Observable<string>) {
+      const local$ = useObservable(name$);
+      return <span>{useValue(local$)}</span>;
+    }`,
+    `export function Name({ value$ }: { value$: Observable<${PROFILE}> | ${PROFILE} }) {
+      const profile = useValue(value$);
+      return <span>{profile.name}</span>;
+    }`,
+  ]) {
+    assert.deepEqual(typedProfileActions(declaration), [], declaration);
+  }
+});
+
+test("proves unions whose every member is an observable type", () => {
+  for (const declaration of [
+    `export function Name(value$: Observable<${PROFILE}> | ObservableParam<${PROFILE}>) {
+      const profile = useValue(value$);
+      return <span>{profile.name}</span>;
+    }`,
+    `type Props = { value$: Observable<${PROFILE}> | ObservableParam<${PROFILE}> };
+    export function Name({ value$ }: Props) {
+      const profile = useValue(value$);
+      return <span>{profile.name}</span>;
+    }`,
+  ]) {
+    assert.deepEqual(
+      typedProfileActions(declaration),
+      ["narrow-use-value-subscription"],
+      declaration,
+    );
+  }
+});
