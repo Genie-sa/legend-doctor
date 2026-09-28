@@ -8,9 +8,9 @@ import {
 } from "../../core/analysis-ast.js";
 import {
   findAncestorUntil,
+  identifiersNamed,
   isRuntimeFunctionLike,
   nearestNestedFunction,
-  visit,
 } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isHookDependencyReference } from "./callback-sites.js";
@@ -108,25 +108,13 @@ function useCallbackListsDependency(
 
 /** The named callback is referenced at least once, and every reference stays event-rooted. */
 function everyReferenceIsEventRooted(name: string, trace: EventRootTrace): boolean {
-  let referenced = false;
-  let safe = true;
-  visit(trace.owner.body, (node) => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== name ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node) ||
-      isHookDependencyReference(node, USE_CALLBACK_HOOK)
-    ) {
-      return;
-    }
-    referenced = true;
-    if (!eventReferenceIsRooted(node, trace)) {
-      safe = false;
-    }
-  });
-  return referenced && safe;
+  const references = identifiersNamed(trace.owner.body, name).filter(
+    (node) =>
+      !isDeclarationName(node) &&
+      !isNonValueIdentifier(node) &&
+      !isHookDependencyReference(node, USE_CALLBACK_HOOK),
+  );
+  return references.length > 0 && references.every((node) => eventReferenceIsRooted(node, trace));
 }
 
 /** The reference is a JSX event handler, or a call made from another event-rooted callback. */

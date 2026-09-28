@@ -2,6 +2,7 @@ import { USE_CALLBACK_HOOK, callbackIsEventRooted, isPlainFunction } from "./eve
 import {
   findAncestor,
   findAncestorUntil,
+  identifiersNamed,
   isRuntimeFunctionLike,
   nearestNestedFunction,
   visit,
@@ -71,23 +72,15 @@ export function hasOnlyEventCommandReads(
   ignored: ReadonlySet<ts.Node> = EMPTY_NODES,
   additionalRoots: ReadonlySet<RuntimeFunctionLike> = EMPTY_RUNTIME_FUNCTIONS,
 ): boolean {
-  let safe = true;
-  visit(state.owner.body, (node) => {
-    if (
-      !safe ||
-      !ts.isIdentifier(node) ||
-      node.text !== state.valueName ||
+  return identifiersNamed(state.owner.body, state.valueName).every(
+    (node) =>
       isDeclarationName(node) ||
       isNonValueIdentifier(node) ||
       node.parent === state.call.parent ||
       ignored.has(node) ||
-      findAncestorUntil(node, isJsxNode, state.owner)
-    ) {
-      return;
-    }
-    safe = stateReadIsEventCommand(node, state, additionalRoots);
-  });
-  return safe;
+      findAncestorUntil(node, isJsxNode, state.owner) !== null ||
+      stateReadIsEventCommand(node, state, additionalRoots),
+  );
 }
 
 /** A read outside JSX is safe only from an event-rooted callback, or as a useCallback dependency. */

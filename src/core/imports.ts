@@ -61,6 +61,8 @@ export interface HookImports {
 
 export type HostTagImports = Pick<HookImports, "hostComponents" | "hostNamespaces">;
 
+const ownScopeNamesByOwner = new WeakMap<RuntimeFunctionLike, ReadonlySet<string>>();
+
 const LEGEND_MODULE = "@legendapp/state";
 const LEGEND_REACT_MODULE = "@legendapp/state/react";
 const LEGEND_REACT_NATIVE_MODULE = "@legendapp/state/react-native";
@@ -339,6 +341,14 @@ function isReboundBeforeModuleScope(call: ts.CallExpression, name: string): bool
 }
 
 function declaresNameInOwnScope(owner: RuntimeFunctionLike, name: string): boolean {
+  return ownScopeNames(owner).has(name);
+}
+
+function ownScopeNames(owner: RuntimeFunctionLike): ReadonlySet<string> {
+  const cached = ownScopeNamesByOwner.get(owner);
+  if (cached) {
+    return cached;
+  }
   const names = new Set<string>();
   for (const parameter of owner.parameters) {
     collectBindingNames(parameter.name, names);
@@ -350,7 +360,8 @@ function declaresNameInOwnScope(owner: RuntimeFunctionLike, name: string): boole
       }
     });
   }
-  return names.has(name);
+  ownScopeNamesByOwner.set(owner, names);
+  return names;
 }
 
 export function isImportedHookCall({

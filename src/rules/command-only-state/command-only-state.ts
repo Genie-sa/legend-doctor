@@ -1,14 +1,14 @@
 import {
+  identifiersNamed,
+  isRuntimeFunctionLike,
+  nodeWithin,
+  visitSkippingNestedRuntimeFunctions,
+} from "../../core/ast.js";
+import {
   isDeclarationName,
   isEvaluationInert,
   isNonValueIdentifier,
 } from "../../core/analysis-ast.js";
-import {
-  isRuntimeFunctionLike,
-  nodeWithin,
-  visit,
-  visitSkippingNestedRuntimeFunctions,
-} from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
 import { setterCallUsesPreviousValue } from "../state-proofs/state-proofs.js";
@@ -32,20 +32,16 @@ export function refWouldChangeCommandSnapshot(
     return false;
   }
 
-  let shared = false;
-  visit(state.owner.body, (node) => {
+  return identifiersNamed(state.owner.body, state.valueName).some((node) => {
     if (
-      shared ||
-      !ts.isIdentifier(node) ||
-      node.text !== state.valueName ||
       node.parent === state.call.parent ||
       isDeclarationName(node) ||
       isNonValueIdentifier(node)
     ) {
-      return;
+      return false;
     }
     const readRegions = commandRuntimeRegions(node, state.owner);
-    shared = writes.some((write) => {
+    return writes.some((write) => {
       const commonRegions = readRegions.filter((region) => write.regions.includes(region));
       if (commonRegions.length === 0) {
         return false;
@@ -55,7 +51,6 @@ export function refWouldChangeCommandSnapshot(
       return !readBeforeWrite || !readsAreEventRooted;
     });
   });
-  return shared;
 }
 
 function commandRuntimeRegions(node: ts.Node, owner: RuntimeFunctionLike): RuntimeFunctionLike[] {
