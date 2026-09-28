@@ -25,6 +25,7 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceIndex } from "../source-components/source-components.js";
 import { componentParentRerender } from "./parent-rerenders.js";
 import { componentPropDataPath } from "./component-prop-data.js";
+import { componentPropRunsOnlyInHostEvents } from "../../rules/child-contract/host-event-dispatch.js";
 import { importedHookConsumers } from "./hook-consumer-index.js";
 import { keyedCursorConsumerResult } from "../../rules/hook-keyed-cursor-contract/hook-keyed-cursor-contract.js";
 import { sourceHookDefersCallback } from "../../rules/source-callback-contract/source-callback-contract.js";
@@ -48,6 +49,7 @@ class ChildContracts implements ChildContractResolver {
   private readonly callbackContracts = new Map<string, boolean>();
   private readonly componentCallbackContracts = new Map<string, boolean>();
   private readonly componentEffectCallbackContracts = new Map<string, boolean>();
+  private readonly componentHostEventContracts = new Map<string, boolean>();
   private readonly componentInvocationCallbackContracts = new Map<string, boolean>();
   private readonly componentSources = new Map<string, ChildComponentSource | null>();
   private readonly hookDeclarations = new Map<string, SourceHookDeclaration | null>();
@@ -160,6 +162,19 @@ class ChildContracts implements ChildContractResolver {
         );
       },
     );
+  }
+
+  public componentCallbackPropRunsOnlyInHostEvents(
+    componentName: string,
+    propName: string,
+  ): boolean {
+    return componentPropRunsOnlyInHostEvents({
+      cache: this.componentHostEventContracts,
+      componentName,
+      file: this.importerFile,
+      propName,
+      resolveComponent: (file, name) => this.resolveComponentSource(file, name),
+    });
   }
 
   public componentCallbackPropRunsOnlyInReactEffect(
