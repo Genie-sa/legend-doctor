@@ -23,17 +23,27 @@ const COMPONENT = `
   }
 `;
 
-async function snapshotFindings(writer: string): Promise<LegendPracticeFinding[]> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-in-place-memo-"));
+interface WriterPlacement {
+  /** Directories above the scanned root, whose names say nothing about the app's own files. */
+  readonly parent?: string;
+  readonly writerFile?: string;
+}
+
+async function snapshotFindings(
+  writer: string,
+  { parent = "", writerFile = "state/actions.ts" }: WriterPlacement = {},
+): Promise<LegendPracticeFinding[]> {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-in-place-memo-"));
+  const root = path.join(scratch, parent);
   try {
-    await mkdir(path.join(root, "state"), { recursive: true });
+    await mkdir(path.join(root, path.dirname(writerFile)), { recursive: true });
     await writeFile(path.join(root, "state", "tabs.ts"), STORE, "utf8");
-    await writeFile(path.join(root, "state", "actions.ts"), writer, "utf8");
+    await writeFile(path.join(root, writerFile), writer, "utf8");
     await writeFile(path.join(root, "tab-strip.tsx"), COMPONENT, "utf8");
     const report = await analyzePath(root);
     return report.practices.filter((finding) => finding.action === "snapshot-mutated-use-value");
   } finally {
-    await rm(root, { force: true, recursive: true });
+    await rm(scratch, { force: true, recursive: true });
   }
 }
 
@@ -50,6 +60,35 @@ test("proves a stale memo from an in-place write in another module", async () =>
   assert.equal(proven.location.file, "tab-strip.tsx");
   assert.match(proven.message, /in-place write at state\/actions\.ts:4 \(`push`\)/u);
   assert.match(proven.message, /`useValue\(\(\) => \[\.\.\.tabs\$\.order\.get\(\)\]\)`/u);
+});
+
+test("ignores in-place writes that only tests, stories, and demos run", async () => {
+  const writer = `
+    import { tabs$ } from "../tabs";
+    export function openTab(id: string) {
+      tabs$.order.push(id);
+    }
+  `;
+  for (const harness of [
+    "state/__tests__/tabs.ts",
+    "state/fixtures/tabs.test.ts",
+    "state/stories/tabs.ts",
+  ]) {
+    assert.deepEqual(await snapshotFindings(writer, { writerFile: harness }), [], harness);
+  }
+});
+
+test("keeps production writes in an app checked out under a demos directory", async () => {
+  const findings = await snapshotFindings(
+    `
+      import { tabs$ } from "./tabs";
+      export function openTab(id: string) {
+        tabs$.order.push(id);
+      }
+    `,
+    { parent: "demos/tabs-app" },
+  );
+  assert.equal(findings.length, 1);
 });
 
 test("ignores writes through a module-local binding that shadows the imported root", async () => {

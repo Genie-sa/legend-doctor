@@ -1,6 +1,7 @@
 import type { ProgramReach, WriteUnit } from "./write-units.js";
 import type { ResolvedSymbol, SourceIndexState } from "./model.js";
 import { isDeclarationName, unwrapTransparentExpression } from "../../core/analysis-ast.js";
+import { isNonProductionHarness, visit } from "../../core/ast.js";
 import { localReachResolver, projectReachResolver } from "./reach-resolvers.js";
 import type { ExecutionUnit } from "../../core/execution-units.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "../../rules/observable-reads/observable-paths.js";
@@ -12,7 +13,6 @@ import path from "node:path";
 import { programReach } from "./write-units.js";
 import { resolvedFor } from "./symbol-resolution.js";
 import ts from "typescript";
-import { visit } from "../../core/ast.js";
 
 /**
  * A write that changes an observable's raw value while keeping the object that holds the changed
@@ -201,12 +201,18 @@ function groupWritesBySymbol(
   return index;
 }
 
-/** A write reaches an imported observable only when the writing file does not redeclare its root. */
+/**
+ * A write reaches an imported observable only when the writing file does not redeclare its root.
+ * Tests, stories, and demos never run in the production app, so their writes change nothing it renders.
+ */
 function keyedFileWrites(
   state: SourceIndexState,
   file: string,
   sourceFile: ts.SourceFile,
 ): [string, CollectedWrite][] {
+  if (isNonProductionHarness(path.relative(normalizeFile(state.root), file))) {
+    return [];
+  }
   const visible = visibleObservables(state, file);
   const writes = visible.size > 0 ? collectInPlaceWrites(sourceFile) : [];
   if (writes.length === 0) {
