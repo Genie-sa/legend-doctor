@@ -82,4 +82,30 @@ export const noutubeHookCases = [
       "The draft is read and written only by the TextInput, the add button, and `add`, all inside the input row at line 91; a leaf around that row takes `kind` as a prop, so keystrokes stop rerendering the note, empty state, and every BlocklistRow.",
     target: "noutube-blocklist",
   },
+  ...(
+    [
+      [163, "importingList"],
+      [164, "importingTakeout"],
+    ] as const
+  ).map(([line, name]) => ({
+    action: "review-state" as const,
+    file: "SettingsTree.tsx",
+    hook: "useState" as const,
+    line,
+    name,
+    rationale:
+      "The import flag is owned above SettingsTransferContent so an in-flight import survives leaving the transfer page, and the child reads it in render and in its command guards. Extracting the scroll body around `renderPage()` moves the helper and nearly all 51 owner elements into the leaf, leaving eight above the cut, so moving the state down removes no material render.",
+    target: "noutube-settings-tree",
+  })),
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "SettingsTree.tsx",
+    hook: "useState",
+    line: 166,
+    name: "checkingUpdate",
+    rationale:
+      "The update-check pending flag feeds only the About page's update row `loading` prop and is written only by that row's handler, so a call-site subscriber would keep the settings header and page out of both transitions. The row sits inside `renderPage()`'s switch case and a ternary, which the analyzer does not yet prove mount-stable; extracting the scroll body instead cuts only eight of 51 elements.",
+    target: "noutube-settings-tree",
+  },
 ] as const satisfies readonly GoldHookCase[];

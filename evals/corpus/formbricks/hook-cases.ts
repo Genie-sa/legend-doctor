@@ -1437,13 +1437,13 @@ export const formbricksHookCases = [
     target: "formbricks-google-sheet-wrapper",
   },
   {
-    action: "move-state-down",
+    action: "review-state",
     file: "add-filter-modal.tsx",
     hook: "useState",
     line: 179,
     name: "activeTabId",
     rationale:
-      "The tab id is read only by the tab bar and by `getTabContent`, an owner-level render helper used once inside the same filter column; both move into a leaf around that column, so the dialog body no longer renders per tab change.",
+      "The tab id reaches the filter column through `getTabContent`, whose four tab helpers render 20 of the owner's 33 JSX elements, and the column also holds the search input and tab bar. A leaf around that column takes the helpers with it, leaving only the five dialog-shell elements above the cut, so moving the state down removes no material render.",
     target: "formbricks-add-filter-modal",
   },
   {
