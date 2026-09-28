@@ -35,6 +35,7 @@ test("narrows a broad useValue binding to its only static child", () => {
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
     const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function write() { profile$.email.set("grace@example.com"); }
     export function Profile() {
       const profile = useValue(profile$);
       return <><h1>{profile.name}</h1><span>{profile.name.trim()}</span></>;
@@ -54,6 +55,7 @@ test("narrows useValue to the deepest shared static observable path", () => {
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
     const profile$ = observable({ contact: { name: "Ada", email: "ada@example.com" } });
+    export function write() { profile$.contact.email.set("grace@example.com"); }
     export function Profile() {
       const profile = useValue(profile$);
       return <><h1>{profile.contact.name}</h1><span>{profile.contact.name.trim()}</span></>;
@@ -71,7 +73,8 @@ test("uses the deepest common path when sibling leaves are read", () => {
     sourceText: `
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
-    const profile$ = observable({ contact: { name: "Ada", email: "ada@example.com" } });
+    const profile$ = observable({ contact: { name: "Ada", email: "ada@example.com" }, status: "active" });
+    export function write() { profile$.status.set("away"); }
     export function Profile() {
       const profile = useValue(profile$);
       return <span>{profile.contact.name} {profile.contact.email}</span>;
@@ -114,6 +117,7 @@ test("keeps the single-path narrowing when one shared path exists", () => {
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
     const profile$ = observable({ contact: { name: "Ada" }, other: 1 });
+    export function write() { profile$.other.set(2); }
     export function Profile() {
       const profile = useValue(profile$);
       return <span>{profile.contact.name} {profile.contact.name.trim()}</span>;
@@ -133,6 +137,7 @@ test("stops narrowing at a TypeScript assertion boundary", () => {
       contact: { name: "Ada" } as { name: string } | null,
       status: "active",
     });
+    export function write() { profile$.status.set("away"); }
     export function Profile() {
       const profile = useValue(profile$);
       return <span>{(profile.contact!).name}</span>;
@@ -149,6 +154,7 @@ test("narrows a child used by a boolean projection", () => {
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
     const profile$ = observable({ enabled: false, name: "Ada" });
+    export function write() { profile$.name.set("Grace"); }
     export function Profile() {
       const profile = useValue(profile$);
       return <span>{!profile.enabled ? "off" : "on"}</span>;
@@ -166,6 +172,7 @@ test("narrows a single-property useValue destructure", () => {
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
     const theme$ = observable({ colors: { dark: { text: "black" }, light: { text: "white" } } });
+    export function write() { theme$.colors.light.text.set("grey"); }
     export function Theme() {
       const { dark: palette } = useValue(theme$.colors);
       return <span>{palette.text}</span>;
@@ -185,6 +192,7 @@ test("narrows optional raw-value reads only when they share one static child pat
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
     const dialog$ = observable<{ state: boolean; data?: { id: string } } | undefined>(undefined);
+    export function write() { dialog$.state.set(true); }
     export function Dialog() {
       const dialog = useValue(dialog$);
       return <span>{dialog?.data?.id}{dialog?.data?.id}</span>;
@@ -271,6 +279,7 @@ test("keeps multi-property, defaulted, and rest useValue destructures", () => {
     import { observable } from "@legendapp/state";
     import { useValue } from "@legendapp/state/react";
     const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function write() { profile$.email.set("grace@example.com"); }
     export function Profile() {
       const ${binding} = useValue(profile$);
       return null;
@@ -290,6 +299,7 @@ test("narrows the legacy useSelector and use$ aliases like useValue", () => {
     import { observable } from "@legendapp/state";
     ${importLine}
     const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function write() { profile$.email.set("grace@example.com"); }
     export function Profile() {
       const profile = ${call}(profile$);
       return <h1>{profile.name}</h1>;
@@ -318,6 +328,7 @@ test("keeps same-named selector hooks that are not Legend State aliases", () => 
     import { observable } from "@legendapp/state";
     ${importLine}
     const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+    export function write() { profile$.email.set("grace@example.com"); }
     export function Profile() {
       ${prelude}
       const profile = useSelector(profile$);

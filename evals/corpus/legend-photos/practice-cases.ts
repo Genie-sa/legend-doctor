@@ -72,14 +72,6 @@ export const legendPhotosPracticeCases = [
     target: "legend-photos",
   },
   {
-    action: "narrow-use-value-subscription",
-    file: "settings/LibrarySettings.tsx",
-    line: 10,
-    rationale:
-      "The legacy useSelector subscribes to the whole library settings object, but render reads only paths; sibling library preferences should not invalidate the screen.",
-    target: "legend-photos",
-  },
-  {
     action: "use-peek-for-snapshot",
     file: "settings/LibrarySettings.tsx",
     line: 17,

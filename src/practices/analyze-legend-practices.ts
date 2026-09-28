@@ -1,6 +1,6 @@
 import {
   NO_OBSERVABLE_FIELD_FACTS,
-  observableFieldWriteGroups,
+  observableWriteGroups,
 } from "../rules/observable-reads/field-writes.js";
 import {
   dataFieldKeys,
@@ -162,7 +162,7 @@ function collectObservableFieldFacts(
       dataKeys.set(local.name, localDataKeys);
     }
   });
-  return { dataKeys, keys, writes: observableFieldWriteGroups(request.observableInPlaceWrites) };
+  return { dataKeys, keys, writes: observableWriteGroups(request.observableInPlaceWrites) };
 }
 
 interface LocalObservableScope {

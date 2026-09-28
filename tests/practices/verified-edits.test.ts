@@ -237,6 +237,14 @@ import { useValue } from "@legendapp/state/react";
 
 const profile$ = observable({ email: "", name: "" });
 
+export function rename(name: string) {
+  profile$.name.set(name);
+}
+
+export function changeEmail(email: string) {
+  profile$.email.set(email);
+}
+
 export function Name() {
   const { name } = useValue(profile$);
   return <p>{name}</p>;
@@ -255,6 +263,14 @@ export function Title() {
 import { useValue } from "@legendapp/state/react";
 
 const profile$ = observable({ email: "", name: "" });
+
+export function rename(name: string) {
+  profile$.name.set(name);
+}
+
+export function changeEmail(email: string) {
+  profile$.email.set(email);
+}
 
 export function Name() {
   const name = useValue(profile$.name);
@@ -276,6 +292,14 @@ test("leaves narrowing prose-only when an annotation or a read path shapes the b
 import { useValue } from "@legendapp/state/react";
 
 const profile$ = observable({ email: "", name: "" });
+
+export function rename(name: string) {
+  profile$.name.set(name);
+}
+
+export function changeEmail(email: string) {
+  profile$.email.set(email);
+}
 
 export function Name() {
   const { name }: { name: string } = useValue(profile$);

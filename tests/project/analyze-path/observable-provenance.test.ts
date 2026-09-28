@@ -40,7 +40,7 @@ test("uses cross-file observable provenance for batching findings", async () => 
   }
 });
 
-test("uses typed project factory provenance for narrow leaf subscriptions", async () => {
+test("uses typed project factory provenance for observable parameters", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observable-factory-"));
   try {
     await writeFile(
@@ -60,8 +60,7 @@ test("uses typed project factory provenance for narrow leaf subscriptions", asyn
         import { createStore } from "./create-store";
         const state$ = createStore({ profile: { name: "Ada", email: "ada@example.com" } });
         function Name(profile$: typeof state$.profile) {
-          const profile = useValue(profile$);
-          return <span>{profile.name}</span>;
+          return <span>{profile$.name.get()}</span>;
         }
         export function Screen() { return <span>{Name(state$.profile)}</span>; }
       `,
@@ -71,9 +70,9 @@ test("uses typed project factory provenance for narrow leaf subscriptions", asyn
     const report = await analyzePath(root);
     assert.deepEqual(
       report.practices.map((finding) => finding.action),
-      ["narrow-use-value-subscription"],
+      ["use-value-for-render-read"],
     );
-    assert.match(requireValue(report.practices[0]).message ?? "", /useValue\(profile\$\.name\)/u);
+    assert.match(requireValue(report.practices[0]).message ?? "", /profile\$\.name/u);
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -200,9 +199,8 @@ test("uses source-proven wrapper member provenance without treating the wrapper 
         import { useValue } from "@legendapp/state/react";
         import { dialog } from "./state";
         export function Screen() {
-          const value = useValue(dialog.value$);
           dialog.set({ state: false });
-          return <span>{value.profile.name}</span>;
+          return <span>{dialog.value$.profile.name.get()}</span>;
         }
       `,
       "utf8",
@@ -216,11 +214,11 @@ test("uses source-proven wrapper member provenance without treating the wrapper 
     const report = await analyzePath(root, { sharedContext: context });
     assert.deepEqual(
       report.practices.map((finding) => finding.action),
-      ["narrow-use-value-subscription"],
+      ["use-value-for-render-read"],
     );
     assert.match(
       requireValue(report.practices[0]).message ?? "",
-      /useValue\(dialog\.value\$\.profile\.name\)/u,
+      /dialog\.value\$\.profile\.name/u,
     );
   } finally {
     await rm(root, { force: true, recursive: true });

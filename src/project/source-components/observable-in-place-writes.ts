@@ -1,6 +1,8 @@
 import type { ResolvedSymbol, SourceIndexState } from "./model.js";
 import { isDeclarationName, unwrapTransparentExpression } from "../../core/analysis-ast.js";
+import type { ExecutionUnit } from "../../core/execution-units.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "../../rules/observable-reads/observable-paths.js";
+import { executionUnit } from "../../core/execution-units.js";
 import { moduleRecord } from "./module-record.js";
 import { normalizeFile } from "./module-resolution.js";
 import path from "node:path";
@@ -18,6 +20,8 @@ export interface InPlaceObservableWrite {
   readonly method: string;
   /** The changed member below the observable root; `*` is a key known only at runtime. */
   readonly path: readonly string[];
+  /** Writes of one file with the same unit key run in one synchronous stretch, so one render sees them all. */
+  readonly unit: ExecutionUnit;
 }
 
 /** In-place writes that can reach each observable a file can name, keyed by its local name. */
@@ -177,9 +181,10 @@ function inPlaceWrites(call: ts.CallExpression): RootedWrite[] {
   const method = callee.name.text;
   const sourceFile = call.getSourceFile();
   const line = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile)).line + 1;
+  const unit = executionUnit(call);
   return changedPaths(call, method, receiver.members).map((changed) => ({
     root: receiver.root,
-    write: { file: sourceFile.fileName, line, method, path: changed },
+    write: { file: sourceFile.fileName, line, method, path: changed, unit },
   }));
 }
 

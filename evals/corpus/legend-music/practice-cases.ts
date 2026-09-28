@@ -251,26 +251,20 @@ export const legendMusicPracticeCases = [
   },
   {
     action: "narrow-use-value-subscription",
+    disposition: "change",
     file: "components/PlaybackControls.tsx",
     line: 47,
     rationale:
-      "Playback controls read only library tracks, so sibling library fields should not invalidate the component.",
+      "Playback controls read only library tracks, while the librarySettings$.lastScanTime listener in LibraryState.ts writes library$.lastScanTime alone after every scan and rerenders the whole-library subscriber.",
     target: "legend-music",
   },
   {
     action: "narrow-use-value-subscription",
+    disposition: "change",
     file: "components/PlaylistSelector.tsx",
     line: 36,
     rationale:
-      "The selector reads only library tracks, making the child observable the exact subscription boundary.",
-    target: "legend-music",
-  },
-  {
-    action: "narrow-use-value-subscription",
-    file: "components/SkiaText.tsx",
-    line: 53,
-    rationale:
-      "The component destructures only width, so it can subscribe directly to the width child observable.",
+      "The selector reads only library tracks, while the librarySettings$.lastScanTime listener in LibraryState.ts writes library$.lastScanTime alone after every scan and rerenders the whole-library subscriber.",
     target: "legend-music",
   },
   {
@@ -311,14 +305,6 @@ export const legendMusicPracticeCases = [
     line: 972,
     rationale:
       "Scan completion publishes tracks, timestamp, and progress totals together while preserving value evaluation order.",
-    target: "legend-music",
-  },
-  {
-    action: "narrow-use-value-subscription",
-    file: "theme/ThemeProvider.tsx",
-    line: 40,
-    rationale:
-      "The provider reads only customColors.dark, so sibling color updates should not invalidate it.",
     target: "legend-music",
   },
   {

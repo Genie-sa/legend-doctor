@@ -3,6 +3,7 @@ import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableFieldFacts } from "./field-writes.js";
 import { identifiedUseValueDeclaration } from "./observable-paths.js";
 import { isNonValueIdentifier } from "../../core/analysis-ast.js";
+import { topLevelFields } from "./field-writes.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
@@ -126,8 +127,9 @@ function unreadWrittenFields(
 ): readonly string[] {
   const data = dataKeys.get(name) ?? new Set<string>();
   const siblings = (writes.get(name) ?? [])
-    .filter((group) => [...group].every((field) => !read.has(field)))
-    .flatMap((group) => [...group].filter((field) => data.has(field)));
+    .map((group) => topLevelFields(group))
+    .filter((fields) => fields !== null && [...fields].every((field) => !read.has(field)))
+    .flatMap((fields) => [...(fields ?? [])].filter((field) => data.has(field)));
   return [...new Set(siblings)].toSorted();
 }
 

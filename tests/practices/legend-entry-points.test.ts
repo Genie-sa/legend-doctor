@@ -33,8 +33,7 @@ test("treats useLocalObservable as useObservable and the Observable* aliases as 
     import type { ObservableObject } from "@legendapp/state";
     import { useLocalObservable, useValue } from "@legendapp/state/react";
     function Name(profile$: ObservableObject<{ name: string; email: string }>) {
-      const profile = useValue(profile$);
-      return <span>{profile.name}</span>;
+      return <span>{profile$.name.get()}</span>;
     }
     export function Screen() {
       const draft$ = useLocalObservable({ name: "", email: "" });
@@ -46,7 +45,7 @@ test("treats useLocalObservable as useObservable and the Observable* aliases as 
   });
   assert.deepEqual(
     findings.map((finding) => finding.action),
-    ["narrow-use-value-subscription", "pass-observable-to-use-value"],
+    ["use-value-for-render-read", "pass-observable-to-use-value"],
   );
 });
 
@@ -58,6 +57,7 @@ test("reads exact object keys through a synced initial value", () => {
       import { useValue } from "@legendapp/state/react";
       import * as Sync from "@legendapp/state/sync";
       const settings$ = observable(Sync.synced({ initial: { theme: "dark", locale: "en" } }));
+      export function setLocale(locale: string) { settings$.locale.set(locale); }
       export function Settings() {
         const settings = useValue(settings$);
         return <span>${reads}</span>;

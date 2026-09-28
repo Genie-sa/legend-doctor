@@ -5,35 +5,59 @@ import type {
 import { ANY_MEMBER } from "../../project/source-components/observable-in-place-writes.js";
 import { isNonProductionHarness } from "../../core/ast.js";
 
-/** Top-level fields of one observable that a single production write changes together. */
-export type FieldWriteGroup = ReadonlySet<string>;
+/**
+ * The member paths below one observable root that a single synchronous stretch of production code
+ * writes, so one render observes them together; `*` stands for a member known only at runtime.
+ */
+export interface ObservableWriteGroup {
+  readonly paths: readonly (readonly string[])[];
+  /** `file:line` of the stretch's first write, relative to the analysis root. */
+  readonly site: string;
+}
 
-/** Field groups per observable, from its production writes; test and story writes are ignored. */
-export function observableFieldWriteGroups(
+/**
+ * Write groups per observable, from the production writes that can land after a consumer mounts:
+ * test and story writes and module-load initialization are ignored.
+ */
+export function observableWriteGroups(
   writes: ObservableInPlaceWrites,
-): ReadonlyMap<string, readonly FieldWriteGroup[]> {
+): ReadonlyMap<string, readonly ObservableWriteGroup[]> {
   return new Map(
     [...writes].map(([name, sites]) => [
       name,
-      fieldWriteGroups(sites.filter((site) => !isNonProductionHarness(site.file))),
+      writeGroups(
+        sites.filter((site) => !site.unit.atModuleLoad && !isNonProductionHarness(site.file)),
+      ),
     ]),
   );
 }
 
-/**
- * Writes on one source line form one group, so an `assign` of several keys, or two writes sharing
- * a line, only ever widens a group. A group that reaches a runtime-keyed member may change any
- * field and is dropped.
- */
-function fieldWriteGroups(sites: readonly InPlaceObservableWrite[]): readonly FieldWriteGroup[] {
-  const groups = new Map<string, Set<string>>();
+function writeGroups(sites: readonly InPlaceObservableWrite[]): readonly ObservableWriteGroup[] {
+  const groups = new Map<string, ObservableWriteGroup>();
   for (const site of sites) {
-    const key = `${site.file}:${site.line}`;
-    const group = groups.get(key) ?? new Set<string>();
-    group.add(site.path[0] ?? ANY_MEMBER);
-    groups.set(key, group);
+    const key = `${site.file}\0${site.unit.key}`;
+    const group = groups.get(key) ?? { paths: [], site: `${site.file}:${site.line}` };
+    groups.set(key, { ...group, paths: [...group.paths, site.path] });
   }
-  return [...groups.values()].filter((group) => !group.has(ANY_MEMBER));
+  return [...groups.values()];
+}
+
+/** The top-level fields a group writes, or null when a runtime-keyed member could be any field. */
+export function topLevelFields(group: ObservableWriteGroup): ReadonlySet<string> | null {
+  const fields = new Set(group.paths.map((path) => path[0] ?? ANY_MEMBER));
+  return fields.has(ANY_MEMBER) ? null : fields;
+}
+
+/** Whether two member paths can name the same node or one another's ancestor. */
+export function pathsOverlap(left: readonly string[], right: readonly string[]): boolean {
+  const shared = Math.min(left.length, right.length);
+  for (let index = 0; index < shared; index += 1) {
+    const [leftMember, rightMember] = [left[index], right[index]];
+    if (leftMember !== rightMember && leftMember !== ANY_MEMBER && rightMember !== ANY_MEMBER) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export interface ObservableFieldFacts {
@@ -41,7 +65,7 @@ export interface ObservableFieldFacts {
   readonly keys: ReadonlyMap<string, ReadonlySet<string>>;
   /** The subset of those keys that hold data rather than functions. */
   readonly dataKeys: ReadonlyMap<string, ReadonlySet<string>>;
-  readonly writes: ReadonlyMap<string, readonly FieldWriteGroup[]>;
+  readonly writes: ReadonlyMap<string, readonly ObservableWriteGroup[]>;
 }
 
 export const NO_OBSERVABLE_FIELD_FACTS: ObservableFieldFacts = {

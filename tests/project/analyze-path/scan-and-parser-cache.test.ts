@@ -81,7 +81,7 @@ test("shares one cached AST across source indexing and both detector families", 
   const screenPath = path.join(root, "Screen.tsx");
   await writeFile(
     statePath,
-    'import { observable } from "@legendapp/state"; export const profile$ = observable({ name: "Ada", email: "ada@example.com" });',
+    'import { observable } from "@legendapp/state"; export const profile$ = observable({ name: "Ada", email: "ada@example.com" }); export function rename(email: string) { profile$.email.set(email); }',
     "utf8",
   );
   await writeFile(
