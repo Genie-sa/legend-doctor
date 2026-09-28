@@ -5,7 +5,7 @@ import ts from "typescript";
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 
 /** Read-only prototype methods of arrays, strings, maps, and sets; none mutates its receiver. */
-const SAFE_PROJECTION_METHODS: ReadonlySet<string> = new Set([
+export const SAFE_PROJECTION_METHODS: ReadonlySet<string> = new Set([
   "at",
   "charAt",
   "concat",
