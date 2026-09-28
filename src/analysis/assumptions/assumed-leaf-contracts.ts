@@ -123,6 +123,10 @@ export class AssumedLeafContracts implements ChildContractResolver {
     return this.#base.contextProviderSites(contextName);
   }
 
+  public contextReaderBindings(): ReadonlySet<string> {
+    return this.#base.contextReaderBindings();
+  }
+
   public hasPlatformVariant(): boolean {
     return this.#base.hasPlatformVariant();
   }

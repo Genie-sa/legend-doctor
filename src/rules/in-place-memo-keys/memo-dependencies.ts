@@ -91,7 +91,7 @@ function isReactHook(
   });
 }
 
-function isUseObservableCall(call: ts.CallExpression, imports: HookImports): boolean {
+export function isUseObservableCall(call: ts.CallExpression, imports: HookImports): boolean {
   const callee = unwrapTransparentExpression(call.expression);
   if (ts.isIdentifier(callee)) {
     return imports.useObservable.has(callee.text);

@@ -104,6 +104,8 @@ export interface ChildContractResolver {
   contextConsumers: (contextName: string) => readonly ContextConsumerSource[];
   /** How many `<Context.Provider>` sites the indexed sources render for this context. */
   contextProviderSites: (contextName: string) => number;
+  /** Imported hooks that only return one React context read, so they rerun to the same value. */
+  contextReaderBindings: () => ReadonlySet<string>;
   /** Whether a platform-specific sibling (`.native`, `.ios`, `.android`, `.web`) shadows this file. */
   hasPlatformVariant: () => boolean;
   /** Whether this module declares or imports an observable under this name. */

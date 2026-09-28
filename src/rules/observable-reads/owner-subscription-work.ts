@@ -1,16 +1,20 @@
 import {
+  hasStableCacheDependencies,
   hasStableEffectDependencies,
-  stablePrimitiveDependency,
+  subscriptionStableValue,
 } from "./stable-effect-dependencies.js";
 import type { ObservableReadScan } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { identifiedUseValueDeclaration } from "./observable-paths.js";
 import { isImportedHookCall } from "../../core/imports.js";
 import ts from "typescript";
-import { uniqueVariableDeclaration } from "../state-proofs/binding-lookup.js";
 import { visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 
-/** Every subscription relocation must preserve commit work and imperative render snapshots. */
+/**
+ * Every subscription relocation must preserve commit work and imperative render snapshots. Work
+ * blocks only when a subscription-only render would redo it: an effect or cache whose dependency
+ * can change identity, a ref whose identity can change, or a render-time `.current`, `get()`, or
+ * `peek()` read whose snapshot would otherwise refresh.
+ */
 export function hasUnprovenOwnerWork(
   owner: RuntimeFunctionLike,
   scan: ObservableReadScan,
@@ -22,7 +26,7 @@ export function hasUnprovenOwnerWork(
   visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
     if (
       (ts.isCallExpression(node) && unstableCachedHook(node, owner, scan)) ||
-      (ts.isJsxAttribute(node) && node.name.getText() === "ref") ||
+      (ts.isJsxAttribute(node) && unstableRefAttribute(node, owner, scan)) ||
       (ts.isPropertyAccessExpression(node) && node.name.text === "current") ||
       (ts.isElementAccessExpression(node) &&
         ts.isStringLiteralLike(node.argumentExpression) &&
@@ -49,42 +53,35 @@ export function hasUnprovenOwnerWork(
   return found;
 }
 
+/** React reattaches a ref on commit only when its identity changes. */
+function unstableRefAttribute(
+  attribute: ts.JsxAttribute,
+  owner: RuntimeFunctionLike,
+  scan: ObservableReadScan,
+): boolean {
+  if (attribute.name.getText() !== "ref") {
+    return false;
+  }
+  const value =
+    attribute.initializer && ts.isJsxExpression(attribute.initializer)
+      ? attribute.initializer.expression
+      : undefined;
+  return !value || !subscriptionStableValue(value, owner, scan);
+}
+
 function unstableCachedHook(
   call: ts.CallExpression,
   owner: RuntimeFunctionLike,
   scan: ObservableReadScan,
 ): boolean {
-  if (
-    !(["useMemo", "useCallback"] as const).some((canonicalName) =>
+  return (
+    (["useMemo", "useCallback"] as const).some((canonicalName) =>
       isImportedHookCall({
         call,
         canonicalName,
         localNames: scan.imports[canonicalName],
         namespaceNames: scan.imports.reactNamespaces,
       }),
-    )
-  ) {
-    return false;
-  }
-  const [callback, dependencies] = call.arguments;
-  return (
-    !callback ||
-    (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) ||
-    !dependencies ||
-    !ts.isArrayLiteralExpression(dependencies) ||
-    !dependencies.elements.every((dependency) => stableMemoDependency(dependency, owner, scan))
+    ) && !hasStableCacheDependencies(call, owner, scan)
   );
-}
-function stableMemoDependency(
-  dependency: ts.Expression,
-  owner: RuntimeFunctionLike,
-  scan: ObservableReadScan,
-): boolean {
-  if (stablePrimitiveDependency(dependency, owner)) {
-    return true;
-  }
-  const declaration = ts.isIdentifier(dependency)
-    ? uniqueVariableDeclaration(owner, dependency.text)
-    : null;
-  return declaration !== null && identifiedUseValueDeclaration(declaration, scan) !== null;
 }
