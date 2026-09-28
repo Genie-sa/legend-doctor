@@ -16,6 +16,7 @@ import {
   keepExternalIntegrationEffect,
   keepLifecycleEffect,
   keepPairedMountEffect,
+  keepParentRenderedReactionEffect,
   keepRenderedReactionEffect,
   keepStateIndependentEffect,
   keepStateSnapshotEffect,
@@ -23,6 +24,7 @@ import {
   ownershipDirectiveEffect,
   reviewCausalOwnerEffect,
   reviewEmptyDependencySetupEffect,
+  reviewParentRenderedReactionEffect,
   reviewStateReactionEffect,
   reviewStateWritingEffect,
   unmountEffect,
@@ -177,9 +179,7 @@ function dependencyEffectClassification(
   if (isObservableSourcedReaction(effect, callback, inline)) {
     return (
       persistedObservableClassification(effect, inline) ??
-      (useValueDependenciesAreEffectOnly(effect, inline)
-        ? observeEffect()
-        : keepRenderedReactionEffect())
+      observableReactionClassification(effect, inline)
     );
   }
   if (inline.hasCleanup) {
@@ -279,6 +279,44 @@ function isObservableSourcedReaction(
     ) &&
     directUseValueDependencies.every((name) => callbackReadsSynchronously(callback, name))
   );
+}
+
+function observableReactionClassification(
+  effect: EffectCandidate,
+  inline: InlineEffectContext,
+): ClassifiedEffect {
+  if (!effect.owner || !useValueDependenciesAreEffectOnly(effect, inline)) {
+    return keepRenderedReactionEffect();
+  }
+  const parentRerender =
+    inline.childContracts?.componentParentRerender(
+      effect.owner,
+      useValueDependencySources(effect, effect.owner, inline),
+    ) ?? "absent";
+  if (parentRerender === "proven") {
+    return keepParentRenderedReactionEffect();
+  }
+  return parentRerender === "possible" ? reviewParentRenderedReactionEffect() : observeEffect();
+}
+
+/** The observable argument of each `useValue` call whose result the effect lists as a dependency. */
+function useValueDependencySources(
+  effect: EffectCandidate,
+  owner: RuntimeFunctionLike,
+  inline: InlineEffectContext,
+): ts.Expression[] {
+  return (effect.dependencies?.elements ?? []).flatMap((element) => {
+    if (!ts.isIdentifier(element) || !inline.useValueBindings.has(element.text)) {
+      return [];
+    }
+    const declaration = identifiersNamed(owner.body, element.text).find((reference) =>
+      isDeclarationName(reference),
+    )?.parent;
+    const call =
+      declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer : null;
+    const source = call && ts.isCallExpression(call) ? call.arguments[0] : undefined;
+    return source ? [source] : [];
+  });
 }
 
 function useValueDependenciesAreEffectOnly(

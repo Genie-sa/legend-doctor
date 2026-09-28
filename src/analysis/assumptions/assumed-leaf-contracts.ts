@@ -4,7 +4,9 @@ import type {
   ContextConsumerSource,
   HookPresentationConsumer,
   HookReturnMembers,
+  ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
+import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
 
 /**
@@ -104,6 +106,13 @@ export class AssumedLeafContracts implements ChildContractResolver {
     propName: string,
   ): boolean {
     return this.#base.componentCallbackPropRunsOnlyInReactEffect(componentName, propName);
+  }
+
+  public componentParentRerender(
+    owner: RuntimeFunctionLike,
+    paths: readonly ts.Expression[],
+  ): ParentRerenderProof {
+    return this.#base.componentParentRerender(owner, paths);
   }
 
   public contextConsumers(contextName: string): readonly ContextConsumerSource[] {

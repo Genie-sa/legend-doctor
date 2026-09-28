@@ -5,6 +5,7 @@ import type {
   ContextConsumerSource,
   HookPresentationConsumer,
   HookReturnMembers,
+  ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
 import type {
   SourceHookDeclaration,
@@ -22,6 +23,7 @@ import {
 import type { AnalysisContext } from "./analysis-context.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceIndex } from "../source-components/source-components.js";
+import { componentParentRerender } from "./parent-rerenders.js";
 import { componentPropDataPath } from "./component-prop-data.js";
 import { importedHookConsumers } from "./hook-consumer-index.js";
 import { keyedCursorConsumerResult } from "../../rules/hook-keyed-cursor-contract/hook-keyed-cursor-contract.js";
@@ -168,6 +170,13 @@ class ChildContracts implements ChildContractResolver {
       const source = this.resolveComponentSource(this.importerFile, componentName);
       return source !== null && propCallbackRunsOnlyInReactEffect(source, propName);
     });
+  }
+
+  public componentParentRerender(
+    owner: RuntimeFunctionLike,
+    paths: readonly ts.Expression[],
+  ): ParentRerenderProof {
+    return componentParentRerender(this.context, owner, paths);
   }
 
   public componentPropCallbackIsDeferred(

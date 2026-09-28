@@ -95,6 +95,27 @@ export function keepRenderedReactionEffect(): ClassifiedEffect {
   };
 }
 
+export function keepParentRenderedReactionEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Keep this React effect; every component that renders this owner subscribes to its `useValue` dependencies too and rerenders it on each change, so an observable reaction would remove no render.",
+  };
+}
+
+export function reviewParentRenderedReactionEffect(): ClassifiedEffect {
+  return {
+    action: "review-effect",
+    abstentionReason: "render-cut-unproven",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Review this effect before choosing `useObserveEffect`; a component that renders this owner also subscribes to its `useValue` dependencies, so dropping them may not remove the owner's render. Prove that every parent render site is memoized with stable props or reads none of these observables.",
+  };
+}
+
 export function keepBrowserStorageEffect(): ClassifiedEffect {
   return {
     action: "keep-effect",

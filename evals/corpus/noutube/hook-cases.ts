@@ -32,6 +32,16 @@ export const noutubeHookCases = [
     target: "noutube-page",
   },
   {
+    action: "keep-effect",
+    file: "MainPageContent.tsx",
+    hook: "useEffect",
+    line: 345,
+    name: null,
+    rationale:
+      "`preferH264` and `clickbaitThumbnail` feed only this reload effect, but `MainPageContent`, the one component that renders `DesktopTabView`, subscribes to both leaves itself and renders the unmemoized tab with a fresh `buildPrelude` every time, so each change already rerenders the tab and observing the settings directly removes no render.",
+    target: "noutube-page",
+  },
+  {
     action: "use-observe-effect",
     file: "components/native/AppShell.tsx",
     hook: "useEffect",
