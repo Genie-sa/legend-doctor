@@ -1,3 +1,4 @@
+import { EFFECT_ACTIONS, LEGEND_PRACTICE_ACTIONS, STATE_ACTIONS } from "../core/types.js";
 import type {
   HookAction,
   HookFinding,
@@ -17,46 +18,11 @@ const DISPOSITIONS: readonly Disposition[] = ["candidate", "change", "keep", "st
 
 const DISPOSITION_VALUES: ReadonlySet<string> = new Set(DISPOSITIONS);
 
-const KNOWN_ACTIONS = {
-  "assign-observable-fields": true,
-  "batch-observable-writes": true,
-  "delete-derived-state": true,
-  "delete-effect": true,
-  "delete-unused-state": true,
-  "derive-computed-observable": true,
-  "select-primitive-projection": true,
-  "keep-effect": true,
-  "keep-state": true,
-  "move-state-down": true,
-  "move-to-event": true,
-  "move-use-value-down": true,
-  "move-use-value-into-child": true,
-  "narrow-observable-write": true,
-  "narrow-use-value-subscription": true,
-  "pass-observable-to-reactive-input": true,
-  "pass-observable-to-use-value": true,
-  "peek-unrendered-use-value": true,
-  "persist-observable": true,
-  "replace-legacy-use-value": true,
-  "reuse-observable-reference": true,
-  "review-effect": true,
-  "review-state": true,
-  "snapshot-computed-initializer": true,
-  "split-use-value-leaves": true,
-  "split-use-value-result": true,
-  "review-helper-tracking": true,
-  "toggle-observable": true,
-  "use-mount": true,
-  "use-observable": true,
-  "use-observe-effect": true,
-  "use-peek-for-snapshot": true,
-  "use-ref": true,
-  "use-unmount": true,
-  "use-value": true,
-  "use-value-for-render-read": true,
-} satisfies Record<Action, true>;
-
-const ACTION_VALUES: ReadonlySet<string> = new Set(Object.keys(KNOWN_ACTIONS));
+const ACTION_VALUES: ReadonlySet<string> = new Set<Action>([
+  ...STATE_ACTIONS,
+  ...EFFECT_ACTIONS,
+  ...LEGEND_PRACTICE_ACTIONS,
+]);
 
 const MAX_FLAG_SUGGESTION_DISTANCE = 3;
 

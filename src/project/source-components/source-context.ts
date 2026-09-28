@@ -2,10 +2,16 @@ import type { SourceIndexState, SourceSymbolKind } from "./model.js";
 import { normalizeFile, sourceModuleResolution } from "./module-resolution.js";
 import ts from "typescript";
 
+export const UNAVAILABLE_SOURCE_REASONS = [
+  "module-unresolved",
+  "declaration-only",
+  "source-not-indexed",
+] as const;
+
 export interface UnavailableSourceEdge {
   readonly importer: string;
   readonly specifier: string;
-  readonly reason: "module-unresolved" | "declaration-only" | "source-not-indexed";
+  readonly reason: (typeof UNAVAILABLE_SOURCE_REASONS)[number];
   readonly resolvedFile: string | null;
 }
 

@@ -14,7 +14,6 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 | [`use-observable`](EXAMPLES.md#keep-owner-lifetime-and-subscribe-in-a-leaf)  | A broad owner render while keeping the required lifetime |
 | [`use-ref`](EXAMPLES.md#replace-render-free-state-with-a-ref)                | A render for a value used only by commands or cleanup    |
 | [`use-value`](EXAMPLES.md#remove-a-react-mirror)                             | Duplicate React ownership of an existing Legend value    |
-| `review-state`, `review-effect`                                              | An unsafe guess; the report names the missing proof      |
 
 ### Effects
 
@@ -65,6 +64,16 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 | [`reuse-observable-reference`](EXAMPLES.md#reuse-the-observable-you-already-have)                      | A wrapper node identical to its source observable    |
 | [`snapshot-computed-initializer`](EXAMPLES.md#snapshot-an-initial-value-instead-of-writing-a-computed) | Writes that a computed initializer silently replaces |
 
-`review-helper-tracking` is a candidate review, not an optimization instruction. It names extra
-observable dependencies reached through one synchronous local helper. Establish intended triggers
+### Keep and review
+
+These carry no edit. A `keep` finding preserves code that is already correct; a review names the proof it lacks.
+
+| Action                                                                 | Means                                                                                       |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`keep-state`](EXAMPLES.md#keep-small-local-state-in-react)            | React state is already the smallest render boundary; an observable would only add machinery |
+| [`keep-effect`](EXAMPLES.md#keep-an-effect-while-changing-its-storage) | The effect's React timing, cleanup, or ownership must stay as written                       |
+| `review-state`, `review-effect`                                        | An unsafe guess; `abstentionReason` names the missing proof ([REPORT.md](REPORT.md))        |
+| `review-helper-tracking`                                               | Extra observable dependencies reached through one synchronous local helper                  |
+
+`review-helper-tracking` is a candidate review, not an optimization instruction. Establish intended triggers
 and selector execution cost before changing snapshot boundaries.

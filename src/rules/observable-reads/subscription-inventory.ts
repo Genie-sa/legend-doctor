@@ -1,9 +1,12 @@
+import type {
+  SubscriptionInventory,
+  SubscriptionInventoryReason,
+} from "../../core/subscriptions.js";
 import { hasAncestorUseValueSubscription, otherSubscriptionTracksAncestor } from "./move-down.js";
 import { subscriptionLocation, subscriptionOwner } from "./subscription-cut.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
 import type { SubscriptionFlow } from "./subscription-flow.js";
-import type { SubscriptionInventory } from "../../core/subscriptions.js";
 import type { UseValueBinding } from "./use-value-bindings.js";
 import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
 import { isUseValueCall } from "./observable-paths.js";
@@ -89,7 +92,10 @@ function bindingAnalysis(call: ts.CallExpression, scan: ObservableReadScan): Bin
     : { binding, flow: subscriptionFlow(binding.use, scan) };
 }
 
-function inventoryReasons(analysis: BindingAnalysis, scan: ObservableReadScan): string[] {
+function inventoryReasons(
+  analysis: BindingAnalysis,
+  scan: ObservableReadScan,
+): SubscriptionInventoryReason[] {
   if (!analysis.flow) {
     return [analysis.binding.blocker];
   }
@@ -103,8 +109,8 @@ function inventoryReasons(analysis: BindingAnalysis, scan: ObservableReadScan): 
 function ownerReasons(
   analysis: Extract<BindingAnalysis, { flow: SubscriptionFlow }>,
   scan: ObservableReadScan,
-): string[] {
-  const facts: readonly (readonly [boolean, string])[] = [
+): SubscriptionInventoryReason[] {
+  const facts: readonly (readonly [boolean, SubscriptionInventoryReason])[] = [
     [hasUnprovenOwnerWork(analysis.flow.use.owner, scan), "owner-commit-or-snapshot-work"],
     [overlapsOwnerSubscription(analysis.binding, scan), "overlapping-parent-subscription"],
   ];

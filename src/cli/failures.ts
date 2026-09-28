@@ -1,11 +1,14 @@
 import type { SCHEMA_VERSION } from "../core/types.js";
 
-export type FailureReason =
-  | "invalid_usage"
-  | "scan_failed"
-  | "scope_unavailable"
-  | "target_not_found"
-  | "unsupported_target";
+export const FAILURE_REASONS = [
+  "invalid_usage",
+  "scan_failed",
+  "scope_unavailable",
+  "target_not_found",
+  "unsupported_target",
+] as const;
+
+export type FailureReason = (typeof FAILURE_REASONS)[number];
 
 export const EXIT_INVALID_USAGE = 2;
 

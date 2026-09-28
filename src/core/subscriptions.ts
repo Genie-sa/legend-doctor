@@ -1,5 +1,48 @@
 import type { SourceLocation } from "./types.js";
 
+export const SUBSCRIPTION_INVENTORY_STATUSES = ["planned", "other-action", "unresolved"] as const;
+
+export const SUBSCRIPTION_READ_KINDS = [
+  "render",
+  "derivation",
+  "memo",
+  "render-callback",
+  "event-or-callback",
+  "effect",
+  "unknown",
+] as const;
+
+export const SELECTOR_RESULTS = ["boolean", "primitive", "unknown"] as const;
+
+/** Every reason an inventory entry can carry; `unresolved` entries name at least one. */
+export const SUBSCRIPTION_INVENTORY_REASONS = [
+  "destructured-result",
+  "effect-consumer",
+  "event-or-callback-consumer",
+  "excluded-by-report-filter",
+  "memo-consumer",
+  "no-render-consumer",
+  "observable-binding-not-proven",
+  "overlapping-parent-subscription",
+  "owner-commit-or-snapshot-work",
+  "owner-not-proven",
+  "render-callback-consumer",
+  "returned-result",
+  "selector-calls-unproven-function",
+  "selector-function-not-proven",
+  "selector-observable-binding-not-proven",
+  "selector-read-not-proven",
+  "selector-syntax-not-proven",
+  "selector-tracks-no-observable",
+  "shadowed-or-reassigned-binding",
+  "stable-material-render-cut-not-proven",
+  "unsupported-value-flow",
+  "use-value-options",
+  "wrapped-result",
+] as const;
+
+export type SubscriptionInventoryReason = (typeof SUBSCRIPTION_INVENTORY_REASONS)[number];
+
 export interface SubscriptionBoundary {
   location: SourceLocation;
   start: number;
@@ -27,20 +70,13 @@ export interface SubscriptionInventory {
   binding: string | null;
   observable: string | null;
   /** Present for a `useValue(() => …)` binding whose every tracked read is a proven `path$.get()`. */
-  selector?: { tracks: string[]; result: "boolean" | "primitive" | "unknown" };
-  status: "planned" | "other-action" | "unresolved";
-  reasons: string[];
+  selector?: { tracks: string[]; result: (typeof SELECTOR_RESULTS)[number] };
+  status: (typeof SUBSCRIPTION_INVENTORY_STATUSES)[number];
+  reasons: SubscriptionInventoryReason[];
   reads: {
     location: SourceLocation;
     name: string;
-    kind:
-      | "render"
-      | "derivation"
-      | "memo"
-      | "render-callback"
-      | "event-or-callback"
-      | "effect"
-      | "unknown";
+    kind: (typeof SUBSCRIPTION_READ_KINDS)[number];
   }[];
   derivations: SubscriptionCut["derivations"];
 }
