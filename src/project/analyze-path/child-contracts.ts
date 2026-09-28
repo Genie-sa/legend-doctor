@@ -11,6 +11,7 @@ import type {
   SourceHookDeclaration,
   SourceHookResolver,
 } from "../../rules/source-callback-contract/model.js";
+import { componentParentRerender, customHookSubscribes } from "./parent-rerenders.js";
 import { findComponentDeclaration, findHookDeclaration } from "./source-declarations.js";
 import { findHookPresentationConsumer, hasSingleLeafConsumer } from "./hook-consumers.js";
 import {
@@ -25,7 +26,6 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceIndex } from "../source-components/source-components.js";
 import { cached } from "./contract-cache.js";
 import { componentIsUnreferenced } from "./unreferenced-components.js";
-import { componentParentRerender } from "./parent-rerenders.js";
 import { componentPropDataPath } from "./component-prop-data.js";
 import { componentPropRunsOnlyInHostEvents } from "../../rules/child-contract/host-event-dispatch.js";
 import { importedHookConsumers } from "./hook-consumer-index.js";
@@ -188,6 +188,10 @@ class ChildContracts implements ChildContractResolver {
 
   public componentIsUnreferenced(owner: RuntimeFunctionLike): boolean {
     return componentIsUnreferenced(this.context, owner);
+  }
+
+  public customHookSubscribes(owner: RuntimeFunctionLike, observable: ts.Expression): boolean {
+    return customHookSubscribes(this.context, owner, observable);
   }
 
   public componentPropCallbackIsDeferred(

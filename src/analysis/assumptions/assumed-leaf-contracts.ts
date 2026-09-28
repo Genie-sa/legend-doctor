@@ -126,6 +126,10 @@ export class AssumedLeafContracts implements ChildContractResolver {
     return this.#base.componentIsUnreferenced(owner);
   }
 
+  public customHookSubscribes(owner: RuntimeFunctionLike, observable: ts.Expression): boolean {
+    return this.#base.customHookSubscribes(owner, observable);
+  }
+
   public contextConsumers(contextName: string): readonly ContextConsumerSource[] {
     return this.#base.contextConsumers(contextName);
   }

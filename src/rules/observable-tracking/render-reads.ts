@@ -14,6 +14,7 @@ import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { RenderOwner } from "./render-owners.js";
 import type { TrackingScan } from "./model.js";
+import { guardsOnlyObservableWrites } from "./write-guards.js";
 import { hasCoveringSubscription } from "./subscription-coverage.js";
 import { isReactiveInputArgument } from "./reactive-inputs.js";
 import { renderOwnerOf } from "./render-owners.js";
@@ -33,7 +34,8 @@ interface RenderRead {
  * render without any tracking context. Nothing subscribes, so the value is read once per render
  * and the owner never re-renders when it changes. Reads handed to Legend reactive inputs, which
  * track on their own, `useValue` arguments, reads handed to hooks as snapshots, `key` attributes,
- * observer components, and paths already covered by a `useValue` in the same owner are left alone.
+ * reads that only guard observable writes, observer components, and paths already covered by a
+ * `useValue` in the same owner or in a source-resolved custom hook it calls are left alone.
  */
 export function renderReadFinding(
   call: ts.CallExpression,
@@ -51,12 +53,18 @@ function untrackedRenderRead(call: ts.CallExpression, scan: TrackingScan): Rende
     !observable ||
     !path ||
     isReactiveInputArgument(call, scan) ||
-    isSnapshotPosition(call, scan.imports)
+    isSnapshotPosition(call, scan.imports) ||
+    guardsOnlyObservableWrites(call, scan)
   ) {
     return null;
   }
   const owner = renderOwnerOf(call, scan.imports);
-  if (!owner || owner.tracked || hasCoveringSubscription(owner.owner, path, scan)) {
+  if (
+    !owner ||
+    owner.tracked ||
+    hasCoveringSubscription(owner.owner, path, scan) ||
+    scan.childContracts?.customHookSubscribes(owner.owner, observable)
+  ) {
     return null;
   }
   return { call, observable, owner, path };
@@ -165,7 +173,7 @@ function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPractic
         owner.hops === 0
           ? `the call executes directly in the render body of ${owner.kind} \`${owner.name}\``
           : `the call executes in a synchronous iteration callback of ${owner.kind} \`${owner.name}\`'s render`,
-        `no useValue, use$, or useSelector call in \`${owner.name}\` subscribes to \`${path}\` or a parent path, and the component is not wrapped in observer`,
+        `no useValue, use$, or useSelector call in \`${owner.name}\` or a source-resolved custom hook it calls subscribes to \`${path}\` or a parent path, and the component is not wrapped in observer`,
       ],
       location: { column: character + 1, file: scan.fileName, line: line + 1 },
       message: `${instruction}; ${consequence}.`,

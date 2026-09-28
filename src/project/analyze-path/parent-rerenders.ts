@@ -22,6 +22,7 @@ import type { RenderFunction } from "../../rules/observable-tracking/render-owne
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { collectHookImports } from "../../core/imports.js";
 import { componentReferences } from "./component-references.js";
+import { findHookDeclaration } from "./source-declarations.js";
 import { pathIdentityKey } from "../../core/path-identity.js";
 import { renderOwnerOf } from "../../rules/observable-tracking/render-owners.js";
 import ts from "typescript";
@@ -60,6 +61,9 @@ const FRESH_VALUE_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
 ]);
 
 const hookImportsBySource = new WeakMap<ts.SourceFile, HookImports>();
+
+const MAX_CUSTOM_HOOK_DEPTH = 3;
+const CUSTOM_HOOK_NAME = /^use[A-Z0-9]/u;
 
 /**
  * Whether the components that render `owner` subscribe to these observable paths themselves and
@@ -158,6 +162,61 @@ function siteRerender(reference: ts.Identifier, query: SiteQuery): SiteRerender 
     rendersWithParent(opening, parent.owner, query.component.mode)
     ? "rerendering"
     : "overlapping";
+}
+
+/**
+ * Whether a custom hook that `owner`'s render calls, followed through the custom hooks it calls in
+ * turn, subscribes to this observable path or an ancestor with a `useValue`-style hook. Hooks run
+ * on every render of their caller, so the owner already rerenders on each change of the path.
+ */
+export function customHookSubscribes(
+  context: AnalysisContext,
+  owner: RuntimeFunctionLike,
+  observable: ts.Expression,
+): boolean {
+  const read = observablePathKey(context, owner.getSourceFile().fileName, observable);
+  return (
+    read !== null &&
+    customHookSubscribedPaths(context, owner, MAX_CUSTOM_HOOK_DEPTH).some((path) =>
+      isPathPrefix(path, read),
+    )
+  );
+}
+
+function customHookSubscribedPaths(
+  context: AnalysisContext,
+  owner: RuntimeFunctionLike,
+  depth: number,
+): ObservablePathKey[] {
+  if (depth === 0) {
+    return [];
+  }
+  return calledCustomHooks(context, owner).flatMap((hook) => [
+    ...subscribedPaths(hook, hookImportsFor(hook.getSourceFile()), context),
+    ...customHookSubscribedPaths(context, hook, depth - 1),
+  ]);
+}
+
+function calledCustomHooks(context: AnalysisContext, owner: RuntimeFunctionLike): RenderFunction[] {
+  const file = owner.getSourceFile().fileName;
+  const hooks: RenderFunction[] = [];
+  visit(owner.body, (node) => {
+    if (
+      !ts.isCallExpression(node) ||
+      !ts.isIdentifier(node.expression) ||
+      !CUSTOM_HOOK_NAME.test(node.expression.text) ||
+      findAncestor(node, isRuntimeFunctionLike) !== owner
+    ) {
+      return;
+    }
+    const resolved = context.sourceIndex.hookDeclarationFor(file, node.expression.text);
+    const sourceFile = resolved && context.project.getFile(resolved.file)?.sourceFile;
+    const hook = sourceFile && findHookDeclaration(sourceFile, resolved.localName);
+    if (hook) {
+      hooks.push(hook);
+    }
+  });
+  return hooks;
 }
 
 function jsxSite(reference: ts.Identifier): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {

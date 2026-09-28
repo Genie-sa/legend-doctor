@@ -104,6 +104,8 @@ export interface ChildContractResolver {
   componentPropIsLeafRenderConsumer: (componentName: string, propName: string) => boolean;
   /** No production source in the closed application package can render this component. */
   componentIsUnreferenced: (owner: RuntimeFunctionLike) => boolean;
+  /** A source-resolved custom hook the owner's render calls subscribes to this path or an ancestor. */
+  customHookSubscribes: (owner: RuntimeFunctionLike, observable: ts.Expression) => boolean;
   /** Every source file that reads a React context created or imported here, with its reader hooks. */
   contextConsumers: (contextName: string) => readonly ContextConsumerSource[];
   /** How many `<Context.Provider>` sites the indexed sources render for this context. */
