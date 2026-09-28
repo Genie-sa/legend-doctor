@@ -10,6 +10,11 @@ import {
   nearestNestedFunction,
   visit,
 } from "../../core/ast.js";
+import {
+  isInertFallback,
+  isInvariantFallback,
+  wrappedUseValueResult,
+} from "./wrapped-use-value-results.js";
 import { isInlineJsxEventHandler, runsOutsideRender } from "./render-exclusion.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
@@ -33,6 +38,7 @@ interface PlainSeedSubscription {
 }
 
 interface UnrenderedSubscription extends PlainSeedSubscription {
+  readonly fallback: string | null;
   readonly localName: string;
   readonly owner: RuntimeFunctionLike;
   readonly reads: readonly UnrenderedRead[];
@@ -55,29 +61,45 @@ function unrenderedSubscription(
   scan: ObservableReadScan,
 ): UnrenderedSubscription | null {
   const owner = topLevelOwner(declaration);
-  const subscription = plainSeedSubscription(declaration, scan);
-  if (!owner || !subscription || !ts.isIdentifier(declaration.name)) {
+  const result = declaration.initializer && wrappedUseValueResult(declaration.initializer);
+  const subscription = result && plainSeedSubscription(result.call, scan);
+  if (!owner || !result || !subscription || !ts.isIdentifier(declaration.name)) {
     return null;
   }
   const reads = unrenderedReads(owner, declaration.name, scan.imports);
-  if (!reads || renderMayReadUntrackedState(owner, scan)) {
+  if (
+    !reads ||
+    (result.fallback && !fallbackSurvivesRewrite(result.fallback, reads)) ||
+    renderMayReadUntrackedState(owner, scan)
+  ) {
     return null;
   }
-  return { ...subscription, localName: declaration.name.text, owner, reads };
+  return {
+    ...subscription,
+    fallback: result.fallback?.getText(scan.sourceFile) ?? null,
+    localName: declaration.name.text,
+    owner,
+    reads,
+  };
+}
+
+/**
+ * Deleting the binding drops only an inert fallback; replacing its reads repeats the fallback at each
+ * read site, which is sound only when every evaluation yields the render-time value.
+ */
+function fallbackSurvivesRewrite(
+  fallback: ts.Expression,
+  reads: readonly UnrenderedRead[],
+): boolean {
+  return reads.length === 0 ? isInertFallback(fallback) : isInvariantFallback(fallback);
 }
 
 /** A plain-data seed proves the subscription activates no lazy source that `peek()` would defer. */
 function plainSeedSubscription(
-  declaration: ts.VariableDeclaration,
+  call: ts.CallExpression,
   scan: ObservableReadScan,
 ): PlainSeedSubscription | null {
-  const call = declaration.initializer;
-  if (
-    !call ||
-    !ts.isCallExpression(call) ||
-    call.arguments.length !== 1 ||
-    !isUseValueCall(call, scan.imports)
-  ) {
+  if (call.arguments.length !== 1 || !isUseValueCall(call, scan.imports)) {
     return null;
   }
   const path = provenObservablePath(call.arguments[0]!, scan.observableBindings)?.getText(
@@ -209,10 +231,7 @@ function isEventRootedCommand({
   readonly imports: HookImports;
   readonly owner: RuntimeFunctionLike;
 }): boolean {
-  if (
-    callback.asteriskToken ||
-    callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
-  ) {
+  if (!isSynchronous(callback)) {
     return false;
   }
   if (isInlineJsxEventHandler(callback)) {
@@ -221,6 +240,13 @@ function isEventRootedCommand({
   return (
     isOwnerLevelCallback(callback, owner, imports) &&
     callbackIsEventRooted({ callback, owner, dependencyName, seen: new Set() })
+  );
+}
+
+function isSynchronous(callback: PlainFunction): boolean {
+  return (
+    !callback.asteriskToken &&
+    !callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
   );
 }
 
@@ -288,8 +314,9 @@ function isUntrackedRead(
 }
 
 /**
- * A proven observable's `get()` directly in the inline selector of a `useValue`, `use$`, or
- * `useSelector` call: that hook tracks the read and rerenders the owner itself when it changes.
+ * A proven observable's `get()` directly in the synchronous inline selector of a `useValue`, `use$`,
+ * or `useSelector` call: that hook tracks the read and rerenders the owner itself when it changes.
+ * Reads after an `await` or `yield` run outside the tracking context.
  */
 function isTrackedSelectorRead(
   read: ts.CallExpression,
@@ -299,9 +326,12 @@ function isTrackedSelectorRead(
   const selector = nearestNestedFunction(read, owner);
   const call = selector?.parent;
   return Boolean(
+    selector &&
     call &&
     ts.isCallExpression(call) &&
     call.arguments[0] === selector &&
+    isPlainFunction(selector) &&
+    isSynchronous(selector) &&
     isUseValueCall(call, scan.imports) &&
     directObservableReadPath(read, scan.observableBindings),
   );
@@ -315,20 +345,8 @@ function unrenderedFinding(
   const { line, character } = scan.sourceFile.getLineAndCharacterOfPosition(
     declaration.getStart(scan.sourceFile),
   );
-  const { hook, localName, observable, reads } = subscription;
+  const { localName, observable, reads } = subscription;
   const owner = ownerName(subscription.owner);
-  const lineOf = (node: ts.Node): number =>
-    scan.sourceFile.getLineAndCharacterOfPosition(node.getStart(scan.sourceFile)).line + 1;
-  const snapshots = reads.filter((read) => read.kind !== "callback-dependency");
-  const dependencies = reads.filter((read) => read.kind === "callback-dependency");
-  const rewrite =
-    snapshots.length === 0
-      ? `Delete \`const ${localName} = ${hook}(${observable})\`; nothing reads \`${localName}\``
-      : `Remove \`const ${localName} = ${hook}(${observable})\` and replace its ${snapshots.length} non-render read${snapshots.length === 1 ? "" : "s"} (line ${snapshots.map((read) => lineOf(read.node)).join(", ")}) with \`${observable}.peek()\``;
-  const dropped =
-    dependencies.length === 0
-      ? ""
-      : `; drop \`${localName}\` from the useCallback dependencies at line ${dependencies.map((read) => lineOf(read.node)).join(", ")}`;
   return {
     action: "peek-unrendered-use-value",
     confidence: "probable",
@@ -341,9 +359,32 @@ function unrenderedFinding(
       `\`${owner}\` renders no ref, peek(), or untracked get() read that could depend on the forced rerender`,
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
-    message: `${rewrite}${dropped}. No render reads the value, so \`${observable}\` updates stop rerendering \`${owner}\`.`,
+    message: `${rewriteInstruction(subscription, scan.sourceFile)}. No render reads the value, so \`${observable}\` updates stop rerendering \`${owner}\`.`,
     practice: "reactivity",
   };
+}
+
+function rewriteInstruction(
+  { fallback, hook, localName, observable, reads }: UnrenderedSubscription,
+  sourceFile: ts.SourceFile,
+): string {
+  const lines = (items: readonly UnrenderedRead[]): string =>
+    items
+      .map(
+        (read) => sourceFile.getLineAndCharacterOfPosition(read.node.getStart(sourceFile)).line + 1,
+      )
+      .join(", ");
+  const binding = `const ${localName} = ${hook}(${observable})${fallback ? ` ?? ${fallback}` : ""}`;
+  const snapshot = fallback ? `(${observable}.peek() ?? ${fallback})` : `${observable}.peek()`;
+  const snapshots = reads.filter((read) => read.kind !== "callback-dependency");
+  const dependencies = reads.filter((read) => read.kind === "callback-dependency");
+  const rewrite =
+    snapshots.length === 0
+      ? `Delete \`${binding}\`; nothing reads \`${localName}\``
+      : `Remove \`${binding}\` and replace its ${snapshots.length} non-render read${snapshots.length === 1 ? "" : "s"} (line ${lines(snapshots)}) with \`${snapshot}\``;
+  return dependencies.length === 0
+    ? rewrite
+    : `${rewrite}; drop \`${localName}\` from the useCallback dependencies at line ${lines(dependencies)}`;
 }
 
 function ownerName(owner: RuntimeFunctionLike): string {

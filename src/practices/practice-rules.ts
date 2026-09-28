@@ -132,6 +132,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
         inventory: request.subscriptionInventory,
         primitivePaths: request.importedObservablePrimitivePaths ?? new Set(),
         plainSeedPaths: request.importedObservablePlainSeedPaths ?? new Set(),
+        plainConstants: request.plainConstants,
         childContracts: request.childContracts,
         fileName: request.fileName,
         imports,

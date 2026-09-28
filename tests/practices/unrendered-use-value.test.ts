@@ -177,6 +177,92 @@ test("keeps subscriptions when a render may rely on the forced rerender", () => 
   }
 });
 
+test("sees through wrappers that return a defined subscription result unchanged", () => {
+  const store = `${player}\nconst FIRST = 0;`;
+  const deleted = requireValue(
+    unrendered(`const playing = useValue(player$.playing) ?? false; return null;`, store),
+  );
+  assert.match(
+    deleted.message,
+    /^Delete `const playing = useValue\(player\$\.playing\) \?\? false`; nothing reads `playing`/u,
+  );
+  const imported = requireValue(
+    unrendered(
+      `const index = useValue(player$.index) ?? DEFAULT_INDEX; return null;`,
+      store,
+      `${header}\nimport { DEFAULT_INDEX } from "./constants";`,
+    ),
+  );
+  assert.match(imported.message, /\?\? DEFAULT_INDEX`; nothing reads `index`/u);
+  const asserted = requireValue(
+    unrendered(
+      `const index = useValue(player$.index)!;
+       return <button onClick={() => log(index)}>go</button>;`,
+      store,
+    ),
+  );
+  assert.match(asserted.message, /with `player\$\.index\.peek\(\)`/u);
+  const fallback = requireValue(
+    unrendered(
+      `const index = (useValue(player$.index) as number | undefined) ?? FIRST;
+       return <button onClick={() => log(index)}>go</button>;`,
+      store,
+    ),
+  );
+  assert.match(fallback.message, /with `\(player\$\.index\.peek\(\) \?\? FIRST\)`/u);
+});
+
+test("keeps wrapped subscriptions whose fallback or operator changes the value or its timing", () => {
+  const store = `${player}\nlet mutableFallback = 0;\ndeclare function compute(): number;`;
+  const preamble = `${header}\nimport { DEFAULT_INDEX } from "./constants";`;
+  for (const [label, body] of [
+    ["falsy fallback", `const index = useValue(player$.index) || 0; return null;`],
+    ["arithmetic", `const index = useValue(player$.index) + 1; return null;`],
+    ["called fallback", `const index = useValue(player$.index) ?? compute(); return null;`],
+    [
+      "owner-level fallback",
+      `const first = 0;
+       const index = useValue(player$.index) ?? first;
+       return null;`,
+    ],
+    [
+      "mutable fallback copied into a command",
+      `const index = useValue(player$.index) ?? mutableFallback;
+       return <button onClick={() => log(index)}>go</button>;`,
+    ],
+    [
+      "imported fallback copied into a command",
+      `const index = useValue(player$.index) ?? DEFAULT_INDEX;
+       return <button onClick={() => log(index)}>go</button>;`,
+    ],
+  ] as const) {
+    assert.equal(unrendered(body, store, preamble), undefined, label);
+  }
+});
+
+test("treats a direct get() inside a Legend selector callback as a tracked render read", () => {
+  const legacyPreamble = header.replace("useObservable, useValue", "use$, useSelector, useValue");
+  for (const [label, body] of [
+    [
+      "useValue selector",
+      `const player = useValue(player$);
+       const current = useValue(() => player$.index.get() === 1);
+       return <p>{current ? "a" : "b"}</p>;`,
+    ],
+    [
+      "legacy useSelector selector",
+      `const player = use$(player$);
+       const current = useSelector(() => {
+         const index = player$.index.get();
+         return index === 1;
+       });
+       return <p>{current ? "a" : "b"}</p>;`,
+    ],
+  ] as const) {
+    assert.ok(unrendered(body, player, legacyPreamble), label);
+  }
+});
+
 test("quotes the legacy hook it deletes beside a selector that tracks its own read", () => {
   const preamble = header.replace("useObservable, useValue", "use$, useSelector");
   const finding = requireValue(
@@ -222,6 +308,28 @@ test("keeps subscriptions beside selector reads that no hook tracks", () => {
        return <p>{current ? "current" : "idle"}</p>;`,
       `${header.replace("useObservable, useValue", "use$")}\nimport { useSelector } from "react-redux";`,
     ],
+    [
+      "peek in a selector",
+      `const player = useValue(player$);
+       const current = useValue(() => player$.index.peek());
+       return <p>{current}</p>;`,
+      header,
+    ],
+    [
+      "ref in a selector",
+      `const count = useRef(0);
+       const player = useValue(player$);
+       const current = useValue(() => player$.index.get() + count.current);
+       return <p>{current}</p>;`,
+      header,
+    ],
+    [
+      "async selector",
+      `const player = useValue(player$);
+       const current = useValue(async () => player$.index.get());
+       return <p>{String(current)}</p>;`,
+      header,
+    ],
   ] as const) {
     assert.equal(unrendered(body, player, preamble), undefined, label);
   }
@@ -242,6 +350,11 @@ test("requires a plain-data seed for the subscribed path", () => {
     ],
     ["repeated key", `const player$ = observable({ playing: false, playing: () => true });`],
     ["mutable root", `let player$ = observable({ playing: false });`],
+    ["mutable constant", `let IDLE = false; const player$ = observable({ playing: IDLE });`],
+    [
+      "computed constant",
+      `const IDLE = Math.random() > 1; const player$ = observable({ playing: IDLE });`,
+    ],
   ]) {
     assert.equal(unrendered(body, store), undefined, label);
   }
@@ -250,13 +363,16 @@ test("requires a plain-data seed for the subscribed path", () => {
       "plain sibling",
       `declare const WIDTH: number; const player$ = observable({ playing: false, width: WIDTH });`,
     ],
+    ["module constant", `const IDLE = false; const player$ = observable({ playing: IDLE });`],
     [
       "negative number and nested object",
       `const player$ = observable({ playing: { value: -1 } });`,
     ],
   ]) {
     const path =
-      label === "plain sibling" ? body : body.replace("player$.playing", "player$.playing.value");
+      label === "negative number and nested object"
+        ? body.replace("player$.playing", "player$.playing.value")
+        : body;
     assert.ok(unrendered(path, store), label);
   }
 });

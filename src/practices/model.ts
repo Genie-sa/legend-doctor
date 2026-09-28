@@ -18,6 +18,8 @@ export interface LegendPracticesRequest {
   subscriptionInventory?: SubscriptionInventory[] | undefined;
   importedObservablePrimitivePaths?: ReadonlySet<string>;
   importedObservablePlainSeedPaths?: ReadonlySet<string>;
+  /** Names bound to a module `const` of a plain scalar literal, locally or through an import. */
+  plainConstants?: ReadonlySet<string> | undefined;
   capabilities: FileCapabilities;
   childContracts: ChildContractResolver | null;
   fileName: string;

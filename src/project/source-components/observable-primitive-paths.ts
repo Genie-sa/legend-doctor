@@ -16,7 +16,7 @@ export function observablePrimitivePathsFor(
 export function observableDeclarationPathsFor(
   state: SourceIndexState,
   file: string,
-  pathsOf: (declaration: ts.VariableDeclaration) => ReadonlySet<string>,
+  pathsOf: (declaration: ts.VariableDeclaration, declaringFile: string) => ReadonlySet<string>,
 ): ReadonlySet<string> {
   const paths = new Set<string>();
   for (const [name, symbol] of resolvedFor(state, file, "observable")) {
@@ -25,7 +25,7 @@ export function observableDeclarationPathsFor(
     if (!declaration) {
       continue;
     }
-    for (const suffix of pathsOf(declaration)) {
+    for (const suffix of pathsOf(declaration, symbol.file)) {
       paths.add(suffix ? `${name}.${suffix}` : name);
     }
   }

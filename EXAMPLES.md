@@ -233,10 +233,13 @@ const wasPlayingRef = useRef(player$.isPlaying.peek());
 const toggle = useCallback(() => setPlaying(!player$.isPlaying.peek()), []);
 ```
 
-The path must be seeded with plain data, so dropping the subscription never delays a lazy `synced` or computed
-source. The action abstains when a render reads a ref, `peek()`, or an untracked `get()` that could depend on the
-forced rerender, and when a read is awaited, deferred, or captured by a callback that omits the value from its
-dependencies.
+The path must be seeded with plain data or a module constant of a literal, so dropping the subscription never
+delays a lazy `synced` or computed source. A persisted store is lazy: its first read starts the load, so it stays
+out of scope. The result may sit behind `!`, a type assertion, or `?? fallback`; each rewritten read keeps the
+fallback, which must be a literal or a module `const`. The action abstains when a render reads a ref, `peek()`,
+or an untracked `get()` that could depend on the forced rerender, and when a read is awaited, deferred, or captured
+by a callback that omits the value from its dependencies. A `path$.get()` directly inside a Legend selector callback
+is tracked by that selector and does not block it.
 
 ### Split unrelated leaves
 
