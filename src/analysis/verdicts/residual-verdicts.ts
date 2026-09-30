@@ -18,6 +18,7 @@ import type { StateClassificationContext } from "./classification-context.js";
 import { forwardedSetterProp } from "./setter-forwarding.js";
 import { isCohesiveDelayedPendingState } from "../delayed-pending.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
+import { passThroughLeaf } from "./pass-through-leaf.js";
 import { setterOwnedByValueTransitionCallSite } from "../controlled-leaf-cuts.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
 
@@ -213,27 +214,58 @@ export function broadTransportVerdict(context: StateClassificationContext): Clas
     !callSiteIsKeyed(ownerCallSite) &&
     setterCallsAssignBooleanLiterals(usage)
   ) {
-    const leafProp = verifiedLeafRenderProp(usage, childContracts);
-    if (leafProp) {
+    const leaf = leafTransport(context, childContracts);
+    if (leaf) {
       return {
         action: "use-observable",
         confidence: "probable",
-        message: leafTransportMessage(context, leafProp, forwardedSetter),
+        message: leafTransportMessage(context, leaf, forwardedSetter),
       };
     }
   }
   return null;
 }
 
+interface LeafTransport {
+  readonly callSites: number;
+  readonly proof: string;
+  readonly target: string;
+}
+
+/** The child contract proves a resolvable child; otherwise the owner-side proof never reads it. */
+function leafTransport(
+  context: StateClassificationContext,
+  childContracts: ChildContractResolver,
+): LeafTransport | null {
+  const leafProp = verifiedLeafRenderProp(context.usage, childContracts);
+  if (leafProp) {
+    const proof = `The child contract is verified: \`${leafProp.target}\` renders the \`${leafProp.propName}\` value directly and owns none of its lifecycle.`;
+    return { callSites: 1, proof, target: leafProp.target };
+  }
+  const [target = ""] = context.usage.jsxTargets;
+  const passThrough = passThroughLeaf(context, target);
+  return (
+    passThrough && {
+      callSites: passThrough.callSites,
+      proof: `The owner-side contract is verified: this owner reads \`${context.state.valueName}\` only as that \`${passThrough.propName}\` attribute and never writes it during render, and each call site's parent passes the wrapper through unchanged, so the child receives the same props without being read.`,
+      target,
+    }
+  );
+}
+
 function leafTransportMessage(
   { state, subscriptionHook }: StateClassificationContext,
-  leafProp: VerifiedLeafRenderProp,
+  { callSites, proof, target }: LeafTransport,
   forwardedSetter: ForwardedSetterProp | null,
 ): string {
   const forwarding = forwardedSetter
     ? ` Forward the setter through the wrapper as \`${forwardedSetter.propName}={(next) => ${state.valueName}$.set(next)}\`; the child only calls it after render.`
     : "";
-  return `Replace \`${state.valueName}\` with a component-lifetime observable and wrap the stable \`${leafProp.target}\` call site in a leaf subscriber; subscribe once with \`${subscriptionHook}\`, pass the same plain value, and leave the child API unchanged.${forwarding} The child contract is verified: \`${leafProp.target}\` renders the \`${leafProp.propName}\` value directly and owns none of its lifecycle.`;
+  const sites =
+    callSites === 1
+      ? `the stable \`${target}\` call site`
+      : `each of the ${callSites} stable \`${target}\` call sites`;
+  return `Replace \`${state.valueName}\` with a component-lifetime observable and wrap ${sites} in a leaf subscriber; subscribe once with \`${subscriptionHook}\`, pass the same plain value, and leave the child API unchanged.${forwarding} ${proof}`;
 }
 
 export function residualStateVerdict(context: StateClassificationContext): ClassifiedState {

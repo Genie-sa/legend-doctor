@@ -56,6 +56,16 @@ export const zenborgHookCases = [
     action: "use-observable",
     file: "components/CycleDeck.tsx",
     hook: "useState",
+    line: 93,
+    name: "createDialogOpen",
+    rationale:
+      "`createDialogOpen` is read only as the `open` prop of the four `CycleCalendarDialog` call sites (:194, :467, :499, :541), one per return branch and each a direct child of that branch's root `<div>`; it is written only by the plan-cycle buttons (:187, :371) and each dialog's `onClose`. Opening or closing the dialog rerenders the whole deck, which rebuilds the virtual deck cards without memoization (:153-175), so a leaf around each call site keeps them out.",
+    target: "zenborg",
+  },
+  {
+    action: "use-observable",
+    file: "components/CycleDeck.tsx",
+    hook: "useState",
     line: 117,
     name: "editName",
     rationale: CYCLE_DRAFT,

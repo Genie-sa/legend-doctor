@@ -336,6 +336,10 @@ class ChildContracts implements ChildContractResolver {
     return this.resolveComponentSource(this.importerFile, name);
   }
 
+  public resolveComponentIn(file: string, name: string): ChildComponentSource | null {
+    return this.resolveComponentSource(file, name);
+  }
+
   private hookDefersCallback(file: string, name: string, argumentIndex: number): boolean {
     const source = this.resolveHookDeclaration(file, name);
     return (

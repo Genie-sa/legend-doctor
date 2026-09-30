@@ -9,6 +9,10 @@ import test from "node:test";
 const OWNER_CHROME =
   "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />";
 
+/**
+ * The children render under an unresolved `Panel`, which keeps the owner-side pass-through proof
+ * out, so each case exercises the child contract alone.
+ */
 function screen(children: readonly string[], imports: string): string {
   return `
     import { useState } from "react";
@@ -18,7 +22,7 @@ function screen(children: readonly string[], imports: string): string {
       const run = async () => { setBusy(false); await work(); };
       ${"\n".repeat(150)}
       const content = (
-        <main>${OWNER_CHROME}<button onClick={run} />${children.join("")}</main>
+        <main>${OWNER_CHROME}<button onClick={run} /><Panel>${children.join("")}</Panel></main>
       );
       return <Shell>{content}</Shell>;
     }

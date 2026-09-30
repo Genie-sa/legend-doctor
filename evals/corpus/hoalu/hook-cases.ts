@@ -46,6 +46,18 @@ export const hoaluHookCases = [
       "Opening the controlled combobox should update its stable leaf without rerunning the field owner, query hooks, or option derivation.",
     target: "hoalu-app",
   })),
+  ...[
+    ["components/forms/select-category.tsx", 35, ":41-50"],
+    ["components/forms/select-recurring-bill.tsx", 48, ":54-62"],
+  ].map(([file, line, derivation]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: "dialogOpen",
+    rationale: `The field owner reads \`dialogOpen\` only as the \`open\` prop of its stable \`Dialog\` call site and hands the setter to it as \`onOpenChange\`; its parent \`Field\` spreads its props onto the \`@hoalu/ui\` \`Field\`, which spreads them onto a \`div\`, so a leaf around \`Dialog\` is invisible to both. Opening the create dialog from the open combobox otherwise reruns the query hook, the option derivation (${derivation}), and the combobox with every listed item; the leaf passes the same children, so those subtrees bail out.`,
+    target: "hoalu-app",
+  })),
   {
     action: "use-observable",
     file: "components/receipt/receipt-scanner.tsx",

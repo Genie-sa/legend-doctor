@@ -1,5 +1,5 @@
-import { findAncestor, isRuntimeFunctionLike } from "../../core/ast.js";
-import type { ComponentSourceResolver } from "./model.js";
+import type { ChildComponentSource, ComponentSourceResolver } from "./model.js";
+import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import type { HostTagImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isHostTag } from "../../core/imports.js";
@@ -7,6 +7,21 @@ import ts from "typescript";
 
 /** The React APIs and element field through which a component can observe its children's types. */
 const CHILD_INSPECTION = /\b(?:Children|cloneElement|isValidElement)\b|\.type\b/u;
+
+/** Adds the props and element fields through which a component slots a child or reads its props. */
+const CHILD_OBSERVATION = new RegExp(
+  `${CHILD_INSPECTION.source}|\\b(?:asChild|Slot)\\b|[\\w)\\]]\\.props\\b`,
+  "u",
+);
+
+/** How many forwarding components a wrapped element may pass through before reaching a host. */
+const MAX_FORWARDING_DEPTH = 3;
+
+/** Beyond the owner's file only intrinsic tags count as hosts, since host imports are per file. */
+const INTRINSIC_HOST_TAGS: HostTagImports = {
+  hostComponents: new Set(),
+  hostNamespaces: new Set(),
+};
 
 /** React Native's Android `ScrollView` clones this element to inject `style` and its `children`. */
 const CLONED_ELEMENT_PROP = "refreshControl";
@@ -43,6 +58,106 @@ export function replacedElementTypeIsUnobserved(
   }
   const body = scope.resolveComponent(tag)?.owner.body;
   return body !== undefined && !CHILD_INSPECTION.test(body.getText());
+}
+
+export interface PassThroughScope {
+  readonly hostTags: HostTagImports;
+  readonly owner: RuntimeFunctionLike;
+  /** Resolves a tag against the imports of `file`, or of the owner's file when `file` is `null`. */
+  readonly resolveComponent: (file: string | null, name: string) => ChildComponentSource | null;
+}
+
+/**
+ * Proves that wrapping the element at `node` in a leaf subscriber is invisible to every element that
+ * receives it: the owner's output, a host element, or a source component that only renders its
+ * `children` or spreads its props onto elements meeting the same contract, down to a host. No
+ * component on that chain may take `asChild`, render a `Slot`, inspect or clone its children, or
+ * read another element's `.props`.
+ */
+export function wrappedElementIsPassedThrough(node: ts.Node, scope: PassThroughScope): boolean {
+  const parent = receivingElement(replacedElement(node), scope.owner);
+  return (
+    parent === null ||
+    (parent !== undefined &&
+      forwardsChildren(parent.openingElement, scope, { depth: MAX_FORWARDING_DEPTH, file: null }))
+  );
+}
+
+function forwardsChildren(
+  element: ts.JsxOpeningLikeElement,
+  scope: PassThroughScope,
+  { depth, file }: { readonly depth: number; readonly file: string | null },
+): boolean {
+  const tag = element.tagName.getText();
+  if (isHostTag(tag, file === null ? scope.hostTags : INTRINSIC_HOST_TAGS)) {
+    return true;
+  }
+  const slotted = element.attributes.properties.some(
+    (property) => ts.isJsxAttribute(property) && property.name.getText() === "asChild",
+  );
+  const source = depth > 0 && !slotted ? scope.resolveComponent(file, tag) : null;
+  const receivers =
+    source && !CHILD_OBSERVATION.test(source.body.getText()) ? childrenReceivers(source) : null;
+  return (
+    receivers?.every((receiver) =>
+      forwardsChildren(receiver, scope, { depth: depth - 1, file: source?.file ?? null }),
+    ) ?? false
+  );
+}
+
+/**
+ * The elements a component hands its `children` to, directly or through a props spread. Its own
+ * output and reads of other props need no proof; any other use of `children` or the props abstains.
+ */
+function childrenReceivers(source: ChildComponentSource): ts.JsxOpeningLikeElement[] | null {
+  const carriers = childrenCarriers(source.owner.parameters[0]?.name);
+  const receivers: ts.JsxOpeningLikeElement[] = [];
+  let forwardsOnly = carriers !== null;
+  visit(source.body, (node) => {
+    if (forwardsOnly && ts.isIdentifier(node) && carriers?.has(node.text)) {
+      const receiver = childrenReceiver(node, source.owner);
+      forwardsOnly = receiver !== undefined;
+      if (receiver) {
+        receivers.push(receiver);
+      }
+    }
+  });
+  return forwardsOnly ? receivers : null;
+}
+
+/** The parameter bindings that hold `children`: the props object, a rest element, or `children`. */
+function childrenCarriers(binding: ts.BindingName | undefined): ReadonlySet<string> | null {
+  if (binding === undefined || ts.isIdentifier(binding)) {
+    return new Set(binding ? [binding.text] : []);
+  }
+  const carriers = ts.isObjectBindingPattern(binding)
+    ? binding.elements.filter(
+        (element) =>
+          element.dotDotDotToken || (element.propertyName ?? element.name).getText() === "children",
+      )
+    : [];
+  return ts.isObjectBindingPattern(binding) &&
+    carriers.every((element) => ts.isIdentifier(element.name))
+    ? new Set(carriers.map((element) => element.name.getText()))
+    : null;
+}
+
+function childrenReceiver(
+  reference: ts.Identifier,
+  owner: RuntimeFunctionLike,
+): ts.JsxOpeningLikeElement | null | undefined {
+  const { parent } = reference;
+  if (ts.isJsxSpreadAttribute(parent)) {
+    return parent.parent.parent;
+  }
+  if (ts.isPropertyAccessExpression(parent) && parent.name.text !== "children") {
+    return null;
+  }
+  const element = receivingElement(
+    ts.isPropertyAccessExpression(parent) ? parent : reference,
+    owner,
+  );
+  return element ? element.openingElement : element;
 }
 
 /**
