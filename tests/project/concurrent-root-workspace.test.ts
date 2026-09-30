@@ -119,6 +119,37 @@ test("published packages answer for their consumers' renderers through peer rang
   }
 });
 
+test("a peer range that admits every renderer version constrains nothing, like an omitted peer", async () => {
+  const workspace = {
+    ...NPM_LOCKFILE,
+    "package.json": manifest({ workspaces: ["packages/*"] }),
+    "packages/app/package.json": JSON.stringify({
+      dependencies: { "react-native": "0.86.3" },
+      name: "mobile",
+    }),
+  };
+  for (const [label, library, expected] of [
+    ["star peer", { peerDependencies: { "react-native": "*" } }, true],
+    ["x peer", { peerDependencies: { "react-native": "x" } }, true],
+    ["empty peer", { peerDependencies: { "react-native": "" } }, true],
+    [
+      "star peer beside a legacy development renderer",
+      { devDependencies: { "react-native": "0.81.6" }, peerDependencies: { "react-native": "*" } },
+      false,
+    ],
+    ["bounded legacy peer", { peerDependencies: { "react-native": ">=0.70" } }, false],
+  ] as const) {
+    assert.equal(
+      await rendersConcurrently({
+        ...workspace,
+        "packages/tabs/package.json": JSON.stringify({ name: "tabs", ...library }),
+      }),
+      expected,
+      label,
+    );
+  }
+});
+
 test("catalog references resolve through pnpm and Bun workspace catalogs", async () => {
   const app = JSON.stringify({ dependencies: { "react-dom": "catalog:" }, name: "web" });
   for (const [catalog, expected] of [

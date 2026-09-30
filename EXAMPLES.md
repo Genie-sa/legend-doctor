@@ -404,7 +404,7 @@ This preserves an atomic transition: subscribers see one completed update.
 The render saving depends on the renderer. A legacy root (React Native's old architecture or `ReactDOM.render`) renders
 each write made outside a React event separately, so both actions are changes there. When every React renderer in the
 workspace can only create concurrent roots (React Native 0.82 or later, React DOM 19 or later, including published
-packages' peer ranges), React already commits the writes in one render. React Native 0.74 to 0.81 qualifies when every
+packages' peer ranges other than `*`, which constrains nothing), React already commits the writes in one render. React Native 0.74 to 0.81 qualifies when every
 app host enables the New Architecture on each platform it builds: an assigned `RCT_NEW_ARCH_ENABLED` or
 `Podfile.properties.json` flag with no app delegate override, `newArchEnabled=true` in `gradle.properties`, or the Expo
 app config flag, which Expo SDK 53 and 54 default to on. React DOM 18 qualifies when each package that declares it

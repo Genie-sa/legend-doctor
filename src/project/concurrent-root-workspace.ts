@@ -48,6 +48,7 @@ const SIMPLE_RANGE =
   /^(?:[\^~]|>=)?\s*v?(?<major>\d+)(?:\.(?<minor>\d+))?(?:\.[\dx*]+)?(?:-[\w.]+)?$/u;
 const CATALOG_REFERENCE = /^catalog:(?<name>.*)$/u;
 const NPM_ALIAS = /^npm:(?:@[^/@]+\/)?[^/@]+@(?<range>.+)$/u;
+const ANY_VERSION = /^[*xX]?$/u;
 
 interface Version {
   readonly major: number;
@@ -237,7 +238,8 @@ async function everyHostRunsNewArchitecture(
 
 /**
  * The verdict of each renderer the package declares; empty when it declares none. A published package also
- * runs under its consumers' renderers, so its peer ranges must qualify too.
+ * runs under its consumers' renderers, so its peer ranges must qualify too. A peer range that admits every
+ * version constrains nothing, exactly like an omitted peer.
  */
 function rendererVerdicts(pkg: Package, catalogs: Catalogs): ReadonlySet<RendererVerdict> {
   const fields = pkg.packageJson.private === true ? LOCAL_FIELDS : PUBLISHED_FIELDS;
@@ -245,7 +247,10 @@ function rendererVerdicts(pkg: Package, catalogs: Catalogs): ReadonlySet<Rendere
     fields.flatMap((field) =>
       Object.entries(pkg.packageJson[field] ?? {}).flatMap(([name, range]) => {
         const floor = RENDERER_FLOORS.get(name);
-        return floor ? [declarationVerdict({ catalogs, field, floor, name, range })] : [];
+        const unconstrained = field === "peerDependencies" && ANY_VERSION.test(range.trim());
+        return floor && !unconstrained
+          ? [declarationVerdict({ catalogs, field, floor, name, range })]
+          : [];
       }),
     ),
   );
