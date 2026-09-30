@@ -4,7 +4,7 @@ import type { StateTransitionEvidence } from "./state-transitions.js";
 type Confidence = "certain" | "probable";
 
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public JSON protocol version.
-const SCHEMA_VERSION = 5 as const;
+const SCHEMA_VERSION = 6 as const;
 
 const ABSTENTION_REASONS = [
   "async-command-origin-unresolved",
@@ -127,7 +127,6 @@ const LEGEND_PRACTICE_ACTIONS = [
   "select-primitive-projection",
   "assign-observable-fields",
   "batch-observable-writes",
-  "derive-computed-observable",
   "move-use-value-into-child",
   "move-use-value-down",
   "narrow-observable-write",

@@ -27,7 +27,7 @@ function evaluation(disposition: LegendPracticeFinding["disposition"]): Evaluati
         practice: "reactivity",
       },
     ],
-    schemaVersion: 5,
+    schemaVersion: 6,
   };
   return {
     failures: [],

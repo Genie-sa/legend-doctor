@@ -328,32 +328,6 @@ selector derives a value from one or more observables, including boolean project
 Both actions carry `edits`. A legacy migration renames every legacy call in the file and removes the legacy import
 specifiers together, so each of those findings carries the same file-wide edit set.
 
-### Compute a derived primitive as an observable
-
-Use `derive-computed-observable` when every `useMemo` dependency is a `useValue` subscription read nowhere else and
-every result is a primitive.
-
-```tsx
-// Before: any change to either field renders Header
-const selectedView = useValue(library$.selectedView);
-const selectedPlaylistId = useValue(library$.selectedPlaylistId);
-const title = useMemo(
-  () => (selectedView === "playlist" ? `playlist-${selectedPlaylistId}` : "Library"),
-  [selectedView, selectedPlaylistId],
-);
-
-// After: the computed tracks both fields; Header renders only when the title string changes
-const title$ = useObservable(() =>
-  library$.selectedView.get() === "playlist"
-    ? `playlist-${library$.selectedPlaylistId.get()}`
-    : "Library",
-);
-const title = useValue(title$);
-```
-
-Keep the memo when it mixes props or component-local helpers with observable inputs, or when it returns an object or
-array: a selector would recompute on every render, and a reference result renders on every input change either way.
-
 ### Update one host prop
 
 A reactive host prop can update without rendering a heavy owner.

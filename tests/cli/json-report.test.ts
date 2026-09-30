@@ -35,7 +35,7 @@ test("a missing target is reported as a target_not_found payload without a next 
   assert.equal(failure.stderr, "");
   // SAFETY: the CLI failed, so stdout is a serialized failure payload.
   const payload = JSON.parse(failure.stdout) as FailurePayload;
-  assert.equal(payload.schemaVersion, 5);
+  assert.equal(payload.schemaVersion, 6);
   assert.equal(payload.status, "error");
   assert.equal(payload.reason, "target_not_found");
   assert.match(payload.message, /legend-doctor-missing.*nope/u);
@@ -52,7 +52,7 @@ test("the report carries status, root, and hidden counts alongside the findings"
 
   assert.equal(report.status, "ok");
   assert.equal(report.root, root);
-  assert.equal(report.schemaVersion, 5);
+  assert.equal(report.schemaVersion, 6);
   assert.match(report.analyzer.build, /^[0-9a-f]{16}$/u);
   assert.match(report.analyzer.version, /^\d+\.\d+\.\d+/u);
   assert.deepEqual(report.findings, []);
@@ -68,7 +68,7 @@ test("--coverage adds coverage and diagnostics to the same report root", async (
   const report = JSON.parse(stdout) as ReportPayload;
 
   assert.equal(report.status, "ok");
-  assert.equal(report.schemaVersion, 5);
+  assert.equal(report.schemaVersion, 6);
   assert.equal(report.root, root);
   assert.deepEqual(report.hidden, { findings: 0, practices: 0 });
   assert.equal(report.report, undefined);

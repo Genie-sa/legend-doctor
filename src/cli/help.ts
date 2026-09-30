@@ -72,7 +72,7 @@ Output
   Stdout is one JSON document, on success and on failure alike, and nothing
   is written to stderr.
 
-JSON contract (schemaVersion 5)
+JSON contract (schemaVersion 6)
   A completed scan is the report object with:
     status          "ok"
     root            directory every location.file is relative to

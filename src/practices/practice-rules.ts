@@ -4,7 +4,6 @@ import type { LegendPracticeFinding } from "../core/types.js";
 import type { LegendPracticesRequest } from "./model.js";
 import type { ObservableFieldFacts } from "../rules/observable-reads/field-writes.js";
 import { collectTransactionFindings } from "./transaction-runs.js";
-import { findDerivedUseValuePractices } from "../rules/derived-use-value/derived-use-value.js";
 import { findInPlaceMemoKeyPractices } from "../rules/in-place-memo-keys/in-place-memo-keys.js";
 import { findLegacyUseValuePractices } from "../rules/legacy-use-value.js";
 import { findMemoParentCapturePractices } from "../rules/memo-parent-captures/memo-parent-captures.js";
@@ -17,7 +16,6 @@ import { findPrimitiveProjections } from "../rules/primitive-projection/primitiv
 
 export type PracticeRuleId =
   | "plain-primitive-projection"
-  | "derived-use-value"
   | "in-place-memo-keys"
   | "legacy-use-value"
   | "memo-parent-captures"
@@ -173,18 +171,6 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
     run: ({ imports, observableBindings, request }) =>
       findObservableTrackingPractices({
         childContracts: request.childContracts,
-        fileName: request.fileName,
-        imports,
-        installedLegendState: request.capabilities.legendState,
-        observableBindings,
-        sourceFile: request.sourceFile,
-      }),
-  },
-  {
-    id: "derived-use-value",
-    needsObservableBindings: true,
-    run: ({ imports, observableBindings, request }) =>
-      findDerivedUseValuePractices({
         fileName: request.fileName,
         imports,
         installedLegendState: request.capabilities.legendState,
