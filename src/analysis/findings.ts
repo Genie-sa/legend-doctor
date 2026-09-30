@@ -17,6 +17,10 @@ import {
   stateIsCommitSensitive,
 } from "./commit-sensitive-state.js";
 import { findingFor, stateEvidence } from "./finding-format.js";
+import {
+  stateHasTrivialRenderRemainder,
+  trivialRenderRemainderClassification,
+} from "./trivial-remainder-state.js";
 import { EMPTY_RUNTIME_FUNCTIONS } from "./constants.js";
 import type { FindingsScope } from "./finding-clusters.js";
 import type { HookFinding } from "../core/types.js";
@@ -202,8 +206,11 @@ function splitClusterClassification(
 }
 
 interface StateVerdictResolution extends ResolvedStateClassification {
-  /** A commit-sensitive owner overrides every conversion the verdicts or a confirmation produced. */
-  readonly commitSensitiveOverride: boolean;
+  /**
+   * A commit-sensitive owner or a trivial render remainder overrides every conversion the verdicts
+   * or a confirmation produced.
+   */
+  readonly verdictOverride: boolean;
 }
 
 function resolveStateVerdict(
@@ -217,17 +224,34 @@ function resolveStateVerdict(
     inputs,
     result,
   );
-  const commitSensitiveOverride =
+  const commitSensitive =
     stateIsCommitSensitive(state, usage, result.analysis) &&
     resolved.classification.action !== "review-state" &&
     resolved.classification.action !== "keep-state";
+  const trivialRemainder =
+    !commitSensitive && stateHasTrivialRenderRemainder(resolved.classification, inputs, result);
   return {
     ...resolved,
-    classification: commitSensitiveOverride
-      ? commitSensitiveStateClassification(state)
-      : resolved.classification,
-    commitSensitiveOverride,
+    classification:
+      overridingClassification(state, { commitSensitive, trivialRemainder }) ??
+      resolved.classification,
+    verdictOverride: commitSensitive || trivialRemainder,
   };
+}
+
+interface VerdictOverrides {
+  readonly commitSensitive: boolean;
+  readonly trivialRemainder: boolean;
+}
+
+function overridingClassification(
+  state: StateCandidate,
+  { commitSensitive, trivialRemainder }: VerdictOverrides,
+): ClassifiedState | null {
+  if (commitSensitive) {
+    return commitSensitiveStateClassification(state);
+  }
+  return trivialRemainder ? trivialRenderRemainderClassification(state) : null;
 }
 
 interface GroupAttachment {
@@ -237,7 +261,7 @@ interface GroupAttachment {
 }
 
 function attachGroup(finding: HookFinding, { cluster, resolved, state }: GroupAttachment): void {
-  if (resolved.commitSensitiveOverride) {
+  if (resolved.verdictOverride) {
     return;
   }
   if (resolved.group) {
@@ -278,8 +302,8 @@ function withAssumption(
   finding: HookFinding,
   { analysis, resolved, state }: AssumptionAttachment,
 ): void {
-  const { assumption, commitSensitiveOverride } = resolved;
-  if (!assumption || commitSensitiveOverride) {
+  const { assumption, verdictOverride } = resolved;
+  if (!assumption || verdictOverride) {
     return;
   }
   finding.assumption = assumption;

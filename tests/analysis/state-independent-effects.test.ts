@@ -166,7 +166,7 @@ test("reviews dependency effects that write local React state directly or throug
       useEffect(() => {
         void load(id).then((next) => setOther(next));
       }, [id]);
-      return <section><h1>Title</h1><p>Intro</p><p>Body</p><p>More</p><output>{data}{other}</output></section>;
+      return <section><h1>Title</h1><p>{translate("intro")}</p><p>Body</p><p>More</p><output>{data}{other}</output></section>;
     }
     export function Helper({ id }: { id: string }) {
       const [data, setData] = useState<string | null>(null);

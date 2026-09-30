@@ -104,7 +104,7 @@ test("settles effect-written state that leaves the small owner's own render by i
       }, [id]);
       return (
         <section>
-          <header><h1>Title</h1><p>Intro</p></header>
+          <header><h1>Title</h1><p>{translate("intro")}</p></header>
           <p>{record?.name}</p>
           <footer><button>Ok</button></footer>
         </section>

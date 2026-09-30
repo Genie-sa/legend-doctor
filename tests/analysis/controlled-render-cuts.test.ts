@@ -29,7 +29,7 @@ test("uses independent host siblings as a controlled render-cut witness", () => 
       return <main>
         <Field value={format} onChange={setFormat} />
         <hr />
-        <button onClick={submit}>Export</button>
+        <button onClick={submit}>{translate("export")}</button>
       </main>;
     }
   `,
