@@ -46,7 +46,7 @@ export function memoReads(callback: RuntimeFunctionLike, name: string): MemoRead
   return valueReferences(callback, name).flatMap((reference) => readsFrom(reference, []));
 }
 
-function valueReferences(scope: ts.Node, name: string): ts.Identifier[] {
+export function valueReferences(scope: ts.Node, name: string): ts.Identifier[] {
   return identifiersNamed(scope, name).filter(
     (identifier) => !isDeclarationName(identifier) && !isNonValueIdentifier(identifier),
   );
