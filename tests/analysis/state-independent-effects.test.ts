@@ -185,6 +185,47 @@ test("reviews dependency effects that write local React state directly or throug
   assert.match(requireValue(findings[3]).message, /writes React state `data`/u);
 });
 
+test("labels a state-writing effect by its write even when state or an unresolved binding schedules it", () => {
+  const findings = effects(`
+    import { useEffect, useState } from "react";
+    import { load } from "./resource";
+    export function ByState() {
+      const [query, setQuery] = useState("");
+      const [result, setResult] = useState("");
+      useEffect(() => {
+        void load(query).then((next) => setResult(next));
+      }, [query]);
+      return <section><h1>Title</h1><p>Intro</p><p>Body</p><p>More</p><button onClick={() => setQuery("next")}>Next</button><output>{result}</output></section>;
+    }
+    export function ByMutable({ id }: { id: string }) {
+      let key = id;
+      const [result, setResult] = useState("");
+      useEffect(() => {
+        void load(key).then((next) => setResult(next));
+      }, [key]);
+      return <section><h1>Title</h1><p>Intro</p><p>Body</p><p>More</p><output>{result}</output></section>;
+    }
+    export function ReactsOnly() {
+      const [query, setQuery] = useState("");
+      useEffect(() => {
+        void load(query);
+      }, [query]);
+      return <section><h1>Title</h1><p>Intro</p><p>Body</p><p>More</p><input value={query} onChange={(event) => setQuery(event.target.value)} /></section>;
+    }
+  `);
+  assert.deepEqual(
+    findings.map((finding) => `${finding.action}:${finding.abstentionReason}`),
+    [
+      "review-effect:effect-write-ownership-unresolved",
+      "review-effect:effect-write-ownership-unresolved",
+      "review-effect:effect-causal-owner-unresolved",
+    ],
+  );
+  assert.match(requireValue(findings[0]).message, /writes React state `result`/u);
+  assert.match(requireValue(findings[1]).message, /writes React state `result`/u);
+  assert.match(requireValue(findings[2]).message, /reacts to React state `query`/u);
+});
+
 test("does not prove independence across shadowed, mutable, enclosing, or non-tuple state bindings", () => {
   const findings = effects(`
     import { useEffect, useReducer, useState } from "react";
