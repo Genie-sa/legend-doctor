@@ -78,3 +78,45 @@ test("publishes hook state rendered inside a host parent", async () => {
   assert.equal(finding.action, "use-observable");
   assert.match(finding.message, /publish the observable from `useEntry`/u);
 });
+
+const REACT_NATIVE_PACKAGE = JSON.stringify({
+  dependencies: { "react-native": "0.83.0" },
+  name: "app",
+});
+
+function refreshFeed(list: (control: string) => string): string {
+  return `
+    import { useCallback, useState } from "react";
+    import { FlatList, RefreshControl } from "react-native";
+    export function Feed() {
+      const [refreshing, setRefreshing] = useState(false);
+      const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try { await reload(); } finally { setRefreshing(false); }
+      }, []);
+      return (
+        <main>
+          ${CHROME}
+          ${list("<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />")}
+        </main>
+      );
+    }
+  `;
+}
+
+test("reviews state rendered by the refreshControl element, which the scroll view clones", async () => {
+  const finding = await refreshingVerdict({
+    "feed.tsx": refreshFeed((control) => `<FlatList refreshControl={${control}} />`),
+    "package.json": REACT_NATIVE_PACKAGE,
+  });
+  assert.equal(finding.action, "review-state");
+  assert.equal(finding.abstentionReason, "child-contract-unresolved");
+});
+
+test("publishes the same state rendered by an element in a prop the list renders as is", async () => {
+  const finding = await refreshingVerdict({
+    "feed.tsx": refreshFeed((control) => `<FlatList ListHeaderComponent={${control}} />`),
+    "package.json": REACT_NATIVE_PACKAGE,
+  });
+  assert.equal(finding.action, "use-observable");
+});

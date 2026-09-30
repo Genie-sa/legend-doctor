@@ -54,6 +54,7 @@ import {
 import { stateCommandSnapshotEvidence, stateRenderCutEvidence } from "./classification-context.js";
 import type { ClassifiedState } from "../model.js";
 import { ownerHasMutableRenderRead } from "../../rules/state-proofs/render-purpose.js";
+import { renderedByClonedPropElement } from "../../rules/child-contract/element-identity.js";
 import { siteSubscriptionVerdict } from "./site-subscription-verdict.js";
 import { splitCommitVerdict } from "./split-commit-verdict.js";
 
@@ -120,10 +121,29 @@ function firstStateVerdict(inputs: StateClassificationInputs): ClassifiedState {
           message: `Review \`${inputs.state.valueName}\`; its render may refresh mutable refs or imperative reads even though the state value does not render. Preserve the update until every refreshed value has an independent subscription.`,
         };
       }
-      return withDetachedEffectNote(classified, context);
+      return withDetachedEffectNote(withClonedElementReview(classified, context), context);
     }
   }
   return residualStateVerdict(context);
+}
+
+/** A leaf that replaces a cloned `refreshControl` element must forward the props injected into it. */
+function withClonedElementReview(
+  classified: ClassifiedState,
+  { state, usage }: StateClassificationContext,
+): ClassifiedState {
+  const extracts =
+    classified.action === "use-observable" || classified.action === "move-state-down";
+  const reads = [...usage.directRenderNodes, ...[...usage.transportNodes.values()].flat()];
+  if (!extracts || !reads.some((read) => renderedByClonedPropElement(read))) {
+    return classified;
+  }
+  return {
+    action: "review-state",
+    abstentionReason: "child-contract-unresolved",
+    confidence: "probable",
+    message: `Review \`${state.valueName}\`; it renders in the element passed as \`refreshControl\`, which React Native's Android ScrollView clones to inject \`style\` and the scroll view as \`children\`. A leaf subscriber around that element must forward every prop it receives, or the list disappears on Android.`,
+  };
 }
 
 const DETACHED_EFFECT_NOTE =
