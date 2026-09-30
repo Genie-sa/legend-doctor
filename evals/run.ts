@@ -1,6 +1,7 @@
 import { inspectRepository, mapSequentially } from "./runner/repository-inspection.js";
 import {
   knownFalsePracticeLines,
+  knownMissPracticeLines,
   scoreHookCases,
   scorePractices,
   scoreStateGroups,
@@ -38,6 +39,7 @@ function scoreCorpus(run: Evaluation, corpus: CorpusSlice): readonly string[] {
   return [
     ...summaryLines(run, hooks, tallies),
     ...knownFalsePracticeLines(run, corpus.practiceCases),
+    ...knownMissPracticeLines(run, corpus.practiceCases),
   ];
 }
 

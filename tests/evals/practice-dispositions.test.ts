@@ -1,5 +1,9 @@
 import type { AnalysisReport, LegendPracticeFinding } from "../../src/core/types.js";
-import { knownFalsePracticeLines, scorePractices } from "../../evals/runner/scoring.js";
+import {
+  knownFalsePracticeLines,
+  knownMissPracticeLines,
+  scorePractices,
+} from "../../evals/runner/scoring.js";
 import type { Evaluation } from "../../evals/runner/model.js";
 import type { GoldPracticeCase } from "../../evals/corpus/contracts.js";
 import assert from "node:assert/strict";
@@ -120,4 +124,36 @@ test("a known false positive with a corrected disposition asks to be enforced on
     "Known false-positive Legend practices still emitted: 0/1.",
     "Known false positive now emitted as style [app/row.tsx:7]: pass-observable-to-use-value; enforce its label.",
   ]);
+});
+
+test("an unemitted known-miss practice label counts against recall without failing or entering precision", () => {
+  const run = evaluation("candidate");
+  const known = { ...gold, enforced: "known-miss" as const };
+  assert.deepEqual(scorePractices(run, [known]), { labels: 1, matches: 0, predictions: 0 });
+  assert.deepEqual(run.failures, []);
+  assert.deepEqual(knownMissPracticeLines(run, [known]), ["Known practice misses: 1/1."]);
+  assert.deepEqual(knownFalsePracticeLines(run, [known]), [
+    "Known false-positive Legend practices still emitted: 0/0.",
+  ]);
+});
+
+test("an emitted known-miss practice matches and asks for its label to be enforced", () => {
+  const run = evaluation("change");
+  const known = { ...gold, enforced: "known-miss" as const };
+  assert.deepEqual(scorePractices(run, [known]), { labels: 1, matches: 1, predictions: 1 });
+  assert.deepEqual(run.failures, []);
+  assert.deepEqual(knownMissPracticeLines(run, [known]), [
+    "Known practice misses: 0/1.",
+    "Known practice miss now emitted as change [app/row.tsx:7]: pass-observable-to-use-value; enforce its label.",
+  ]);
+});
+
+test("a known-miss practice emitted with the wrong disposition fails instead of asking to be enforced", () => {
+  const run = evaluation("change");
+  const known = { ...gold, disposition: "style" as const, enforced: "known-miss" as const };
+  assert.deepEqual(scorePractices(run, [known]), { labels: 1, matches: 0, predictions: 1 });
+  assert.deepEqual(run.failures, [
+    "app/row.tsx:7: expected pass-observable-to-use-value disposition style, received change (Same node; no proven render saving.)",
+  ]);
+  assert.deepEqual(knownMissPracticeLines(run, [known]), ["Known practice misses: 1/1."]);
 });
