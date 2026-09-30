@@ -202,12 +202,13 @@ function scorePracticeCase(run: Evaluation, gold: GoldPracticeCase, score: Tally
     (gold.disposition === undefined || finding.disposition === gold.disposition);
   if (agrees) {
     score.matches += 1;
-  } else {
-    const detail = finding
-      ? ` disposition ${gold.disposition}, received ${finding.disposition}`
-      : "";
+  } else if (finding) {
     run.failures.push(
-      `${gold.target}/${gold.file}:${gold.line}: expected ${gold.action}${detail} (${gold.rationale})`,
+      `${gold.target}/${gold.file}:${gold.line}: expected ${gold.action} disposition ${gold.disposition}, received ${finding.disposition} (${gold.rationale})`,
+    );
+  } else if (gold.enforced !== "known-miss") {
+    run.failures.push(
+      `${gold.target}/${gold.file}:${gold.line}: expected ${gold.action} (${gold.rationale})`,
     );
   }
 }
@@ -248,9 +249,13 @@ function emittedDisposition(
     )?.disposition;
 }
 
+function practiceLabelWhere(gold: GoldPracticeCase): string {
+  return `[${gold.target}/${gold.file}:${gold.line}]: ${gold.action}`;
+}
+
 function fixedKnownFalseLine(run: Evaluation, gold: GoldPracticeCase): string | null {
   const disposition = emittedDisposition(run, gold);
-  const where = `[${gold.target}/${gold.file}:${gold.line}]: ${gold.action}`;
+  const where = practiceLabelWhere(gold);
   if (disposition === undefined) {
     return `Known false positive no longer emitted ${where}; delete its label.`;
   }
@@ -274,6 +279,28 @@ export function knownFalsePracticeLines(
     `Known false-positive Legend practices still emitted: ${known.length - fixed.length}/${known.length}.`,
     ...fixed,
   ];
+}
+
+/**
+ * Real opportunities the analyzer abstains on. One emitted as labeled already matches in
+ * `scorePractices`; it is listed so its PR enforces the label.
+ */
+export function knownMissPracticeLines(
+  run: Evaluation,
+  cases: readonly GoldPracticeCase[] = goldPracticeCases,
+): string[] {
+  const known = cases.filter(
+    (gold) => gold.enforced === "known-miss" && run.targets.has(gold.target),
+  );
+  const emitted = known.flatMap((gold) => {
+    const disposition = emittedDisposition(run, gold);
+    return disposition !== undefined && (gold.disposition ?? disposition) === disposition
+      ? [
+          `Known practice miss now emitted as ${disposition} ${practiceLabelWhere(gold)}; enforce its label.`,
+        ]
+      : [];
+  });
+  return [`Known practice misses: ${known.length - emitted.length}/${known.length}.`, ...emitted];
 }
 
 export function scorePractices(

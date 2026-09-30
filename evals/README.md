@@ -18,7 +18,11 @@ whatever it currently prints.
   action-only matching. An audited false positive whose fix has not landed is labeled with the action the tool emits,
   `enforced: false`, and a rationale that starts with `Known false positive`: the finding stays in practice precision
   without failing the run, and the runner lists the label once the finding is gone so the fix deletes it. With the label
-  deleted, the corpus asserts absence: any later `change` or `style` finding there fails as unlabeled.
+  deleted, the corpus asserts absence: any later `change` or `style` finding there fails as unlabeled. A proven
+  opportunity the analyzer abstains on is labeled with the action it should give and `enforced: "known-miss"`: like a
+  non-enforced hook label, it counts against practice recall without failing the run and never counts against practice
+  precision. The runner prints `Known practice misses: x/y` for the ones still missing, and lists one emitted with the
+  labeled action and disposition so its PR enforces the label. Never delete a known miss because it is not emitted.
 - **Expert replay.** Performance commits by Legend State's author and by application maintainers are ground truth for
   what an expert changes. Each hunk is labeled at its line in the commit's first parent: `enforced` when a sound static
   proof shows the edit removes a render or lifecycle cost without changing behavior, `non-enforced` when it changes

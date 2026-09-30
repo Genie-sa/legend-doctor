@@ -52,8 +52,10 @@ export interface GoldPracticeCase {
   /**
    * False marks an audited false positive awaiting its fix: the emitted finding does not fail the run,
    * still counts against practice precision, and never matches. The fix deletes the label.
+   * `"known-miss"` marks a real opportunity the analyzer does not emit yet: it counts against practice
+   * recall without failing the run and matches once emitted, so the fix enforces the label.
    */
-  enforced?: boolean;
+  enforced?: boolean | "known-miss";
   file: string;
   line: number;
   rationale: string;
