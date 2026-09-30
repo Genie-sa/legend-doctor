@@ -2,6 +2,7 @@ import {
   collectReactComponentWrappers,
   isReactComponentWrapper,
 } from "../../core/react-component-wrappers.js";
+import type { AnalysisContext } from "./analysis-context.js";
 import type { ChildComponentSource } from "../../rules/child-contract/model.js";
 import type { ReactComponentWrappers } from "../../core/react-component-wrappers.js";
 import type { SourceHookDeclaration } from "../../rules/source-callback-contract/model.js";
@@ -87,6 +88,25 @@ function declarationHookOwner(
   return ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)
     ? initializer
     : null;
+}
+
+/** The source of the component that `name` binds in `file`, followed through imports and re-exports. */
+export function componentSource(
+  context: AnalysisContext,
+  file: string,
+  name: string,
+): ChildComponentSource | null {
+  const resolved = context.sourceIndex.componentDeclarationFor(file, name);
+  const analysisFile = resolved ? context.project.getFile(resolved.file) : null;
+  if (!resolved || !analysisFile) {
+    return null;
+  }
+  return findComponentDeclaration({
+    deferredCallbackHooks: context.sourceIndex.deferredCallbackHooksFor(resolved.file),
+    file: resolved.file,
+    localName: resolved.localName,
+    sourceFile: analysisFile.sourceFile,
+  });
 }
 
 export function findComponentDeclaration(

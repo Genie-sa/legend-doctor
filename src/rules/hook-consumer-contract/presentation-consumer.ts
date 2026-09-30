@@ -1,4 +1,8 @@
-import type { HookPresentationConsumer, HookReturnMembers } from "../child-contract/model.js";
+import type {
+  ComponentSourceResolver,
+  HookPresentationConsumer,
+  HookReturnMembers,
+} from "../child-contract/model.js";
 import {
   subscriptionSites,
   subscriptionSitesAreMaterial,
@@ -29,6 +33,7 @@ interface PresentationConsumerQuery {
   readonly scope: {
     readonly broadOwnerJsx: number;
     readonly pureProjectionImports: ReadonlySet<string>;
+    readonly resolveComponent: ComponentSourceResolver;
   };
   readonly sourceFile: ts.SourceFile;
 }
@@ -101,6 +106,7 @@ function presentationSites(
       ...collectPureProjectionImports(sourceFile),
       ...scope.pureProjectionImports,
     ]),
+    resolveComponent: scope.resolveComponent,
     state,
   });
   return sites?.sites.length && subscriptionSitesAreMaterial(sites.sites, state) ? sites : null;

@@ -1,5 +1,5 @@
 import { findAncestor, isRuntimeFunctionLike } from "../../core/ast.js";
-import type { ChildContractResolver } from "./model.js";
+import type { ComponentSourceResolver } from "./model.js";
 import type { HostTagImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isHostTag } from "../../core/imports.js";
@@ -12,9 +12,9 @@ const CHILD_INSPECTION = /\b(?:Children|cloneElement|isValidElement)\b|\.type\b/
 const CLONED_ELEMENT_PROP = "refreshControl";
 
 export interface ElementIdentityScope {
-  readonly childContracts: ChildContractResolver | null;
   readonly hostTags: HostTagImports;
   readonly owner: RuntimeFunctionLike;
+  readonly resolveComponent: ComponentSourceResolver;
 }
 
 /**
@@ -41,7 +41,7 @@ export function replacedElementTypeIsUnobserved(
   if (isHostTag(tag, scope.hostTags)) {
     return true;
   }
-  const body = scope.childContracts?.resolveComponent(tag)?.owner.body;
+  const body = scope.resolveComponent(tag)?.owner.body;
   return body !== undefined && !CHILD_INSPECTION.test(body.getText());
 }
 

@@ -12,7 +12,7 @@ import type {
   SourceHookResolver,
 } from "../../rules/source-callback-contract/model.js";
 import { componentParentRerender, customHookSubscribes } from "./parent-rerenders.js";
-import { findComponentDeclaration, findHookDeclaration } from "./source-declarations.js";
+import { componentSource, findHookDeclaration } from "./source-declarations.js";
 import { findHookPresentationConsumer, hasSingleLeafConsumer } from "./hook-consumers.js";
 import {
   propCallbackIsDeferred,
@@ -388,23 +388,9 @@ class ChildContracts implements ChildContractResolver {
     if (hit !== undefined) {
       return hit;
     }
-    const source = this.readComponentSource(file, name);
+    const source = componentSource(this.context, file, name);
     this.componentSources.set(key, source);
     return source;
-  }
-
-  private readComponentSource(file: string, name: string): ChildComponentSource | null {
-    const resolved = this.context.sourceIndex.componentDeclarationFor(file, name);
-    const analysisFile = resolved ? this.context.project.getFile(resolved.file) : null;
-    if (!resolved || !analysisFile) {
-      return null;
-    }
-    return findComponentDeclaration({
-      deferredCallbackHooks: this.context.sourceIndex.deferredCallbackHooksFor(resolved.file),
-      file: resolved.file,
-      localName: resolved.localName,
-      sourceFile: analysisFile.sourceFile,
-    });
   }
 
   private hasSingleKeyedRowConsumer(

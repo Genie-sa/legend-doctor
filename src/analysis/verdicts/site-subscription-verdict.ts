@@ -1,3 +1,7 @@
+import type {
+  ChildContractResolver,
+  ComponentSourceResolver,
+} from "../../rules/child-contract/model.js";
 import type { ClassifiedState, StateCandidate, StateUsage } from "../model.js";
 import {
   bindingDeclarationCount,
@@ -17,7 +21,6 @@ import {
   stateMayHoldCallable,
 } from "../../rules/state-proofs/state-proofs.js";
 import { isCustomHookOwner, jsxTargetName } from "../ast-helpers.js";
-import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { HostTagImports } from "../../core/imports.js";
 import { MAX_LEAF_SUBTREE_RATIO } from "../constants.js";
 import type { MaterialityPolicy } from "../constants.js";
@@ -48,6 +51,7 @@ interface SiteScope {
   readonly childContracts: ChildContractResolver | null;
   readonly hostTags: HostTagImports;
   readonly pureProjectionImports: ReadonlySet<string>;
+  readonly resolveComponent: ComponentSourceResolver;
   readonly state: StateCandidate;
 }
 
@@ -73,6 +77,7 @@ export function siteSubscriptionVerdict(
     childContracts,
     hostTags: context.hostTags,
     pureProjectionImports: context.pureProjectionImports,
+    resolveComponent: (name) => childContracts?.resolveComponent(name) ?? null,
     state,
   });
   if (!resolved || !subscriptionSitesAreMaterial(resolved.sites, state)) {

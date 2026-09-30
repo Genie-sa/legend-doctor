@@ -9,7 +9,7 @@ export const hoaluHookCases = [
     line: 11,
     name: "status",
     rationale:
-      "The screenshot hook owns every async status write but never reads the value; publishing a hook-lifetime observable would let the sole broad chart consumer subscribe only inside its screenshot button, but that Button hands its children to the third-party base-ui useRender, which no indexed source proves never inspects them.",
+      "The screenshot hook owns every async status write but never reads the value; publishing a hook-lifetime observable lets the sole broad chart consumer subscribe only inside its screenshot button. The source-resolved Button never inspects its children, so the rule publishes, but it hands them to the third-party base-ui useRender, which no indexed source proves leaves their element types unobserved.",
     target: "hoalu-app",
   },
   {

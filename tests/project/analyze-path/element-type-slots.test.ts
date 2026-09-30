@@ -120,3 +120,16 @@ test("publishes the same state rendered by an element in a prop the list renders
   });
   assert.equal(finding.action, "use-observable");
 });
+
+test("publishes hook state rendered inside a source component that ignores child types", async () => {
+  const finding = await refreshingVerdict({
+    "entry-screen.tsx": entryScreen(`import { Panel } from "./panel";`, "Panel"),
+    "panel.tsx": `
+      import { forwardRef, type HTMLAttributes } from "react";
+      export const Panel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+        (props, ref) => <section ref={ref} {...props} />,
+      );
+    `,
+  });
+  assert.equal(finding.action, "use-observable");
+});
