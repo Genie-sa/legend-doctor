@@ -109,8 +109,9 @@ test("requires literal leaf setters to be event-rooted and independently useful"
     "fixture.tsx",
   );
   const candidates = findings.filter((candidate) => candidate.name === "visible");
-  assert.equal(candidates.length, 4);
-  for (const finding of candidates) {
-    assert.equal(finding.action, "review-state");
-  }
+  assert.deepEqual(
+    candidates.map((finding) => finding.action),
+    ["keep-state", "review-state", "review-state", "review-state"],
+  );
+  assert.match(requireValue(candidates[0]).message, /runs while its owner renders/u);
 });

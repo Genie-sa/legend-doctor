@@ -21,4 +21,19 @@ export const legendAppsHookCases = [
       "The flag only transports into MarkdownEditorSessionContent, while the owner runs a synchronous theme load and a dozen settings and window hooks on every render; a leaf subscriber opens and closes the link popover without rerunning that owner.",
     target: "legend-apps-markdown",
   },
+  ...[
+    ["DiffViewerWindow.tsx", 2368, "mergeDocumentSession"],
+    ["DiffViewerWindow.tsx", 2404, "sideBySideSession"],
+    ["DiffViewerWindow.tsx", 2448, "unifiedSession"],
+    ["viewer/diffLoadedDocumentModel.tsx", 289, "sideBySideSession"],
+  ].map(([file, line, name]) => ({
+    action: "keep-state" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale:
+      "The render body replaces the session when its document changes and sets it in the same render; React re-runs that render before committing, while an observable written there would notify subscribers mid-render.",
+    target: "legend-apps-diff",
+  })),
 ] as const satisfies readonly GoldHookCase[];

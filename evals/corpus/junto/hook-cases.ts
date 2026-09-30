@@ -528,4 +528,38 @@ export const juntoHookCases = [
       "Every scroll event on the grid (line 218) rerenders the whole sheet editor, including the header and column name inputs; only the visible row range at line 176 reads it, and a subscriber that selects that range rerenders the body only when a row enters or leaves.",
     target: "junto-renderer",
   },
+  ...[
+    [
+      "components/pad/PadEditor.tsx",
+      302,
+      "hint",
+      "The remote-revision check in the render body calls `notice`, whose callback sets the hint, so the state is written while PadEditor renders.",
+    ],
+    [
+      "components/pad/PadEditor.tsx",
+      305,
+      "undoDepth",
+      "The remote-revision check in the render body clears the undo depth when a foreign revision arrives, so the state is written while PadEditor renders.",
+    ],
+    [
+      "components/pad/PadEditor.tsx",
+      306,
+      "localPad",
+      "The remote-revision check in the render body drops the optimistic pad when a new remote pad arrives, so the state is written while PadEditor renders.",
+    ],
+    [
+      "components/AgentPortrait.tsx",
+      116,
+      "shown",
+      "The render body records the previous image when `src` changes, so the crossfade state is written while the portrait renders.",
+    ],
+  ].map(([file, line, name, rationale]) => ({
+    action: "keep-state" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: `${rationale as string} React re-runs that render before committing; an observable written there would notify subscribers mid-render.`,
+    target: "junto-renderer",
+  })),
 ] as const satisfies readonly GoldHookCase[];
