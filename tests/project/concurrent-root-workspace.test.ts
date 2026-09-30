@@ -210,3 +210,53 @@ test("a workspace package on React below 19 renders the store's sync lane alone"
     assert.equal(verdict, expected, label);
   }
 });
+
+test("a private package that installs React renders its own files with that React", async () => {
+  const workspace = {
+    ...NPM_LOCKFILE,
+    "package.json": manifest({ workspaces: ["apps/*", "packages/*"] }),
+    "apps/legacy/package.json": manifest({ dependencies: { react: "^18.2.0" }, name: "legacy" }),
+  };
+  for (const [label, file, packageJson, expected] of [
+    [
+      "private React 19 app",
+      "apps/web/src/app.tsx",
+      manifest({ dependencies: { react: "^19.2.0" }, name: "web" }),
+      false,
+    ],
+    [
+      "private React 18 app",
+      "apps/web/src/app.tsx",
+      manifest({ dependencies: { react: "^18.3.1" }, name: "web" }),
+      true,
+    ],
+    [
+      "published React 19 library",
+      "packages/ui/src/app.tsx",
+      JSON.stringify({ dependencies: { react: "^19.2.0" }, name: "ui" }),
+      true,
+    ],
+    [
+      "React peer range",
+      "packages/ui/src/app.tsx",
+      manifest({
+        dependencies: { react: "^19.2.0" },
+        name: "ui",
+        peerDependencies: { react: "^19.0.0" },
+      }),
+      true,
+    ],
+  ] as const) {
+    const manifestPath = path.join(path.dirname(path.dirname(file)), "package.json");
+    let verdict = !expected;
+    await withProject(
+      { ...workspace, [manifestPath]: packageJson, [file]: "export {};" },
+      async (root) => {
+        const absolute = path.join(root, file);
+        const aloneFiles = await filesRenderingSyncLaneAlone([absolute]);
+        verdict = aloneFiles.has(absolute);
+      },
+    );
+    assert.equal(verdict, expected, label);
+  }
+});
