@@ -174,13 +174,13 @@ export const hoaluHookCases = [
   },
   {
     action: "review-effect",
-    abstentionReason: "effect-causal-owner-unresolved",
+    abstentionReason: "effect-write-ownership-unresolved",
     file: "components/forms/transaction-amount.tsx",
     hook: "useEffect",
     line: 62,
     name: null,
     rationale:
-      "The focus and expression reset reacts to the local calculator-mode state, so the mutation site of that state or an observable reaction may own it once the state migrates.",
+      "Relabeled 2026-10-01: the calculator-mode effect writes `expression` and `calculatedValue` after commit, so its ownership settles with those states' migration; the earlier causal-owner reason came from checking the dependency array before the body's writes.",
     target: "hoalu-app",
   },
   {

@@ -195,11 +195,11 @@ function stateDependencyClassification(
     inline,
   );
   const stateDependencies = opaque ? [] : states;
-  if (schedule) {
-    return reviewStateScheduledEffect(schedule, stateDependencies);
-  }
   if (body?.kind === "setter") {
     return reviewStateWritingEffect(body.state.valueName, stateDependencies);
+  }
+  if (schedule) {
+    return reviewStateScheduledEffect(schedule, stateDependencies);
   }
   if (body?.kind === "unresolved") {
     return reviewCausalOwnerEffect();
