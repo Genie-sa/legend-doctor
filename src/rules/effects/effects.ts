@@ -168,19 +168,23 @@ function dependencyEffectClassification(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   inline: InlineEffectContext,
 ): ClassifiedEffect {
-  if (!inline.hasCleanup && effect.owner && isCommittedRefEffect(effect, callback, inline)) {
+  const observableSourced = isObservableSourcedReaction(effect, callback, inline);
+  const lifecycle =
+    inline.hasCleanup && (observableSourced || returnsCleanupUnconditionally(callback));
+  if (!lifecycle && effect.owner && isCommittedRefEffect(effect, callback, inline)) {
     return committedRefEffect();
   }
-  if (isObservableSourcedReaction(effect, callback, inline)) {
+  if (observableSourced && !inline.hasCleanup) {
     return (
       persistedObservableClassification(effect, inline) ??
       observableReactionClassification(effect, callback, inline)
     );
   }
-  if (inline.hasCleanup) {
+  if (lifecycle) {
     return keepLifecycleEffect();
   }
-  const specificKeep = effect.owner ? dependencyEffectKeepProof(effect, callback, inline) : null;
+  const specificKeep =
+    effect.owner && !inline.hasCleanup ? dependencyEffectKeepProof(effect, callback, inline) : null;
   return specificKeep ?? stateDependencyClassification(effect, callback, inline);
 }
 
@@ -254,7 +258,7 @@ function isObservableSourcedReaction(
   inline: InlineEffectContext,
 ): boolean {
   const { dependencies } = effect;
-  if (inline.hasCleanup || !dependencies || dependencies.elements.length === 0) {
+  if (!dependencies || dependencies.elements.length === 0) {
     return false;
   }
   const dependencyNames = dependencies.elements.flatMap((element) =>
@@ -324,9 +328,27 @@ export function callbackHasCleanup(
       (ts.isCallExpression(callback.body) && isSubscriptionCall(callback.body))
     );
   }
-  return callback.body.statements.some(
-    (statement) => ts.isReturnStatement(statement) && statement.expression !== undefined,
+  return returnsValue(callback.body);
+}
+
+/** Whether the callback's own statements, outside any branch, return its cleanup. */
+function returnsCleanupUnconditionally(
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+): boolean {
+  return (
+    !ts.isBlock(callback.body) ||
+    callback.body.statements.some(
+      (statement) => ts.isReturnStatement(statement) && statement.expression !== undefined,
+    )
   );
+}
+
+/** Whether a `return` with a value runs in this node's own function, under any branch, loop, or `try`. */
+function returnsValue(node: ts.Node): boolean {
+  if (ts.isReturnStatement(node)) {
+    return node.expression !== undefined;
+  }
+  return !ts.isFunctionLike(node) && ts.forEachChild(node, returnsValue) === true;
 }
 
 function isCleanupOnly(callback: ts.ArrowFunction | ts.FunctionExpression): boolean {
