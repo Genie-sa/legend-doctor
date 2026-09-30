@@ -328,6 +328,29 @@ selector derives a value from one or more observables, including boolean project
 Both actions carry `edits`. A legacy migration renames every legacy call in the file and removes the legacy import
 specifiers together, so each of those findings carries the same file-wide edit set.
 
+### Select a derived primitive
+
+This is a manual pattern; no action reports it on its own. When a `useMemo` derives a primitive from observable reads
+that nothing else in the component reads, select the primitive instead.
+
+```tsx
+// Before: every write under habits$.streaks renders the component
+const streaks = useValue(habits$.streaks);
+const longest = useMemo(
+  () => Math.max(0, ...Object.values(streaks).map((s) => s.longest)),
+  [streaks],
+);
+
+// After: the selector reruns on each render, and a write renders only when the number changes
+const longest = useValue(() =>
+  Math.max(0, ...Object.values(habits$.streaks.get()).map((s) => s.longest)),
+);
+```
+
+Keep the memo when an input is also read elsewhere in the component, since that read renders on every write anyway,
+or when the result is an object or array, since `useValue` compares by reference and a new result always renders.
+`snapshot-mutated-use-value` recommends this rewrite when an in-place write leaves such a memo stale.
+
 ### Update one host prop
 
 A reactive host prop can update without rendering a heavy owner.
@@ -545,7 +568,9 @@ const visible = useMemo(() => folders.filter((folder) => !folder.deleted), [fold
 Legend applies child writes, array mutators, `assign`, and `delete` to the object it already holds, so `useValue`
 rerenders the component with the same reference and the memo returns its previous result. A copy selected inside
 `useValue` gets a new reference on every tracked change. If the derivation is cheap, computing it without `useMemo`
-is equally correct.
+is equally correct. When that memo is the value's only reader and computes a primitive without side effects, the
+finding instead recommends [selecting the primitive](#select-a-derived-primitive) and deleting both the memo and the
+`useValue` binding.
 
 The finding names each in-place write and fires only when the memo reads what the write changes: a membership write
 against any element read, a field write against a read of that field. It is a `change` when every other dependency

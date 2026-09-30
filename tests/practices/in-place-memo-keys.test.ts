@@ -88,6 +88,49 @@ test("proves a record whose child is replaced in place and suggests an object co
   );
 });
 
+const loadAccount = `export function load(id: string, list: Folder[]) { library$.byAccount[id].set(list); }`;
+const longestMemo = `const longest = useMemo(() => Math.max(0, ...Object.values(byAccount).map((list) => list?.length ?? 0)), [byAccount]);`;
+
+test("selects a primitive when one side-effect-free memo is the snapshot's only reader", () => {
+  const finding = requireValue(
+    findings(
+      `
+        const byAccount = useValue(library$.byAccount);
+        ${longestMemo}
+        return <ul>{longest}</ul>;
+      `,
+      loadAccount,
+    )[0],
+  );
+  assert.equal(finding.disposition, "change");
+  assert.equal(
+    finding.message,
+    "Select the primitive instead of a snapshot: replace the useMemo at line 20 with `const longest = useValue(() => …)` computing the same expression from `library$.byAccount.get()` in place of `byAccount`, and delete `const byAccount = useValue(library$.byAccount)`. The in-place write at fixture.tsx:16 (`set`) keeps the reference, so the memo keeps a stale result; the selector reruns on every render, and an observable write rerenders the component only when `longest` changes.",
+  );
+});
+
+test("keeps the copy advice when the memo returns a reference or the snapshot has other readers", () => {
+  for (const body of [
+    `const byAccount = useValue(library$.byAccount);
+     const lists = useMemo(() => Object.values(byAccount).map((list) => list?.length ?? 0), [byAccount]);
+     return <ul>{lists.length}</ul>;`,
+    `const byAccount = useValue(library$.byAccount);
+     ${longestMemo}
+     return <ul data-accounts={Object.keys(byAccount).length}>{longest}</ul>;`,
+    `const byAccount = useValue(library$.byAccount);
+     const longest = useMemo(() => Math.max(0, ...Object.values(byAccount).map((list) => merge(list).length)), [byAccount]);
+     return <ul>{longest}</ul>;`,
+  ]) {
+    const finding = requireValue(findings(body, loadAccount)[0]);
+    assert.equal(finding.disposition, "change", body);
+    assert.match(
+      finding.message,
+      /^Select a copy so the reference changes with the contents: replace `useValue\(library\$\.byAccount\)` with `useValue\(\(\) => \(\{ \.\.\.library\$\.byAccount\.get\(\) \}\)\)`/u,
+      body,
+    );
+  }
+});
+
 test("asks for review when another reactive dependency may change with the write", () => {
   for (const other of ["tab", "folders.length"]) {
     const finding = requireValue(

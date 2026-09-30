@@ -1,6 +1,7 @@
 import type { InPlaceMemoKeyScan, RawValueBinding, RelativeWrite, StaleMemo } from "./model.js";
 import { ARRAY_MUTATORS } from "../../project/source-components/observable-in-place-writes.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
+import { primitiveMemoName } from "./primitive-selection.js";
 
 const LISTED_WRITES = 3;
 
@@ -34,6 +35,12 @@ function provenMessage(
   scan: InPlaceMemoKeyScan,
 ): string {
   const writes = distinctWrites(memos);
+  const [memo] = memos;
+  const selected = memo && memos.length === 1 ? primitiveMemoName(binding, memo, scan) : null;
+  if (memo && selected) {
+    const callee = binding.call.expression.getText(scan.sourceFile);
+    return `Select the primitive instead of a snapshot: replace the useMemo at line ${lineOf(memo, scan)} with \`const ${selected} = ${callee}(() => …)\` computing the same expression from \`${binding.sourceText}.get()\` in place of \`${binding.name}\`, and delete \`const ${binding.name} = ${binding.call.getText(scan.sourceFile)}\`. The in-place write at ${describeWrites(writes)} keeps the reference, so the memo keeps a stale result; the selector reruns on every render, and an observable write rerenders the component only when \`${selected}\` changes.`;
+  }
   return `${snapshotInstruction(binding, writes, scan)}. The in-place write at ${describeWrites(writes)} keeps the reference, so ${memoList(memos, scan)} keyed on \`${binding.name}\` keeps a stale result while the component rerenders. If the derivation is cheap, compute it without useMemo instead.`;
 }
 
