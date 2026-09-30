@@ -120,7 +120,11 @@ export class ConcurrentRootResolver {
   }
 }
 
-/** The files whose workspace installs a React below 19, which renders the sync lane alone. */
+/**
+ * The files that may run under a React below 19, which renders the sync lane alone. A private package
+ * that installs React runs its own files under that React; any other file may run under the React of
+ * any workspace package.
+ */
 export async function filesRenderingSyncLaneAlone(
   files: readonly string[],
 ): Promise<ReadonlySet<string>> {
@@ -142,10 +146,22 @@ async function directoryRendersSyncLaneAlone(directory: string): Promise<boolean
     return false;
   }
   const catalogs = await workspaceCatalogs(workspace.rootDir);
-  return workspace.packages.some((pkg) => {
+  const owner = owningPackage(workspace, directory);
+  const reactPackages = owner && installsOwnReact(owner) ? [owner] : workspace.packages;
+  return reactPackages.some((pkg) => {
     const minimum = localMinimumVersion(pkg, "react", catalogs);
     return minimum !== null && compareVersions(minimum, FIRST_UNIFIED_LANES_REACT) < 0;
   });
+}
+
+/** A published package or a React peer range defers to its consumers' React. */
+function installsOwnReact(pkg: Package): boolean {
+  const { packageJson } = pkg;
+  return (
+    packageJson.private === true &&
+    packageJson.peerDependencies?.["react"] === undefined &&
+    LOCAL_FIELDS.some((field) => packageJson[field]?.["react"] !== undefined)
+  );
 }
 
 interface Workspace {
