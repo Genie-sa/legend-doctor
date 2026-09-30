@@ -217,4 +217,14 @@ export const legendMusicHookCases = [
       "The cursor reset effect only writes `highlightedIndex`, whose own finding migrates it to an observable while keeping every effect; the effect stays and its setter calls become observable writes.",
     target: "legend-music",
   },
+  {
+    action: "use-observable",
+    file: "media-library/MediaLibraryWindow.tsx",
+    hook: "useState",
+    line: 24,
+    name: "height",
+    rationale:
+      "The layout handler destructures its own `height` from the event and passes it to the setter; the state is read only by one View's style, so a leaf wrapper around that View can subscribe without rebuilding the window's providers.",
+    target: "legend-music",
+  },
 ] as const satisfies readonly GoldHookCase[];

@@ -10,6 +10,7 @@ import {
   isOriginalStateBinding,
   jsxTargetName,
   jsxTransportSite,
+  resolvesToStateBinding,
 } from "./ast-helpers.js";
 import {
   isDeclarationName,
@@ -71,6 +72,16 @@ function recordStateBindingReference(
     context.usage.shadowed ||= shadowsStateBinding(node, state);
     return;
   }
+  if (resolvesToStateBinding(node, state)) {
+    classifyStateReference(node, state, context);
+  }
+}
+
+function classifyStateReference(
+  node: ts.Identifier,
+  state: StateCandidate,
+  context: StateReferenceContext,
+): void {
   if (state.setterName !== null && node.text === state.setterName) {
     classifySetterReference(node, state, context);
     return;
@@ -80,12 +91,12 @@ function recordStateBindingReference(
   }
 }
 
+/**
+ * A same-named declaration the lexical resolver cannot tell apart from the state: its references
+ * would be counted as the state's, so the name-based proofs downstream cannot trust them.
+ */
 function shadowsStateBinding(node: ts.Identifier, state: StateCandidate): boolean {
-  return (
-    (node.text === state.valueName ||
-      (state.setterName !== null && node.text === state.setterName)) &&
-    !isOriginalStateBinding(node, state.call)
-  );
+  return !isOriginalStateBinding(node, state.call) && resolvesToStateBinding(node, state);
 }
 
 function emptyStateUsage(): StateUsage {

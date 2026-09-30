@@ -154,7 +154,7 @@ test("inventories nonstandard React useState bindings as review", () => {
   );
 });
 
-test("abstains when state is shadowed", () => {
+test("resolves a parameter that shadows the state to its own binding", () => {
   assert.deepEqual(
     actions(`
       import { useState } from "react";
@@ -164,7 +164,7 @@ test("abstains when state is shadowed", () => {
         return <Child callback={callback} />;
       }
     `),
-    ["review-state"],
+    ["delete-unused-state"],
   );
 });
 
