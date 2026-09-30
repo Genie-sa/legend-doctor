@@ -8,21 +8,20 @@ test("isolates direct primitive state at one stable call-site leaf", () => {
     `
     import { useState } from "react";
     const Leaf = (props: { value: unknown }) => <output>{String(props.value)}</output>;
-    const Shell = ({ children }: { children: React.ReactNode }) => <main>{children}</main>;
     export function BooleanScreen() {
       const [visible, setVisible] = useState(true);
-      return <Shell><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
-        <button onClick={() => setVisible(false)}>Close</button><Leaf value={visible} /></Shell>;
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+        <button onClick={() => setVisible(false)}>Close</button><Leaf value={visible} /></main>;
     }
     export function StringScreen() {
       const [mode, setMode] = useState("idle");
-      return <Shell><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
-        <button onClick={() => setMode("done")}>Done</button><Leaf value={mode} /></Shell>;
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+        <button onClick={() => setMode("done")}>Done</button><Leaf value={mode} /></main>;
     }
     export function NumberScreen() {
       const [page, setPage] = useState(-1);
-      return <Shell><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
-        <button onClick={() => setPage(1)}>Next</button><Leaf value={page} /></Shell>;
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions />
+        <button onClick={() => setPage(1)}>Next</button><Leaf value={page} /></main>;
     }
   `,
     "fixture.tsx",

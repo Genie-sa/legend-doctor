@@ -38,9 +38,43 @@ export const crossRepositoryHookCases = [
     target: target as string,
   })),
   ...[
-    ["expensify-authorize-transaction", "index.tsx", 63, "isConfirmModalVisible"],
     ["formbricks-custom-filter", "CustomFilter.tsx", 138, "isFilterDropDownOpen"],
     ["formbricks-custom-filter", "CustomFilter.tsx", 139, "isDownloadDropDownOpen"],
+  ].map(([target, file, line, name]) => ({
+    abstentionReason: "child-contract-unresolved" as const,
+    action: "review-state" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale:
+      "The only call site, `PopoverTriggerButton` (:281, :388), is the child of `<DropdownMenuTrigger asChild>`, whose Radix Slot clones that child to merge the trigger's handlers, `aria` state and ref. A leaf subscriber in that position receives those props instead of the button and drops them unless it forwards every prop and the ref, so the wrapper is not proven.",
+    target: target as string,
+  })),
+  {
+    action: "review-state",
+    enforced: false,
+    file: "CustomFilter.tsx",
+    hook: "useState",
+    line: 141,
+    name: "isDownloading",
+    rationale:
+      "Known false positive (Slot clones the leaf): the async-status rule wraps the `PopoverTriggerButton` call site (:388), which is the child of `<DropdownMenuTrigger asChild>`; the Radix Slot would clone the leaf subscriber instead of the button and drop the trigger's handlers and ref.",
+    target: "formbricks-custom-filter",
+  },
+  {
+    abstentionReason: "child-contract-unresolved",
+    action: "review-state",
+    file: "SplitButton.tsx",
+    hook: "useState",
+    line: 51,
+    name: "alignOffset",
+    rationale:
+      "The call site `DropdownMenuPrimitive.Content` (:88) is the child of `DropdownMenuPrimitive.Portal`. Radix's menu portal renders its child through `Presence`, which clones it to attach a ref, and through `Portal asChild`, whose Slot clones it again, so a leaf subscriber there would take the ref and merged props meant for the content.",
+    target: "outline-split-button",
+  },
+  ...[
+    ["expensify-authorize-transaction", "index.tsx", 63, "isConfirmModalVisible"],
     ["formbricks-select-plan-card", "select-plan-card.tsx", 43, "showHobbyConfirm"],
     ["formbricks-upload-contacts", "upload-contacts-button.tsx", 47, "open"],
     ["formbricks-webhook-settings", "webhook-settings-tab.tsx", 51, "isUpdatingWebhook"],
@@ -53,7 +87,6 @@ export const crossRepositoryHookCases = [
     ["formbricks-survey-menu-bar", "survey-menu-bar.tsx", 73, "isSurveyPublishing"],
     ["formbricks-connect-integration", "index.tsx", 29, "isConnecting"],
     ["formbricks-date-picker", "index.tsx", 55, "isOpen"],
-    ["outline-split-button", "SplitButton.tsx", 51, "alignOffset"],
   ].map(([target, file, line, name]) => ({
     action: "use-observable" as const,
     file: file as string,
@@ -115,7 +148,6 @@ export const crossRepositoryHookCases = [
       "isRechecking",
       "Button",
     ],
-    ["formbricks-custom-filter", "CustomFilter.tsx", 141, "isDownloading", "PopoverTriggerButton"],
     [
       "formbricks-selected-row-settings",
       "selected-row-settings.tsx",

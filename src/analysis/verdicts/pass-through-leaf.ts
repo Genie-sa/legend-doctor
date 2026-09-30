@@ -8,6 +8,21 @@ import { nearestNestedFunction } from "../../core/ast.js";
 import ts from "typescript";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
+export function passThroughScope({
+  childContracts,
+  hostTags,
+  state,
+}: StateClassificationContext): PassThroughScope {
+  return {
+    hostTags,
+    owner: state.owner,
+    resolveComponent: (file, name) =>
+      (file === null
+        ? childContracts?.resolveComponent(name)
+        : childContracts?.resolveComponentIn(file, name)) ?? null,
+  };
+}
+
 export interface PassThroughLeaf {
   readonly callSites: number;
   readonly propName: string;
@@ -44,14 +59,7 @@ export function passThroughLeaf(
   ) {
     return null;
   }
-  const scope: PassThroughScope = {
-    hostTags: context.hostTags,
-    owner: state.owner,
-    resolveComponent: (file, name) =>
-      file === null
-        ? childContracts.resolveComponent(name)
-        : childContracts.resolveComponentIn(file, name),
-  };
+  const scope = passThroughScope(context);
   const stable = callSites.every(
     (callSite) =>
       nearestNestedFunction(callSite, state.owner) === null &&

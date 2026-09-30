@@ -31,7 +31,7 @@ test("isolates a compact transported leaf only with an independent sibling rende
         return <main>
           <Toolbar />
           <button onClick={open}>Open</button>
-          <Host><NativeMenu expanded={expanded} onDismiss={dismiss} /></Host>
+          <section><NativeMenu expanded={expanded} onDismiss={dismiss} /></section>
         </main>;
       }
       export function CohesiveMenu() {
@@ -49,7 +49,7 @@ test("isolates a compact transported leaf only with an independent sibling rende
         return <main>
           <Toolbar />
           <button onClick={open}>Open</button>
-          <Host data-mode={mode}><NativeMenu expanded={coupledOpen} onDismiss={dismiss} /></Host>
+          <section data-mode={mode}><NativeMenu expanded={coupledOpen} onDismiss={dismiss} /></section>
         </main>;
       }
       export function OrderedMenu() {
@@ -59,7 +59,7 @@ test("isolates a compact transported leaf only with an independent sibling rende
         return <main>
           <Toolbar />
           <button onClick={open}>Open</button>
-          <Host><NativeMenu expanded={orderedOpen} onDismiss={dismiss} /></Host>
+          <section><NativeMenu expanded={orderedOpen} onDismiss={dismiss} /></section>
         </main>;
       }
       export function ForwardedSetterMenu() {
@@ -68,7 +68,7 @@ test("isolates a compact transported leaf only with an independent sibling rende
         return <main>
           <Toolbar />
           <button onClick={open}>Open</button>
-          <Host><NativeMenu expanded={forwardedOpen} onDismiss={setForwardedOpen} /></Host>
+          <section><NativeMenu expanded={forwardedOpen} onDismiss={setForwardedOpen} /></section>
         </main>;
       }
     `,
