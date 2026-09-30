@@ -8,6 +8,9 @@ import ts from "typescript";
 /** The React APIs and element field through which a component can observe its children's types. */
 const CHILD_INSPECTION = /\b(?:Children|cloneElement|isValidElement)\b|\.type\b/u;
 
+/** React Native's Android `ScrollView` clones this element to inject `style` and its `children`. */
+const CLONED_ELEMENT_PROP = "refreshControl";
+
 export interface ElementIdentityScope {
   readonly childContracts: ChildContractResolver | null;
   readonly hostTags: HostTagImports;
@@ -40,6 +43,26 @@ export function replacedElementTypeIsUnobserved(
   }
   const body = scope.childContracts?.resolveComponent(tag)?.owner.body;
   return body !== undefined && !CHILD_INSPECTION.test(body.getText());
+}
+
+/**
+ * Whether the element that renders `node` is passed as a scroll view's `refreshControl`. A leaf
+ * that replaces it must forward the props the scroll view injects, or the list disappears.
+ */
+export function renderedByClonedPropElement(node: ts.Node): boolean {
+  let current: ts.Node | null = findAncestor(node, isJsxElementLike);
+  while (current && passesElementThrough(current.parent, current)) {
+    current = current.parent;
+  }
+  return (
+    current !== null &&
+    ts.isJsxAttribute(current.parent) &&
+    current.parent.name.getText() === CLONED_ELEMENT_PROP
+  );
+}
+
+function isJsxElementLike(node: ts.Node): node is ts.JsxElement | ts.JsxSelfClosingElement {
+  return ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node);
 }
 
 function replacedElement(node: ts.Node): ts.Node {
