@@ -10,13 +10,13 @@ import {
   provenObservablePath,
 } from "../observable-reads/observable-paths.js";
 import { earlyExitBefore, renderInitializerEdits } from "./render-read-edits.js";
+import { inBabelWrappedChild, isReactiveInputArgument } from "./reactive-inputs.js";
 import type { HookImports } from "../../core/imports.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { RenderOwner } from "./render-owners.js";
 import type { TrackingScan } from "./model.js";
 import { guardsOnlyObservableWrites } from "./write-guards.js";
 import { hasCoveringSubscription } from "./subscription-coverage.js";
-import { isReactiveInputArgument } from "./reactive-inputs.js";
 import { renderOwnerOf } from "./render-owners.js";
 import { subscriptionHookCallee } from "../../core/use-value-import.js";
 import ts from "typescript";
@@ -62,6 +62,7 @@ function untrackedRenderRead(call: ts.CallExpression, scan: TrackingScan): Rende
   if (
     !owner ||
     owner.tracked ||
+    inBabelWrappedChild(call, owner.owner, scan) ||
     hasCoveringSubscription(owner.owner, path, scan) ||
     scan.childContracts?.customHookSubscribes(owner.owner, observable)
   ) {

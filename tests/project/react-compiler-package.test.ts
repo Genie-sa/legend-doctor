@@ -1,5 +1,5 @@
+import { REACT_COMPILER, ToolchainResolver } from "../../src/project/react-compiler-package.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { ReactCompilerResolver } from "../../src/project/react-compiler-package.js";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import os from "node:os";
@@ -13,6 +13,6 @@ test("config discovery preserves the filesystem's case matching", async (context
 
   // The directory optimization must accept exactly the same spelling as a direct file read.
   const readableByConfiguredName = existsSync(path.join(root, "next.config.js"));
-  const resolver = new ReactCompilerResolver();
-  assert.equal(await resolver.compilesDirectory(root), readableByConfiguredName);
+  const resolver = new ToolchainResolver(REACT_COMPILER);
+  assert.equal(await resolver.enablesDirectory(root), readableByConfiguredName);
 });

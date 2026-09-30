@@ -17,6 +17,8 @@ const COMPONENT_SLOTS: ReadonlyMap<LegendReactComponent, ReadonlySet<string>> = 
 
 const CHILD_COMPONENTS: ReadonlySet<LegendReactComponent> = new Set(["Computed", "Memo"]);
 
+const BABEL_WRAPPED_COMPONENTS: ReadonlySet<string> = new Set(["Computed", "Memo", "Show"]);
+
 const REACTIONS: ReadonlySet<string> = new Set([
   "observe",
   "useObserve",
@@ -51,6 +53,39 @@ export function isReactiveInputArgument(read: ts.Expression, scan: TrackingScan)
     ts.isCallExpression(parent) &&
     parent.arguments[0] === outer &&
     isLegendReaction(parent, scan.imports)
+  );
+}
+
+/**
+ * Whether `@legendapp/state/babel` moves `node` into a child function that a Legend component
+ * tracks. The plugin rewrites `Computed`, `Memo`, and `Show` tags written under their imported
+ * names when the first child is an element or a braced expression other than a function, identifier,
+ * or member access, so every render read among those children runs in the component's selector.
+ */
+export function inBabelWrappedChild(node: ts.Node, owner: ts.Node, scan: TrackingScan): boolean {
+  for (let child = node; scan.legendBabel && child.parent !== owner; child = child.parent) {
+    const { parent } = child;
+    if (ts.isJsxElement(parent) && child !== parent.openingElement && babelWraps(parent, scan)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function babelWraps({ children, openingElement }: ts.JsxElement, scan: TrackingScan): boolean {
+  const tag = openingElement.tagName.getText();
+  const first = children.find((child) => !ts.isJsxText(child) || child.text.trim() !== "");
+  const content = first && ts.isJsxExpression(first) ? first.expression : first;
+  const bare = content && ts.isExpression(content) ? unwrapTransparentExpression(content) : null;
+  return (
+    BABEL_WRAPPED_COMPONENTS.has(tag) &&
+    scan.imports.legendReactComponents.get(tag) === tag &&
+    bare !== null &&
+    !ts.isJsxFragment(bare) &&
+    !ts.isFunctionLike(bare) &&
+    !ts.isIdentifier(bare) &&
+    !ts.isPropertyAccessExpression(bare) &&
+    !ts.isElementAccessExpression(bare)
   );
 }
 

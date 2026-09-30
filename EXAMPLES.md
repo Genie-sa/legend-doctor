@@ -502,7 +502,9 @@ Legend tracks a `get()` only inside a tracking context: `useValue`, `observer`, 
 ### Subscribe to a render read
 
 `use-value-for-render-read` changes a `get()` that runs in a component's or custom hook's render, including
-synchronous `.map`-style callbacks, with nothing tracking it.
+synchronous `.map`-style callbacks, with nothing tracking it. When the package's Babel config lists
+`@legendapp/state/babel`, reads among the element children of `Computed`, `Memo`, and `Show` are tracked, because the
+plugin wraps those children in a function.
 
 ```tsx
 // Before: Counter renders the value once and never again
