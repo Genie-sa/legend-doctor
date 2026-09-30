@@ -161,4 +161,8 @@ export class AssumedLeafContracts implements ChildContractResolver {
   public resolveComponent(name: string): ChildComponentSource | null {
     return this.#base.resolveComponent(name);
   }
+
+  public resolveComponentIn(file: string, name: string): ChildComponentSource | null {
+    return this.#base.resolveComponentIn(file, name);
+  }
 }

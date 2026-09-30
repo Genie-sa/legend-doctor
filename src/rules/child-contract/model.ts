@@ -125,6 +125,8 @@ export interface ChildContractResolver {
   frameworkEventComponent: (componentName: string) => boolean;
   pureProjectionBindings: () => ReadonlySet<string>;
   resolveComponent: ComponentSourceResolver;
+  /** Resolves a JSX tag name against the imports of `file`, for components that forward children. */
+  resolveComponentIn: (file: string, name: string) => ChildComponentSource | null;
 }
 
 export const MAX_TRACKED_NAMES = 8;
