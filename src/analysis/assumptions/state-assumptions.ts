@@ -167,12 +167,19 @@ function leafWrapAlone(
 /**
  * When the specific hypothesis leaves the owner still subscribed, the generic leaf-subscriber rewrite
  * is the remaining fact: a second one when the blocker differs, the only one when it is the same.
+ * Wrapping read sites cannot answer an escaped or shadowed binding, so that blocker gets no fallback.
  */
 function leafWrapFallback(
   first: ResolvedHypothesis,
   reason: AbstentionReason,
   scope: AssumptionScope,
 ): ResolvedHypothesis | null {
+  if (
+    first.verdict.action === "review-state" &&
+    first.verdict.abstentionReason === "ownership-flow-unresolved"
+  ) {
+    return null;
+  }
   const leaf = leafWrapHypothesis(scope);
   if (!leaf?.directVerdict) {
     return null;

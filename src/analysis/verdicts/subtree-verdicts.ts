@@ -164,11 +164,13 @@ export function unsafeOwnershipVerdict(
   context: StateClassificationContext,
 ): ClassifiedState | null {
   const { belongsToObservableSelection, hasDetachedEffectWrites, state, usage } = context;
-  if (usage.shadowed || usage.escaped || (usage.effectWrites > 0 && !hasDetachedEffectWrites)) {
+  const hasOwnedEffectWrites = usage.effectWrites > 0 && !hasDetachedEffectWrites;
+  if (usage.shadowed || usage.escaped || hasOwnedEffectWrites) {
     return {
       action: "review-state",
-      abstentionReason:
-        usage.effectWrites > 0 ? "effect-write-ownership-unresolved" : "ownership-flow-unresolved",
+      abstentionReason: hasOwnedEffectWrites
+        ? "effect-write-ownership-unresolved"
+        : "ownership-flow-unresolved",
       confidence: "probable",
       message:
         !usage.shadowed && isStructuralLegendCandidate(state, usage, context)
