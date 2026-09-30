@@ -62,6 +62,7 @@ test("a file filter narrows analysis while the context keeps every target file",
 test("rule gates read the installed Legend State export shape and the React Compiler flag", () => {
   const missingUseValue = {
     concurrentRoot: false,
+    legendBabel: false,
     legendState: {
       source: "installed" as const,
       syncExport: "missing" as const,
@@ -83,9 +84,12 @@ test("rule gates read the installed Legend State export shape and the React Comp
     ],
   );
   assert.deepEqual(
-    enabledPracticeRules({ concurrentRoot: false, legendState: null, reactCompiler: false }).map(
-      (rule) => rule.id,
-    ),
+    enabledPracticeRules({
+      concurrentRoot: false,
+      legendBabel: false,
+      legendState: null,
+      reactCompiler: false,
+    }).map((rule) => rule.id),
     [
       "plain-primitive-projection",
       "legacy-use-value",
@@ -105,6 +109,7 @@ test("the tracking rule is switched off under Legend State 2.x, where auto track
   const gates = (version: string): readonly string[] =>
     disabledPracticeRules({
       concurrentRoot: false,
+      legendBabel: false,
       legendState: {
         source: "installed",
         syncExport: "available",

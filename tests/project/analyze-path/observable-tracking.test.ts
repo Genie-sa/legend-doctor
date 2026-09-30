@@ -94,3 +94,58 @@ test("treats a render read as fresh when a custom hook the owner calls subscribe
   assert.deepEqual(await screenRenderReadLines("return use$(other$);"), [6, 6]);
   assert.deepEqual(await screenRenderReadLines("return () => use$(settings$);"), [6, 6]);
 });
+
+const BABEL_CHILDREN_SCREEN = `
+  import { Computed, Memo, Show } from "@legendapp/state/react";
+  import { state$ } from "./store";
+  export function Screen({ label }: { label: string }) {
+    return (
+      <div>
+        <Computed>
+          <b title={state$.ready.get() ? "on" : "off"} />
+        </Computed>
+        <Memo>{state$.ready.get() ? <i /> : <u />}</Memo>
+        <Show if={state$.ready}><b>{state$.count.get()}</b></Show>
+        <Computed>{label}<b>{state$.count.get()}</b></Computed>
+        <b>{state$.count.get()}</b>
+      </div>
+    );
+  }
+`;
+
+async function babelChildrenRenderReadLines(babelConfig: string | null): Promise<number[]> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-babel-children-"));
+  try {
+    await writeFile(
+      path.join(root, "store.ts"),
+      `
+        import { observable } from "@legendapp/state";
+        export const state$ = observable({ ready: false, count: 0 });
+      `,
+      "utf8",
+    );
+    await writeFile(path.join(root, "screen.tsx"), BABEL_CHILDREN_SCREEN, "utf8");
+    if (babelConfig !== null) {
+      await writeFile(path.join(root, "babel.config.js"), babelConfig, "utf8");
+    }
+    const report = await analyzePath(root);
+    return report.practices
+      .filter((practice) => practice.action === "use-value-for-render-read")
+      .map((practice) => practice.location.line);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+test("the Legend Babel plugin makes Computed, Memo, and Show element children track their reads", async () => {
+  const lines = await babelChildrenRenderReadLines(
+    `module.exports = { plugins: ["@legendapp/state/babel"] };`,
+  );
+
+  // The plugin leaves children unwrapped when the first one is an identifier.
+  assert.deepEqual(lines, [12, 13]);
+});
+
+test("Computed and Memo element children stay untracked without the Legend Babel plugin", async () => {
+  assert.deepEqual(await babelChildrenRenderReadLines(null), [8, 10, 11, 12, 13]);
+});

@@ -8,6 +8,7 @@ import type {
   LegendPracticeFinding,
   ReportScope,
 } from "../../core/types.js";
+import { LEGEND_BABEL, REACT_COMPILER, ToolchainResolver } from "../react-compiler-package.js";
 import {
   analyzeLegendPracticesFile,
   mayContainLegendPractice,
@@ -28,7 +29,6 @@ import type { FunctionCoverageEntry } from "./coverage-stages.js";
 import type { HookImports } from "../../core/imports.js";
 import { InstalledLegendStateResolver } from "../installed-legend-state-resolver.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
-import { ReactCompilerResolver } from "../react-compiler-package.js";
 import { SCHEMA_VERSION } from "../../core/types.js";
 import { StateFlowIndex } from "../state-flow/state-flow.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
@@ -37,6 +37,7 @@ import { collectHookImports } from "../../core/imports.js";
 import { createChildContractResolver } from "./child-contracts.js";
 import { disabledEffectRules } from "../../rules/effects/browser-storage-persistence.js";
 import { disabledPracticeRules } from "../../practices/practice-rules.js";
+import { filesWhere } from "../capabilities.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
 import { mayCallUseValue } from "../../rules/observable-reads/observable-paths.js";
 import path from "node:path";
@@ -82,6 +83,7 @@ interface AnalysisAccumulator {
 interface AnalysisPass extends AnalysisPassOptions {
   accumulator: AnalysisAccumulator;
   compiledFiles: ReadonlySet<string>;
+  legendBabelFiles: ReadonlySet<string>;
   concurrentFiles: ReadonlySet<string>;
   legendStates: ReadonlyMap<string, InstalledLegendState | null>;
   rootCompiles: boolean;
@@ -123,17 +125,25 @@ export async function runAnalysisPass(
   entries: readonly AnalysisFileEntry[],
   options: AnalysisPassOptions,
 ): Promise<AnalysisPass> {
-  const reactCompiler = new ReactCompilerResolver();
+  const reactCompiler = new ToolchainResolver(REACT_COMPILER);
+  const legendBabel = new ToolchainResolver(LEGEND_BABEL);
   const concurrentRoots = new ConcurrentRootResolver();
   const practiceFiles = legendPracticeFiles(entries, options.includeDetails);
-  const [compiledFiles, rootCompiles, concurrentFiles, rootRendersConcurrently, legendStates] =
-    await Promise.all([
-      filesWhere(practiceFiles, (file) => reactCompiler.packageCompilesFile(file)),
-      reactCompiler.compilesDirectory(options.context.root),
-      filesWhere(practiceFiles, (file) => concurrentRoots.rendersFileConcurrently(file)),
-      concurrentRoots.rendersDirectoryConcurrently(options.context.root),
-      installedLegendStates(entries, options.context.installedLegendState),
-    ]);
+  const [
+    compiledFiles,
+    legendBabelFiles,
+    rootCompiles,
+    concurrentFiles,
+    rootRendersConcurrently,
+    legendStates,
+  ] = await Promise.all([
+    filesWhere(practiceFiles, (file) => reactCompiler.packageEnablesFile(file)),
+    filesWhere(practiceFiles, (file) => legendBabel.packageEnablesFile(file)),
+    reactCompiler.enablesDirectory(options.context.root),
+    filesWhere(practiceFiles, (file) => concurrentRoots.rendersFileConcurrently(file)),
+    concurrentRoots.rendersDirectoryConcurrently(options.context.root),
+    installedLegendStates(entries, options.context.installedLegendState),
+  ]);
   const pass: AnalysisPass = {
     ...options,
     accumulator: {
@@ -145,6 +155,7 @@ export async function runAnalysisPass(
     },
     compiledFiles,
     concurrentFiles,
+    legendBabelFiles,
     legendStates,
     rootCompiles,
     rootRendersConcurrently,
@@ -179,16 +190,6 @@ async function installedLegendStates(
       files.map(async (file) => [file, await resolver.resolveForFile(file)] as const),
     ),
   );
-}
-
-async function filesWhere(
-  files: readonly string[],
-  predicate: (file: string) => Promise<boolean>,
-): Promise<ReadonlySet<string>> {
-  const verdicts = await Promise.all(
-    files.map(async (file) => ({ file, holds: await predicate(file) })),
-  );
-  return new Set(verdicts.filter((verdict) => verdict.holds).map((verdict) => verdict.file));
 }
 
 function analyzeFileEntry(entry: AnalysisFileEntry, pass: AnalysisPass): void {
@@ -265,6 +266,7 @@ function hookFindings(
 function fileCapabilities(entry: SupportedAnalysisFileEntry, pass: AnalysisPass): FileCapabilities {
   return {
     concurrentRoot: pass.concurrentFiles.has(entry.file),
+    legendBabel: pass.legendBabelFiles.has(entry.file),
     legendState: pass.legendStates.get(entry.file) ?? null,
     reactCompiler: pass.compiledFiles.has(entry.file),
   };

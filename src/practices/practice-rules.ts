@@ -173,6 +173,7 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
         childContracts: request.childContracts,
         fileName: request.fileName,
         imports,
+        legendBabel: request.capabilities.legendBabel,
         installedLegendState: request.capabilities.legendState,
         observableBindings,
         sourceFile: request.sourceFile,
