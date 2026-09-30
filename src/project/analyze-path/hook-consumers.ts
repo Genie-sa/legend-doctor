@@ -9,6 +9,7 @@ import {
 } from "../../rules/hook-consumer-contract/hook-consumer-contract.js";
 import type { AnalysisContext } from "./analysis-context.js";
 import { closedHookConsumers } from "./hook-consumer-closure.js";
+import { componentSource } from "./source-declarations.js";
 import { hookConsumers } from "./hook-consumer-index.js";
 
 interface HookConsumerQuery {
@@ -56,6 +57,7 @@ export function findHookPresentationConsumer(
       hookBinding: localName,
       members: query.members,
       pureProjectionImports: query.context.sourceIndex.pureProjectionsFor(file.identityPath),
+      resolveComponent: (name) => componentSource(query.context, file.identityPath, name),
       sourceFile: file.sourceFile,
     }),
   );

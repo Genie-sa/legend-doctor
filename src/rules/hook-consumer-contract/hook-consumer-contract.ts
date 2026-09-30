@@ -1,9 +1,10 @@
-import { EMPTY_NODES, SMALL_OWNER_JSX_ELEMENTS } from "../../analysis/constants.js";
 import type {
+  ComponentSourceResolver,
   HookPresentationConsumer,
   HookReturnMember,
   HookReturnMembers,
 } from "../child-contract/model.js";
+import { EMPTY_NODES, SMALL_OWNER_JSX_ELEMENTS } from "../../analysis/constants.js";
 import {
   bindingDeclarationCount,
   isDeclarationName,
@@ -134,6 +135,7 @@ export interface HookConsumerQuery {
 export interface HookPresentationConsumerQuery extends HookConsumerQuery {
   readonly broadOwnerJsx: number;
   readonly pureProjectionImports: ReadonlySet<string>;
+  readonly resolveComponent: ComponentSourceResolver;
 }
 
 /**
@@ -168,6 +170,7 @@ export function hookPresentationConsumerResult({
   hookBinding,
   members,
   pureProjectionImports,
+  resolveComponent,
   sourceFile,
 }: HookPresentationConsumerQuery): HookPresentationConsumerResult {
   const references = hookBindingReferences(sourceFile, hookBinding);
@@ -182,7 +185,7 @@ export function hookPresentationConsumerResult({
     ? presentationConsumerFor({
         call,
         members,
-        scope: { broadOwnerJsx, pureProjectionImports },
+        scope: { broadOwnerJsx, pureProjectionImports, resolveComponent },
         sourceFile,
       })
     : "unsafe";

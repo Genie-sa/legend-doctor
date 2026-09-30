@@ -12,6 +12,9 @@ export interface ChildComponentSource {
   readonly reactWrapped?: boolean;
 }
 
+/** Resolves a JSX tag name against the imports of the file that renders it. */
+export type ComponentSourceResolver = (name: string) => ChildComponentSource | null;
+
 export interface ContextConsumerSource {
   readonly file: string;
   readonly hookNames: ReadonlySet<string>;
@@ -121,7 +124,7 @@ export interface ChildContractResolver {
   isObservableBinding: (name: string) => boolean;
   frameworkEventComponent: (componentName: string) => boolean;
   pureProjectionBindings: () => ReadonlySet<string>;
-  resolveComponent: (name: string) => ChildComponentSource | null;
+  resolveComponent: ComponentSourceResolver;
 }
 
 export const MAX_TRACKED_NAMES = 8;
