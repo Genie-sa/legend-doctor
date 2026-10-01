@@ -3,7 +3,7 @@ import { analyzeLegendPractices } from "../../src/practices/analyze-legend-pract
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("names the legacy hook the file already imports and leaves the edit to the legacy migration", () => {
+test("names useValue beside an imported legacy hook and leaves the edit to the legacy migration", () => {
   const source = `import { observable } from "@legendapp/state";
 import { use$ as useLegend } from "@legendapp/state/react";
 
@@ -18,7 +18,7 @@ export function Counter() {
   const finding = analyzeLegendPractices({ fileName: "fixture.tsx", sourceText: source }).find(
     (candidate) => candidate.action === "use-value-for-render-read",
   );
-  assert.match(finding?.message ?? "", /with `useLegend\(counter\$\.count\)`/u);
+  assert.match(finding?.message ?? "", /with `useValue\(counter\$\.count\)`/u);
   assert.equal(finding?.edits, undefined);
 });
 

@@ -77,22 +77,28 @@ function messageFor(findings: readonly HookFinding[], file: string, action: stri
   return finding.message;
 }
 
-test("a leaf instruction names the subscription hook the file imports, else useValue", async () => {
+test("a leaf instruction names the file's useValue binding, never a deprecated alias", async () => {
   const findings = await findingsUnder({
     "imports-use-dollar.tsx": conditionalSubtree(`import { use$ } from "@legendapp/state/react";`),
     "imports-selector.tsx": conditionalSubtree(
       `import { useSelector as select } from "@legendapp/state/react";`,
     ),
+    "imports-aliased-value.tsx": conditionalSubtree(
+      `import { use$, useValue as read } from "@legendapp/state/react";`,
+    ),
+    "imports-namespace.tsx": conditionalSubtree(`import * as L from "@legendapp/state/react";`),
     "imports-nothing.tsx": conditionalSubtree(""),
   });
   for (const [file, hook] of Object.entries({
-    "imports-use-dollar.tsx": "use$",
-    "imports-selector.tsx": "select",
+    "imports-use-dollar.tsx": "useValue",
+    "imports-selector.tsx": "useValue",
+    "imports-aliased-value.tsx": "read",
+    "imports-namespace.tsx": "L.useValue",
     "imports-nothing.tsx": "useValue",
   })) {
     const message = messageFor(findings, file, "use-observable");
     assert.ok(message.includes(`subscribe there with \`${hook}\`;`), file);
-    assert.equal(hook === "useValue" || !message.includes("useValue"), true, file);
+    assert.doesNotMatch(message, /`use\$`|`select`/u, file);
   }
 });
 

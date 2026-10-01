@@ -77,7 +77,7 @@ function legacyUseValueFinding(context: LegacyUseValueCall): LegendPracticeFindi
     disposition: "style",
     evidence: [
       `\`${current}\` resolves to a legacy hook imported from @legendapp/state/react`,
-      "Legend State documents useValue as the replacement for useSelector and use$",
+      "Legend State deprecates useSelector and use$ in favor of useValue and will remove them in a later version",
       "useValue is an alias of useSelector, so this rename is a consistency change with no runtime effect",
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
