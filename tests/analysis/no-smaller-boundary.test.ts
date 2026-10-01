@@ -92,6 +92,18 @@ test("hook inputs that never reach rendered output leave the finding to the subs
   }
 });
 
+test("settles a chain of derived values that each read the previous one twice in linear time", () => {
+  const chain = Array.from(
+    { length: 40 },
+    (_level, index) => `const level${index + 1} = level${index} + level${index};`,
+  ).join("\n");
+  const unrendered = query(`const level0 = useDeferredValue(query);\n${chain}`);
+  assert.doesNotMatch(unrendered.message, NO_SMALLER_BOUNDARY);
+  const rendered = query(`const level0 = useDeferredValue(query);\n${chain}`, `<p>{level40}</p>`);
+  assert.equal(rendered.action, "keep-state");
+  assert.match(rendered.message, /feeds an owner-level hook whose result the owner renders/u);
+});
+
 test("a subtree is weighed against the return branch that renders it", () => {
   const wholeBranch = name(
     `<form><label>Name</label><input value={name} onChange={(e) => setName(e.target.value)} /><p>{name.length}</p><span>{name ? "dirty" : "clean"}</span></form>`,

@@ -80,11 +80,21 @@ function ownerDeclaration(
   return null;
 }
 
+/**
+ * Whether the owner renders `declaration` directly or through later owner-level declarations. Each
+ * declaration is settled once: a chain of declarations that each read the previous one several
+ * times would otherwise revisit every path through it.
+ */
 function rendersDeclaration(
   declaration: ts.VariableDeclaration,
   owner: RuntimeFunctionLike,
+  settled = new Map<ts.VariableDeclaration, boolean>(),
 ): boolean {
-  return boundIdentifiers(declaration.name).some((name) =>
+  const known = settled.get(declaration);
+  if (known !== undefined) {
+    return known;
+  }
+  const renders = boundIdentifiers(declaration.name).some((name) =>
     ownerLevelReferences(owner, name).some((reference) => {
       const callback = nearestNestedFunction(reference, owner);
       if (callback && !isSynchronousRenderCallback(callback)) {
@@ -97,10 +107,12 @@ function rendersDeclaration(
         earlyReturnGate(reference, owner) !== null ||
         (next !== null &&
           next.getStart() > declaration.getStart() &&
-          rendersDeclaration(next, owner))
+          rendersDeclaration(next, owner, settled))
       );
     }),
   );
+  settled.set(declaration, renders);
+  return renders;
 }
 
 function boundIdentifiers(name: ts.BindingName): ts.Identifier[] {
