@@ -185,7 +185,7 @@ function baseStateClassification(
     ) ??
     derivedStateClassification(state, effectProofs.derivedStates.has(state)) ??
     effectProofs.legendValueMirrors.get(state) ??
-    classifyCowrittenState(inputs, analysis)
+    classifyCowrittenState(inputs, analysis, result.classifyAlone)
   );
 }
 

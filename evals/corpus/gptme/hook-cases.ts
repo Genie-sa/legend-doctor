@@ -22,6 +22,16 @@ export const gptmeHookCases = [
     target: "gptme-webui",
   },
   {
+    action: "keep-state",
+    file: "components/BrowserPreview.tsx",
+    hook: "useState",
+    line: 21,
+    name: "currentUrl",
+    rationale:
+      "The refresh command, the only write, also clears the rendered console log list with a fresh array, so the owner rerenders on every URL change anyway; an observable for the URL saves no render.",
+    target: "gptme-webui",
+  },
+  {
     action: "use-observable",
     file: "components/BrowserPreview.tsx",
     hook: "useState",

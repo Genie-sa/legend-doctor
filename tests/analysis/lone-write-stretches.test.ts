@@ -142,3 +142,56 @@ test("a lone write stretch never converts state its owner sets while rendering",
   );
   assert.equal(verdict(source, "lane"), "keep-state");
 });
+
+function notes(edit: string, rendered = "<h1>{form.title}</h1><p>{form.title}</p>"): string {
+  return `
+    import { useState } from "react";
+    declare function save(id: string, text: string): void;
+    interface Item { id: string; text: string }
+    export function Notes({ items }: { items: Item[] }) {
+      const [editingId, setEditingId] = useState<string | null>(null);
+      const [form, setForm] = useState({ title: "" });
+      const [open, setOpen] = useState(false);
+      const edit = (item: Item) => {
+        ${edit}
+      };
+      return (
+        <main>
+          ${CHROME}
+          ${rendered}
+          {open ? <aside>Editing</aside> : null}
+          <button onClick={() => edit(items[0]!)}>Edit</button>
+          <button onClick={() => { if (editingId) save(editingId, form.title); }}>Save</button>
+        </main>
+      );
+    }
+  `;
+}
+
+const EDIT = "setEditingId(item.id); setForm({ title: item.text });";
+
+test("a write that always lands with a fresh rendered React value saves no render", () => {
+  assert.equal(verdict(notes(EDIT), "editingId"), "keep-state");
+});
+
+test("a companion the owner never renders leaves the write's render to the state", () => {
+  assert.equal(verdict(notes(EDIT, "<p>Notes</p>"), "editingId"), "use-ref");
+});
+
+test("a companion value that may already be held does not prove an owner render", () => {
+  const edit = "setEditingId(item.id); setOpen(true);";
+  assert.equal(verdict(notes(edit), "editingId"), "use-ref");
+});
+
+test("a companion behind a guard may skip the update", () => {
+  const edit = "setEditingId(item.id); if (item.text) setForm({ title: item.text });";
+  assert.equal(verdict(notes(edit), "editingId"), "use-ref");
+});
+
+test("one lone write site keeps the state's own render to save", () => {
+  const source = notes(
+    EDIT,
+    `<h1>{form.title}</h1><p>{form.title}</p><input onChange={(event) => setEditingId(event.target.value)} />`,
+  );
+  assert.equal(verdict(source, "editingId"), "use-ref");
+});

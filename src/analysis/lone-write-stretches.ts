@@ -13,6 +13,7 @@ import { isSynchronousRenderCallback } from "../rules/state-proofs/callback-site
 import { isVisibilityTransitionAttribute } from "./membership-toggle.js";
 import { lexicalBinding } from "../core/lexical-bindings.js";
 import { localReachResolver } from "../project/source-components/reach-resolvers.js";
+import { mutationsWriteTogether } from "./mutations.js";
 import { programReach } from "../project/source-components/write-units.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../core/analysis-ast.js";
@@ -24,8 +25,22 @@ import { unwrapTransparentExpression } from "../core/analysis-ast.js";
 export function classifyCowrittenState(
   inputs: StateClassificationInputs,
   analysis: SourceAnalysis,
+  classifyAlone: (state: StateCandidate) => ClassifiedState,
 ): ClassifiedState {
   const classified = classifyState(inputs);
+  if (
+    ["move-state-down", "review-state", "use-observable", "use-ref"].includes(classified.action) &&
+    inputs.hasCompanionWrites &&
+    inputs.usage.setterReferences === inputs.usage.setterCalls &&
+    !inputs.usage.shadowed &&
+    ownerRendersEveryWrite(inputs.state, analysis, classifyAlone)
+  ) {
+    return {
+      action: "keep-state",
+      confidence: "certain",
+      message: `Keep \`${inputs.state.valueName}\` as React state; each write lands in one render with a fresh value of another state this owner renders, so moving it saves no render.`,
+    };
+  }
   if (
     classified.action !== "review-state" ||
     classified.abstentionReason !== "atomic-transition-unproven" ||
@@ -43,6 +58,34 @@ export function classifyCowrittenState(
     hasMaterialLoneWriteStretch(inputs.state, analysis)
     ? alone
     : classified;
+}
+
+/** Each write shares a block, before any await, with a fresh object or array for a rendered state. */
+function ownerRendersEveryWrite(
+  state: StateCandidate,
+  { stateFlow, states, usageByState }: SourceAnalysis,
+  classifyAlone: (state: StateCandidate) => ClassifiedState,
+): boolean {
+  const ownerStates = states.filter((other) => other.owner === state.owner);
+  const mutations = collectSetterMutations(state.owner, ownerStates);
+  const rendering = mutations.filter(
+    ({ call, state: other }) =>
+      other !== state &&
+      (call.arguments[0]?.kind === ts.SyntaxKind.ArrayLiteralExpression ||
+        call.arguments[0]?.kind === ts.SyntaxKind.ObjectLiteralExpression) &&
+      !usageByState.get(other)?.shadowed &&
+      (usageByState.get(other)?.localRenderReads ?? 0) > 0 &&
+      ["keep-state", "review-state"].includes(classifyAlone(other).action),
+  );
+  return mutations.every(
+    (write) =>
+      write.state !== state ||
+      rendering.some(
+        (companion) =>
+          companion.call.parent.parent === write.call.parent.parent &&
+          mutationsWriteTogether(write, companion, stateFlow),
+      ),
+  );
 }
 
 /**

@@ -501,6 +501,12 @@ export const expensifyHookCases = [
       "The conditional admin switch owns one presentation subscriber while confirmation reads its latest value as an event snapshot.",
     ],
     [
+      159,
+      "avatarFile",
+      "keep-state",
+      "Both avatar callbacks write the file together with a fresh `workspaceAvatar` object, which this form renders as the avatar source, so the owner rerenders on each write anyway and a ref or observable for the file saves nothing.",
+    ],
+    [
       134,
       "workspaceNameFirstCharacter",
       "review-state",
