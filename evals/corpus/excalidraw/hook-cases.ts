@@ -265,4 +265,14 @@ export const excalidrawHookCases = [
       "The delay timer writes the flag from its effect and the flag gates this four-element owner's own render, so an observable could not remove a render and the timer keeps React lifecycle.",
     target: "excalidraw",
   },
+  {
+    action: "keep-state",
+    file: "components/ToolPopover.tsx",
+    hook: "useState",
+    line: 45,
+    name: "isPopupOpen",
+    rationale:
+      "The render body closes the popup when the active tool leaves its options, so the state is written while ToolPopover renders; React re-runs that render before committing, while an observable written there would notify subscribers mid-render.",
+    target: "excalidraw",
+  },
 ] as const satisfies readonly GoldHookCase[];

@@ -26,6 +26,7 @@ import { classifyState } from "./verdicts/classify-state.js";
 import { effectFindingFor } from "./effect-findings.js";
 import { hasLazyStateInitializer } from "../rules/effect-drafts/effect-drafts.js";
 import { omittedValueSetterName } from "./candidates.js";
+import { renderPhaseWriteOverride } from "./render-phase-writes.js";
 import { resolveStateClassification } from "./assumptions/review-assumptions.js";
 import { splitCommitVerdict } from "./verdicts/split-commit-verdict.js";
 import type ts from "typescript";
@@ -202,8 +203,8 @@ function splitClusterClassification(
 }
 
 interface StateVerdictResolution extends ResolvedStateClassification {
-  /** A commit-sensitive owner overrides every conversion the verdicts or a confirmation produced. */
-  readonly commitSensitiveOverride: boolean;
+  /** React scheduling the state depends on overrides what the verdicts or a confirmation produced. */
+  readonly overridden: boolean;
 }
 
 function resolveStateVerdict(
@@ -217,16 +218,18 @@ function resolveStateVerdict(
     inputs,
     result,
   );
-  const commitSensitiveOverride =
-    stateIsCommitSensitive(state, usage, result.analysis) &&
-    resolved.classification.action !== "review-state" &&
-    resolved.classification.action !== "keep-state";
+  const { action } = resolved.classification;
+  const override =
+    renderPhaseWriteOverride(state, usage, action) ??
+    (action !== "review-state" &&
+    action !== "keep-state" &&
+    stateIsCommitSensitive(state, usage, result.analysis)
+      ? commitSensitiveStateClassification(state)
+      : null);
   return {
     ...resolved,
-    classification: commitSensitiveOverride
-      ? commitSensitiveStateClassification(state)
-      : resolved.classification,
-    commitSensitiveOverride,
+    classification: override ?? resolved.classification,
+    overridden: override !== null,
   };
 }
 
@@ -237,7 +240,7 @@ interface GroupAttachment {
 }
 
 function attachGroup(finding: HookFinding, { cluster, resolved, state }: GroupAttachment): void {
-  if (resolved.commitSensitiveOverride) {
+  if (resolved.overridden) {
     return;
   }
   if (resolved.group) {
@@ -278,8 +281,8 @@ function withAssumption(
   finding: HookFinding,
   { analysis, resolved, state }: AssumptionAttachment,
 ): void {
-  const { assumption, commitSensitiveOverride } = resolved;
-  if (!assumption || commitSensitiveOverride) {
+  const { assumption, overridden } = resolved;
+  if (!assumption || overridden) {
     return;
   }
   finding.assumption = assumption;

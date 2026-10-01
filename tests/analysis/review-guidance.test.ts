@@ -49,9 +49,9 @@ test("a proven pending interval asks about its event origin, not nonexistent cap
 
 test("a known render-time invocation cannot be waived by an event-origin question", () => {
   const finding = pending(PENDING.replace("return <main>", "submit(); return <main>"));
-  assert.equal(finding.action, "review-state");
+  assert.equal(finding.action, "keep-state");
   assert.equal(finding.assumption, undefined);
-  assert.equal(finding.review?.kind, "investigate");
+  assert.match(finding.message, /runs while its owner renders/u);
 });
 
 for (const adapter of [

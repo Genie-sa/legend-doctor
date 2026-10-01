@@ -147,7 +147,7 @@ test("proves every async command path through source wrappers and inline event a
   );
   assert.equal(
     requireValue(findings.get("eagerDeleting")).action,
-    "review-state",
+    "keep-state",
     requireValue(findings.get("eagerDeleting")).message,
   );
   assert.equal(
