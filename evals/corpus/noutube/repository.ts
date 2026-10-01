@@ -8,7 +8,7 @@ export const noutubeRepository = {
   targets: [
     { effects: 23, id: "noutube-page", root: "components/page", states: 5 },
     { effects: 3, id: "noutube-header", root: "components/header", states: 3 },
-    { effects: 7, id: "noutube-extension", root: "extension", states: 7 },
+    { effects: 8, id: "noutube-extension", root: "extension", states: 7 },
     { effects: 3, id: "noutube-feed-modal", root: "components/modal/FeedModal.tsx", states: 7 },
     {
       effects: 0,

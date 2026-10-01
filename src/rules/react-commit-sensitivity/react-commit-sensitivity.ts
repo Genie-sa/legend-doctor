@@ -95,7 +95,10 @@ function collectEffectCall(node: ts.CallExpression, scan: CommitScan, imports: H
   if (callback) {
     scan.lifecycleRegions.add(callback);
   }
-  if (isImportedReactCall(node, imports, "useEffect")) {
+  if (
+    isImportedReactCall(node, imports, "useEffect") ||
+    isImportedReactCall(node, imports, "useLayoutEffect")
+  ) {
     scan.effectCalls.push(node);
   }
   if (hasNoDependencyArray(node)) {

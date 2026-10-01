@@ -13,6 +13,7 @@ import {
   committedRefEffect,
   harnessEffect,
   keepExternalIntegrationEffect,
+  keepLayoutEffect,
   keepLifecycleAliasEffect,
   keepLifecycleEffect,
   keepPairedMountEffect,
@@ -38,6 +39,7 @@ import { findAncestorUntil } from "../../core/ast.js";
 import { findMutationSiteReset } from "./mutation-site-resets.js";
 import { findPureDerivedSetter } from "./derived-setters.js";
 import { isDependencyDrivenExternalCommandEffect } from "./external-command-effects.js";
+import { isImportedReactCall } from "../react-commit-sensitivity/binding-resolution.js";
 import { observableReactionClassification } from "./observable-reactions.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
@@ -50,7 +52,29 @@ export interface EffectClassificationRequest extends EffectClassificationContext
   readonly nonProductionHarness: boolean;
 }
 
+/**
+ * A layout effect runs after DOM mutation and before paint. Deleting derived state, moving a write
+ * into its event, and waiting on the state it writes keep that work ahead of paint; an observable
+ * reaction, Legend persistence, or a lifecycle alias would run it later.
+ */
 export function classifyEffect(request: EffectClassificationRequest): ClassifiedEffect {
+  const classification = effectClassification(request);
+  return isImportedReactCall(request.effect.call, request.imports, "useLayoutEffect") &&
+    !preservesLayoutTiming(classification)
+    ? keepLayoutEffect()
+    : classification;
+}
+
+function preservesLayoutTiming({ abstentionReason, action }: ClassifiedEffect): boolean {
+  return (
+    action === "delete-effect" ||
+    action === "move-to-event" ||
+    abstentionReason === "effect-write-ownership-unresolved" ||
+    abstentionReason === "effect-callback-unresolved"
+  );
+}
+
+function effectClassification(request: EffectClassificationRequest): ClassifiedEffect {
   const {
     childContracts,
     effect,

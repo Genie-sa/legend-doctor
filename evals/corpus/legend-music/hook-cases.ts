@@ -227,4 +227,14 @@ export const legendMusicHookCases = [
       "The layout handler destructures its own `height` from the event and passes it to the setter; the state is read only by one View's style, so a leaf wrapper around that View can subscribe without rebuilding the window's providers.",
     target: "legend-music",
   },
+  {
+    action: "keep-effect",
+    file: "observables/useObservableLatest.tsx",
+    hook: "useEffect",
+    line: 8,
+    name: null,
+    rationale:
+      "The layout effect publishes the latest prop to a component observable before paint, so subscribers rerender with it ahead of the first paint; nothing derives it in render or writes it from an event, and an observable reaction or passive effect would publish after paint.",
+    target: "legend-music",
+  },
 ] as const satisfies readonly GoldHookCase[];

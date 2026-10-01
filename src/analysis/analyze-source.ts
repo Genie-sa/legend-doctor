@@ -128,10 +128,13 @@ export function findingHookImports(file: AnalysisFile): HookImports | null {
     : null;
 }
 
-/** A finding hook call names a `useState` or `useEffect` import, or a member of a React namespace. */
+/** A finding hook call names a `useState`, `useEffect`, or `useLayoutEffect` import, or a member of a React namespace. */
 function canCallFindingHook(imports: HookImports): boolean {
   return (
-    imports.useState.size > 0 || imports.useEffect.size > 0 || imports.reactNamespaces.size > 0
+    imports.useState.size > 0 ||
+    imports.useEffect.size > 0 ||
+    imports.useLayoutEffect.size > 0 ||
+    imports.reactNamespaces.size > 0
   );
 }
 
@@ -149,6 +152,12 @@ function containsFindingHookCall(node: ts.Node, imports: HookImports): boolean {
         localNames: imports.useEffect,
         namespaceNames: imports.reactNamespaces,
         canonicalName: "useEffect",
+      }) ||
+      isImportedHookCall({
+        call: node,
+        localNames: imports.useLayoutEffect,
+        namespaceNames: imports.reactNamespaces,
+        canonicalName: "useLayoutEffect",
       }))
   ) {
     return true;

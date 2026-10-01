@@ -409,7 +409,7 @@ export const expensifyRepository = {
       root: "src/pages/iou/request/step/IOURequestStepDistanceGPS/GPSButtons/index.tsx",
       states: 4,
     },
-    { effects: 10, id: "expensify-root-lifecycle", root: "src/Expensify.tsx", states: 4 },
+    { effects: 12, id: "expensify-root-lifecycle", root: "src/Expensify.tsx", states: 4 },
     {
       effects: 2,
       id: "expensify-signer-info-lifecycle",
