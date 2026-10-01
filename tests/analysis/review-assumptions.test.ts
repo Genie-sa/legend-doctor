@@ -220,9 +220,9 @@ test("when one assumed fact leaves another blocker, both are asked in one two-fa
     import { useState } from "react";
     export function Panel() {
       const [value, setValue] = useState("");
-      const form = useFancyForm({ value, onChange: setValue });
+      useFancyForm({ value, onChange: setValue });
       return <main>${CHROME}
-        <Editor {...form} />
+        <Editor />
         <p>{value.length} characters</p>
         <span>{value ? "dirty" : "clean"}</span>
       </main>;

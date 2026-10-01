@@ -10,6 +10,13 @@ import {
   oneHopRenderProjectionReferences,
 } from "../../rules/state-proofs/projection-hops.js";
 import {
+  branchJsxElementCount,
+  isSafeJsxProjectionReference,
+  jsxElementCount,
+  jsxElementCountIn,
+  lowestCommonJsxSubtree,
+} from "../../rules/state-proofs/jsx-subtrees.js";
+import {
   hasOnlyEventCommandReads,
   stateMayHoldCallable,
 } from "../../rules/state-proofs/state-proofs.js";
@@ -21,12 +28,6 @@ import {
   multipleOneHopRenderProjectionReferences,
   stateSubtreeResult,
 } from "./materiality.js";
-import {
-  isSafeJsxProjectionReference,
-  jsxElementCount,
-  jsxElementCountIn,
-  lowestCommonJsxSubtree,
-} from "../../rules/state-proofs/jsx-subtrees.js";
 import {
   projectionSubtreeKind,
   projectionWritesAreDeferred,
@@ -188,12 +189,11 @@ function projectionCallAllowlist(
 function directRenderSubtree(
   state: StateCandidate,
   usage: StateUsage,
-  { materiality, ownerJsx }: RenderSubtreeScope,
+  { materiality }: RenderSubtreeScope,
 ): StateSubtree | null {
   return boundedDirectSubtree(state, [...usage.directRenderNodes, ...usage.setterCallNodes], {
     materiality,
     movedDeclarations: [],
-    ownerJsx,
   });
 }
 
@@ -224,7 +224,6 @@ function closureConfinedSubtree(
   const subtree = boundedDirectSubtree(state, confined.nodes, {
     materiality,
     movedDeclarations: confined.movedDeclarations,
-    ownerJsx: jsxElementCount(state.owner),
   });
   return subtree && !subtree.repeated && !subtreeIsReturnRoot(subtree, confined.returned)
     ? subtree
@@ -239,18 +238,18 @@ function subtreeIsReturnRoot(subtree: StateSubtree, returned: ts.Expression): bo
 interface DirectSubtreeScope {
   readonly materiality: MaterialityPolicy;
   readonly movedDeclarations: readonly string[];
-  readonly ownerJsx: number;
 }
 
 function boundedDirectSubtree(
   state: StateCandidate,
   nodes: readonly ts.Node[],
-  { materiality, movedDeclarations, ownerJsx }: DirectSubtreeScope,
+  { materiality, movedDeclarations }: DirectSubtreeScope,
 ): StateSubtree | null {
   const direct = lowestCommonJsxSubtree(nodes, state.owner);
   if (!direct) {
     return null;
   }
+  const ownerJsx = branchJsxElementCount(direct, state.owner);
   if (
     ownerJsx < materiality.broadOwnerJsx ||
     jsxElementCountIn(direct) < MIN_LEAF_SUBTREE_ELEMENTS ||

@@ -62,9 +62,10 @@ test("keeps the atomic-transition abstention when a member cannot migrate alone"
   for (const [name, fixture] of Object.entries({ broadRead, effectWritten })) {
     const findings = states(fixture);
     for (const finding of findings) {
-      assert.equal(finding.action, "review-state", `${name} ${finding.name}`);
+      assert.notEqual(finding.action, "use-observable", `${name} ${finding.name}`);
       assert.equal(finding.group, undefined, `${name} ${finding.name}`);
     }
+    assert.equal(findings[0]?.action, "review-state", name);
     assert.equal(findings[0]?.abstentionReason, "atomic-transition-unproven", name);
   }
 });

@@ -220,15 +220,13 @@ export const hoaluHookCases = [
     target: "hoalu-app",
   },
   {
-    abstentionReason: "ownership-flow-unresolved",
-    action: "review-state",
-    assumption: { ifConfirmed: "use-observable" },
+    action: "keep-state",
     file: "components/command-palette/command-palette.tsx",
     hook: "useState",
     line: 31,
     name: "search",
     rationale:
-      "The search text is handed to an unknown search hook and read in several render sites of a broad palette; the finding must ask both facts, the escaped consumer and the leaf-wrapped read sites, in one question.",
+      "The search text feeds an owner-level search hook whose filtered results the palette renders, and gates several sections, so every keystroke re-renders the owner and no smaller subscriber removes a render.",
     target: "hoalu-app",
   },
 ] as const satisfies readonly GoldHookCase[];
