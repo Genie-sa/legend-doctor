@@ -165,6 +165,9 @@ Its `members` list says what a "yes" does to each: members whose standalone proo
 one cluster instruction written with `assign`, and a member another blocker still holds is re-examined without the
 co-write blocker and gets its next question on the same scan. Until then, filtered views drop that member when a
 converting member's review carries the same question, and keep it otherwise, so every open question stays readable.
+When no member converts alone and every co-written pair provably runs in one synchronous stretch, with no `await` or
+`flushSync` between the writes in an owner without transitions, React already commits the writes in one render, so no
+atomic question is asked: each state gets its own next question, and its evidence records the proof.
 
 A confirmed individual question turns its finding into `ifConfirmed` with disposition `change`; a group converts only the members whose outcome is actionable. The answer is recorded in each converted finding's evidence. Such a finding also carries `verification`: the conversion rests on an answer rather than a proof, so the
 recipe names the jsdom harness exported as `legend-doctor/runtime` (`mountDom`, `count`), the before/after comparison

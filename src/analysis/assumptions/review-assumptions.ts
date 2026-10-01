@@ -8,6 +8,7 @@ import {
 import type { FindingsScope } from "../finding-clusters.js";
 import type { GroupAssumptionResult } from "./group-assumptions.js";
 import type { StateClassificationInputs } from "../verdicts/classification-context.js";
+import { cowritesShareOneStretch } from "./atomic-stretch.js";
 import path from "node:path";
 import { stateAssumption } from "./state-assumptions.js";
 
@@ -98,6 +99,9 @@ function cowrittenAssumption(
     reportFile: reportFileOf(result),
     result,
   });
+  if (!grouped && cowritesShareOneStretch(members, result.analysis)) {
+    return provenAtomicAssumption(members, inputs, result);
+  }
   if (!grouped) {
     const partners = members.filter((member) => member !== inputs.state);
     return singleAssumption({ classified, inputs, partners, result });
@@ -105,6 +109,19 @@ function cowrittenAssumption(
   return grouped.confirmed
     ? settledGroup(grouped, inputs, result)
     : { ...unchanged(classified), assumption: grouped.assumption };
+}
+
+/** No member converts alone, so a proven atomic transition leaves this state's own next blocker. */
+function provenAtomicAssumption(
+  members: readonly StateCandidate[],
+  inputs: StateClassificationInputs,
+  result: FindingsScope,
+): ResolvedStateClassification {
+  const names = members.map((member) => `\`${member.valueName}\``).join(", ");
+  const alone = result.classifyAlone(inputs.state);
+  const next = isReview(alone) ? chainedAssumption(alone, inputs, result) : unchanged(alone);
+  const proof = `atomic transition proven: every co-write of ${names} shares one synchronous stretch, which React commits in one render together with observable notifications`;
+  return { ...next, evidence: [proof, ...next.evidence] };
 }
 
 function settledGroup(
