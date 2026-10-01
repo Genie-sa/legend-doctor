@@ -9,9 +9,9 @@ import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
 import type { SubscriptionFlow } from "./subscription-flow.js";
 import type { UseValueBinding } from "./use-value-bindings.js";
-import { hasInventoryAnchor } from "../../core/subscriptions.js";
 import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
 import { isUseValueCall } from "./observable-paths.js";
+import { settlesInventoryEntry } from "../../core/subscriptions.js";
 import { staticMemberPrefix } from "./selector-expressions.js";
 import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
@@ -41,7 +41,7 @@ export function resolveSubscriptionInventory(
   entry: SubscriptionInventory,
   findings: readonly LegendPracticeFinding[],
 ): SubscriptionInventory {
-  const anchored = findings.filter((finding) => hasInventoryAnchor(entry, finding.location));
+  const anchored = findings.filter((finding) => settlesInventoryEntry(entry, finding));
   if (anchored.length === 0) {
     return entry;
   }

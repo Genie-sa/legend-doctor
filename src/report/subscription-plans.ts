@@ -7,8 +7,8 @@ import type {
 } from "../core/subscriptions.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import { applySubscriptionMeasurements } from "./subscription-measurements.js";
-import { hasInventoryAnchor } from "../core/subscriptions.js";
 import { isNonValueIdentifier } from "../core/analysis-ast.js";
+import { settlesInventoryEntry } from "../core/subscriptions.js";
 import ts from "typescript";
 import { visit } from "../core/ast.js";
 
@@ -127,7 +127,7 @@ export function filterSubscriptionAnalysis(
   findings: readonly LegendPracticeFinding[],
 ): SubscriptionAnalysis {
   const visible = (entry: SubscriptionInventory): boolean =>
-    findings.some((finding) => hasInventoryAnchor(entry, finding.location));
+    findings.some((finding) => settlesInventoryEntry(entry, finding));
   const inventory = analysis.inventory.map((entry): SubscriptionInventory =>
     entry.status !== "unresolved" && !visible(entry)
       ? { ...entry, status: "unresolved", reasons: ["excluded-by-report-filter"] }

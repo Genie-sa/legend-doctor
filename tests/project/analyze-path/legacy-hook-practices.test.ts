@@ -145,3 +145,34 @@ test("replaces an exact React mirror of a one-hop Legend value hook", async (tes
     "use-value",
   );
 });
+
+test("a legacy rename alone leaves the subscription inventory unresolved with its reasons", async (testContext) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-legacy-inventory-"));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "screen.tsx"),
+    `
+      import { use$, useObservable } from "@legendapp/state/react";
+      import { useEffect } from "react";
+      export function Screen({ load }: { load: () => string }) {
+        const selected$ = useObservable(load);
+        const selected = use$(selected$);
+        useEffect(() => sync(selected), []);
+        return <main/>;
+      }
+    `,
+    "utf8",
+  );
+
+  const report = await analyzePath(root);
+
+  assert.deepEqual(
+    report.practices.map((practice) => practice.action),
+    ["replace-legacy-use-value"],
+  );
+  const entry = requireValue(
+    report.subscriptionAnalysis?.inventory.find((item) => item.binding === "selected"),
+  );
+  assert.equal(entry.status, "unresolved");
+  assert.deepEqual(entry.reasons, ["effect-consumer", "no-render-consumer"]);
+});

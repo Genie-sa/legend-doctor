@@ -1,4 +1,4 @@
-import type { SourceLocation } from "./types.js";
+import type { LegendPracticeAction, LegendPracticeFinding, SourceLocation } from "./types.js";
 
 export const SUBSCRIPTION_INVENTORY_STATUSES = ["planned", "other-action", "unresolved"] as const;
 
@@ -104,16 +104,27 @@ export interface SubscriptionInventory {
   derivations: SubscriptionCut["derivations"];
 }
 
-/** A practice finding about a `useValue` call sits at its binding or at the call itself. */
-export function hasInventoryAnchor(
+/** Rewrites to the canonical hook keep the same subscription and its render cost. */
+const API_REWRITE_ACTIONS: ReadonlySet<LegendPracticeAction> = new Set([
+  "replace-legacy-use-value",
+]);
+
+/**
+ * Whether a finding settles an entry's subscription. A finding about a `useValue` call sits at its
+ * binding or at the call itself.
+ */
+export function settlesInventoryEntry(
   entry: SubscriptionInventory,
-  location: SourceLocation,
+  { action, location }: LegendPracticeFinding,
 ): boolean {
-  return [entry.location, entry.callLocation].some(
-    (anchor) =>
-      anchor.file === location.file &&
-      anchor.line === location.line &&
-      anchor.column === location.column,
+  return (
+    !API_REWRITE_ACTIONS.has(action) &&
+    [entry.location, entry.callLocation].some(
+      (anchor) =>
+        anchor.file === location.file &&
+        anchor.line === location.line &&
+        anchor.column === location.column,
+    )
   );
 }
 
