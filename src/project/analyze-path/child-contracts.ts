@@ -167,6 +167,8 @@ class ChildContracts implements ChildContractResolver {
       cache: this.componentHostEventContracts,
       componentName,
       file: this.importerFile,
+      isHostElementComponent: (file, name) =>
+        this.context.sourceIndex.hostElementComponentFor(file, name),
       propName,
       resolveComponent: (file, name) => this.resolveComponentSource(file, name),
     });

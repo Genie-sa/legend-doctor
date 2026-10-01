@@ -48,12 +48,20 @@ export interface ComponentPropQuery {
   readonly cache: Map<string, boolean>;
   readonly componentName: string;
   readonly file: string;
+  readonly isHostElementComponent: (file: string, name: string) => boolean;
   readonly propName: string;
   readonly resolveComponent: (file: string, name: string) => ChildComponentSource | null;
 }
 
 /** Whether a component's callback prop reaches only host event props of what it renders. */
 export function componentPropRunsOnlyInHostEvents(query: ComponentPropQuery): boolean {
+  return (
+    query.isHostElementComponent(query.file, query.componentName) ||
+    forwardedPropRunsOnlyInHostEvents(query)
+  );
+}
+
+function forwardedPropRunsOnlyInHostEvents(query: ComponentPropQuery): boolean {
   const key = `${query.file}\0${query.componentName}\0${query.propName}`;
   const hit = query.cache.get(key);
   if (hit !== undefined) {

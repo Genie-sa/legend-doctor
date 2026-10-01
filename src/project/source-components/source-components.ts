@@ -71,6 +71,7 @@ export interface SourceIndex {
   deferredCallbackHooksFor: (file: string) => ReadonlyMap<string, ReadonlySet<number>>;
   frameworkEventComponentFor: (file: string, name: string) => boolean;
   hookDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
+  hostElementComponentFor: (file: string, name: string) => boolean;
   legendValueBridgesFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
   observableArrayPathsFor: (file: string) => ReadonlySet<string>;
   /** Contexts, and hooks returning context values, whose declared value type can hold observables. */
@@ -122,6 +123,7 @@ export function buildSourceIndexFromFiles(
     deferredCallbackRegistrationsFor: (file) => deferredCallbackRegistrationsFor(state, file),
     frameworkEventComponentFor: (file, name) => frameworkEventComponentFor(state, file, name),
     hookDeclarationFor: (file, name) => hookDeclarationFor(state, file, name),
+    hostElementComponentFor: (file, name) => hostElementComponentFor(state, file, name),
     legendValueBridgesFor: (file) => legendValueBridgesFor(state, file),
     observableArrayPathsFor: (file) => observableArrayPathsFor(state, file),
     observableContextReadersFor: (file) => observableContextReadersFor(state, file),
@@ -321,6 +323,15 @@ function frameworkEventComponentFor(state: SourceIndexState, file: string, name:
   return (
     (binding !== undefined && isFrameworkEventModuleSpecifier(binding.moduleSpecifier)) ||
     resolvedFor(state, file, "framework-event-component").has(rootName)
+  );
+}
+
+function hostElementComponentFor(state: SourceIndexState, file: string, name: string): boolean {
+  const record = state.records.get(normalizeFile(file));
+  return (
+    record?.shadowedImports.has(name) !== true &&
+    (record?.hostElementComponents.has(name) === true ||
+      resolvedFor(state, file, "host-element-component").has(name))
   );
 }
 

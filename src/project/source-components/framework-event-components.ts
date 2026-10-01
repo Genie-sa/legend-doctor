@@ -1,6 +1,11 @@
 import type { ModuleRecordDraft, StyledComponentCandidate } from "./model.js";
 import ts from "typescript";
 
+/** `styled.input` renders the host element its lowercase member names. */
+const INTRINSIC_TAG = /^[a-z]/u;
+
+type StyledTarget = Pick<StyledComponentCandidate, "factory" | "intrinsic" | "targetRoot">;
+
 export function isFrameworkEventModuleSpecifier(specifier: string): boolean {
   return (
     specifier === "react-native" ||
@@ -12,14 +17,25 @@ export function isFrameworkEventModuleSpecifier(specifier: string): boolean {
   );
 }
 
-export function styledComponentTarget(
-  initializer: ts.Expression,
-): { factory: string; targetRoot: string } | null {
+export function styledComponentTarget(initializer: ts.Expression): StyledTarget | null {
   if (!ts.isTaggedTemplateExpression(initializer)) {
     return null;
   }
   const { tag } = initializer;
-  if (!ts.isCallExpression(tag) || !ts.isIdentifier(tag.expression) || tag.arguments.length !== 1) {
+  if (ts.isPropertyAccessExpression(tag)) {
+    return intrinsicStyledTarget(tag);
+  }
+  return ts.isCallExpression(tag) ? wrappedStyledTarget(tag) : null;
+}
+
+function intrinsicStyledTarget(tag: ts.PropertyAccessExpression): StyledTarget | null {
+  return ts.isIdentifier(tag.expression) && INTRINSIC_TAG.test(tag.name.text)
+    ? { factory: tag.expression.text, intrinsic: true, targetRoot: tag.name.text }
+    : null;
+}
+
+function wrappedStyledTarget(tag: ts.CallExpression): StyledTarget | null {
+  if (!ts.isIdentifier(tag.expression) || tag.arguments.length !== 1) {
     return null;
   }
   const [target] = tag.arguments;
@@ -27,7 +43,9 @@ export function styledComponentTarget(
     return null;
   }
   const root = styledTargetRoot(target);
-  return ts.isIdentifier(root) ? { factory: tag.expression.text, targetRoot: root.text } : null;
+  return ts.isIdentifier(root)
+    ? { factory: tag.expression.text, intrinsic: false, targetRoot: root.text }
+    : null;
 }
 
 function styledTargetRoot(target: ts.Expression): ts.Expression {
@@ -59,15 +77,26 @@ function applyStyledComponentCandidate(
   ) {
     return;
   }
-  const binding = draft.imports.get(candidate.targetRoot);
-  const provenTarget = binding
-    ? isFrameworkEventModuleSpecifier(binding.moduleSpecifier)
-    : draft.frameworkEventComponents.has(candidate.targetRoot);
-  if (!provenTarget) {
+  const components = styledComponentSet(draft, candidate);
+  if (!components) {
     return;
   }
-  draft.frameworkEventComponents.add(candidate.name);
+  components.add(candidate.name);
   if (candidate.exported) {
     draft.localExports.set(candidate.name, candidate.name);
   }
+}
+
+function styledComponentSet(
+  draft: ModuleRecordDraft,
+  { intrinsic, targetRoot }: StyledComponentCandidate,
+): Set<string> | null {
+  if (intrinsic) {
+    return draft.hostElementComponents;
+  }
+  const binding = draft.imports.get(targetRoot);
+  const provenTarget = binding
+    ? isFrameworkEventModuleSpecifier(binding.moduleSpecifier)
+    : draft.frameworkEventComponents.has(targetRoot);
+  return provenTarget ? draft.frameworkEventComponents : null;
 }
