@@ -52,6 +52,63 @@ test("moves a transported useValue subscription into one source-proven child", a
   assert.match(requireValue(finding).message ?? "", /subscribe inside the child/u);
 });
 
+test("moves a subscription only when the owner renders more than the child", async (testContext) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-subscription-wrapper-"));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  await writeFile(
+    path.join(root, "state.ts"),
+    `
+      import { observable } from "@legendapp/state";
+      export const query$ = observable("");
+      export const open$ = observable(false);
+    `,
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, "fields.tsx"),
+    `
+      export function SearchField({ value }: { value: string }) {
+        return <input value={value} />;
+      }
+      export function Sheet({ open, children }: { open: boolean; children: React.ReactNode }) {
+        return open ? <section>{children}</section> : null;
+      }
+    `,
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, "screen.tsx"),
+    `
+      import { useValue } from "@legendapp/state/react";
+      import { SearchField, Sheet } from "./fields";
+      import { open$, query$ } from "./state";
+      export function SearchLeaf() {
+        const query = useValue(query$);
+        return <SearchField value={query} />;
+      }
+      export function HistorySheet({ rows }: { rows: string[] }) {
+        const open = useValue(open$);
+        return (
+          <Sheet open={open}>
+            <h2>History</h2>
+            <p>{rows[0]}</p>
+            <p>{rows[1]}</p>
+          </Sheet>
+        );
+      }
+    `,
+    "utf8",
+  );
+
+  const report = await analyzePath(root);
+  assert.deepEqual(
+    report.practices
+      .filter((candidate) => candidate.action === "move-use-value-into-child")
+      .map((finding) => finding.location.line),
+    [10],
+  );
+});
+
 test("keeps transported useValue subscriptions without one stable primitive child contract", async (testContext) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-child-subscription-negative-"));
   testContext.after(() => rm(root, { force: true, recursive: true }));
