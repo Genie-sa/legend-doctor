@@ -62,7 +62,7 @@ export function findObservableReadPractices(
   visit(sourceFile, (node) => {
     collectReadFindings(node, scan, findings);
   });
-  request.inventory?.push(...subscriptionInventory(scan, findings));
+  request.inventory?.push(...subscriptionInventory(scan));
   return findings;
 }
 

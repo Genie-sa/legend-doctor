@@ -1,4 +1,4 @@
-import type { SourceLocation } from "./types.js";
+import type { LegendPracticeAction, LegendPracticeFinding, SourceLocation } from "./types.js";
 
 export const SUBSCRIPTION_INVENTORY_STATUSES = ["planned", "other-action", "unresolved"] as const;
 
@@ -27,6 +27,7 @@ export const SUBSCRIPTION_INVENTORY_REASONS = [
   "owner-commit-or-snapshot-work",
   "owner-not-proven",
   "render-callback-consumer",
+  "render-consumer-not-proven",
   "returned-result",
   "selector-calls-unproven-function",
   "selector-function-not-proven",
@@ -83,7 +84,9 @@ export interface SubscriptionCut {
 }
 
 export interface SubscriptionInventory {
+  /** The binding's declaration, or the call when its result is not bound. */
   location: SourceLocation;
+  callLocation: SourceLocation;
   owner: string;
   binding: string | null;
   observable: string | null;
@@ -99,6 +102,30 @@ export interface SubscriptionInventory {
     kind: (typeof SUBSCRIPTION_READ_KINDS)[number];
   }[];
   derivations: SubscriptionCut["derivations"];
+}
+
+/** Rewrites to the canonical hook keep the same subscription and its render cost. */
+const API_REWRITE_ACTIONS: ReadonlySet<LegendPracticeAction> = new Set([
+  "replace-legacy-use-value",
+]);
+
+/**
+ * Whether a finding settles an entry's subscription. A finding about a `useValue` call sits at its
+ * binding or at the call itself.
+ */
+export function settlesInventoryEntry(
+  entry: SubscriptionInventory,
+  { action, location }: LegendPracticeFinding,
+): boolean {
+  return (
+    !API_REWRITE_ACTIONS.has(action) &&
+    [entry.location, entry.callLocation].some(
+      (anchor) =>
+        anchor.file === location.file &&
+        anchor.line === location.line &&
+        anchor.column === location.column,
+    )
+  );
 }
 
 export interface SubscriptionCosts {

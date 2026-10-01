@@ -2,6 +2,7 @@ import {
   NO_OBSERVABLE_FIELD_FACTS,
   observableWriteGroups,
 } from "../rules/observable-reads/field-writes.js";
+import type { PracticeRule, PracticeRuleInput } from "./practice-rules.js";
 import { SOURCE_FILE_OPTIONS, isNonProductionHarness, visit } from "../core/ast.js";
 import {
   dataFieldKeys,
@@ -29,6 +30,7 @@ import { localObservableInPlaceWrites } from "../project/source-components/obser
 import { moduleRecord } from "../project/source-components/module-record.js";
 import { observableInitialValue } from "../core/observable-initial-value.js";
 import { resolveObservableBindings } from "./observable-bindings.js";
+import { resolveSubscriptionInventory } from "../rules/observable-reads/subscription-inventory.js";
 import ts from "typescript";
 import { withSoleBindingFacts } from "./sole-binding-facts.js";
 
@@ -154,9 +156,25 @@ function analyzeParsedLegendPractices(
   const observableFields = rules.some((rule) => rule.id === "observable-reads")
     ? collectObservableFieldFacts(request, imports, observableBindings)
     : NO_OBSERVABLE_FIELD_FACTS;
-  return rules
-    .flatMap((rule) => rule.run({ imports, observableBindings, observableFields, request }))
+  return runPracticeRules(rules, { imports, observableBindings, observableFields, request });
+}
+
+/** An inventory status reflects the findings of every rule, so it is resolved after all of them run. */
+function runPracticeRules(
+  rules: readonly PracticeRule[],
+  input: Omit<PracticeRuleInput, "inventory">,
+): LegendPracticeFinding[] {
+  const { subscriptionInventory } = input.request;
+  const unresolved: SubscriptionInventory[] = [];
+  const findings = rules
+    .flatMap((rule) =>
+      rule.run({ ...input, inventory: subscriptionInventory ? unresolved : undefined }),
+    )
     .toSorted(compareFindingLocation);
+  subscriptionInventory?.push(
+    ...unresolved.map((entry) => resolveSubscriptionInventory(entry, findings)),
+  );
+  return findings;
 }
 
 function compareFindingLocation(left: LegendPracticeFinding, right: LegendPracticeFinding): number {

@@ -62,6 +62,39 @@ test("memo callbacks and their dependency lists are memo reads, not event callba
   }
 });
 
+test("an unclassified read may reach render, so it is not proof that nothing renders the value", async (context) => {
+  for (const [setup, content] of [
+    ["", "<p>{format(selected)}</p>"],
+    ["const row = <p>{selected}</p>;", "{row}"],
+  ] as const) {
+    const { entry } = await inventory(context, setup, content);
+    assert.deepEqual(kinds(entry), ["unknown"], setup || content);
+    assert.ok(entry.reasons.includes("render-consumer-not-proven"), setup || content);
+    assert.ok(!entry.reasons.includes("no-render-consumer"), setup || content);
+  }
+});
+
+test("effect and event reads alone prove that nothing renders the value", async (context) => {
+  for (const [read, expected] of [
+    ["useEffect(() => sync(selected), []);", "effect"],
+    ["const onSave = () => save(selected);", "event-or-callback"],
+  ] as const) {
+    // A lazily seeded observable keeps peek-unrendered-use-value from resolving the entry.
+    const { entry } = await inventoryOf(
+      context,
+      `export function Screen({ load }: { load: () => string }) {
+        const selected$ = useObservable(load);
+        const selected = useValue(selected$);
+        ${read}
+        return <main/>;
+      }`,
+    );
+    assert.deepEqual(kinds(entry), [expected], read);
+    assert.ok(entry.reasons.includes("no-render-consumer"), read);
+    assert.ok(!entry.reasons.includes("render-consumer-not-proven"), read);
+  }
+});
+
 test("synchronous array callbacks in the returned JSX are render reads that repeat", async (context) => {
   const { entry, actions } = await inventory(
     context,

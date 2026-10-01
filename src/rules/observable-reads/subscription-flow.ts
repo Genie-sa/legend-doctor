@@ -65,10 +65,21 @@ export function subscriptionFlow(
     blockers: new Set(),
   };
   collectFlowReads(flow, scan);
-  if (!flow.reads.some((read) => RENDERED_READ_KINDS.has(read.kind))) {
-    flow.blockers.add("no-render-consumer");
+  const renderConsumer = renderConsumerBlocker(flow.reads);
+  if (renderConsumer) {
+    flow.blockers.add(renderConsumer);
   }
   return flow;
+}
+
+/** An `unknown` read may still reach render, so only fully classified reads prove there is no render consumer. */
+function renderConsumerBlocker(reads: readonly FlowRead[]): SubscriptionInventoryReason | null {
+  if (reads.some((read) => RENDERED_READ_KINDS.has(read.kind))) {
+    return null;
+  }
+  return reads.some((read) => read.kind === "unknown")
+    ? "render-consumer-not-proven"
+    : "no-render-consumer";
 }
 
 function collectFlowReads(flow: SubscriptionFlow, scan: ObservableReadScan): void {
