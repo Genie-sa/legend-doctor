@@ -2,6 +2,7 @@ import type { EffectCandidate, StateCandidate, StateUsage } from "../../analysis
 import { nearestNestedFunction, visitSkippingNestedFunctions } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { groupStatesByOwner } from "../../analysis/ast-helpers.js";
 import { isListenerRefCandidate } from "./listener-ref-candidates.js";
 import { listenerCallbacks } from "./listener-callbacks.js";
 import { mutationRegionOnlyCallsStateSetters } from "../effect-drafts/draft-mutations.js";
@@ -48,7 +49,7 @@ export function findListenerRefStateClusters({
   usageByState,
 }: ListenerRefStateScan): ReadonlyMap<StateCandidate, ListenerRefStateCluster> {
   const result = new Map<StateCandidate, ListenerRefStateCluster>();
-  for (const [owner, ownerStates] of groupByOwner(states)) {
+  for (const [owner, ownerStates] of groupStatesByOwner(states)) {
     for (const [state, cluster] of ownerClusters({
       effects,
       imports,
@@ -167,18 +168,6 @@ function orderedCandidateRegions(
     }
   }
   return [...regions].toSorted(([left], [right]) => left.getStart() - right.getStart());
-}
-
-function groupByOwner(
-  states: readonly StateCandidate[],
-): ReadonlyMap<RuntimeFunctionLike, readonly StateCandidate[]> {
-  const groups = new Map<RuntimeFunctionLike, StateCandidate[]>();
-  for (const state of states) {
-    const group = groups.get(state.owner) ?? [];
-    group.push(state);
-    groups.set(state.owner, group);
-  }
-  return groups;
 }
 
 function regionWritesOnlyMembers(

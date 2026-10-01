@@ -11,6 +11,7 @@ import {
   visitSkippingNestedRuntimeFunctions,
 } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { isConstDeclaration } from "../../core/binding-references.js";
 import { jsxElementCountIn } from "../../rules/state-proofs/jsx-subtrees.js";
 import ts from "typescript";
 
@@ -110,14 +111,6 @@ function isOwnerParameter(declaration: ts.Node, owner: RuntimeFunctionLike): boo
   return ts.isParameter(declaration) && declaration.parent === owner;
 }
 
-function isConstDeclaration(declaration: ts.Node): boolean {
-  return (
-    ts.isVariableDeclaration(declaration) &&
-    ts.isVariableDeclarationList(declaration.parent) &&
-    (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-  );
-}
-
 /** The declaration of a binding and every assignment that can give it a later value. */
 function bindingSources(
   declaration: ts.Node,
@@ -131,7 +124,7 @@ function bindingSources(
     return cached;
   }
   const sources: ts.Node[] = [declaration];
-  if (!isConstDeclaration(declaration)) {
+  if (!ts.isVariableDeclaration(declaration) || !isConstDeclaration(declaration)) {
     visit(owner.body, (node) => {
       if (!ts.isIdentifier(node) || node.text !== name) {
         return;

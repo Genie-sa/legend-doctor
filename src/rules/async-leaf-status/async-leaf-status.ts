@@ -10,6 +10,7 @@ import { asyncLeafCallSites } from "./leaf-call-sites.js";
 import { hasIndependentRenderCutWitness } from "../state-proofs/render-cut-witness.js";
 import { hasStateInitializer } from "../deferred-reveal/deferred-reveal.js";
 import { isEventRootedCommand } from "./event-rooted-commands.js";
+import { isLiteralBooleanSetter } from "../literal-boolean-leaf/boolean-setters.js";
 import { isProvenPendingSegment } from "./pending-segment.js";
 import { jsxElementCount } from "../state-proofs/jsx-subtrees.js";
 import { pendingCommand } from "./pending-command.js";
@@ -87,15 +88,7 @@ function isAsyncCommandFlagUsage(
     !usage.setterUsesPreviousValue &&
     !usage.shadowed &&
     !usage.escaped &&
-    usage.setterCallNodes.every((call) => isBooleanLiteralSetterCall(call))
-  );
-}
-
-function isBooleanLiteralSetterCall(call: ts.CallExpression): boolean {
-  return (
-    call.arguments.length === 1 &&
-    (call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword ||
-      call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword)
+    usage.setterCallNodes.every((call) => isLiteralBooleanSetter(call))
   );
 }
 

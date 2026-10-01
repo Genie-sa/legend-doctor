@@ -1,7 +1,6 @@
 import type { ControlledFilterLeafCut, StateCandidate, StateUsage } from "../model.js";
 import { MIN_COLLECTION_RENDER_WORK, MIN_OWNER_RENDER_CUT_ELEMENTS } from "../constants.js";
 import {
-  bindingReferences,
   collectionBindingIsReadOnly,
   commonContainingRepeatedRender,
   directReturnedJsxSlot,
@@ -20,6 +19,7 @@ import { jsxTargetName, stateValueReferences } from "../ast-helpers.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { ExactStringFilter } from "./string-filter.js";
 import type { MaterialityPolicy } from "../constants.js";
+import { bindingReferences } from "../../core/binding-references.js";
 import { exactStringFilter } from "./string-filter.js";
 import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
@@ -45,7 +45,7 @@ function readOnlyFilterResultReferences(
   state: StateCandidate,
   filter: ExactStringFilter,
 ): readonly ts.Identifier[] | null {
-  const references = bindingReferences(state.owner, filter.resultName.text, filter.resultName);
+  const references = bindingReferences(state.owner, filter.resultName);
   if (
     references.length === 0 ||
     references.some((reference) => !isReadOnlyFilteredResultReference(reference, state.owner))
@@ -128,9 +128,7 @@ function repeatedProducerRenderCut(
 ): RepeatedProducerSlot | null {
   const repeated = commonContainingRepeatedRender(references, state.owner);
   const producer = repeated ? repeatedRenderBinding(repeated, state.owner) : null;
-  const producerReferences = producer
-    ? bindingReferences(state.owner, producer.text, producer)
-    : [];
+  const producerReferences = producer ? bindingReferences(state.owner, producer) : [];
   const slot =
     producerReferences.length === 1
       ? directReturnedJsxSlot(producerReferences[0]!, state.owner)

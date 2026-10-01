@@ -10,6 +10,7 @@ import {
   provenObservablePath,
 } from "../observable-reads/observable-paths.js";
 import { findAncestor, isRuntimeFunctionLike } from "../../core/ast.js";
+import { isConstDeclaration } from "../../core/binding-references.js";
 import ts from "typescript";
 
 /**
@@ -61,9 +62,4 @@ function observedSource(
       : null;
   }
   return provenObservablePath(selector, observableBindings);
-}
-
-function isConstDeclaration(declaration: ts.VariableDeclaration): boolean {
-  const list = declaration.parent;
-  return ts.isVariableDeclarationList(list) && (list.flags & ts.NodeFlags.Const) !== 0;
 }
