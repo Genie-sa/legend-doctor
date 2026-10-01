@@ -74,7 +74,7 @@ export function Counter() {
   );
 });
 
-test("names the imported legacy hook in a render read without an edit the migration would strand", () => {
+test("names useValue in a render read without an edit the legacy migration would strand", () => {
   const source = `import { observable } from "@legendapp/state";
 import { useMount, useSelector } from "@legendapp/state/react";
 
@@ -95,7 +95,7 @@ export function Counter() {
     findings.map((finding) => finding.action),
     ["use-value-for-render-read", "replace-legacy-use-value"],
   );
-  assert.match(renderRead?.message ?? "", /with `useSelector\(state\$\.count\)`/u);
+  assert.match(renderRead?.message ?? "", /with `useValue\(state\$\.count\)`/u);
   assert.equal(renderRead?.edits, undefined);
   assertVerifiedEdits(
     source,
