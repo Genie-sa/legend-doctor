@@ -117,6 +117,6 @@ test("settles effect-written state that leaves the small owner's own render by i
   );
   assert.deepEqual(
     findings.slice(1, 4).map((finding) => finding.abstentionReason),
-    ["render-cut-unproven", "effect-write-ownership-unresolved", "child-contract-unresolved"],
+    ["render-cut-unproven", "ownership-flow-unresolved", "child-contract-unresolved"],
   );
 });
