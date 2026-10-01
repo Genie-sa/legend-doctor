@@ -6,13 +6,13 @@ import {
   MIN_OWNER_RENDER_CUT_ELEMENTS,
 } from "../constants.js";
 import type { StateCandidate, StateSubtree, StateUsage } from "../model.js";
-import { commonRepeatedRender, jsxSubtreeLabel } from "../ast-helpers.js";
-import { findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import {
+  branchJsxElementCount,
   hasUnstableSubtreeLifetime,
-  jsxElementCount,
   nearestRepeatedRenderCall,
 } from "../../rules/state-proofs/jsx-subtrees.js";
+import { commonRepeatedRender, jsxSubtreeLabel } from "../ast-helpers.js";
+import { findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import type { JsxSubtreeNode } from "../../rules/deferred-reveal/jsx-subtrees.js";
 import type { MaterialityPolicy } from "../constants.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
@@ -49,7 +49,7 @@ export function isMaterialStateSubtree(
   owner: RuntimeFunctionLike,
   { effectWrittenPresentation, materiality, uniqueRepeatedProjection }: SubtreeMaterialityEvidence,
 ): boolean {
-  const ownerJsx = jsxElementCount(owner);
+  const ownerJsx = branchJsxElementCount(subtree, owner);
   const subtreeJsx = extractedJsxElementCount(subtree, owner);
   return (
     (ownerJsx >= materiality.broadOwnerJsx && subtreeJsx / ownerJsx <= MAX_LEAF_SUBTREE_RATIO) ||

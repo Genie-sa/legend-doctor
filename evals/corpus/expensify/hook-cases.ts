@@ -212,13 +212,13 @@ export const expensifyHookCases = [
     target: "expensify-domain-member",
   },
   {
-    action: "review-state",
+    action: "keep-state",
     file: "index.tsx",
     hook: "useState",
     line: 140,
     name: "searchValue",
     rationale:
-      "Search text drives filtering and result ownership in the address-search owner, so a leaf subscription cannot remove its render work.",
+      "Search text feeds the owner-level filtered-places memo that the owner renders, so every keystroke re-renders the address-search owner and a leaf subscription cannot remove its render work.",
     target: "expensify-address-search",
   },
   {
@@ -705,21 +705,16 @@ export const expensifyHookCases = [
       "This empty-dependency setup only clears a module-owned onboarding error and captures no changing component value. Legend's useMount runs this same useEffect in production and still replays a cleanup-free setup under Strict Mode, so the rewrite removes no render or lifecycle cost.",
     target: "expensify-onboarding-personal-details",
   },
-  ...[
-    [
-      39,
-      "animationFile",
-      "The effect deliberately publishes a new animation source after commit; deriving the prop during render would change fallback and native animation lifecycle timing.",
-    ],
-  ].map(([line, name, rationale]) => ({
-    action: "review-state" as const,
+  {
+    action: "keep-state",
     file: "index.tsx",
-    hook: "useState" as const,
-    line: line as number,
-    name: name as string,
-    rationale: rationale as string,
+    hook: "useState",
+    line: 39,
+    name: "animationFile",
+    rationale:
+      "The animation source selects the owner's early fallback return, so every source change re-renders the owner; the effect deliberately publishes it after commit, and no smaller subscriber removes a render.",
     target: "expensify-lottie",
-  })),
+  },
   {
     action: "keep-state",
     file: "index.tsx",
@@ -731,13 +726,13 @@ export const expensifyHookCases = [
     target: "expensify-lottie",
   },
   {
-    action: "review-effect",
+    action: "keep-effect",
     file: "index.tsx",
     hook: "useEffect",
     line: 42,
     name: null,
     rationale:
-      "This prop-to-state effect intentionally changes the native animation source after commit; deleting it or replacing it with an observable reaction changes lifecycle timing.",
+      "This prop-to-state effect intentionally changes the native animation source after commit, and its state stays React state; deleting it or replacing it with an observable reaction changes lifecycle timing.",
     target: "expensify-lottie",
   },
   {
@@ -868,12 +863,17 @@ export const expensifyHookCases = [
     rationale: rationale as string,
     target: "expensify-emoji-skin-tone",
   })),
+  {
+    action: "keep-state",
+    file: "BaseOnboardingEmployees.tsx",
+    hook: "useState",
+    line: 45,
+    name: "selectedCompanySize",
+    rationale:
+      "Selection feeds the owner-level company-size options memo that the owner renders as SelectionList data, so every selection re-renders the owner and a row-only subscriber removes no render.",
+    target: "expensify-onboarding-employees",
+  },
   ...[
-    [
-      45,
-      "selectedCompanySize",
-      "Selection rebuilds the SelectionList data model and participates in submit validation, so a row-only subscriber is incomplete.",
-    ],
     [
       46,
       "error",

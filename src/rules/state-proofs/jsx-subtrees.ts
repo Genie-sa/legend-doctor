@@ -102,6 +102,27 @@ export function jsxElementCount(owner: RuntimeFunctionLike): number {
   return owner.body ? jsxElementCountIn(owner.body) : 0;
 }
 
+/** The owner's JSX elements less those that only another return statement renders. */
+export function branchJsxElementCount(node: ts.Node, owner: RuntimeFunctionLike): number {
+  const otherReturns: ts.Expression[] = [];
+  let returnsNode = false;
+  visitSkippingNestedRuntimeFunctions(owner.body ?? owner, (current) => {
+    if (!ts.isReturnStatement(current) || !current.expression) {
+      return;
+    }
+    if (nodeWithin(node, current.expression)) {
+      returnsNode = true;
+    } else {
+      otherReturns.push(current.expression);
+    }
+  });
+  let count = jsxElementCount(owner);
+  for (const returned of returnsNode ? otherReturns : []) {
+    count -= jsxElementCountIn(returned);
+  }
+  return count;
+}
+
 export function hasRepeatedJsxRenderWorkOutside(
   owner: RuntimeFunctionLike,
   excludedSubtree: ts.Node,

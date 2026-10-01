@@ -26,6 +26,7 @@ import { classifyCowrittenState } from "./lone-write-stretches.js";
 import { classifyState } from "./verdicts/classify-state.js";
 import { effectFindingFor } from "./effect-findings.js";
 import { hasLazyStateInitializer } from "../rules/effect-drafts/effect-drafts.js";
+import { noSmallerBoundaryVerdict } from "./verdicts/no-smaller-boundary.js";
 import { omittedValueSetterName } from "./candidates.js";
 import { opaqueInstanceOverride } from "../rules/opaque-instance-state.js";
 import { renderPhaseWriteOverride } from "./render-phase-writes.js";
@@ -218,6 +219,7 @@ function resolveStateVerdict(
   const override =
     renderPhaseWriteOverride(state, usage, action) ??
     opaqueInstanceOverride(state, action) ??
+    (action === "review-state" ? noSmallerBoundaryVerdict(inputs) : null) ??
     (action !== "review-state" &&
     action !== "keep-state" &&
     stateIsCommitSensitive(state, usage, result.analysis)

@@ -2,13 +2,13 @@ import type { GoldHookCase } from "../contracts.js";
 
 export const legendMusicHookCases = [
   {
-    action: "review-state",
+    action: "keep-state",
     file: "components/AlbumArt.tsx",
     hook: "useState",
     line: 153,
     name: "isLoading",
     rationale:
-      "The download effect sets loading before awaiting, and clears it on both success and catch while also writing imageUri. The suspension and partial exception paths do not establish one synchronous atomic transition across these writes.",
+      "Loading selects the owner's early fallback return, so every loading change re-renders AlbumArt whichever subscriber owns it; no smaller boundary removes a render.",
     target: "legend-music",
   },
   {

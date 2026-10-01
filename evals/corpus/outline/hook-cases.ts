@@ -101,13 +101,13 @@ export const outlineHookCases = [
     target: "outline-link-editor",
   },
   {
-    action: "review-state",
+    action: "keep-state",
     file: "SuggestionsMenu.tsx",
     hook: "useState",
     line: 216,
     name: "selectedIndex",
     rationale:
-      "The cursor participates in multiple effects, submenu state, scrolling, and result cardinality, so a row-only selector is not a complete migration.",
+      "The cursor feeds the owner-level ARIA hook whose option ids the menu renders, and participates in multiple effects, submenu state, and scrolling, so every move re-renders the owner and a row-only selector removes no render.",
     target: "outline-suggestions-menu",
   },
   ...[
