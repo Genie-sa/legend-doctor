@@ -8,6 +8,7 @@ import type { JsxSubtreeNode } from "../rules/deferred-reveal/jsx-subtrees.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
 import { STABLE_CALL_SITE_PAIR } from "./constants.js";
 import type { StateCandidate } from "./model.js";
+import { lexicalBinding } from "../core/lexical-bindings.js";
 import { nearestRepeatedRenderCall } from "../rules/state-proofs/jsx-subtrees.js";
 import ts from "typescript";
 
@@ -228,6 +229,16 @@ export function isOriginalStateBinding(node: ts.Identifier, call: ts.CallExpress
     declaration.name.getStart() <= node.getStart() &&
     node.end <= declaration.name.end
   );
+}
+
+/** Only a state bound by a variable declaration can be resolved; any other shape stays name-matched. */
+export function resolvesToStateBinding(node: ts.Identifier, state: StateCandidate): boolean {
+  const declaration = state.call.parent;
+  if (!ts.isVariableDeclaration(declaration)) {
+    return true;
+  }
+  const binding = lexicalBinding(node);
+  return binding?.kind === "value" && binding.declaration === declaration;
 }
 
 export function hasAncestorInSet(node: ts.Node, ancestors: ReadonlySet<ts.Node>): boolean {

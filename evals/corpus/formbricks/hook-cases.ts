@@ -1480,4 +1480,27 @@ export const formbricksHookCases = [
       "The toggle is read by one advanced-option row and written only by its handler, which is used only there; the card has an early `return null`, so the owner keeps the observable and the row wrapper subscribes and hosts the handler.",
     target: "formbricks-when-to-send",
   },
+  ...[
+    ["formbricks-create-segment", "create-segment-modal.tsx", 54],
+    ["formbricks-create-attribute", "create-attribute-modal.tsx", 42],
+  ].map(([target, file, line]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: "open",
+    rationale:
+      "The dialog's `onOpenChange` parameter is also named `open`, but it is the callback's own binding. The state reaches only the Dialog's `open` prop; the reset handler that closes it also clears the form, which only the closed dialog renders, so one stable Dialog wrapper can subscribe.",
+    target: target as string,
+  })),
+  {
+    action: "move-state-down",
+    file: "quotas-card.tsx",
+    hook: "useState",
+    line: 75,
+    name: "open",
+    rationale:
+      "Only the Collapsible root reads the value and receives the setter; the `open` parameter of the delete dialog's `setOpen` callback is a separate binding, so the state can move into a wrapper around the root.",
+    target: "formbricks-quotas-card",
+  },
 ] as const satisfies readonly GoldHookCase[];
