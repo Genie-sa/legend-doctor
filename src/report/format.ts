@@ -1,6 +1,8 @@
-import type { HookFinding } from "../core/types.js";
+import type { AbstentionReason, HookFinding } from "../core/types.js";
 
 export interface HiddenCounts {
+  /** Hidden reviews that no answer converts, counted by `abstentionReason`. */
+  abstentions: Partial<Record<AbstentionReason, number>>;
   findings: number;
   practices: number;
 }
@@ -15,9 +17,27 @@ const REVIEW_ACTIONS: ReadonlySet<HookFinding["action"]> = new Set([
   "review-state",
 ]);
 
-/** A review finding with no assumption has no question to answer, so no answer can turn it into an edit. */
-function isUnanswerableReview(finding: HookFinding): boolean {
-  return REVIEW_ACTIONS.has(finding.action) && !finding.assumption;
+/**
+ * A review no answer turns into an edit: it has no question, or it is a co-written member that stays
+ * under review once its group's question, asked on a converting member, is confirmed.
+ */
+export function isUnconvertibleReview(finding: HookFinding): boolean {
+  const ownOutcome = finding.assumption?.members?.find(
+    (member) => member.name === finding.name,
+  )?.outcome;
+  return (
+    REVIEW_ACTIONS.has(finding.action) && (!finding.assumption || ownOutcome === "review-state")
+  );
+}
+
+export function abstentionCounts(hidden: readonly HookFinding[]): HiddenCounts["abstentions"] {
+  const counts: HiddenCounts["abstentions"] = {};
+  for (const { abstentionReason } of hidden.filter((finding) => isUnconvertibleReview(finding))) {
+    if (abstentionReason) {
+      counts[abstentionReason] = (counts[abstentionReason] ?? 0) + 1;
+    }
+  }
+  return counts;
 }
 
 /**
@@ -27,7 +47,7 @@ function isUnanswerableReview(finding: HookFinding): boolean {
 export function agentFindings(findings: readonly HookFinding[]): HookFinding[] {
   const seenGroups = new Set<string>();
   return findings.filter((finding) => {
-    if (finding.disposition === "keep" || isUnanswerableReview(finding)) {
+    if (finding.disposition === "keep" || isUnconvertibleReview(finding)) {
       return false;
     }
     if (!finding.group) {

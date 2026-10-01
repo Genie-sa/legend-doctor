@@ -65,6 +65,8 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 ### Keep and review
 
 These carry no edit. A `keep` finding preserves code that is already correct; a review names the proof it lacks.
+`--actionable` and `--disposition candidate` show a review only when a yes/no answer would convert it, and count the
+rest under `hidden.abstentions`.
 
 | Action                                                                 | Means                                                                                       |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
