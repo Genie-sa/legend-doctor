@@ -201,7 +201,8 @@ in `evals/performance-budgets.ts`:
   counter, so wall time with that margin stands in for one.
 
 Baselines come from CI run 36409722431 on ubuntu-latest (4 CPUs, 16 GB) with the analyzer at 51f2d32, and for gptme,
-zenborg, and junto from CI run 36444683516 at c478731, and for fractals from CI run 36894444846 at 1b0e659:
+zenborg, and junto from CI run 36444683516 at c478731, for fractals from CI run 36894444846 at 1b0e659, and for
+social-app, fontsource, food-app-expo, campus-rallye, and bbplayer from CI run 36936168646 at 16d263d:
 
 | Repository                | Baseline | Limit |
 | ------------------------- | -------: | ----: |
@@ -209,15 +210,20 @@ zenborg, and junto from CI run 36444683516 at c478731, and for fractals from CI 
 | `formbricks`              |    15.0s |   60s |
 | `junto`                   |    13.6s |   60s |
 | `legend-apps`             |     9.2s |   60s |
+| `social-app`              |     8.2s |   60s |
 | `outline`                 |     6.1s |   60s |
 | `noutube`                 |     4.5s |   60s |
 | `excalidraw`              |     4.2s |   60s |
+| `bbplayer`                |     4.1s |   60s |
 | `gptme`                   |     3.9s |   60s |
 | `zenborg`                 |     3.7s |   60s |
 | `hoalu`                   |     3.4s |   60s |
 | `open-webui-react-native` |     3.1s |   60s |
+| `fontsource`              |     2.7s |   60s |
 | `legend-music`            |     2.4s |   60s |
+| `food-app-expo`           |     2.4s |   60s |
 | `nori`                    |     2.2s |   60s |
+| `campus-rallye`           |     2.1s |   60s |
 | `fractals`                |     2.0s |   60s |
 | `legend-photos`           |     1.2s |   60s |
 
