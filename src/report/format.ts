@@ -17,22 +17,33 @@ const REVIEW_ACTIONS: ReadonlySet<HookFinding["action"]> = new Set([
   "review-state",
 ]);
 
-/**
- * A review no answer turns into an edit: it has no question, or it is a co-written member that stays
- * under review once its group's question, asked on a converting member, is confirmed.
- */
-export function isUnconvertibleReview(finding: HookFinding): boolean {
+function staysUnderReview(finding: HookFinding): boolean {
   const ownOutcome = finding.assumption?.members?.find(
     (member) => member.name === finding.name,
   )?.outcome;
-  return (
-    REVIEW_ACTIONS.has(finding.action) && (!finding.assumption || ownOutcome === "review-state")
+  return ownOutcome === "review-state";
+}
+
+/**
+ * Reviews no answer turns into an edit: those with no question, and co-written members that stay under
+ * review once their group is confirmed, when a converting member carries the same question.
+ */
+export function unconvertibleReviews(findings: readonly HookFinding[]): Set<HookFinding> {
+  const reviews = findings.filter((finding) => REVIEW_ACTIONS.has(finding.action));
+  const carried = new Set(
+    reviews.filter((review) => !staysUnderReview(review)).map((review) => review.assumption?.id),
+  );
+  return new Set(
+    reviews.filter(
+      (review) =>
+        !review.assumption || (staysUnderReview(review) && carried.has(review.assumption.id)),
+    ),
   );
 }
 
-export function abstentionCounts(hidden: readonly HookFinding[]): HiddenCounts["abstentions"] {
+export function abstentionCounts(reviews: readonly HookFinding[]): HiddenCounts["abstentions"] {
   const counts: HiddenCounts["abstentions"] = {};
-  for (const { abstentionReason } of hidden.filter((finding) => isUnconvertibleReview(finding))) {
+  for (const { abstentionReason } of reviews) {
     if (abstentionReason) {
       counts[abstentionReason] = (counts[abstentionReason] ?? 0) + 1;
     }
@@ -46,8 +57,9 @@ export function abstentionCounts(hidden: readonly HookFinding[]): HiddenCounts["
  */
 export function agentFindings(findings: readonly HookFinding[]): HookFinding[] {
   const seenGroups = new Set<string>();
+  const unconvertible = unconvertibleReviews(findings);
   return findings.filter((finding) => {
-    if (finding.disposition === "keep" || isUnconvertibleReview(finding)) {
+    if (finding.disposition === "keep" || unconvertible.has(finding)) {
       return false;
     }
     if (!finding.group) {

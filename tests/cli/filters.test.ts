@@ -175,3 +175,41 @@ test("--actionable hides a co-written member its group's yes leaves under review
   );
   assert.deepEqual(report.hidden.abstentions, { "atomic-transition-unproven": 1 });
 });
+
+test("--actionable keeps a co-written member when no shown review carries its group's question", async () => {
+  const source = `
+    import { useState } from "react";
+    export function Panel({ onAdd }: { onAdd: (name: string) => void }) {
+      const [name, setName] = useState("");
+      const [adding, setAdding] = useState(false);
+      const submit = () => {
+        if (!name.trim()) return;
+        onAdd(name);
+        setName("");
+        setAdding(false);
+      };
+      return <main>${CHROME}
+        <button onClick={() => setAdding(!adding)}>{adding ? "Cancel" : "Add"}</button>
+        {adding && <form><Input value={name} onChange={(e) => setName(e.target.value)} /><button onClick={submit} /></form>}
+      </main>;
+    }
+    function Input({ value, onChange }: { value: string; onChange: (e: { target: { value: string } }) => void }) {
+      return <input value={value} onChange={onChange} />;
+    }
+  `;
+
+  const report = await scanPanel(source, ["--actionable"]);
+
+  assert.deepEqual(
+    report.findings.map((finding) => [finding.name, finding.action]),
+    [
+      ["name", "use-observable"],
+      ["adding", "review-state"],
+    ],
+  );
+  assert.equal(
+    report.findings[1]?.assumption?.id,
+    "panel.tsx::Panel::{name,adding}::atomic-transition-unproven",
+  );
+  assert.deepEqual(report.hidden.abstentions, {});
+});

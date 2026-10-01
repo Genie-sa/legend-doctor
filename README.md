@@ -110,8 +110,9 @@ Every finding has a disposition:
 | `keep`      | Correct as is. Leave the React or lifecycle boundary alone. |
 | `style`     | Cleaner form with no runtime effect.                        |
 
-`--actionable` and `--disposition candidate` list only the reviews a yes/no answer would convert. The rest count by
-`abstentionReason` under `hidden.abstentions`, and an unfiltered scan still lists them.
+`--actionable` and `--disposition candidate` hide reviews with no yes/no question, and reviews that repeat a question
+another shown review carries. They count by `abstentionReason` under `hidden.abstentions`, and an unfiltered scan
+still lists them.
 
 See [REPORT.md](REPORT.md) for review blockers, grouped transitions, subscription plans, and runtime measurements.
 Validate suggested edits with your formatter, typecheck, and tests, then rescan.

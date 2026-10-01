@@ -100,7 +100,7 @@ silently confirm this new question.
 
 Use an unfiltered scan to inventory all review kinds. `--actionable` and `--disposition candidate` hide reviews that
 no answer converts: those without a confirmable question, and co-written members whose own outcome stays
-`review-state`. `hidden.abstentions` counts every hidden review of either kind by `abstentionReason`. Guidance does
+`review-state` when a converting member carries the same question. `hidden.abstentions` counts every hidden review of either kind by `abstentionReason`. Guidance does
 not override that filter or make a review actionable.
 
 ## Answer a review question
@@ -163,8 +163,8 @@ facts in one question; the id then joins both reasons with `+`, and `facts` list
 States a handler writes together share one question and one id, `file::Owner::{a,b}::atomic-transition-unproven`.
 Its `members` list says what a "yes" does to each: members whose standalone proof already passes convert together under
 one cluster instruction written with `assign`, and a member another blocker still holds is re-examined without the
-co-write blocker and gets its next question on the same scan. Until then, filtered views show the group's question
-only on its converting members.
+co-write blocker and gets its next question on the same scan. Until then, filtered views drop that member when a
+converting member's review carries the same question, and keep it otherwise, so every open question stays readable.
 
 A confirmed individual question turns its finding into `ifConfirmed` with disposition `change`; a group converts only the members whose outcome is actionable. The answer is recorded in each converted finding's evidence. Such a finding also carries `verification`: the conversion rests on an answer rather than a proof, so the
 recipe names the jsdom harness exported as `legend-doctor/runtime` (`mountDom`, `count`), the before/after comparison
