@@ -35,11 +35,12 @@ const refresh = () => {
 
 ### Calculate derived values during render
 
-`delete-derived-state` removes the stale first render and the effect-driven second render.
+`delete-derived-state` removes the render that shows a stale value after an input changes and the effect-driven
+render that corrects it.
 
 ```tsx
 // Before
-const [total, setTotal] = useState(0);
+const [total, setTotal] = useState(price * quantity);
 useEffect(() => setTotal(price * quantity), [price, quantity]);
 
 // After
@@ -47,6 +48,9 @@ const total = price * quantity;
 ```
 
 If that was the effect's only work, `delete-effect` removes the empty effect too.
+
+When the initializer differs from the value the effect writes, such as `useState(0)`, the first commit shows the
+initializer. Calculating during render would change that first commit, so the finding is `keep-state`.
 
 ### Remove a React mirror
 
