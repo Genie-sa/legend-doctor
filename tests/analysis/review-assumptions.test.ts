@@ -233,7 +233,7 @@ test("when one assumed fact leaves another blocker, both are asked in one two-fa
     import { useState } from "react";
     export function Panel() {
       const [value, setValue] = useState("");
-      useFancyForm({ value, onChange: setValue });
+      useFancyForm({ onChange: setValue });
       return <main>${CHROME}
         <Editor />
         <p>{value.length} characters</p>
@@ -253,7 +253,7 @@ test("when one assumed fact leaves another blocker, both are asked in one two-fa
   assert.match(assumption.question, /escapes to code this analysis cannot follow/u);
   assert.match(
     assumption.question,
-    /Additionally, `value` is read 3 times in the render of Panel/u,
+    /Additionally, `value` is read 2 times in the render of Panel/u,
   );
   assert.ok(
     assumption.research.some((step) =>
@@ -263,11 +263,11 @@ test("when one assumed fact leaves another blocker, both are asked in one two-fa
   assert.ok(assumption.research.some((step) => /read in render here/u.test(step.check)));
 });
 
-const TITLE_EFFECT = `
+const TRUNCATING_EFFECT = `
   import { useEffect, useState } from "react";
   export function Panel() {
     const [filter, setFilter] = useState("");
-    useEffect(() => { document.title = filter ? "filtered" : "all"; }, [filter]);
+    useEffect(() => { if (filter.length > 9) setFilter(filter.slice(0, 9)); }, [filter]);
     return <main>${CHROME}
       <input value={filter} onChange={(e) => setFilter(e.target.value)} />
       <p>{filter ? "filtered" : "all"}</p>
@@ -280,10 +280,11 @@ function effects(source: string): HookFinding[] {
 }
 
 test("an effect waiting on a state's verdict names the state's open question", () => {
-  const [title] = effects(TITLE_EFFECT);
-  const found = requireValue(title);
-  assert.equal(found.abstentionReason, "effect-causal-owner-unresolved");
-  assert.deepEqual(found.waitsOn, ["src/panel.tsx::Panel::filter::render-cut-unproven"]);
+  const found = requireValue(effects(TRUNCATING_EFFECT)[0]);
+  assert.equal(found.abstentionReason, "effect-write-ownership-unresolved");
+  assert.deepEqual(found.waitsOn, [
+    "src/panel.tsx::Panel::filter::effect-write-ownership-unresolved+render-cut-unproven",
+  ]);
   assert.equal(found.assumption, undefined);
 });
 

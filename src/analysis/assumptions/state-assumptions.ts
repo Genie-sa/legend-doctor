@@ -180,7 +180,10 @@ function leafWrapFallback(
   ) {
     return null;
   }
-  const leaf = leafWrapHypothesis(scope);
+  const leaf = leafWrapHypothesis({
+    ...scope,
+    inputs: hypothesisFor(reason, scope)?.inputs ?? scope.inputs,
+  });
   if (!leaf?.directVerdict) {
     return null;
   }

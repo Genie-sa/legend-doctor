@@ -1,17 +1,20 @@
 import type { AbstentionReason, ResearchStep } from "../../core/types.js";
 import type { ClassifiedState, StateCandidate } from "../model.js";
+import { hasAncestorInSet, isCustomHookOwner, runtimeFunctionName } from "../ast-helpers.js";
 import {
   hasOnlySplitCommitCompanions,
   withoutCompanionWrites,
 } from "../verdicts/classification-context.js";
-import { isCustomHookOwner, runtimeFunctionName } from "../ast-helpers.js";
 import { jsxElementCount, leafSiteCoversOwner } from "../../rules/state-proofs/jsx-subtrees.js";
 import { AssumedLeafContracts } from "./assumed-leaf-contracts.js";
 import type { StateClassificationInputs } from "../verdicts/classification-context.js";
 import { asyncCommandHypothesis } from "./async-command-hypothesis.js";
+import { hasNoEffectReads } from "../state-usage.js";
 import { lineOf } from "../../core/ast.js";
 import path from "node:path";
 import { pathIdentityKey } from "../../core/path-identity.js";
+import { stateFeedsHook } from "../../rules/effect-drafts/member-boundary-controls.js";
+import { stateReadIsEventCommand } from "../../rules/state-proofs/state-proofs.js";
 import type ts from "typescript";
 
 /** The facts a review finding needs before its blocker can be assumed away. */
@@ -314,6 +317,22 @@ function renderReadLines(nodes: readonly ts.Node[], sourceFile: ts.SourceFile): 
   return `${lines.length === 1 ? "line" : "lines"} ${listed}`;
 }
 
+/**
+ * Leaf subscribers stop the owner rendering on updates, so an effect or a hook argument that captures
+ * the value in render would go stale. Event-rooted callbacks read it at call time instead, and effect
+ * reads stay allowed once the effect-write question has moved them to `peek()`.
+ */
+function hasRenderCapturedConsumer(inputs: StateClassificationInputs): boolean {
+  const { effectRegions, eventTransitionCallbacks, hasDetachedEffectWrites, state, usage } = inputs;
+  const readsAfterRender = (reference: ts.Identifier): boolean =>
+    hasAncestorInSet(reference, effectRegions) ||
+    stateReadIsEventCommand(reference, state, eventTransitionCallbacks);
+  return (
+    (!hasDetachedEffectWrites && !hasNoEffectReads(usage)) ||
+    stateFeedsHook(state, readsAfterRender)
+  );
+}
+
 function renderCutHypothesis(scope: HypothesisScope): Hypothesis | null {
   const { inputs } = scope;
   const { materiality, sourceFile, state, usage } = inputs;
@@ -321,7 +340,8 @@ function renderCutHypothesis(scope: HypothesisScope): Hypothesis | null {
     isCustomHookOwner(state.owner) ||
     jsxElementCount(state.owner) < materiality.broadOwnerJsx ||
     usage.directRenderNodes.length === 0 ||
-    leafSiteCoversOwner(usage.directRenderNodes, state.owner)
+    leafSiteCoversOwner(usage.directRenderNodes, state.owner) ||
+    hasRenderCapturedConsumer(inputs)
   ) {
     return null;
   }
@@ -365,7 +385,8 @@ export function leafWrapHypothesis(scope: HypothesisScope): Hypothesis | null {
     isCustomHookOwner(state.owner) ||
     jsxElementCount(state.owner) < materiality.broadOwnerJsx ||
     usage.directRenderNodes.length + transports.length === 0 ||
-    leafSiteCoversOwner([...usage.directRenderNodes, ...transports], state.owner)
+    leafSiteCoversOwner([...usage.directRenderNodes, ...transports], state.owner) ||
+    hasRenderCapturedConsumer(inputs)
   ) {
     return null;
   }

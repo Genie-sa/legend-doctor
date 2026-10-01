@@ -83,7 +83,7 @@ export function hasOnlyEventCommandReads(
 }
 
 /** A read outside JSX is safe only from an event-rooted callback, or as a useCallback dependency. */
-function stateReadIsEventCommand(
+export function stateReadIsEventCommand(
   reference: ts.Identifier,
   state: StateCandidate,
   additionalRoots: ReadonlySet<RuntimeFunctionLike>,
