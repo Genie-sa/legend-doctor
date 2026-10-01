@@ -9,6 +9,7 @@ import type { ChildContractResolver } from "../child-contract/model.js";
 import type { KeyedRecordEntry } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { localFunctionName } from "../../analysis/ast-helpers.js";
 import { nearestRepeatedRenderCall } from "../state-proofs/jsx-subtrees.js";
 import ts from "typescript";
 
@@ -100,7 +101,7 @@ interface RecordCommandEntryCheck {
 
 function recordCommandEntry(check: RecordCommandEntryCheck): KeyedRecordEntry | null {
   const { command, state } = check;
-  const name = localRuntimeFunctionName(command);
+  const name = localFunctionName(command);
   if (!name || bindingDeclarationCount(state.owner, name) !== 1) {
     return null;
   }
@@ -203,17 +204,4 @@ function jsxEventCallIsDeferred(
     (childContracts.frameworkEventComponent(component) ||
       childContracts.componentCallbackPropIsDeferred(component, attribute.name.getText()))
   );
-}
-
-function localRuntimeFunctionName(
-  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-): string | null {
-  if (ts.isFunctionDeclaration(callback)) {
-    return callback.name?.text ?? null;
-  }
-  return ts.isVariableDeclaration(callback.parent) &&
-    callback.parent.initializer === callback &&
-    ts.isIdentifier(callback.parent.name)
-    ? callback.parent.name.text
-    : null;
 }

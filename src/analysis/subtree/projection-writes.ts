@@ -1,8 +1,9 @@
 import type { StateSubtree, StateUsage } from "../model.js";
-import { ancestorCallInSet, isCustomJsxTarget, jsxTargetName } from "../ast-helpers.js";
 import { findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { ancestorCallInSet } from "../ast-helpers.js";
+import { jsxEventAttributeIsDeferred } from "../callbacks/deferred-events.js";
 import { nearestMutationFunction } from "../mutations.js";
 import { outermostTransparentParent } from "../../core/analysis-ast.js";
 import ts from "typescript";
@@ -36,26 +37,6 @@ export function projectionWritesAreDeferred(
   );
 }
 
-interface EventHandlerAttributeTarget {
-  readonly prop: string;
-  readonly target: string;
-}
-
-function eventHandlerAttributeTarget(
-  call: ts.CallExpression,
-  owner: RuntimeFunctionLike,
-): EventHandlerAttributeTarget | null {
-  const callback = nearestMutationFunction(call, owner);
-  const attribute =
-    callback === owner ? null : findAncestorUntil(callback, ts.isJsxAttribute, owner);
-  const prop = attribute?.name.getText() ?? null;
-  const target = attribute ? jsxTargetName(attribute) : null;
-  if (!prop || !target || !/^on[A-Z]/u.test(prop)) {
-    return null;
-  }
-  return { prop, target };
-}
-
 function setterWriteIsDeferred(
   call: ts.CallExpression,
   owner: RuntimeFunctionLike,
@@ -64,17 +45,10 @@ function setterWriteIsDeferred(
   if (ancestorCallInSet(call, directEffectCalls, owner)) {
     return true;
   }
-  const handler = eventHandlerAttributeTarget(call, owner);
-  if (!handler) {
-    return false;
-  }
-  if (!isCustomJsxTarget(handler.target)) {
-    return true;
-  }
-  return (
-    childContracts?.frameworkEventComponent(handler.target) === true ||
-    childContracts?.componentCallbackPropIsDeferred(handler.target, handler.prop) === true
-  );
+  const callback = nearestMutationFunction(call, owner);
+  const attribute =
+    callback === owner ? null : findAncestorUntil(callback, ts.isJsxAttribute, owner);
+  return attribute !== null && jsxEventAttributeIsDeferred(attribute, childContracts);
 }
 
 function sharedNestedCallback(

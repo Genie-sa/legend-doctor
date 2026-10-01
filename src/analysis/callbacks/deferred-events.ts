@@ -4,7 +4,6 @@ import {
   isDeclarationName,
   isDirectJsxAttributeExpression,
   isNonValueIdentifier,
-  unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { declaredBindingName, isCustomJsxTarget, jsxTargetName } from "../ast-helpers.js";
 import {
@@ -56,10 +55,8 @@ function isInlineDeferredEventCallback(
   }
   const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
   return (
-    attribute?.initializer !== undefined &&
-    ts.isJsxExpression(attribute.initializer) &&
-    attribute.initializer.expression !== undefined &&
-    unwrapTransparentExpression(attribute.initializer.expression) === node &&
+    attribute !== null &&
+    isDirectJsxAttributeExpression(attribute, node) &&
     jsxEventAttributeIsDeferred(attribute, childContracts)
   );
 }
@@ -182,7 +179,7 @@ function callbackResolvesToDeferredEvent(
   });
 }
 
-function everyValueReferenceSatisfies(
+export function everyValueReferenceSatisfies(
   owner: RuntimeFunctionLike,
   name: string,
   predicate: (node: ts.Identifier) => boolean,
@@ -229,7 +226,7 @@ function callbackHasDirectJsxEventRoot(
   });
 }
 
-function jsxEventAttributeIsDeferred(
+export function jsxEventAttributeIsDeferred(
   attribute: ts.JsxAttribute,
   childContracts: ChildContractResolver | null,
 ): boolean {
