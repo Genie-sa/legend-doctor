@@ -304,7 +304,8 @@ separate subscriptions add overhead and are justified only when their combined r
 
 ### Remove selector work and legacy names
 
-Use `pass-observable-to-use-value` for a direct value and `replace-legacy-use-value` for old APIs.
+Use `pass-observable-to-use-value` for a direct value and `replace-legacy-use-value` for `use$` and `useSelector`,
+which Legend State deprecates in favor of `useValue` and plans to remove.
 
 ```tsx
 useValue(() => profile$.name.get()); // Before
@@ -502,7 +503,8 @@ Render reads and reactive callbacks keep tracking reads. The finding's `edits` r
 ## Track every render read
 
 Legend tracks a `get()` only inside a tracking context: `useValue`, `observer`, a reactive component's selector, or
-`observe`/`when`. These findings catch reads that fall outside one, or whose change a memo hides.
+`observe`/`when`. These findings catch reads that fall outside one, or whose change a memo hides. Legend State
+discourages render-time `get()` even inside `observer`; read rendered values through `useValue`.
 
 ### Subscribe to a render read
 
@@ -661,7 +663,8 @@ useEffect(() => {
 ### Keep empty-dependency lifecycle effects
 
 Legend's `useMount(fn)` runs `useEffect(fn, [])` in production, and `useUnmount(fn)` is `useMount(() => fn)`. Rewriting
-an empty-dependency effect with either removes no render or lifecycle cost, so the effect is `keep-effect`.
+an empty-dependency effect with either removes no render or lifecycle cost, so the effect is `keep-effect`. Legend
+State prefers `useMount` and `useUnmount` when writing new code; converting existing effects is optional.
 
 ```tsx
 useEffect(() => {
