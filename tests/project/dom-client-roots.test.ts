@@ -195,3 +195,98 @@ test("Next.js 13.1 and later create the root of a React DOM 18 app without app s
     "a legacy root beside Next.js",
   );
 });
+
+test("a private React DOM 18 library renders under the client root of a host that depends on it", async () => {
+  const library = (isPrivate: boolean): string =>
+    JSON.stringify({ dependencies: REACT_18, name: "ui", private: isPrivate, version: "1.0.0" });
+  const host = (dependencies: Readonly<Record<string, string>>, name: string): string =>
+    app({ ...REACT_18, ...dependencies }, name);
+  const workspace = {
+    "bun.lock": "{}",
+    "package.json": JSON.stringify({
+      name: "root",
+      private: true,
+      workspaces: ["apps/*", "packages/*"],
+    }),
+    "apps/web/package.json": host({ ui: "workspace:*" }, "web"),
+    "apps/web/src/main.tsx": CREATE_ROOT_ENTRY,
+    "packages/ui/src/app.tsx": "export function App() {}",
+  };
+  const file = "packages/ui/src/app.tsx";
+  for (const [label, files, expected] of [
+    ["private library", { "packages/ui/package.json": library(true) }, true],
+    [
+      "private library through a range its version satisfies",
+      {
+        "apps/web/package.json": host({ ui: "^1.0.0" }, "web"),
+        "packages/ui/package.json": library(true),
+      },
+      true,
+    ],
+    [
+      "second host on a legacy root",
+      {
+        "apps/admin/package.json": host({ ui: "workspace:*" }, "admin"),
+        "apps/admin/src/main.tsx": LEGACY_RENDER_ENTRY,
+        "packages/ui/package.json": library(true),
+      },
+      false,
+    ],
+    ["published library", { "packages/ui/package.json": library(false) }, false],
+    [
+      "private library no host depends on",
+      {
+        "apps/web/package.json": host({}, "web"),
+        "packages/ui/package.json": library(true),
+      },
+      false,
+    ],
+    [
+      "range the local version does not satisfy",
+      {
+        "apps/web/package.json": host({ ui: "^2.0.0" }, "web"),
+        "packages/ui/package.json": library(true),
+      },
+      false,
+    ],
+  ] as const) {
+    let verdict = false;
+    await withProject({ ...workspace, ...files }, async (root) => {
+      verdict = await new ConcurrentRootResolver().rendersFileConcurrently(path.join(root, file));
+    });
+    assert.equal(verdict, expected, label);
+  }
+});
+
+test("Expo 48 and later with React Native Web 0.19 create the web root of a React DOM 18 app", async () => {
+  const expo52 = { expo: "~52.0.46", "react-native-web": "~0.19.13" };
+  for (const [label, dependencies, entry, expected] of [
+    ["Expo 52", expo52, "", true],
+    ["Expo 49", { expo: "~49.0.0", "react-native-web": "~0.19.6" }, "", true],
+    ["Expo 47", { expo: "~47.0.0", "react-native-web": "~0.19.0" }, "", false],
+    ["React Native Web 0.18", { ...expo52, "react-native-web": "~0.18.12" }, "", false],
+    ["no React Native Web", { expo: "~52.0.46" }, "", false],
+    [
+      "app source runs the application itself",
+      expo52,
+      `import { AppRegistry } from "react-native";\nAppRegistry.runApplication("main", { mode: "legacy", rootTag: document.body });`,
+      false,
+    ],
+    [
+      "React Native Web's legacy render",
+      expo52,
+      `import { render } from "react-native-web";`,
+      false,
+    ],
+  ] as const) {
+    assert.equal(
+      await rendersConcurrently({
+        [ENTRY_FILE]: entry,
+        "app.json": JSON.stringify({ expo: { name: "app", newArchEnabled: true } }),
+        "package.json": app({ ...REACT_18, "react-native": "0.76.9", ...dependencies }),
+      }),
+      expected,
+      label,
+    );
+  }
+});

@@ -6,8 +6,15 @@ import { readFile } from "node:fs/promises";
 import ts from "typescript";
 
 const CLIENT_MODULE = "react-dom/client";
-/** Entry points that export React 18's legacy `render` and `hydrate` beside the client root APIs. */
-const LEGACY_CAPABLE_MODULES: ReadonlySet<string> = new Set(["react-dom", "react-dom/profiling"]);
+/**
+ * Modules that export a legacy root API: React DOM 18's entry points beside the client root APIs, and React
+ * Native Web, whose `render` calls React DOM's.
+ */
+const LEGACY_CAPABLE_MODULES: ReadonlySet<string> = new Set([
+  "react-dom",
+  "react-dom/profiling",
+  "react-native-web",
+]);
 const CLIENT_ROOT_APIS: ReadonlySet<string> = new Set(["createRoot", "hydrateRoot"]);
 /** Every React DOM export that creates a root, legacy or concurrent. */
 const ROOT_APIS: ReadonlySet<string> = new Set([
@@ -18,6 +25,9 @@ const ROOT_APIS: ReadonlySet<string> = new Set([
 ]);
 /** The UMD build's global, which scripts can call without importing anything. */
 const UMD_GLOBAL = "ReactDOM";
+/** React Native Web's `AppRegistry.runApplication` creates a legacy root in `mode: "legacy"` and before 0.19. */
+const RUN_APPLICATION = "runApplication";
+const ROOT_SOURCE_MARKERS = ["react-dom", "react-native-web", UMD_GLOBAL, RUN_APPLICATION] as const;
 const DECLARATION_FILE = /\.d\.[cm]?ts$/u;
 
 /** How the source files under one directory create React DOM roots. */
@@ -25,8 +35,8 @@ export interface DomRootInventory {
   /** Files that call `createRoot` or `hydrateRoot` imported from `react-dom/client`. */
   readonly clientRootFiles: readonly string[];
   /**
-   * A file may create a root another way: a legacy root API, a root API from `react-dom` itself, or a
-   * `react-dom` binding used in a way the scan cannot follow.
+   * A file may create a root another way: a legacy root API, a root API from `react-dom` itself, React
+   * Native Web's `AppRegistry.runApplication`, or a `react-dom` binding used in a way the scan cannot follow.
    */
   readonly otherRootCreation: boolean;
 }
@@ -70,7 +80,7 @@ export async function domRootInventory(directory: string): Promise<DomRootInvent
 
 async function fileRootCreation(file: string): Promise<FileRootCreation> {
   const text = await readFile(file, "utf8");
-  if (!text.includes("react-dom") && !text.includes(UMD_GLOBAL)) {
+  if (!ROOT_SOURCE_MARKERS.some((marker) => text.includes(marker))) {
     return { clientRoots: false, otherRootCreation: false };
   }
   const sourceFile = ts.createSourceFile(
@@ -90,7 +100,7 @@ function sourceRootCreation(sourceFile: ts.SourceFile): FileRootCreation {
   visit(sourceFile, (node) => {
     if (ts.isCallExpression(node)) {
       clientRoots ||= isClientRootCall(node, bindings);
-      otherRootCreation ||= isDynamicLegacyModuleLoad(node);
+      otherRootCreation ||= isDynamicLegacyModuleLoad(node) || isRunApplicationCall(node);
     } else if (ts.isIdentifier(node)) {
       otherRootCreation ||= isUnfollowedRootReference(node, bindings);
     }
@@ -209,6 +219,12 @@ function isDynamicLegacyModuleLoad(call: ts.CallExpression): boolean {
     call.expression.kind === ts.SyntaxKind.ImportKeyword ||
     (ts.isIdentifier(call.expression) && call.expression.text === "require");
   return loads && specifier !== undefined && isLegacyCapableModule(specifier);
+}
+
+function isRunApplicationCall(call: ts.CallExpression): boolean {
+  return (
+    ts.isPropertyAccessExpression(call.expression) && call.expression.name.text === RUN_APPLICATION
+  );
 }
 
 /**

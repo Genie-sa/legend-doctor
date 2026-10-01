@@ -431,9 +431,11 @@ packages' peer ranges other than `*`, which constrains nothing), React already c
 app host enables the New Architecture on each platform it builds: an assigned `RCT_NEW_ARCH_ENABLED` or
 `Podfile.properties.json` flag with no app delegate override, `newArchEnabled=true` in `gradle.properties`, or the Expo
 app config flag, which Expo SDK 53 and 54 default to on. React DOM 18 qualifies when each package that declares it
-creates a root with `createRoot` or `hydrateRoot` imported from `react-dom/client`, or runs under Next.js 13.1 or later,
-and no source file in the workspace imports a root API from `react-dom` itself, calls `ReactDOM.render` or `hydrate`,
-or uses a `react-dom` binding the scan cannot follow. The finding is then a review: only a non-React
+creates a root with `createRoot` or `hydrateRoot` imported from `react-dom/client`, runs under Next.js 13.1 or later or
+under Expo 48 or later with React Native Web 0.19 or later, or is a private package that such a host reaches through
+workspace dependencies, and no source file in the workspace imports a root API from `react-dom` itself or
+`react-native-web`, calls `ReactDOM.render`, `hydrate`, or `AppRegistry.runApplication`, or uses a `react-dom` binding
+the scan cannot follow. The finding is then a review: only a non-React
 observer that reads several of the written paths, such as `observe`, a computed, or an `onChange` listener, still sees
 them apart. `syncObservable` persistence queues changes until a microtask, so it saves them together either way. The report's `capabilities.concurrentRoot` records that proof for the analysis root.
 

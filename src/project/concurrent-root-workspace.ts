@@ -1,11 +1,14 @@
 import { minVersion, validRange } from "semver";
 import type { Package } from "@manypkg/get-packages";
+import type { WorkspaceLinkPolicy } from "./workspace/link-policy.js";
 import { domRootInventory } from "./dom-root-creation.js";
 import { getPackages } from "@manypkg/get-packages";
 import { hostRunsNewArchitecture } from "./native-architecture.js";
+import { linksToSibling } from "./workspace/packages.js";
 import { parse as parseYaml } from "yaml";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+import { workspaceLinkPolicy } from "./workspace/link-policy.js";
 
 /** React Native 0.82 removed the legacy architecture, so every root it creates is concurrent. */
 const FIRST_CONCURRENT_ONLY_NATIVE: Version = { major: 0, minor: 82 };
@@ -23,6 +26,12 @@ const FIRST_CLIENT_ROOT_DOM: Version = { major: 18, minor: 0 };
  * fell back to `ReactDOM.render` without a React 18 build flag.
  */
 const FIRST_CLIENT_ROOT_NEXT: Version = { major: 13, minor: 1 };
+/**
+ * Expo 48 and 49 mount the web root with `createRoot` from `react-dom/client`. From Expo 50, React Native Web's
+ * `AppRegistry.runApplication` mounts it, concurrently by default from React Native Web 0.19.
+ */
+const FIRST_CLIENT_ROOT_EXPO: Version = { major: 48, minor: 0 };
+const FIRST_CONCURRENT_DEFAULT_NATIVE_WEB: Version = { major: 0, minor: 19 };
 /** React 19 renders a store notification's sync lane together with every pending default-lane update. */
 const FIRST_UNIFIED_LANES_REACT: Version = { major: 19, minor: 0 };
 const RENDERER_FLOORS: ReadonlyMap<string, Version> = new Map([
@@ -187,15 +196,17 @@ function installsOwnReact(pkg: Package): boolean {
 interface Workspace {
   readonly packages: readonly Package[];
   readonly rootDir: string;
+  readonly tool: string;
 }
 
 async function workspaceOf(directory: string): Promise<Workspace | null> {
   try {
-    const { packages, rootDir, rootPackage } = await getPackages(directory);
+    const { packages, rootDir, rootPackage, tool } = await getPackages(directory);
     return {
       packages:
         rootPackage && !packages.includes(rootPackage) ? [rootPackage, ...packages] : packages,
       rootDir,
+      tool: tool.type,
     };
   } catch {
     // Without a readable manifest graph no renderer can be proven, which keeps the legacy-root default.
@@ -225,8 +236,9 @@ async function workspaceRendersConcurrently(workspace: Workspace): Promise<boole
 }
 
 /**
- * Each React DOM 18 package must create a root with `react-dom/client` in its own source or run under a
- * framework that does, and no source file in the workspace may create a root any other way.
+ * Each React DOM 18 package must create a root with `react-dom/client` in its own source, run under a
+ * framework that does, or be a private library such a host reaches through local dependencies, and no
+ * source file in the workspace may create a root any other way.
  */
 async function everyPackageCreatesClientRoots(
   workspace: Workspace,
@@ -237,8 +249,54 @@ async function everyPackageCreatesClientRoots(
   if (inventory.otherRootCreation) {
     return false;
   }
-  const hosts = new Set(inventory.clientRootFiles.map((file) => owningPackage(workspace, file)));
-  return packages.every((pkg) => hosts.has(pkg) || nextCreatesClientRoots(pkg, catalogs));
+  const sourceHosts = new Set(
+    inventory.clientRootFiles.map((file) => owningPackage(workspace, file)),
+  );
+  const hosts = workspace.packages.filter(
+    (pkg) =>
+      sourceHosts.has(pkg) ||
+      nextCreatesClientRoots(pkg, catalogs) ||
+      expoCreatesClientRoots(pkg, catalogs),
+  );
+  const linkPolicy = await workspaceLinkPolicy(workspace.tool, workspace.rootDir);
+  const rendered = hostsWithPrivateDependencies(workspace, hosts, linkPolicy);
+  return packages.every((pkg) => rendered.has(pkg));
+}
+
+/** A private package cannot be installed from a registry, so only the workspace packages that depend on it render it. */
+function hostsWithPrivateDependencies(
+  workspace: Workspace,
+  hosts: readonly Package[],
+  linkPolicy: WorkspaceLinkPolicy,
+): ReadonlySet<Package> {
+  const byName = new Map(workspace.packages.map((pkg) => [pkg.packageJson.name, pkg]));
+  const reached = new Set(hosts);
+  const pending = [...hosts];
+  for (let pkg = pending.pop(); pkg !== undefined; pkg = pending.pop()) {
+    for (const dependency of privateWorkspaceDependencies(pkg, byName, linkPolicy)) {
+      if (!reached.has(dependency)) {
+        reached.add(dependency);
+        pending.push(dependency);
+      }
+    }
+  }
+  return reached;
+}
+
+function privateWorkspaceDependencies(
+  pkg: Package,
+  byName: ReadonlyMap<string, Package>,
+  linkPolicy: WorkspaceLinkPolicy,
+): Package[] {
+  return LOCAL_FIELDS.flatMap((field) =>
+    Object.entries(pkg.packageJson[field] ?? {}).flatMap(([name, range]) => {
+      const dependency = byName.get(name);
+      return dependency?.packageJson.private === true &&
+        linksToSibling(linkPolicy, range, dependency)
+        ? [dependency]
+        : [];
+    }),
+  );
 }
 
 function owningPackage(workspace: Workspace, file: string): Package | undefined {
@@ -255,6 +313,17 @@ function isWithin(directory: string, file: string): boolean {
 function nextCreatesClientRoots(pkg: Package, catalogs: Catalogs): boolean {
   const minimum = localMinimumVersion(pkg, "next", catalogs);
   return minimum !== null && compareVersions(minimum, FIRST_CLIENT_ROOT_NEXT) >= 0;
+}
+
+function expoCreatesClientRoots(pkg: Package, catalogs: Catalogs): boolean {
+  const expo = localMinimumVersion(pkg, "expo", catalogs);
+  const nativeWeb = localMinimumVersion(pkg, "react-native-web", catalogs);
+  return (
+    expo !== null &&
+    nativeWeb !== null &&
+    compareVersions(expo, FIRST_CLIENT_ROOT_EXPO) >= 0 &&
+    compareVersions(nativeWeb, FIRST_CONCURRENT_DEFAULT_NATIVE_WEB) >= 0
+  );
 }
 
 async function everyHostRunsNewArchitecture(
