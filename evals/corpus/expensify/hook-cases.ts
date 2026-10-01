@@ -637,13 +637,12 @@ export const expensifyHookCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "ImportMultiLevelTagsSettingsPage.tsx",
     hook: "useState",
     line: 54,
     name: "isImportingTags",
     rationale:
-      "A conditionally selected event command starts one pending interval before its first await, and only the footer button subscribes; close and reset behavior stays in the owner. Not enforced (2026-10-01): real win; parent pass-through unprovable statically. The receiving parent is the local `FixedFooter`, which the pass-through proof does not resolve to a host.",
+      "A conditionally selected event command starts one pending interval before its first await, and only the footer button subscribes; close and reset behavior stays in the owner.",
     target: "expensify-import-multi-level-tags",
   },
   {

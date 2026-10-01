@@ -10,11 +10,9 @@ import { wrappedElementIsPassedThrough } from "../../rules/child-contract/elemen
 
 export function passThroughScope({
   childContracts,
-  hostTags,
   state,
 }: StateClassificationContext): PassThroughScope {
   return {
-    hostTags,
     owner: state.owner,
     resolveComponent: (file, name) =>
       (file === null

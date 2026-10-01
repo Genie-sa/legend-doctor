@@ -146,9 +146,59 @@ test("abstains when the parent slots its child through asChild", async () => {
   assert.notEqual(local.action, "use-observable");
 });
 
+const NATIVE_PACKAGE = JSON.stringify({ dependencies: { "react-native": "0.83.0" }, name: "app" });
+
+test("follows a local component that spreads its props onto a React Native View", async () => {
+  const finding = await openVerdict({
+    "card.tsx": `
+      import { View } from "react-native";
+      export function Card(props) { return <View accessible {...props} />; }
+    `,
+    "package.json": NATIVE_PACKAGE,
+    "screen.tsx": screen({
+      imports: `import { Card } from "./card";\nimport { Sheet } from "@acme/sheet";`,
+      site: `<Card>${SHEET_SITE}</Card>`,
+    }),
+  });
+  assert.equal(finding.action, "use-observable");
+});
+
+test("follows a parent that only tests whether it has children before rendering them", async () => {
+  const finding = await openVerdict({
+    "footer.tsx": `
+      import { View } from "react-native";
+      export function Footer({ children, style }) {
+        if (!children) {
+          return null;
+        }
+        return <View style={style}>{children}</View>;
+      }
+    `,
+    "package.json": NATIVE_PACKAGE,
+    "screen.tsx": screen({
+      imports: `import { Footer } from "./footer";\nimport { Sheet } from "@acme/sheet";`,
+      site: `<Footer>${SHEET_SITE}</Footer>`,
+    }),
+  });
+  assert.equal(finding.action, "use-observable");
+});
+
+test("abstains under React Native touchables that clone their only child", async () => {
+  for (const touchable of ["TouchableWithoutFeedback", "TouchableHighlight"]) {
+    const finding = await openVerdict({
+      "package.json": NATIVE_PACKAGE,
+      "screen.tsx": screen({
+        imports: `import { ${touchable} } from "react-native";\nimport { Sheet } from "@acme/sheet";`,
+        site: `<${touchable}>${SHEET_SITE}</${touchable}>`,
+      }),
+    });
+    assert.notEqual(finding.action, "use-observable", touchable);
+  }
+});
+
 test("abstains when the call site is the element a scroll view clones as its refreshControl", async () => {
   const finding = await openVerdict({
-    "package.json": JSON.stringify({ dependencies: { "react-native": "0.83.0" }, name: "app" }),
+    "package.json": NATIVE_PACKAGE,
     "screen.tsx": screen({
       imports: `import { ScrollView } from "react-native";\nimport { RefreshControl } from "react-native-gesture-handler";`,
       site: `<ScrollView refreshControl={<RefreshControl refreshing={open} onRefresh={() => setOpen(false)} />} />`,
