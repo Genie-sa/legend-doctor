@@ -30,7 +30,8 @@ parse instead of a full analysis. `--since <ref>` does the same for everything t
 fix), exit 1 means the scan failed, exit 0 means the report is complete whatever it contains.
 
 Stdout is always one JSON document. Branch on `status`: `"ok"` carries `root` (every `location.file` is
-relative to it) and `hidden` (findings and practices removed by filters, so an empty list is not a clean scan);
+relative to it) and `hidden` (findings and practices removed by filters, so an empty list is not a clean scan, plus
+`abstentions`: the hidden reviews no answer converts, by `abstentionReason`);
 `"error"` carries a stable `reason` (`invalid_usage`, `unsupported_target`, `target_not_found`, `scope_unavailable`,
 `scan_failed`),
 a `message` naming the fix, and `next` commands when one applies. `--fail-on change` exits 3 while any shown finding

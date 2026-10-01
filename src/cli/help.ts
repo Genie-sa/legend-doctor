@@ -29,11 +29,13 @@ Target
             node_modules, and vendor are skipped. Stdin is not read.
 
 Flags
-  --actionable              Hide keep findings, secondary members of
-                            finding groups, and candidate and style
-                            practices, leaving one entry per proven edit
+  --actionable              Hide keep findings, reviews no answer converts,
+                            secondary members of finding groups, and
+                            candidate and style practices, leaving one entry
+                            per proven edit
   --disposition <value>     Show only findings with this disposition
-                            (candidate | change | keep | style)
+                            (candidate | change | keep | style); candidate
+                            also hides reviews no answer converts
   --fail-on <value,...>     Exit 3 when any shown finding or practice has one
                             of these dispositions; applied after filters
   --ignore-action <a,...>   Hide findings and practices with these action names
@@ -106,8 +108,10 @@ JSON contract (schemaVersion 7)
     confirmations   { applied, rejected, stale, unmatched, source } when
                     answers were read
     practices       Legend State practice findings
-    hidden          { findings, practices } removed by --actionable or
-                    --disposition, so an empty list is not a clean scan
+    hidden          { findings, practices, abstentions } removed by
+                    --actionable or --disposition, so an empty list is not
+                    a clean scan; abstentions counts the hidden reviews no
+                    answer converts by abstentionReason
     gate            { failOn, matched } when --fail-on is set
     coverage,       present only with --coverage
     diagnostics

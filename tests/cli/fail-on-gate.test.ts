@@ -65,5 +65,5 @@ test("--fail-on is evaluated after filters", async (testContext) => {
   const report = JSON.parse(stdout) as { gate: unknown; hidden: unknown };
 
   assert.deepEqual(report.gate, { failOn: ["candidate"], matched: 0 });
-  assert.deepEqual(report.hidden, { findings: 0, practices: 1 });
+  assert.deepEqual(report.hidden, { abstentions: {}, findings: 0, practices: 1 });
 });

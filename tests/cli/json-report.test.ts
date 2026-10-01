@@ -19,7 +19,7 @@ interface ReportPayload {
   coverage?: { entries: unknown[] };
   diagnostics?: { parser: unknown[] };
   findings: unknown[];
-  hidden: { findings: number; practices: number };
+  hidden: { abstentions: Record<string, number>; findings: number; practices: number };
   /** Never present: the report is flat, not wrapped. */
   report?: unknown;
   root: string;
@@ -56,7 +56,7 @@ test("the report carries status, root, and hidden counts alongside the findings"
   assert.match(report.analyzer.build, /^[0-9a-f]{16}$/u);
   assert.match(report.analyzer.version, /^\d+\.\d+\.\d+/u);
   assert.deepEqual(report.findings, []);
-  assert.deepEqual(report.hidden, { findings: 1, practices: 1 });
+  assert.deepEqual(report.hidden, { abstentions: {}, findings: 1, practices: 1 });
 });
 
 test("--coverage adds coverage and diagnostics to the same report root", async (testContext) => {
@@ -70,7 +70,7 @@ test("--coverage adds coverage and diagnostics to the same report root", async (
   assert.equal(report.status, "ok");
   assert.equal(report.schemaVersion, 7);
   assert.equal(report.root, root);
-  assert.deepEqual(report.hidden, { findings: 0, practices: 0 });
+  assert.deepEqual(report.hidden, { abstentions: {}, findings: 0, practices: 0 });
   assert.equal(report.report, undefined);
   assert.ok((report.coverage?.entries.length ?? 0) > 0);
   assert.deepEqual(Object.keys(report.diagnostics ?? {}).toSorted(), ["parser"]);

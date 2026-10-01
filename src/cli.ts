@@ -4,6 +4,7 @@ import type { AnalysisReport, ReportScope } from "./core/types.js";
 import { CliError, EXIT_GATE_FAILED, EXIT_SCAN_FAILED } from "./cli/failures.js";
 import type { GateResult, HiddenCounts } from "./report/format.js";
 import { GitScopeError, resolveScopedFiles } from "./project/git-scope.js";
+import { abstentionCounts, agentFindings, unconvertibleReviews } from "./report/format.js";
 import { analyzePath, analyzePathDetailed } from "./project/analyze-path/analyze-path.js";
 import { parseArguments, scanScope, scanScopeFlag } from "./cli/options.js";
 import { readFile, stat } from "node:fs/promises";
@@ -16,7 +17,6 @@ import { HELP } from "./cli/help.js";
 import { SCHEMA_VERSION } from "./core/types.js";
 import type { ScanScope } from "./project/git-scope.js";
 import { UsageError } from "./cli/usage-error.js";
-import { agentFindings } from "./report/format.js";
 import { analyzerIdentity } from "./cli/analyzer-identity.js";
 import { discoverConfig } from "./cli/config.js";
 import { filterSubscriptionAnalysis } from "./report/subscription-plans.js";
@@ -313,8 +313,14 @@ function filterReport(report: AnalysisReport, filter: ReportFilter): FilteredRep
   const shown = (finding: { action: Action; disposition: Disposition }): boolean =>
     (filter.disposition === null || finding.disposition === filter.disposition) &&
     !filter.ignoreActions.includes(finding.action);
-  const agentOnly = filter.actionableOnly ? agentFindings(report.findings) : report.findings;
+  const unconvertible = unconvertibleReviews(report.findings);
+  const agentOnly = filter.actionableOnly
+    ? agentFindings(report.findings)
+    : report.findings.filter(
+        (finding) => filter.disposition !== "candidate" || !unconvertible.has(finding),
+      );
   const findings = agentOnly.filter((finding) => shown(finding));
+  const shownFindings = new Set(findings);
   const practices = report.practices.filter(
     (practice) => shown(practice) && (!filter.actionableOnly || practice.disposition === "change"),
   );
@@ -326,6 +332,11 @@ function filterReport(report: AnalysisReport, filter: ReportFilter): FilteredRep
   }
   return {
     hidden: {
+      abstentions: abstentionCounts(
+        report.findings.filter(
+          (finding) => !shownFindings.has(finding) && unconvertible.has(finding),
+        ),
+      ),
       findings: report.findings.length - findings.length,
       practices: report.practices.length - practices.length,
     },

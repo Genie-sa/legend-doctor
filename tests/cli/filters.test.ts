@@ -7,7 +7,30 @@ import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 
-type CliReport = AnalysisReport & { hidden: { findings: number; practices: number } };
+type CliReport = AnalysisReport & {
+  hidden: { abstentions: Record<string, number>; findings: number; practices: number };
+};
+
+const CHROME =
+  "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview /><Nav />";
+
+async function scanPanel(source: string, flags: readonly string[]): Promise<CliReport> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cli-review-"));
+  try {
+    await writeFile(path.join(root, "panel.tsx"), source, "utf8");
+    const { stdout } = await run(process.execPath, [CLI_PATH, root, ...flags]);
+    // SAFETY: the CLI exited successfully, so stdout is the serialized CLI report.
+    return JSON.parse(stdout) as CliReport;
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+function reviewedStates(report: CliReport): (string | null)[] {
+  return report.findings
+    .filter((finding) => finding.action === "review-state")
+    .map((finding) => finding.name);
+}
 
 test("--disposition candidate keeps only candidate findings and practices", async (testContext) => {
   const root = await writeFixtureRoot();
@@ -109,4 +132,84 @@ test("--disposition keep composes with the equals form and drops practices", asy
     ["keep"],
   );
   assert.deepEqual(report.practices, []);
+});
+
+test("--disposition candidate hides a review no answer converts and counts it by reason", async () => {
+  const source = `
+    import { useState } from "react";
+    export function Panel() {
+      const [render, setRender] = useState<(() => JSX.Element) | null>(null);
+      return <main>${CHROME}<Slot render={render} />{render ? render() : null}<button onClick={() => setRender(null)} /></main>;
+    }
+  `;
+
+  const full = await scanPanel(source, []);
+  const report = await scanPanel(source, ["--disposition", "candidate"]);
+
+  assert.deepEqual(reviewedStates(full), ["render"]);
+  assert.deepEqual(reviewedStates(report), []);
+  assert.deepEqual(report.hidden.abstentions, { "no-proven-optimization": 1 });
+});
+
+test("--actionable hides a co-written member its group's yes leaves under review", async () => {
+  const source = `
+    import { useState } from "react";
+    export function Panel() {
+      const [open, setOpen] = useState(false);
+      const [error, setError] = useState<string | null>(null);
+      const fail = (message: string) => { setError(message); setOpen(true); };
+      return <main>${CHROME}
+        <button onClick={() => fail("boom")} />
+        {error ? <p role="alert">{error.toUpperCase()}</p> : null}
+        <Drawer open={open} onClose={() => setOpen(false)} />
+      </main>;
+    }
+  `;
+
+  const report = await scanPanel(source, ["--actionable"]);
+
+  assert.deepEqual(reviewedStates(report), ["open"]);
+  assert.deepEqual(
+    report.questions?.map((question) => question.id),
+    ["panel.tsx::Panel::{open,error}::atomic-transition-unproven"],
+  );
+  assert.deepEqual(report.hidden.abstentions, { "atomic-transition-unproven": 1 });
+});
+
+test("--actionable keeps a co-written member when no shown review carries its group's question", async () => {
+  const source = `
+    import { useState } from "react";
+    export function Panel({ onAdd }: { onAdd: (name: string) => void }) {
+      const [name, setName] = useState("");
+      const [adding, setAdding] = useState(false);
+      const submit = () => {
+        if (!name.trim()) return;
+        onAdd(name);
+        setName("");
+        setAdding(false);
+      };
+      return <main>${CHROME}
+        <button onClick={() => setAdding(!adding)}>{adding ? "Cancel" : "Add"}</button>
+        {adding && <form><Input value={name} onChange={(e) => setName(e.target.value)} /><button onClick={submit} /></form>}
+      </main>;
+    }
+    function Input({ value, onChange }: { value: string; onChange: (e: { target: { value: string } }) => void }) {
+      return <input value={value} onChange={onChange} />;
+    }
+  `;
+
+  const report = await scanPanel(source, ["--actionable"]);
+
+  assert.deepEqual(
+    report.findings.map((finding) => [finding.name, finding.action]),
+    [
+      ["name", "use-observable"],
+      ["adding", "review-state"],
+    ],
+  );
+  assert.equal(
+    report.findings[1]?.assumption?.id,
+    "panel.tsx::Panel::{name,adding}::atomic-transition-unproven",
+  );
+  assert.deepEqual(report.hidden.abstentions, {});
 });
