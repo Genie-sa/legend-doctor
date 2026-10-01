@@ -1,4 +1,9 @@
-import type { DeclarationContext, ModuleRecordDraft, ModuleSignals } from "./model.js";
+import type {
+  ComponentFunction,
+  DeclarationContext,
+  ModuleRecordDraft,
+  ModuleSignals,
+} from "./model.js";
 import { arrayLiteralPaths, observableInitialValue } from "../../core/observable-initial-value.js";
 import {
   componentFunction,
@@ -15,6 +20,7 @@ import { directObservableMembers, isObservableInitializer } from "./observable-d
 import { directReactContextReader, isReactContextInitializer } from "./react-traits.js";
 import { declaredObservableContextType } from "./observable-contexts.js";
 import { isPlainConstantDeclaration } from "../../rules/observable-reads/plain-seed-paths.js";
+import { staticAssignedComponentName } from "./module-bindings.js";
 import { styledComponentTarget } from "./framework-event-components.js";
 import ts from "typescript";
 
@@ -331,15 +337,12 @@ function collectComponentVariableDeclaration(
   signals: ModuleSignals,
 ): void {
   const { declaration, name } = context;
-  if (
-    name === null ||
-    !isSemanticComponentName(name) ||
-    !declaration.initializer ||
-    !isComponentInitializer(declaration.initializer, signals.componentWrappers)
-  ) {
+  if (name === null || !isSemanticComponentName(name) || !declaration.initializer) {
     return;
   }
-  const component = componentFunction(declaration.initializer, signals.componentWrappers);
+  const component = isComponentInitializer(declaration.initializer, signals.componentWrappers)
+    ? componentFunction(declaration.initializer, signals.componentWrappers)
+    : compoundRootComponent(name, draft, signals);
   if (!component) {
     return;
   }
@@ -347,4 +350,13 @@ function collectComponentVariableDeclaration(
   if (context.exported) {
     draft.localExports.set(name, name);
   }
+}
+
+function compoundRootComponent(
+  name: string,
+  draft: ModuleRecordDraft,
+  signals: ModuleSignals,
+): ComponentFunction | null {
+  const root = staticAssignedComponentName(signals.sourceFile, name, draft.componentDeclarations);
+  return root === null ? null : (draft.componentDeclarations.get(root) ?? null);
 }

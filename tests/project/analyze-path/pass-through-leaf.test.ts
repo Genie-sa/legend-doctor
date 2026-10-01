@@ -79,6 +79,38 @@ test("follows local components that only spread their props down to a host eleme
   assert.equal(finding.action, "use-observable");
 });
 
+test("follows an Object.assign compound part tag to a part that spreads onto a host element", async () => {
+  const finding = await openVerdict({
+    "page.tsx": `
+      function PageRoot(props) { return <div data-page {...props} />; }
+      function PageContent({ className, ...props }) { return <div className={className} {...props} />; }
+      export const Page = Object.assign(PageRoot, { Content: PageContent });
+    `,
+    "screen.tsx": screen({
+      imports: `import { Page } from "./page";\nimport { Sheet } from "@acme/sheet";`,
+      site: `<Page><Page.Content>${SHEET_SITE}</Page.Content></Page>`,
+    }),
+  });
+  assert.equal(finding.action, "use-observable");
+  assert.match(finding.message, /owner-side contract is verified/u);
+});
+
+test("abstains when an Object.assign compound part clones its child", async () => {
+  const finding = await openVerdict({
+    "menu.tsx": `
+      import { cloneElement } from "react";
+      function MenuRoot(props) { return <div {...props} />; }
+      function MenuItem({ children }) { return cloneElement(children, { role: "menuitem" }); }
+      export const Menu = Object.assign(MenuRoot, { Item: MenuItem });
+    `,
+    "screen.tsx": screen({
+      imports: `import { Menu } from "./menu";\nimport { Sheet } from "@acme/sheet";`,
+      site: `<Menu><Menu.Item>${SHEET_SITE}</Menu.Item></Menu>`,
+    }),
+  });
+  assert.notEqual(finding.action, "use-observable");
+});
+
 test("abstains when a local parent forwards its children into an unresolved component", async () => {
   const finding = await openVerdict({
     "field.tsx": `
