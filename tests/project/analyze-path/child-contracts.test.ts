@@ -203,3 +203,43 @@ test("does not require child prop semantics for a call-site subscription wrapper
   const finding = report.findings.find((candidate) => candidate.name === "open");
   assert.equal(requireValue(finding).action, "use-observable");
 });
+
+test("resolves a child wrapped in Legend observer but not a same-named wrapper from another module", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-observer-child-"));
+  const composer = (name: string, wrapperModule: string): string => `
+    import { observer } from "${wrapperModule}";
+    export const ${name} = observer(function ${name}(props: {
+      error: string;
+      onErrorChange: (value: string) => void;
+    }) {
+      return <form><textarea onPaste={() => props.onErrorChange("")} /><p>{props.error}</p></form>;
+    });
+  `;
+  const screen = (name: string): string => `
+    import { useState } from "react";
+    import { ${name} } from "./${name}";
+    export function ${name}Screen({ ready }: { ready: boolean }) {
+      const [error, setError] = useState("");
+      return (
+        <main>
+          <header><h1>Chat</h1><nav><a href="/">Home</a><a href="/s">Settings</a></nav></header>
+          <section><ul><li>One</li><li>Two</li><li>Three</li></ul></section>
+          {ready ? <${name} error={error} onErrorChange={setError} /> : <p>Loading</p>}
+        </main>
+      );
+    }
+  `;
+  await writeFile(
+    path.join(root, "LegendComposer.tsx"),
+    composer("LegendComposer", "@legendapp/state/react"),
+  );
+  await writeFile(path.join(root, "MobxComposer.tsx"), composer("MobxComposer", "mobx-react-lite"));
+  await writeFile(path.join(root, "LegendScreen.tsx"), screen("LegendComposer"));
+  await writeFile(path.join(root, "MobxScreen.tsx"), screen("MobxComposer"));
+
+  const report = await analyzePath(root);
+  const actionIn = (file: string): string | undefined =>
+    report.findings.find((finding) => finding.location.file === file)?.action;
+  assert.equal(actionIn("LegendScreen.tsx"), "use-observable");
+  assert.equal(actionIn("MobxScreen.tsx"), "review-state");
+});
