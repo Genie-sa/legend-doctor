@@ -4,7 +4,7 @@ import { calleeRootIdentifier, findAncestor, isRuntimeFunctionLike } from "../co
 import { HOOK_CALL_ARITY } from "./constants.js";
 import type { HookImports } from "../core/imports.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
-import { isImportedHookCall } from "../core/imports.js";
+import { isReactHookCall } from "../core/imports.js";
 import ts from "typescript";
 import { uniqueVariableDeclaration } from "../rules/state-proofs/binding-lookup.js";
 
@@ -107,12 +107,7 @@ function unshadowedUseCallbackFactory(
 ): ts.ArrowFunction | ts.FunctionExpression | null {
   if (
     !ts.isCallExpression(initializer) ||
-    !isImportedHookCall({
-      call: initializer,
-      localNames: imports.useCallback,
-      namespaceNames: imports.reactNamespaces,
-      canonicalName: "useCallback",
-    }) ||
+    !isReactHookCall(initializer, "useCallback", imports) ||
     initializer.arguments.length !== HOOK_CALL_ARITY
   ) {
     return null;

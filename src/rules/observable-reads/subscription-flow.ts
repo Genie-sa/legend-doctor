@@ -6,10 +6,10 @@ import { primitiveExpression, pureFlowExpression, pureMemoProjection } from "./f
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SubscriptionInventoryReason } from "../../core/subscriptions.js";
 import { blockScopedReferences } from "../../core/scope-references.js";
-import { isImportedHookCall } from "../../core/imports.js";
 import { isImportedReactCall } from "../react-commit-sensitivity/binding-resolution.js";
 import { isInsideOwnerReturn } from "./conditional-jsx-slots.js";
 import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { isRenderGateRead } from "./render-gates.js";
 import { isSynchronousRenderCallback } from "../state-proofs/callback-sites.js";
 import ts from "typescript";
@@ -166,13 +166,7 @@ function addProjection(
   const expression = declaration.initializer!;
   const scope = { names: flow.names, primitives: flow.primitives, sourceFile: scan.sourceFile };
   const memo =
-    ts.isCallExpression(expression) &&
-    isImportedHookCall({
-      call: expression,
-      canonicalName: "useMemo",
-      localNames: scan.imports.useMemo,
-      namespaceNames: scan.imports.reactNamespaces,
-    });
+    ts.isCallExpression(expression) && isReactHookCall(expression, "useMemo", scan.imports);
   if (memo ? !pureMemoProjection(expression, scope) : !pureFlowExpression(expression, scope)) {
     return false;
   }
@@ -304,12 +298,7 @@ function hookInputKind(
 }
 
 function isMemoCall(call: ts.CallExpression, scan: ObservableReadScan): boolean {
-  return isImportedHookCall({
-    call,
-    canonicalName: "useMemo",
-    localNames: scan.imports.useMemo,
-    namespaceNames: scan.imports.reactNamespaces,
-  });
+  return isReactHookCall(call, "useMemo", scan.imports);
 }
 
 function deferredReadKind(

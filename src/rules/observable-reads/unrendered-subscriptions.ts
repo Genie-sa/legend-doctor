@@ -12,8 +12,8 @@ import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { UnrenderedUseValueGate } from "../../core/subscriptions.js";
-import { isImportedHookCall } from "../../core/imports.js";
 import { isInlineJsxEventHandler } from "./render-exclusion.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { ownerLevelReferences } from "../../core/scope-references.js";
 import ts from "typescript";
 
@@ -225,18 +225,8 @@ function isInitialValueArgument(reference: ts.Identifier, imports: HookImports):
     return false;
   }
   return (
-    isImportedHookCall({
-      call,
-      canonicalName: "useRef",
-      localNames: imports.useRef,
-      namespaceNames: imports.reactNamespaces,
-    }) ||
-    isImportedHookCall({
-      call,
-      canonicalName: "useState",
-      localNames: imports.useState,
-      namespaceNames: imports.reactNamespaces,
-    }) ||
+    isReactHookCall(call, "useRef", imports) ||
+    isReactHookCall(call, "useState", imports) ||
     (ts.isIdentifier(call.expression) && imports.useObservable.has(call.expression.text))
   );
 }
@@ -252,12 +242,7 @@ function useCallbackDependencyCallback(
     !call ||
     !ts.isCallExpression(call) ||
     call.arguments[1] !== dependencies ||
-    !isImportedHookCall({
-      call,
-      canonicalName: "useCallback",
-      localNames: imports.useCallback,
-      namespaceNames: imports.reactNamespaces,
-    })
+    !isReactHookCall(call, "useCallback", imports)
   ) {
     return null;
   }
@@ -302,13 +287,7 @@ function isOwnerLevelCallback(
     return callback.parent === owner.body;
   }
   const wrapper =
-    ts.isCallExpression(callback.parent) &&
-    isImportedHookCall({
-      call: callback.parent,
-      canonicalName: "useCallback",
-      localNames: imports.useCallback,
-      namespaceNames: imports.reactNamespaces,
-    })
+    ts.isCallExpression(callback.parent) && isReactHookCall(callback.parent, "useCallback", imports)
       ? callback.parent
       : callback;
   const declaration = wrapper.parent;

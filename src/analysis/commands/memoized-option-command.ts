@@ -14,8 +14,8 @@ import type { ChildContractResolver } from "../../rules/child-contract/model.js"
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { hasStateInitializer } from "../../rules/deferred-reveal/deferred-reveal.js";
-import { isImportedHookCall } from "../../core/imports.js";
 import { isInsideJsxEventCallback } from "../../rules/state-proofs/event-roots.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { isUniqueConstBindingOf } from "./effect-owned-presentation.js";
 import { jsxOpeningForAttribute } from "../callbacks/local-callbacks.js";
 import ts from "typescript";
@@ -85,13 +85,7 @@ function memoizedOptionCallbackFor(
   const containingMemo = findAncestorUntil(
     setter,
     (node): node is ts.CallExpression =>
-      ts.isCallExpression(node) &&
-      isImportedHookCall({
-        call: node,
-        localNames: imports.useMemo,
-        namespaceNames: imports.reactNamespaces,
-        canonicalName: "useMemo",
-      }),
+      ts.isCallExpression(node) && isReactHookCall(node, "useMemo", imports),
     owner,
   );
   const factory = containingMemo?.arguments[0];

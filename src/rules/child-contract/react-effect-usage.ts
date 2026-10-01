@@ -6,7 +6,7 @@ import {
 import type { ChildComponentSource } from "./model.js";
 import type { HookImports } from "../../core/imports.js";
 import { callbackReferenceIsObservationOnly } from "./observation-only-reads.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import ts from "typescript";
 
 export function reactEffectCallbackUsage(
@@ -57,23 +57,8 @@ function effectCallReferenceUsage(
 
 function isReactEffectCall(call: ts.CallExpression, imports: HookImports): boolean {
   return (
-    isImportedHookCall({
-      call,
-      localNames: imports.useEffect,
-      namespaceNames: imports.reactNamespaces,
-      canonicalName: "useEffect",
-    }) ||
-    isImportedHookCall({
-      call,
-      localNames: imports.useLayoutEffect,
-      namespaceNames: imports.reactNamespaces,
-      canonicalName: "useLayoutEffect",
-    }) ||
-    isImportedHookCall({
-      call,
-      localNames: imports.useInsertionEffect,
-      namespaceNames: imports.reactNamespaces,
-      canonicalName: "useInsertionEffect",
-    })
+    isReactHookCall(call, "useEffect", imports) ||
+    isReactHookCall(call, "useLayoutEffect", imports) ||
+    isReactHookCall(call, "useInsertionEffect", imports)
   );
 }

@@ -17,8 +17,8 @@ import type { ChildContractResolver } from "../../rules/child-contract/model.js"
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isHookDependencyReference } from "../../rules/state-proofs/callback-sites.js";
-import { isImportedHookCall } from "../../core/imports.js";
 import { isJsxEventHandlerReference } from "../../rules/state-proofs/event-roots.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { localCallbackByBinding } from "./local-callbacks.js";
 import ts from "typescript";
 
@@ -147,12 +147,7 @@ function memoHookCall(initializer: ts.Expression, imports: HookImports): MemoHoo
   const call = unwrapTransparentExpression(initializer);
   if (
     !ts.isCallExpression(call) ||
-    !isImportedHookCall({
-      call,
-      localNames: imports.useMemo,
-      namespaceNames: imports.reactNamespaces,
-      canonicalName: "useMemo",
-    }) ||
+    !isReactHookCall(call, "useMemo", imports) ||
     call.arguments.length !== HOOK_CALL_ARITY
   ) {
     return null;

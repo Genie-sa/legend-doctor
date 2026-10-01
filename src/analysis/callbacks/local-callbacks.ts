@@ -8,7 +8,7 @@ import {
 import { findAncestorUntil, isRuntimeFunctionLike, nodeWithin, visit } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { nearestMutationFunction } from "../mutations.js";
 import ts from "typescript";
 import { uniqueReturnedExpression } from "../return-call-sites.js";
@@ -149,15 +149,7 @@ function useCallbackFactory(
   initializer: ts.Expression,
   imports: HookImports,
 ): ts.ArrowFunction | ts.FunctionExpression | null {
-  if (
-    !ts.isCallExpression(initializer) ||
-    !isImportedHookCall({
-      call: initializer,
-      localNames: imports.useCallback,
-      namespaceNames: imports.reactNamespaces,
-      canonicalName: "useCallback",
-    })
-  ) {
+  if (!ts.isCallExpression(initializer) || !isReactHookCall(initializer, "useCallback", imports)) {
     return null;
   }
   const [callback] = initializer.arguments;

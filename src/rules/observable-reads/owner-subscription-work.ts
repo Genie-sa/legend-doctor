@@ -5,7 +5,7 @@ import {
 } from "./stable-effect-dependencies.js";
 import type { ObservableReadScan } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import ts from "typescript";
 import { visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 
@@ -40,14 +40,7 @@ export function hasUnprovenOwnerWork(
     if (!found && ts.isCallExpression(node) && !hasStableEffectDependencies(node, owner, scan)) {
       found = (
         ["useEffect", "useLayoutEffect", "useInsertionEffect", "useImperativeHandle"] as const
-      ).some((canonicalName) =>
-        isImportedHookCall({
-          call: node,
-          canonicalName,
-          localNames: scan.imports[canonicalName],
-          namespaceNames: scan.imports.reactNamespaces,
-        }),
-      );
+      ).some((canonicalName) => isReactHookCall(node, canonicalName, scan.imports));
     }
   });
   return found;
@@ -76,12 +69,7 @@ function unstableCachedHook(
 ): boolean {
   return (
     (["useMemo", "useCallback"] as const).some((canonicalName) =>
-      isImportedHookCall({
-        call,
-        canonicalName,
-        localNames: scan.imports[canonicalName],
-        namespaceNames: scan.imports.reactNamespaces,
-      }),
+      isReactHookCall(call, canonicalName, scan.imports),
     ) && !hasStableCacheDependencies(call, owner, scan)
   );
 }

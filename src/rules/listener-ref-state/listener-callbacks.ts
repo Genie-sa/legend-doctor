@@ -9,7 +9,7 @@ import { visit, visitSkippingNestedFunctions } from "../../core/ast.js";
 import type { EffectCandidate } from "../../analysis/model.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import ts from "typescript";
 
 const LISTENER_CALL_ARGUMENT_COUNT = 2;
@@ -154,12 +154,7 @@ function callbackBindings(
       !ts.isIdentifier(node.name) ||
       !node.initializer ||
       !ts.isCallExpression(node.initializer) ||
-      !isImportedHookCall({
-        call: node.initializer,
-        localNames: imports.useCallback,
-        namespaceNames: imports.reactNamespaces,
-        canonicalName: "useCallback",
-      }) ||
+      !isReactHookCall(node.initializer, "useCallback", imports) ||
       bindingDeclarationCount(owner, node.name.text) !== 1
     ) {
       return;

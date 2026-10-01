@@ -370,6 +370,8 @@ function ownScopeNames(owner: RuntimeFunctionLike): ReadonlySet<string> {
   return names;
 }
 
+type ReactHookName = Extract<HookCallQuery["canonicalName"], keyof HookImports>;
+
 export function isImportedHookCall({
   call,
   canonicalName,
@@ -386,6 +388,20 @@ export function isImportedHookCall({
     namespaceNames.has(expression.expression.text) &&
     expression.name.text === canonicalName
   );
+}
+
+/** A call to the React hook `canonicalName`, by its imported local name or as a React namespace member. */
+export function isReactHookCall<TName extends ReactHookName>(
+  call: ts.CallExpression,
+  canonicalName: TName,
+  imports: Pick<HookImports, TName | "reactNamespaces">,
+): boolean {
+  return isImportedHookCall({
+    call,
+    canonicalName,
+    localNames: imports[canonicalName],
+    namespaceNames: imports.reactNamespaces,
+  });
 }
 
 export function isLocalHookCall(call: ts.CallExpression, localNames: ReadonlySet<string>): boolean {

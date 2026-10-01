@@ -8,7 +8,7 @@ import {
 import { findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import ts from "typescript";
 
 export interface EffectOwnedCommandScope {
@@ -26,13 +26,7 @@ function sharedContainingMemoCall(
     const containingMemo = findAncestorUntil(
       setterCall,
       (node): node is ts.CallExpression =>
-        ts.isCallExpression(node) &&
-        isImportedHookCall({
-          call: node,
-          localNames: imports.useMemo,
-          namespaceNames: imports.reactNamespaces,
-          canonicalName: "useMemo",
-        }),
+        ts.isCallExpression(node) && isReactHookCall(node, "useMemo", imports),
       owner,
     );
     if (!containingMemo || (memoCall !== null && memoCall !== containingMemo)) {
