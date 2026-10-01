@@ -117,4 +117,5 @@ test("a context instruction for consumer files names useValue", async () => {
   });
   const message = messageFor(findings, "PanelProvider.tsx", "use-observable");
   assert.ok(message.includes("replace each destructured field with `useValue`"));
+  assert.ok(message.includes("(`useValue(open$.field)`, not `useValue(open$)`)"));
 });
