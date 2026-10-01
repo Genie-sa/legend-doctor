@@ -1,6 +1,6 @@
 import { nearestNestedFunction, visit } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { callbackIsEventRooted } from "../state-proofs/event-roots.js";
+import { plainCallbackIsEventRooted } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
 export function setterRegionIsSynchronous(
@@ -20,10 +20,7 @@ export function regionIsSynchronousEvent(
   return (
     !isAsync(region) &&
     !containsAwaitOrYield(region.body) &&
-    (ts.isArrowFunction(region) ||
-      ts.isFunctionDeclaration(region) ||
-      ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted({ callback: region, owner, dependencyName: "", seen: new Set() })
+    plainCallbackIsEventRooted(region, owner)
   );
 }
 

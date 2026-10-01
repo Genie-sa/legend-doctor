@@ -13,7 +13,7 @@ import {
 } from "../../core/ast.js";
 import { isDeclarationName, isDirectJsxAttributeExpression } from "../../core/analysis-ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { callbackIsEventRooted } from "../state-proofs/event-roots.js";
+import { plainCallbackIsEventRooted } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
 interface DraftEditProof {
@@ -46,18 +46,7 @@ function isEventRootedEditRegion(
   proofs: EffectDraftProofs,
 ): boolean {
   const region = proofs.nearestMutationFunction(call, state.owner);
-  return (
-    region !== state.owner &&
-    (ts.isArrowFunction(region) ||
-      ts.isFunctionDeclaration(region) ||
-      ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted({
-      callback: region,
-      owner: state.owner,
-      dependencyName: "",
-      seen: new Set(),
-    })
-  );
+  return region !== state.owner && plainCallbackIsEventRooted(region, state.owner);
 }
 
 function isIndependentEdit(

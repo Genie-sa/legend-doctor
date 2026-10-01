@@ -23,11 +23,11 @@ import {
   jsxElementCountIn,
 } from "../rules/state-proofs/jsx-subtrees.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
-import { callbackIsEventRooted } from "../rules/state-proofs/event-roots.js";
 import { isCustomHookOwner } from "./ast-helpers.js";
 import { isPairedSetterProp } from "./membership-toggle.js";
 import { isSynchronousRenderCallback } from "../rules/state-proofs/callback-sites.js";
 import { oneHopRenderProjectionReferences } from "../rules/state-proofs/projection-hops.js";
+import { plainCallbackIsEventRooted } from "../rules/state-proofs/event-roots.js";
 import { stateMayHoldCallable } from "../rules/state-proofs/state-proofs.js";
 import ts from "typescript";
 
@@ -178,18 +178,5 @@ function classifyProjectionReference(
 
 function referenceIsEventRooted(reference: ts.Identifier, owner: RuntimeFunctionLike): boolean {
   const callback = nearestNestedFunction(reference, owner);
-  if (
-    !callback ||
-    (!ts.isArrowFunction(callback) &&
-      !ts.isFunctionDeclaration(callback) &&
-      !ts.isFunctionExpression(callback))
-  ) {
-    return false;
-  }
-  return callbackIsEventRooted({
-    callback,
-    owner,
-    dependencyName: reference.text,
-    seen: new Set(),
-  });
+  return callback !== null && plainCallbackIsEventRooted(callback, owner, reference.text);
 }
