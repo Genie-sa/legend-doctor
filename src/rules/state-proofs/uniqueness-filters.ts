@@ -9,9 +9,17 @@ export function expressionIsUniquelyFiltered(
   expression: ts.Expression,
   boundary: ts.Node,
 ): boolean {
+  return isUniquelyFiltered(expression, boundary, new Set());
+}
+
+function isUniquelyFiltered(
+  expression: ts.Expression,
+  boundary: ts.Node,
+  resolving: ReadonlySet<ts.VariableDeclaration>,
+): boolean {
   const value = unwrapTransparentExpression(expression);
   if (ts.isIdentifier(value)) {
-    return constInitializerIsUniquelyFiltered(value, boundary);
+    return constInitializerIsUniquelyFiltered(value, boundary, resolving);
   }
   if (
     !ts.isCallExpression(value) ||
@@ -23,19 +31,27 @@ export function expressionIsUniquelyFiltered(
   return (
     isExactUniquenessFilter(value, boundary) ||
     (isPureSubsetFilter(value, boundary) &&
-      expressionIsUniquelyFiltered(value.expression.expression, boundary))
+      isUniquelyFiltered(value.expression.expression, boundary, resolving))
   );
 }
 
-/** The name resolves to a unique `const` whose initializer is itself uniquely filtered. */
-function constInitializerIsUniquelyFiltered(name: ts.Identifier, boundary: ts.Node): boolean {
+/**
+ * The name resolves to a unique `const` whose initializer is itself uniquely filtered. A `const`
+ * whose filter chain leads back to itself proves nothing.
+ */
+function constInitializerIsUniquelyFiltered(
+  name: ts.Identifier,
+  boundary: ts.Node,
+  resolving: ReadonlySet<ts.VariableDeclaration>,
+): boolean {
   const declaration = uniqueVariableDeclaration(boundary, name.text);
   return (
     declaration !== null &&
     declaration.initializer !== undefined &&
     ts.isVariableDeclarationList(declaration.parent) &&
     (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
-    expressionIsUniquelyFiltered(declaration.initializer, boundary)
+    !resolving.has(declaration) &&
+    isUniquelyFiltered(declaration.initializer, boundary, new Set(resolving).add(declaration))
   );
 }
 
