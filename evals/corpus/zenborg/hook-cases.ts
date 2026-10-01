@@ -220,4 +220,14 @@ export const zenborgHookCases = [
       "Known false positive (atomic split after await): the analyzer emits `use-observable`, but `setHasChecked(true)` (:136) runs in the continuation of `checkForUpdate`, whose `setState` clearing `checking` and replacing `update` (hooks/useUpdater.ts:35-39) is still pending in the default lane. The observable commits first in the sync lane, so on a repeat check the stale `update` block (:561) shows beside the `Checking...` button (:556) until the React write commits.",
     target: "zenborg",
   },
+  {
+    action: "keep-state",
+    file: "components/banded-heatmap/BandedHeatmap.tsx",
+    hook: "useState",
+    line: 200,
+    name: "popupAnchorEl",
+    rationale:
+      "`setPopupAnchorEl` is the callback ref of the create-cycle anchor `<div>` (:570), so the state holds a DOM node React has attached. An observable `set` walks that node's `__reactFiber$` key into the cyclic fiber graph and overflows the stack, so the anchor must stay React state.",
+    target: "zenborg",
+  },
 ] as const satisfies readonly GoldHookCase[];

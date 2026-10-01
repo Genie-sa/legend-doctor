@@ -3,6 +3,7 @@ import type { HookFinding } from "../core/types.js";
 import type { StateAnalysisResult } from "./proofs/contracts.js";
 import { findCowrittenStateClusters } from "./clusters/cowritten-clusters.js";
 import { hookPresentationConsumerForState } from "./verdicts/small-owner-verdicts.js";
+import { stateMayHoldOpaqueInstance } from "../rules/opaque-instance-state.js";
 
 export interface FindingsScope extends StateAnalysisResult {
   /** Classifies one state as if no other React state were written alongside it. */
@@ -43,14 +44,16 @@ export function stateClusterFor(
   state: StateCandidate,
   { clusters, cowrittenClusters }: FindingsScope,
 ): StateCluster | undefined {
-  return (
+  const cluster =
     clusters.contextClusters.get(state) ??
     clusters.effectDrafts.clusters.get(state) ??
     clusters.listenerRefClusters.get(state) ??
     clusters.observableClusters.get(state) ??
     clusters.subtreeClusters.get(state) ??
-    cowrittenClusters.get(state)
-  );
+    cowrittenClusters.get(state);
+  return cluster?.action === "use-observable" && cluster.members.some(stateMayHoldOpaqueInstance)
+    ? undefined
+    : cluster;
 }
 
 export function clusterStateClassification(

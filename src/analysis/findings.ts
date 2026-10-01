@@ -27,6 +27,7 @@ import { classifyState } from "./verdicts/classify-state.js";
 import { effectFindingFor } from "./effect-findings.js";
 import { hasLazyStateInitializer } from "../rules/effect-drafts/effect-drafts.js";
 import { omittedValueSetterName } from "./candidates.js";
+import { opaqueInstanceOverride } from "../rules/opaque-instance-state.js";
 import { renderPhaseWriteOverride } from "./render-phase-writes.js";
 import { resolveStateClassification } from "./assumptions/review-assumptions.js";
 import { splitCommitVerdict } from "./verdicts/split-commit-verdict.js";
@@ -222,6 +223,7 @@ function resolveStateVerdict(
   const { action } = resolved.classification;
   const override =
     renderPhaseWriteOverride(state, usage, action) ??
+    opaqueInstanceOverride(state, action) ??
     (action !== "review-state" &&
     action !== "keep-state" &&
     stateIsCommitSensitive(state, usage, result.analysis)
