@@ -61,8 +61,6 @@ Every condition must hold; a missing proof yields no finding.
    allowed only under a test of the comparison's equal side (`if (selected)`, `selected && …`, or the true branch
    of `selected ? … : …`). Object domains allow none, since an in-place change keeps identity.
 
-The Legend State 2.x gate (`legend-v2-tracking`) disables the rule, because 2.x can auto-track render `get()` calls.
-
 ## Runtime evidence
 
 `tests/runtime/plain-primitive-projection.test.ts` mounts 500 keyed rows under React 19.2.8 and Legend State

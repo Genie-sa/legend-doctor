@@ -63,12 +63,7 @@ export function workspaceLinks(workspace: Workspace): readonly WorkspaceLink[] {
   });
 }
 
-/** Whether the package manager installs `specifier` as a link to the sibling package. */
-export function linksToSibling(
-  policy: WorkspaceLinkPolicy,
-  specifier: string,
-  sibling: Package,
-): boolean {
+function linksToSibling(policy: WorkspaceLinkPolicy, specifier: string, sibling: Package): boolean {
   const protocolRange = WORKSPACE_PROTOCOL.exec(specifier)?.groups?.["range"];
   if (protocolRange === undefined) {
     return policy.semverRanges && versionSatisfies(sibling, specifier);

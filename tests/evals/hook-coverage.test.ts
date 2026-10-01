@@ -36,12 +36,10 @@ function evaluation(findings: HookFinding[]): Evaluation {
             hooks: { states: findings.length, effects: 0, total: findings.length },
             practices: [],
             capabilities: {
-              concurrentRoot: false,
               disabledRules: [],
-              legendState: null,
               reactCompiler: false,
             },
-            schemaVersion: 6,
+            schemaVersion: 7,
           },
         },
       ],

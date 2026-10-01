@@ -1,6 +1,5 @@
 import { assertVerifiedEdits, practiceFindings } from "./edit-assertions.js";
 import type { LegendPracticeFinding } from "../../src/core/types.js";
-import { analyzeLegendPractices } from "../../src/practices/analyze-legend-practices.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -207,27 +206,6 @@ test("guards on the equal side prove nothing for object domains", () => {
     "observable<{ id: string } | null>(null)",
   ).replace("{ trackId }: { trackId: string }", "{ pinned }: { pinned: { id: string } }");
   assert.deepEqual(findings(source), []);
-});
-
-test("only the Legend v2 gate disables the projection", () => {
-  for (const [version, useValueExport, expected] of [
-    ["2.1.15", "alias", 0],
-    ["3.0.0-beta.48", "missing", 1],
-    ["next", "unknown", 1],
-    ["3.0.0-beta.48", "alias", 1],
-  ] as const) {
-    const result = analyzeLegendPractices({
-      fileName: "fixture.tsx",
-      installedLegendState: {
-        source: "installed",
-        syncExport: "available",
-        useValueExport,
-        version,
-      },
-      sourceText: fixture(body),
-    }).filter((finding) => finding.action === "select-primitive-projection");
-    assert.equal(result.length, expected, version);
-  }
 });
 
 test("merged edits replace the raw subscription and delete the comparison", () => {

@@ -1,5 +1,5 @@
-import type { InstalledLegendState, TextEdit } from "./types.js";
 import type { EditSource } from "./text-edits.js";
+import type { TextEdit } from "./types.js";
 import { identifiersNamed } from "./ast.js";
 import { isDeclarationName } from "./analysis-ast.js";
 import { replaceNode } from "./text-edits.js";
@@ -126,14 +126,6 @@ export interface SubscriptionHookReference extends UseValueReference {
   readonly legacy: boolean;
 }
 
-/**
- * The export a new subscription names when the file imports none: `useValue`, unless the package lacks it.
- * Instructions for other files, whose imports are unknown, name this export.
- */
-export function subscriptionHookExport(legendState: InstalledLegendState | null): string {
-  return legendState?.useValueExport === "missing" ? USE_SELECTOR : USE_VALUE;
-}
-
 function namedSubscriptionHook(
   sourceFile: ts.SourceFile,
   clauses: readonly ts.ImportClause[],
@@ -154,7 +146,6 @@ function namedSubscriptionHook(
 function namespaceSubscriptionHook(
   sourceFile: ts.SourceFile,
   clauses: readonly ts.ImportClause[],
-  legendState: InstalledLegendState | null,
 ): SubscriptionHookReference | null {
   const namespace = clauses
     .map((clause) => clause.namedBindings)
@@ -164,59 +155,39 @@ function namespaceSubscriptionHook(
         ts.isNamespaceImport(bindings) &&
         isBoundOnlyByImport(sourceFile, bindings.name.text),
     );
-  const exported = subscriptionHookExport(legendState);
   return namespace
-    ? { callee: `${namespace.name.text}.${exported}`, edits: [], legacy: exported !== USE_VALUE }
+    ? { callee: `${namespace.name.text}.${USE_VALUE}`, edits: [], legacy: false }
     : null;
 }
 
 function importedSubscriptionHook(
   sourceFile: ts.SourceFile,
   clauses: readonly ts.ImportClause[],
-  legendState: InstalledLegendState | null,
 ): SubscriptionHookReference | null {
   return (
-    namedSubscriptionHook(sourceFile, clauses) ??
-    namespaceSubscriptionHook(sourceFile, clauses, legendState)
+    namedSubscriptionHook(sourceFile, clauses) ?? namespaceSubscriptionHook(sourceFile, clauses)
   );
 }
 
 /**
  * The callee an instruction for a new subscription names: the subscription hook the file already
- * imports from `@legendapp/state/react`, else the export the resolved package provides.
+ * imports from `@legendapp/state/react`, else `useValue`.
  */
-export function subscriptionHookCallee(
-  sourceFile: ts.SourceFile,
-  legendState: InstalledLegendState | null,
-): string {
-  return (
-    importedSubscriptionHook(sourceFile, legendReactImports(sourceFile), legendState)?.callee ??
-    subscriptionHookExport(legendState)
-  );
+export function subscriptionHookCallee(sourceFile: ts.SourceFile): string {
+  return importedSubscriptionHook(sourceFile, legendReactImports(sourceFile))?.callee ?? USE_VALUE;
 }
 
 /**
- * Resolves the callee of {@link subscriptionHookCallee} for an edit, adding a specifier beside a
- * retained one when the file imports no subscription hook. Null when only a new import declaration
- * would do.
+ * Resolves the callee of {@link subscriptionHookCallee} for an edit, adding a `useValue` specifier
+ * beside a retained one when the file imports no subscription hook. Null when only a new import
+ * declaration would do.
  */
-export function subscriptionHookReference(
-  source: EditSource,
-  legendState: InstalledLegendState | null,
-): SubscriptionHookReference | null {
+export function subscriptionHookReference(source: EditSource): SubscriptionHookReference | null {
   const clauses = legendReactImports(source.sourceFile);
-  const imported = importedSubscriptionHook(source.sourceFile, clauses, legendState);
+  const imported = importedSubscriptionHook(source.sourceFile, clauses);
   if (imported) {
     return imported;
   }
-  const exported = subscriptionHookExport(legendState);
-  const anchor = retainedImportAnchor(clauses);
-  if (!anchor || !isUnusedName(source.sourceFile, exported)) {
-    return null;
-  }
-  return {
-    callee: exported,
-    edits: [replaceNode(source, anchor, `${anchor.getText(source.sourceFile)}, ${exported}`)],
-    legacy: exported !== USE_VALUE,
-  };
+  const reference = useValueReference(source);
+  return reference && { ...reference, legacy: false };
 }

@@ -1,5 +1,4 @@
 import type { HookImports } from "../core/imports.js";
-import type { InstalledLegendState } from "../project/legend-state-package.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import { collectBindingNames } from "../core/analysis-ast.js";
 import { directObservableSelectorPath } from "./observable-reads/use-value-inputs.js";
@@ -13,7 +12,6 @@ const LEGACY_HOOKS = new Set(["useSelector", "use$"]);
 export interface LegacyUseValueScan {
   readonly fileName: string;
   readonly imports: HookImports;
-  readonly installedLegendState?: InstalledLegendState | null;
   readonly observableBindings: ReadonlySet<string>;
   readonly sourceFile: ts.SourceFile;
 }
@@ -21,7 +19,6 @@ export interface LegacyUseValueScan {
 export function findLegacyUseValuePractices({
   fileName,
   imports,
-  installedLegendState = null,
   observableBindings,
   sourceFile,
 }: LegacyUseValueScan): readonly LegendPracticeFinding[] {
@@ -45,7 +42,6 @@ export function findLegacyUseValuePractices({
       legacyUseValueFinding({
         call,
         fileName,
-        installedLegendState,
         observableBindings,
         sourceFile,
       }),
@@ -57,13 +53,12 @@ export function findLegacyUseValuePractices({
 interface LegacyUseValueCall {
   readonly call: ts.CallExpression;
   readonly fileName: string;
-  readonly installedLegendState: InstalledLegendState | null;
   readonly observableBindings: ReadonlySet<string>;
   readonly sourceFile: ts.SourceFile;
 }
 
 function legacyUseValueFinding(context: LegacyUseValueCall): LegendPracticeFinding {
-  const { call, fileName, installedLegendState, observableBindings, sourceFile } = context;
+  const { call, fileName, observableBindings, sourceFile } = context;
   const { line, character } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
   const current = call.expression.getText(sourceFile);
   const directObservable =
@@ -79,11 +74,11 @@ function legacyUseValueFinding(context: LegacyUseValueCall): LegendPracticeFindi
   return {
     action: "replace-legacy-use-value",
     confidence: "certain",
-    disposition: installedLegendState?.useValueExport === "alias" ? "style" : "change",
+    disposition: "style",
     evidence: [
       `\`${current}\` resolves to a legacy hook imported from @legendapp/state/react`,
       "Legend State documents useValue as the replacement for useSelector and use$",
-      ...installedUseValueEvidence(installedLegendState),
+      "useValue is an alias of useSelector, so this rename is a consistency change with no runtime effect",
     ],
     location: { column: character + 1, file: fileName, line: line + 1 },
     message: directObservable
@@ -93,28 +88,6 @@ function legacyUseValueFinding(context: LegacyUseValueCall): LegendPracticeFindi
         "@legendapp/state/react import; preserve the selector arguments.",
     practice: "reactivity",
   };
-}
-
-function installedUseValueEvidence(installed: InstalledLegendState | null): string[] {
-  if (!installed) {
-    return [];
-  }
-  if (installed.useValueExport === "alias") {
-    return [
-      `useValue is an alias of useSelector in the installed @legendapp/state@${installed.version}; ` +
-        "this rename is a consistency change with no runtime effect",
-    ];
-  }
-  if (installed.useValueExport === "distinct") {
-    return [
-      `useValue and useSelector are distinct exports in the installed @legendapp/state@${installed.version}; ` +
-        "verify the documented behavior difference before and after replacing",
-    ];
-  }
-  return [
-    `the installed @legendapp/state@${installed.version} react type declarations could not be resolved; ` +
-      "confirm useValue exists there before replacing",
-  ];
 }
 
 function isLegacyHookCall(

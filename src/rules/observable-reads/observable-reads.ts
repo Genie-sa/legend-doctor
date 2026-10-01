@@ -1,4 +1,3 @@
-import type { InstalledLegendState, LegendPracticeFinding } from "../../core/types.js";
 import { directUseValueFinding, directUseValueInput } from "./use-value-inputs.js";
 import { localDeclarationPaths, localPrimitivePaths } from "./primitive-paths.js";
 import { localPlainConstants, plainSeedPaths } from "./plain-seed-paths.js";
@@ -9,6 +8,7 @@ import {
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { DirectUseValueInput } from "./use-value-inputs.js";
 import type { HookImports } from "../../core/imports.js";
+import type { LegendPracticeFinding } from "../../core/types.js";
 import { NO_OBSERVABLE_FIELD_FACTS } from "./field-writes.js";
 import type { ObservableFieldFacts } from "./field-writes.js";
 import type { ObservableReadScan } from "./model.js";
@@ -30,8 +30,6 @@ export interface ObservableReadRequest {
   readonly childContracts?: ChildContractResolver | null;
   readonly fileName: string;
   readonly imports: HookImports;
-  /** Null when no installed or locked Legend State version was resolved. */
-  readonly installedLegendState?: InstalledLegendState | null;
   readonly observableBindings: ReadonlySet<string>;
   readonly observableFields?: ObservableFieldFacts;
   readonly sourceFile: ts.SourceFile;
@@ -55,7 +53,6 @@ export function findObservableReadPractices(
       ),
     ]),
     childContracts: request.childContracts ?? null,
-    installedLegendState: request.installedLegendState ?? null,
     observableFields: request.observableFields ?? NO_OBSERVABLE_FIELD_FACTS,
   };
   const findings: LegendPracticeFinding[] = [];
@@ -102,17 +99,13 @@ function collectCallFindings(
 }
 
 /**
- * `replace-legacy-use-value` already rewrites a legacy call's direct selector to the observable
- * whenever the package exports `useValue`, so a second finding would repeat that instruction.
+ * `replace-legacy-use-value` already rewrites a legacy call's direct selector to the observable,
+ * so a second finding would repeat that instruction.
  */
 function legacyMigrationCollapsesSelector(
   call: ts.CallExpression,
   input: DirectUseValueInput,
   scan: ObservableReadScan,
 ): boolean {
-  return (
-    input.kind === "selector" &&
-    !isCanonicalUseValueCall(call, scan.imports) &&
-    scan.installedLegendState?.useValueExport !== "missing"
-  );
+  return input.kind === "selector" && !isCanonicalUseValueCall(call, scan.imports);
 }

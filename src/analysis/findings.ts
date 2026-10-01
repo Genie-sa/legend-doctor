@@ -188,20 +188,14 @@ function baseStateClassification(
   );
 }
 
-/**
- * A cluster converts its members together, so a member written in the same stretch commits with
- * the converted state; a member written in another stretch still commits separately.
- */
+/** A cluster converts its members together, but a member written in another stretch still commits separately. */
 function splitClusterClassification(
   state: StateCandidate,
   { splitCommitCompanions }: StateClassificationInputs,
   cluster: StateCluster | undefined,
 ): ClassifiedState | null {
   const clustered = clusterStateClassification(cluster, state);
-  const apart = splitCommitCompanions.filter(
-    (companion) => !companion.sameStretch || !cluster?.members.includes(companion.state),
-  );
-  return clustered && splitCommitVerdict(clustered, state, apart);
+  return clustered && splitCommitVerdict(clustered, state, splitCommitCompanions);
 }
 
 interface StateVerdictResolution extends ResolvedStateClassification {

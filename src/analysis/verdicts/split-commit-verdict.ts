@@ -1,4 +1,4 @@
-import type { ClassifiedState, SplitCommitCompanion, StateCandidate } from "../model.js";
+import type { ClassifiedState, StateCandidate } from "../model.js";
 
 /**
  * An observable conversion publishes through `useSyncExternalStore`. When the renderer may commit
@@ -8,15 +8,14 @@ import type { ClassifiedState, SplitCommitCompanion, StateCandidate } from "../m
 export function splitCommitVerdict(
   classified: ClassifiedState,
   state: StateCandidate,
-  companions: readonly SplitCommitCompanion[],
+  companions: readonly StateCandidate[],
 ): ClassifiedState {
   if (classified.action !== "use-observable" || companions.length === 0) {
     return classified;
   }
-  const reasons = companions.map(({ sameStretch, state: companion }) =>
-    sameStretch
-      ? `React state \`${companion.valueName}\` is set in the same stretch, and React 18 renders the observable's sync-lane notification ahead of that default-lane update`
-      : `React state \`${companion.valueName}\` is set in another stretch of the same command, which may run after React commits the observable's notification`,
+  const reasons = companions.map(
+    (companion) =>
+      `React state \`${companion.valueName}\` is set in another stretch of the same command, which may run after React commits the observable's notification`,
   );
   return {
     action: "review-state",

@@ -176,13 +176,13 @@ export const gptmeHookCases = [
     target: "gptme-webui",
   },
   {
-    action: "review-state",
+    action: "use-observable",
     file: "components/settings/ServerApiKeySettings.tsx",
     hook: "useState",
     line: 39,
     name: "apiKey",
     rationale:
-      "The save handler clears the draft at line 98 and the `finally` clears `isSaving` at line 108 in the same synchronous stretch after the awaited fetch. The web UI runs React DOM 18 `createRoot`, which renders an observable's sync-lane notification ahead of that default-lane update, so converting the draft alone commits a cleared field while the form still shows saving.",
+      "Each keystroke rerenders the whole settings form while only the Input at line 192 and the Save button at line 202 read the draft; React 19 commits the post-await clear at line 98 and the `finally` reset of `isSaving` at line 108 in one render, so converting the draft alone tears nothing.",
     target: "gptme-webui",
   },
   {
@@ -217,13 +217,12 @@ export const gptmeHookCases = [
   },
   {
     action: "use-observable",
-    enforced: false,
     file: "components/SetupWizard.tsx",
     hook: "useState",
     line: 163,
     name: "apiKey",
     rationale:
-      "Uncertain: each keystroke rerenders the whole setup wizard while only the Input at line 1160 and the Save button read the draft, but the post-await clear at line 546 runs on React DOM 18 `createRoot`, and the analyzer reports `step` as co-written in that stretch; the call path that writes `step` there is not established.",
+      "Each keystroke rerenders the whole setup wizard while only the Input at line 1159 and the Save button at line 1183 read the draft; React 19 commits the post-await clear at line 546 together with any `step` write in the same stretch, so the conversion tears nothing.",
     target: "gptme-webui",
   },
   {
@@ -238,14 +237,13 @@ export const gptmeHookCases = [
     target: "gptme-webui",
   },
   {
-    action: "review-state",
-    enforced: false,
+    action: "use-observable",
     file: "components/TaskCreationDialog.tsx",
     hook: "useState",
     line: 44,
     name: "isLoading",
     rationale:
-      "Known false positive (atomic split after await): the analyzer emits use-observable, but `setIsLoading(false)` at line 77 runs after the form resets at lines 65-73 in the same post-await continuation. As an observable it commits first on the sync lane, so the dialog briefly shows the old task text with Create Task enabled before the reset commits.",
+      "Only the Create Task button at lines 271-272 reads the flag, so `setIsLoading(true)` at line 52 rerenders the whole dialog for one button; React 19 commits `setIsLoading(false)` at line 77 with the form reset at lines 65-73 in one render, so the conversion tears nothing.",
     target: "gptme-webui",
   },
   {

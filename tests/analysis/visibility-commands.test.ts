@@ -1,10 +1,7 @@
 import { actions, requireValue } from "./harness.js";
-import { analyzeSource, analyzeSourceWith } from "../../src/analysis/analyze-source.js";
+import { analyzeSource } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-
-/** React 18 may commit an observable apart from its companions, so a lone write stretch does not convert. */
-const REACT_18 = { syncLaneRendersAlone: true };
 
 test("keeps observable ownership when a sibling command opens one exact leaf", () => {
   assert.deepEqual(
@@ -76,7 +73,7 @@ test("isolates visibility when companion writes occur only while closing", () =>
     "review-state",
   );
 
-  const nonVisibility = analyzeSourceWith(
+  const nonVisibility = analyzeSource(
     `
     import { useState } from "react";
     function Control(_props: unknown) { return null; }
@@ -84,14 +81,13 @@ test("isolates visibility when companion writes occur only while closing", () =>
       const [draft, setDraft] = useState("");
       const [active, setActive] = useState(false);
       const reset = () => { setDraft(""); setActive(false); };
-      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help />
         <button onClick={() => setActive(true)}>Activate</button>
         <Control draft={draft} active={active} onReset={reset} />
       </main>;
     }
   `,
     "fixture.tsx",
-    REACT_18,
   );
   assert.equal(
     requireValue(nonVisibility.find((finding) => finding.name === "active")).action,
@@ -136,7 +132,7 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
     `if (nextOpen) setDraft("next"); setOpen(nextOpen);`,
     `nextOpen = false; if (!nextOpen) setDraft(""); setOpen(nextOpen);`,
   ]) {
-    const unsafe = analyzeSourceWith(
+    const unsafe = analyzeSource(
       `
       import { useState } from "react";
       function Dialog(_props: unknown) { return null; }
@@ -144,14 +140,13 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
         const [draft, setDraft] = useState("");
         const [open, setOpen] = useState(false);
         const changeOpen = (nextOpen: boolean) => { ${unsafeChange} };
-        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help />
           <button onClick={() => setOpen(true)}>Open</button>
           <Dialog draft={draft} open={open} onOpenChange={changeOpen} />
         </main>;
       }
     `,
       "fixture.tsx",
-      REACT_18,
     );
     assert.equal(
       requireValue(unsafe.find((finding) => finding.name === "open")).action,

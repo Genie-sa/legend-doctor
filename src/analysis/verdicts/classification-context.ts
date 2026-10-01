@@ -5,7 +5,6 @@ import type {
   DialogPayloadCut,
   DirectReturnCallSite,
   SiblingRenderCut,
-  SplitCommitCompanion,
   StateCandidate,
   StateSubtree,
   StateUsage,
@@ -80,7 +79,7 @@ export interface StateClassificationInputs {
   readonly sourceComponents: ReadonlySet<string>;
   readonly sourceFile: ts.SourceFile;
   /** Rendered React states the renderer may commit apart from this state's observable. */
-  readonly splitCommitCompanions: readonly SplitCommitCompanion[];
+  readonly splitCommitCompanions: readonly StateCandidate[];
   readonly state: StateCandidate;
   /** The callee instructions for a new subscription in this file name. */
   readonly subscriptionHook: string;
@@ -99,9 +98,6 @@ export function withoutCompanionWrites(
     ...inputs,
     hasCompanionWrites: false,
     hasNonClosingCompanionWrites: false,
-    splitCommitCompanions: inputs.splitCommitCompanions.filter(
-      (companion) => !companion.sameStretch,
-    ),
   };
 }
 

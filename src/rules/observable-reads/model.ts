@@ -1,6 +1,5 @@
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { HookImports } from "../../core/imports.js";
-import type { InstalledLegendState } from "../../core/types.js";
 import type { ObservableFieldFacts } from "./field-writes.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
@@ -14,8 +13,6 @@ export interface ObservableReadScan {
   /** Primitive leaves seeded by a literal, so a read never activates a lazy source. */
   readonly plainSeedPaths?: ReadonlySet<string>;
   readonly imports: HookImports;
-  /** Null when no installed or locked Legend State version was resolved. */
-  readonly installedLegendState: InstalledLegendState | null;
   readonly observableBindings: ReadonlySet<string>;
   readonly observableFields: ObservableFieldFacts;
   readonly childContracts: ChildContractResolver | null;

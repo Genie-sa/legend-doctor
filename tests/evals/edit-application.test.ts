@@ -40,16 +40,14 @@ function evaluation(root: string, practices: LegendPracticeFinding[]): Evaluatio
           root,
           report: {
             capabilities: {
-              concurrentRoot: false,
               disabledRules: [],
-              legendState: null,
               reactCompiler: false,
             },
             files: 1,
             findings: [],
             hooks: { effects: 0, states: 0, total: 0 },
             practices,
-            schemaVersion: 6,
+            schemaVersion: 7,
           },
         },
       ],

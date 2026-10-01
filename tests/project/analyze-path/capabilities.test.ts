@@ -3,10 +3,9 @@ import {
   disabledPracticeRules,
   enabledPracticeRules,
 } from "../../../src/practices/practice-rules.js";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { analyzePath } from "../../../src/project/analyze-path/analyze-path.js";
 import assert from "node:assert/strict";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -20,7 +19,6 @@ test("the report names the toolchain facts and the practice rules they switched 
   const report = await analyzePath(root);
 
   assert.equal(report.capabilities.reactCompiler, true);
-  assert.equal(report.capabilities.legendState, null);
   assert.deepEqual(
     report.capabilities.disabledRules.map(({ files, reason, rule }) => ({ files, reason, rule })),
     [{ files: 1, reason: "react-compiler", rule: "observable-clone-writes" }],
@@ -34,12 +32,7 @@ test("a root without gates reports every practice rule as active", async (testCo
 
   const report = await analyzePath(root);
 
-  assert.deepEqual(report.capabilities, {
-    concurrentRoot: false,
-    disabledRules: [],
-    legendState: null,
-    reactCompiler: false,
-  });
+  assert.deepEqual(report.capabilities, { disabledRules: [], reactCompiler: false });
   assert.equal(report.scope, undefined);
   assert.ok(report.practices.some((practice) => practice.action === "narrow-observable-write"));
 });
@@ -59,37 +52,16 @@ test("a file filter narrows analysis while the context keeps every target file",
   assert.ok(report.practices.every((practice) => practice.location.file === "other.tsx"));
 });
 
-test("rule gates read the installed Legend State export shape and the React Compiler flag", () => {
-  const missingUseValue = {
-    concurrentRoot: false,
-    legendBabel: false,
-    legendState: {
-      source: "installed" as const,
-      syncExport: "missing" as const,
-      useValueExport: "missing" as const,
-      version: "2.1.0",
-    },
-  };
-
+test("only the React Compiler flag gates a practice rule", () => {
   assert.deepEqual(
-    disabledPracticeRules({ ...missingUseValue, reactCompiler: true }).map(({ reason, rule }) => ({
+    disabledPracticeRules({ legendBabel: false, reactCompiler: true }).map(({ reason, rule }) => ({
       reason,
       rule,
     })),
-    [
-      { reason: "legend-v2-tracking", rule: "plain-primitive-projection" },
-      { reason: "use-value-export-missing", rule: "legacy-use-value" },
-      { reason: "react-compiler", rule: "observable-clone-writes" },
-      { reason: "legend-v2-tracking", rule: "observable-tracking" },
-    ],
+    [{ reason: "react-compiler", rule: "observable-clone-writes" }],
   );
   assert.deepEqual(
-    enabledPracticeRules({
-      concurrentRoot: false,
-      legendBabel: false,
-      legendState: null,
-      reactCompiler: false,
-    }).map((rule) => rule.id),
+    enabledPracticeRules({ legendBabel: false, reactCompiler: false }).map((rule) => rule.id),
     [
       "plain-primitive-projection",
       "legacy-use-value",
@@ -101,65 +73,6 @@ test("rule gates read the installed Legend State export shape and the React Comp
       "in-place-memo-keys",
       "memo-parent-captures",
       "observable-ownership",
-    ],
-  );
-});
-
-test("the tracking rule is switched off under Legend State 2.x, where auto tracking may be enabled app-wide", () => {
-  const gates = (version: string): readonly string[] =>
-    disabledPracticeRules({
-      concurrentRoot: false,
-      legendBabel: false,
-      legendState: {
-        source: "installed",
-        syncExport: "available",
-        useValueExport: "alias",
-        version,
-      },
-      reactCompiler: false,
-    }).map(({ reason, rule }) => `${rule}:${reason}`);
-
-  assert.deepEqual(gates("2.1.15"), [
-    "plain-primitive-projection:legend-v2-tracking",
-    "observable-tracking:legend-v2-tracking",
-  ]);
-  assert.deepEqual(gates("3.0.0-beta.48"), []);
-  assert.deepEqual(gates("next"), []);
-});
-
-test("a workspace package gates rules by the Legend State it installs, others by the root's", async (testContext) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-capabilities-workspace-"));
-  testContext.after(() => rm(root, { force: true, recursive: true }));
-  const files = {
-    "bun.lock": '{ "packages": { "@legendapp/state": ["@legendapp/state@3.0.0-beta.48", ""] } }',
-    "package.json": JSON.stringify({ name: "root", private: true, workspaces: ["apps/*"] }),
-    "apps/legacy/package.json": JSON.stringify({ name: "legacy" }),
-    "apps/legacy/node_modules/@legendapp/state/package.json": JSON.stringify({
-      name: "@legendapp/state",
-      version: "2.1.15",
-    }),
-    "apps/legacy/src/pages.tsx": CLONE_WRITE_COMPONENT,
-    "apps/current/package.json": JSON.stringify({ name: "current" }),
-    "apps/current/src/pages.tsx": CLONE_WRITE_COMPONENT,
-  };
-  for (const [file, source] of Object.entries(files)) {
-    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
-    await writeFile(path.join(root, file), source, "utf8");
-  }
-
-  const report = await analyzePath(root);
-
-  assert.equal(report.capabilities.legendState?.source, "lockfile");
-  assert.equal(report.capabilities.legendState.version, "3.0.0-beta.48");
-  assert.deepEqual(
-    report.capabilities.disabledRules.map(({ files: count, reason, rule }) => ({
-      count,
-      reason,
-      rule,
-    })),
-    [
-      { count: 1, reason: "legend-v2-tracking", rule: "observable-tracking" },
-      { count: 1, reason: "legend-v2-tracking", rule: "plain-primitive-projection" },
     ],
   );
 });

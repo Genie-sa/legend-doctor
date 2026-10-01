@@ -19,8 +19,7 @@ import { unwrapTransparentExpression } from "../core/analysis-ast.js";
 
 /**
  * A co-written state converted alone still saves its owner's render in an event that writes no
- * other state of the owner. React 19 commits its remaining stretches with their companions; React
- * 18 may commit the observable first when a library calls the event outside React's event system.
+ * other state of the owner. React commits its remaining stretches with their companions.
  */
 export function classifyCowrittenState(
   inputs: StateClassificationInputs,
@@ -30,8 +29,7 @@ export function classifyCowrittenState(
   if (
     classified.action !== "review-state" ||
     classified.abstentionReason !== "atomic-transition-unproven" ||
-    !inputs.hasCompanionWrites ||
-    analysis.syncLaneRendersAlone
+    !inputs.hasCompanionWrites
   ) {
     return classified;
   }

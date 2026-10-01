@@ -11,7 +11,8 @@ optimizations behind Legend State.
 
 ## Quick start
 
-Requires Node.js 22 or newer.
+Requires Node.js 22 or newer. The analysis assumes React 19 or later, the React Native New Architecture, and the
+latest `@legendapp/state` v3.
 
 ```bash
 npx legend-doctor /absolute/path/to/app --actionable
@@ -102,12 +103,12 @@ useEffect(() => syncWithExternalSystem(), []);
 
 Every finding has a disposition:
 
-| Disposition | Meaning                                                                   |
-| ----------- | ------------------------------------------------------------------------- |
-| `change`    | Proven. Apply the instruction as written.                                 |
-| `candidate` | One fact is missing. The finding names the source to read.                |
-| `keep`      | Correct as is. Leave the React or lifecycle boundary alone.               |
-| `style`     | Cleaner form. Apply only when the installed Legend State API supports it. |
+| Disposition | Meaning                                                     |
+| ----------- | ----------------------------------------------------------- |
+| `change`    | Proven. Apply the instruction as written.                   |
+| `candidate` | One fact is missing. The finding names the source to read.  |
+| `keep`      | Correct as is. Leave the React or lifecycle boundary alone. |
+| `style`     | Cleaner form with no runtime effect.                        |
 
 See [REPORT.md](REPORT.md) for review blockers, grouped transitions, subscription plans, and runtime measurements.
 Validate suggested edits with your formatter, typecheck, and tests, then rescan.

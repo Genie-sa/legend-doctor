@@ -76,16 +76,14 @@ function practiceFinding(
 function report(findings: HookFinding[], practices: LegendPracticeFinding[] = []): AnalysisReport {
   return {
     capabilities: {
-      concurrentRoot: false,
       disabledRules: [],
-      legendState: null,
       reactCompiler: false,
     },
     files: 1,
     findings,
     hooks: { effects: findings.length, states: 0, total: findings.length },
     practices,
-    schemaVersion: 6,
+    schemaVersion: 7,
     subscriptionAnalysis: {
       coverage: { otherAction: 0, planned: 0, total: 1, unresolved: 1 },
       inventory: [

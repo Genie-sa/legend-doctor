@@ -43,12 +43,6 @@ test("splits divergent leaf reads into per-leaf subscriptions", () => {
 
 test("splits a legacy whole-object subscription with the hook the source calls", () => {
   const [finding] = analyzeLegendPractices({
-    installedLegendState: {
-      source: "lockfile",
-      syncExport: "available",
-      useValueExport: "missing",
-      version: "3.0.0-beta.30",
-    },
     sourceText: `
     import { observable } from "@legendapp/state";
     import { use$ } from "@legendapp/state/react";

@@ -116,7 +116,10 @@ yield of each candidate proof. The [unseen-app pin audit](audit-2026-09-28-unsee
 false positives they carry. On October 1 the 14 `use-mount` and `use-unmount` labels and one first-render scroll
 restoration review moved to `keep-effect`: Legend's `useMount` runs the same `useEffect` in production, and
 `tests/runtime/lifecycle-aliases.test.ts` pins the only difference, a skipped teardown in Strict Mode's simulated
-development unmount. A red corpus job remains a real gate; unit-suite success does not override it.
+development unmount. The [latest-versions audit](audit-2026-10-01-latest-versions.md) supersedes the concurrent-root,
+lockfile, and legacy-root findings above: on the supported React 19 and latest Legend State v3 baseline, it retires 25
+transaction labels, marks six whose non-React observers span the writes as known misses, and labels every legacy
+hook rename as style. A red corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay
 

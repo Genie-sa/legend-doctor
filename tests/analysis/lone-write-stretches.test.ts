@@ -6,10 +6,10 @@ import test from "node:test";
 const CHROME =
   "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />";
 
-function verdict(source: string, name: string, syncLaneRendersAlone = false): string {
-  const finding: HookFinding | undefined = analyzeSourceWith(source, "fixture.tsx", {
-    syncLaneRendersAlone,
-  }).find((candidate) => candidate.hook === "useState" && candidate.name === name);
+function verdict(source: string, name: string): string {
+  const finding: HookFinding | undefined = analyzeSourceWith(source, "fixture.tsx", {}).find(
+    (candidate) => candidate.hook === "useState" && candidate.name === name,
+  );
   return finding?.abstentionReason
     ? `${finding.action}/${finding.abstentionReason}`
     : (finding?.action ?? "missing");
@@ -55,10 +55,6 @@ const LONE_CLICK = board("", `${LANE_LEAF}<button onClick={() => setLane("todo")
 
 test("a host event that writes the state alone in a broad mounted tree converts it", () => {
   assert.equal(verdict(LONE_CLICK, "lane"), "use-observable");
-});
-
-test("React 18 may commit a drag callback's observable apart from its companion", () => {
-  assert.equal(verdict(LONE_CLICK, "lane", true), "review-state/atomic-transition-unproven");
 });
 
 test("a bare setter handed to a child is a lone write stretch", () => {

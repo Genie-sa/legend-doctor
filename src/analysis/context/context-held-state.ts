@@ -9,7 +9,6 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceAnalysis } from "../proofs/contracts.js";
 import { groupSettableStatesByOwner } from "../companion-writes.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
-import { subscriptionHookExport } from "../../core/use-value-import.js";
 import ts from "typescript";
 
 const MAX_LISTED_CONSUMER_FILES = 4;
@@ -433,13 +432,12 @@ function contextCluster(
   };
 }
 
-/** Consumer files' imports are unknown here, so their instruction names the hook the package exports. */
+/** Consumer files' imports are unknown here, so their instruction names `useValue`. */
 function contextMessage(
   contextName: string,
   names: readonly string[],
-  { analysis, survey }: ClusterMessageScope,
+  { survey }: ClusterMessageScope,
 ): string {
-  const subscriptionHook = subscriptionHookExport(analysis.legendState);
   const quoted = names.map((name) => `\`${name}\``).join(", ");
   const observables = names.map((name) => `\`${name}$\``).join(", ");
   const listed = survey.files
@@ -449,7 +447,7 @@ function contextMessage(
   const hidden = survey.files.length - MAX_LISTED_CONSUMER_FILES;
   const more = hidden > 0 ? ` and ${hidden} more` : "";
   const plural = survey.files.length === 1 ? "" : "s";
-  return `Replace the context-held React state (${quoted}) with observables published through \`${contextName}\`: create ${observables} with \`useObservable\` in the provider, put the observables themselves in the provider value so its identity no longer changes on writes, and turn each setter into the observable's \`set\`. In the ${survey.files.length} consumer file${plural} (${listed}${more}) replace each destructured field with \`${subscriptionHook}\` on that observable at the same statement, so a consumer re-renders only for the fields it reads and writers never subscribe; the provider stops rendering on these writes.`;
+  return `Replace the context-held React state (${quoted}) with observables published through \`${contextName}\`: create ${observables} with \`useObservable\` in the provider, put the observables themselves in the provider value so its identity no longer changes on writes, and turn each setter into the observable's \`set\`. In the ${survey.files.length} consumer file${plural} (${listed}${more}) replace each destructured field with \`useValue\` on that observable at the same statement, so a consumer re-renders only for the fields it reads and writers never subscribe; the provider stops rendering on these writes.`;
 }
 
 function shortFileName(file: string): string {

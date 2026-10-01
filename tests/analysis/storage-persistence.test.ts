@@ -1,5 +1,5 @@
-import { analyzeSource, analyzeSourceWith } from "../../src/analysis/analyze-source.js";
 import type { HookFinding } from "../../src/core/types.js";
+import { analyzeSource } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import { requireValue } from "./harness.js";
 import test from "node:test";
@@ -108,21 +108,6 @@ test("persisting an existing observable's value names syncObservable and both st
     requireValue(effect).message,
     /ObservablePersistLocalStorage \| ObservablePersistSessionStorage/u,
   );
-});
-
-test("an installed Legend State without the sync entry point keeps every persistence effect in React", () => {
-  const legendState = {
-    source: "installed" as const,
-    syncExport: "missing" as const,
-    useValueExport: "alias" as const,
-    version: "2.1.15",
-  };
-  const findings = analyzeSourceWith(MIGRATING_TARGET, "fixture.tsx", { legendState });
-  const [effect] = effectsOf(findings);
-
-  assert.equal(findings.find((finding) => finding.name === "target")?.action, "review-state");
-  assert.equal(requireValue(effect).action, "keep-effect");
-  assert.doesNotMatch(requireValue(effect).message, /synced/u);
 });
 
 test("a hydration guard read only inside the persistence effect still counts as consumed", () => {

@@ -4,17 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { withProject } from "../with-project.js";
 
-/** `useValue` first ships in 3.0.0-beta.35, so beta.30 exports only `useSelector` and `use$`. */
-const WITHOUT_USE_VALUE = "3.0.0-beta.30";
-const WITH_USE_VALUE = "3.0.0-beta.48";
 const OWNER_PADDING = "\n".repeat(150);
-
-function lockfile(version: string): string {
-  return JSON.stringify({
-    lockfileVersion: 3,
-    packages: { "": {}, "node_modules/@legendapp/state": { version } },
-  });
-}
 
 /** A conditional subtree owns `expanded`, so the verdict extracts a leaf that subscribes to it. */
 function conditionalSubtree(legendImport: string): string {
@@ -70,11 +60,10 @@ const PANEL_BODY = `
 `;
 
 async function findingsUnder(
-  version: string,
   files: Readonly<Record<string, string>>,
 ): Promise<readonly HookFinding[]> {
   let findings: readonly HookFinding[] = [];
-  await withProject({ ...files, "package-lock.json": lockfile(version) }, async (root) => {
+  await withProject(files, async (root) => {
     ({ findings } = await analyzePath(root));
   });
   return findings;
@@ -88,53 +77,38 @@ function messageFor(findings: readonly HookFinding[], file: string, action: stri
   return finding.message;
 }
 
-test("a leaf instruction names the subscription hook the file imports or the package exports", async () => {
-  const files = {
+test("a leaf instruction names the subscription hook the file imports, else useValue", async () => {
+  const findings = await findingsUnder({
     "imports-use-dollar.tsx": conditionalSubtree(`import { use$ } from "@legendapp/state/react";`),
     "imports-selector.tsx": conditionalSubtree(
       `import { useSelector as select } from "@legendapp/state/react";`,
     ),
     "imports-nothing.tsx": conditionalSubtree(""),
-  };
-  for (const [version, expected] of [
-    [WITHOUT_USE_VALUE, { "imports-nothing.tsx": "useSelector" }],
-    [WITH_USE_VALUE, { "imports-nothing.tsx": "useValue" }],
-  ] as const) {
-    const findings = await findingsUnder(version, files);
-    for (const [file, hook] of Object.entries({
-      "imports-use-dollar.tsx": "use$",
-      "imports-selector.tsx": "select",
-      ...expected,
-    })) {
-      const message = messageFor(findings, file, "use-observable");
-      assert.ok(message.includes(`subscribe there with \`${hook}\`;`), `${version} ${file}`);
-      assert.equal(
-        hook === "useValue" || !message.includes("useValue"),
-        true,
-        `${version} ${file}`,
-      );
-    }
+  });
+  for (const [file, hook] of Object.entries({
+    "imports-use-dollar.tsx": "use$",
+    "imports-selector.tsx": "select",
+    "imports-nothing.tsx": "useValue",
+  })) {
+    const message = messageFor(findings, file, "use-observable");
+    assert.ok(message.includes(`subscribe there with \`${hook}\`;`), file);
+    assert.equal(hook === "useValue" || !message.includes("useValue"), true, file);
   }
 });
 
 test("an observable reaction describes its dependencies by the hook the file calls", async () => {
-  const findings = await findingsUnder(WITHOUT_USE_VALUE, { "Title.tsx": TITLE_EFFECT });
+  const findings = await findingsUnder({ "Title.tsx": TITLE_EFFECT });
   const message = messageFor(findings, "Title.tsx", "use-observe-effect");
   assert.match(message, /dependencies are `use\$` snapshots/u);
   assert.doesNotMatch(message, /useValue/u);
 });
 
-test("a context instruction for consumer files names the hook the package exports", async () => {
-  for (const [version, hook] of [
-    [WITHOUT_USE_VALUE, "useSelector"],
-    [WITH_USE_VALUE, "useValue"],
-  ] as const) {
-    const findings = await findingsUnder(version, {
-      "context.tsx": PANEL_CONTEXT,
-      "PanelBody.tsx": PANEL_BODY,
-      "PanelProvider.tsx": PANEL_PROVIDER,
-    });
-    const message = messageFor(findings, "PanelProvider.tsx", "use-observable");
-    assert.ok(message.includes(`replace each destructured field with \`${hook}\``), version);
-  }
+test("a context instruction for consumer files names useValue", async () => {
+  const findings = await findingsUnder({
+    "context.tsx": PANEL_CONTEXT,
+    "PanelBody.tsx": PANEL_BODY,
+    "PanelProvider.tsx": PANEL_PROVIDER,
+  });
+  const message = messageFor(findings, "PanelProvider.tsx", "use-observable");
+  assert.ok(message.includes("replace each destructured field with `useValue`"));
 });

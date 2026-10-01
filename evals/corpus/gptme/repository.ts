@@ -1,6 +1,5 @@
 import type { CorpusRepository } from "../contracts.js";
 
-/** The web UI declares react-dom ^18.3.1 but creates every root with `createRoot`. */
 export const gptmeRepository = {
   commit: "f7bb34871442bb69d3cbecde49c7ce1f2e22517a",
   name: "gptme",

@@ -6,9 +6,9 @@ import test from "node:test";
 const CHROME =
   "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />";
 
-function states(source: string, syncLaneRendersAlone = false): ReadonlyMap<string, HookFinding> {
+function states(source: string): ReadonlyMap<string, HookFinding> {
   return new Map(
-    analyzeSourceWith(source, "fixture.tsx", { syncLaneRendersAlone })
+    analyzeSourceWith(source, "fixture.tsx", {})
       .filter((finding) => finding.hook === "useState")
       .map((finding) => [finding.name ?? "", finding]),
   );
@@ -95,13 +95,13 @@ const HELPER_IN_STRETCH = panel(`
   };
 `);
 
-test("React 19 keeps a conversion whose co-written state is set in the same stretch", () => {
+test("a conversion whose co-written state is set in the same stretch commits together", () => {
   for (const source of [ONE_STRETCH, HELPER_IN_STRETCH]) {
     assert.equal(verdict(states(source).get("error")), "use-observable");
   }
 });
 
-test("React 19 abstains when one command sets a co-written state in another stretch", () => {
+test("abstains when one command sets a co-written state in another stretch", () => {
   for (const source of [HELPER_BEFORE_FINALLY, THEN_BEFORE_FINALLY, THEN_BEFORE_CATCH]) {
     const error = states(source).get("error");
     assert.equal(verdict(error), "review-state/atomic-transition-unproven");
@@ -122,11 +122,9 @@ test("a companion set in another stretch of the converted write's own function n
       setError("stale");
     };
   `);
-  for (const syncLaneRendersAlone of [false, true]) {
-    const found = states(source, syncLaneRendersAlone);
-    assert.equal(verdict(found.get("error")), "use-observable");
-    assert.equal(verdict(found.get("pending")), "use-observable");
-  }
+  const found = states(source);
+  assert.equal(verdict(found.get("error")), "use-observable");
+  assert.equal(verdict(found.get("pending")), "use-observable");
 });
 
 test("a companion set before its command first suspends never splits the conversion", () => {
@@ -154,39 +152,7 @@ test("a companion that only another command sets never splits the conversion", (
   assert.equal(verdict(states(source).get("error")), "use-observable");
 });
 
-test("React 18 abstains on a co-write in the same stretch, which React 19 commits together", () => {
-  const source = `
-    import { useState } from "react";
-    import { report } from "./report";
-    export function Panel({ load }: { load: () => Promise<void> }) {
-      const [pending, setPending] = useState(false);
-      const [error, setError] = useState("");
-      const stop = () => {
-        setPending(false);
-      };
-      const submit = async () => {
-        await load();
-        setError("stale");
-        stop();
-      };
-      report(pending);
-      return (
-        <section>
-          ${CHROME}
-          <p>{error}</p>
-          <button onClick={() => void submit()}>Go</button>
-        </section>
-      );
-    }
-  `;
-  assert.equal(verdict(states(source).get("error")), "use-observable");
-  assert.match(
-    states(source, true).get("error")?.message ?? "",
-    /React state `pending` is set in the same stretch, and React 18 renders/u,
-  );
-});
-
-test("a React host event commits what it runs before suspending once on every renderer", () => {
+test("a React host event commits what it runs before suspending once", () => {
   const source = panel(`
     const start = async () => {
       setPending(true);
@@ -198,9 +164,7 @@ test("a React host event commits what it runs before suspending once on every re
       void start();
     };
   `);
-  for (const syncLaneRendersAlone of [false, true]) {
-    assert.equal(verdict(states(source, syncLaneRendersAlone).get("error")), "use-observable");
-  }
+  assert.equal(verdict(states(source).get("error")), "use-observable");
 });
 
 test("a conversion written before its command first suspends never splits", () => {
@@ -211,12 +175,10 @@ test("a conversion written before its command first suspends never splits", () =
     };
     useEffect(() => submit(), []);
   `);
-  for (const syncLaneRendersAlone of [false, true]) {
-    assert.equal(verdict(states(source, syncLaneRendersAlone).get("error")), "use-observable");
-  }
+  assert.equal(verdict(states(source).get("error")), "use-observable");
 });
 
-test("React 19 renders a companion the converted write's function awaited before it", () => {
+test("React renders a companion the converted write's function awaited before it", () => {
   const source = panel(`
     const probe = async () => {
       await load();
@@ -228,10 +190,6 @@ test("React 19 renders a companion the converted write's function awaited before
     };
   `);
   assert.equal(verdict(states(source).get("error")), "use-observable");
-  assert.equal(
-    verdict(states(source, true).get("error")),
-    "review-state/atomic-transition-unproven",
-  );
 });
 
 test("a cluster that converts together keeps the members it writes in one stretch", () => {
@@ -251,7 +209,7 @@ test("a cluster that converts together keeps the members it writes in one stretc
       );
     }
   `;
-  const found = states(source, true);
+  const found = states(source);
   assert.equal(verdict(found.get("count")), "use-observable");
   assert.equal(verdict(found.get("label")), "use-observable");
 });
@@ -297,8 +255,8 @@ test("the split-commit review asks whether an intermediate commit is acceptable"
   assert.equal(error?.assumption?.ifConfirmed, "use-observable");
 });
 
-function dragBoard(element: string): string {
-  return `
+test("React commits the co-writes of a component's event prop together", () => {
+  const source = `
     import { useState } from "react";
     import { Draggable } from "react-draggable";
     import { report } from "./report";
@@ -313,25 +271,10 @@ function dragBoard(element: string): string {
         <section>
           ${CHROME}
           <p>{origin}</p>
-          ${element}
+          <Draggable onStart={() => { setOrigin("top"); startDrag(); }}>{children}</Draggable>
         </section>
       );
     }
   `;
-}
-
-const CO_WRITE = `() => { setOrigin("top"); startDrag(); }`;
-
-test("React 18 abstains on a co-write in a component's event prop that React may not dispatch", () => {
-  const source = dragBoard(`<Draggable onStart={${CO_WRITE}}>{children}</Draggable>`);
   assert.equal(verdict(states(source).get("origin")), "use-observable");
-  assert.equal(
-    verdict(states(source, true).get("origin")),
-    "review-state/atomic-transition-unproven",
-  );
-});
-
-test("React 18 commits the co-writes of a host element's event prop once", () => {
-  const source = dragBoard(`<button onClick={${CO_WRITE}}>Drop</button>`);
-  assert.equal(verdict(states(source, true).get("origin")), "use-observable");
 });

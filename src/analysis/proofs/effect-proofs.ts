@@ -40,7 +40,6 @@ function classifyEffectFor(
   const {
     childContracts,
     imports,
-    legendState,
     moduleScopeBindings,
     nonProductionHarness,
     subscriptionHook,
@@ -61,7 +60,6 @@ function classifyEffectFor(
       ? (useObservableBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)
       : EMPTY_BINDINGS,
     imports,
-    legendState,
     useRefBindings: imports.useRef,
     reactNamespaces: imports.reactNamespaces,
     moduleScopeBindings,

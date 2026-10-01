@@ -6,7 +6,6 @@ import type {
   EffectCandidate,
   EffectStateScope,
   SiblingRenderCut,
-  SplitCommitCompanion,
   StateCandidate,
   StateCluster,
   StateSubtree,
@@ -18,7 +17,6 @@ import type { ConfirmationSet } from "../assumptions/confirmations.js";
 import type { EffectDraftAnalysis } from "../../rules/effect-drafts/model.js";
 import type { HookImports } from "../../core/imports.js";
 import type { IndependentStateWrites } from "../independent-writes.js";
-import type { InstalledLegendState } from "../../core/types.js";
 import type { KeyedSelectionAnalysis } from "../../rules/keyed-selection/keyed-selection.js";
 import type { MaterialityPolicy } from "../constants.js";
 import type { ReactCommitContext } from "../../rules/react-commit-sensitivity/react-commit-sensitivity.js";
@@ -34,12 +32,10 @@ export interface ParsedSourceAnalysisOptions {
   readonly confirmations?: ConfirmationSet | null;
   readonly deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
   readonly imports?: HookImports;
-  readonly legendState: InstalledLegendState | null;
   readonly legendValueBridges: ReadonlyMap<string, ReadonlySet<string>>;
   readonly materiality?: MaterialityPolicy;
   readonly sourceComponents: ReadonlySet<string>;
   readonly stateFlow: StateFlowIndex;
-  readonly syncLaneRendersAlone?: boolean;
 }
 
 export interface SourceAnalysis {
@@ -55,7 +51,6 @@ export interface SourceAnalysis {
   readonly fileName: string;
   readonly imports: HookImports;
   readonly knownComponents: ReadonlySet<string>;
-  readonly legendState: InstalledLegendState | null;
   readonly legendValueBridges: ReadonlyMap<string, ReadonlySet<string>>;
   readonly lifecycleRegions: ReadonlySet<ts.Node>;
   readonly localComponents: ReadonlySet<string>;
@@ -72,7 +67,6 @@ export interface SourceAnalysis {
   readonly states: readonly StateCandidate[];
   /** The callee instructions for a new subscription in this file name. */
   readonly subscriptionHook: string;
-  readonly syncLaneRendersAlone: boolean;
   readonly unmatchedStateCalls: readonly ts.CallExpression[];
   readonly usageByState: ReadonlyMap<StateCandidate, StateUsage>;
   readonly useObservableBindingsByOwner: ReadonlyMap<RuntimeFunctionLike, ReadonlySet<string>>;
@@ -103,7 +97,7 @@ export interface OwnershipProofs {
   readonly effectStateScopes: ReadonlyMap<RuntimeFunctionLike, EffectStateScope>;
   readonly observableSelectionOwners: ReadonlySet<RuntimeFunctionLike>;
   readonly propertyLocalObjectDrafts: ReadonlySet<StateCandidate>;
-  readonly splitCommitCompanions: ReadonlyMap<StateCandidate, readonly SplitCommitCompanion[]>;
+  readonly splitCommitCompanions: ReadonlyMap<StateCandidate, readonly StateCandidate[]>;
   readonly statesWithCompanionWrites: ReadonlySet<StateCandidate>;
 }
 
