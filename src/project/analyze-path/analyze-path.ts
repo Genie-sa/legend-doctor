@@ -19,7 +19,6 @@ import { DEFAULT_MATERIALITY } from "../../analysis/constants.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
 import type { SubscriptionMeasurement } from "../../core/subscriptions.js";
 import { attachSubscriptionMeasurements } from "../subscription-measurements.js";
-import { filesRenderingSyncLaneAlone } from "../concurrent-root-workspace.js";
 import path from "node:path";
 import { stat } from "node:fs/promises";
 import ts from "typescript";
@@ -97,7 +96,6 @@ async function analyzePathInternal(
     coverage,
     includeDetails,
     materiality,
-    syncLaneFiles: await filesRenderingSyncLaneAlone(target.files),
   });
   const report = analysisReport(
     entries.length,

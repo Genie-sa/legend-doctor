@@ -13,9 +13,7 @@ function evaluation(disposition: LegendPracticeFinding["disposition"]): Evaluati
   const report: AnalysisReport = {
     files: 1,
     capabilities: {
-      concurrentRoot: false,
       disabledRules: [],
-      legendState: null,
       reactCompiler: false,
     },
     findings: [],
@@ -31,7 +29,7 @@ function evaluation(disposition: LegendPracticeFinding["disposition"]): Evaluati
         practice: "reactivity",
       },
     ],
-    schemaVersion: 6,
+    schemaVersion: 7,
   };
   return {
     failures: [],

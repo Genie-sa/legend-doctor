@@ -7,11 +7,13 @@ import { legendMusicPracticeCases } from "./legend-music/practice-cases.js";
 import { legendPhotosPracticeCases } from "./legend-photos/practice-cases.js";
 import { noriPracticeCases } from "./nori/practice-cases.js";
 import { noutubePracticeCases } from "./noutube/practice-cases.js";
+import { openWebuiReactNativePracticeCases } from "./open-webui-react-native/practice-cases.js";
 import { zenborgPracticeCases } from "./zenborg/practice-cases.js";
 
 export const goldPracticeCases: readonly GoldPracticeCase[] = [
   ...legendMusicPracticeCases,
   ...hoaluPracticeCases,
+  ...openWebuiReactNativePracticeCases,
   ...legendPhotosPracticeCases,
   ...legendAppsPracticeCases,
   ...noutubePracticeCases,

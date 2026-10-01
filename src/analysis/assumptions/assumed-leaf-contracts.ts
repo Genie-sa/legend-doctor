@@ -101,13 +101,6 @@ export class AssumedLeafContracts implements ChildContractResolver {
     );
   }
 
-  public componentCallbackPropRunsOnlyInHostEvents(
-    componentName: string,
-    propName: string,
-  ): boolean {
-    return this.#base.componentCallbackPropRunsOnlyInHostEvents(componentName, propName);
-  }
-
   public componentCallbackPropRunsOnlyInReactEffect(
     componentName: string,
     propName: string,

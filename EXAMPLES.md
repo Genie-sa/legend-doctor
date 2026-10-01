@@ -5,7 +5,6 @@ Use these examples after reading a finding. They show the shape of an edit, not 
 - Apply `change` findings as written.
 - Inspect `candidate` findings first.
 - Preserve ownership, timing, mount identity, keys, cleanup, and atomic updates.
-- Check the installed Legend State version and types.
 - When a finding carries `edits`, apply those instead of retyping the example. See
   [REPORT.md](REPORT.md#machine-applicable-edits).
 
@@ -417,27 +416,9 @@ batch(() => {
 
 This preserves an atomic transition: subscribers see one completed update.
 
-The render saving depends on the renderer. A legacy root (React Native's old architecture or `ReactDOM.render`) renders
-each write made outside a React event separately, so both actions are changes there. When every React renderer in the
-workspace can only create concurrent roots (React Native 0.82 or later, React DOM 19 or later, including published
-packages' peer ranges other than `*`, which constrains nothing), React already commits the writes in one render. React Native 0.74 to 0.81 qualifies when every
-app host enables the New Architecture on each platform it builds: an assigned `RCT_NEW_ARCH_ENABLED` or
-`Podfile.properties.json` flag with no app delegate override, `newArchEnabled=true` in `gradle.properties`, or the Expo
-app config flag, which Expo SDK 53 and 54 default to on. React DOM 18 qualifies when each package that declares it
-creates a root with `createRoot` or `hydrateRoot` imported from `react-dom/client`, runs under Next.js 13.1 or later or
-under Expo 48 or later with React Native Web 0.19 or later, or is a private package that such a host reaches through
-workspace dependencies, and no source file in the workspace imports a root API from `react-dom` itself or
-`react-native-web`, calls `ReactDOM.render`, `hydrate`, or `AppRegistry.runApplication`, or uses a `react-dom` binding
-the scan cannot follow. The finding is then a review: only a non-React
+React already commits writes from one synchronous stretch in one render, so both actions are reviews: only a non-React
 observer that reads several of the written paths, such as `observe`, a computed, or an `onChange` listener, still sees
-them apart. `syncObservable` persistence queues changes until a microtask, so it saves them together either way. The report's `capabilities.concurrentRoot` records that proof for the analysis root.
-
-A legacy root also commits writes once when they run synchronously inside a React event handler, because React DOM and
-the React Native renderer dispatch host events inside `batchedUpdates`. The finding is the same review when the writes'
-function reaches nothing but host event props: a lowercase DOM element, a `styled.input` style wrapper of one, or a
-`requireNativeComponent` view, directly, through `useCallback` or a plain alias, through a call from such a handler, or
-through a child that only forwards the prop to one. Any other use, an `await` before the writes, or a timer around them keeps the change. React Native's
-`Pressable` stays a change because its source is not visible to the analysis.
+them apart. `syncObservable` persistence queues changes until a microtask, so it saves them together either way.
 
 ### Preserve a conditional child's mount behavior
 
@@ -711,9 +692,7 @@ const filters$ = useObservable(
 `synced` and `syncObservable` come from `@legendapp/state/sync`; the plugin matching the storage the effect wrote comes
 from `@legendapp/state/persist-plugins/local-storage`. The finding stays a candidate because the storage key, the
 serialized shape, and any mount effect that hydrates the same key need a manual check. While the persisted state stays
-React, or a prop drives the write, the effect is `keep-effect`. When the installed `@legendapp/state` has no `sync`
-entry point, every such effect stays `keep-effect` and `capabilities.disabledRules` lists
-`browser-storage-persistence` with reason `sync-export-missing`.
+React, or a prop drives the write, the effect is `keep-effect`.
 
 ### Keep an effect while changing its storage
 
@@ -760,7 +739,7 @@ menu$.open.set((value) => !value); // Before
 menu$.open.toggle(); // After
 ```
 
-`toggle-observable` is a style finding. Check that the installed API supports `toggle()`.
+`toggle-observable` is a style finding.
 
 ## Own observables once
 

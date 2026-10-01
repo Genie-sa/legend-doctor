@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { analyzePath } from "../../../src/project/analyze-path/analyze-path.js";
 import assert from "node:assert/strict";
 import os from "node:os";
@@ -55,40 +55,6 @@ test("surfaces legacy hook practices in read-only files through the path prefilt
       ["legacy.ts", "replace-legacy-use-value"],
       ["use-t.ts", "replace-legacy-use-value"],
     ],
-  );
-});
-
-test("downgrades replace-legacy-use-value to style when the installed useValue is an alias", async (testContext) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-installed-alias-"));
-  testContext.after(() => rm(root, { force: true, recursive: true }));
-  const packageDirectory = path.join(root, "node_modules", "@legendapp", "state");
-  await mkdir(packageDirectory, { recursive: true });
-  await writeFile(
-    path.join(packageDirectory, "package.json"),
-    JSON.stringify({ name: "@legendapp/state", version: "3.0.0-beta.48" }),
-    "utf8",
-  );
-  await writeFile(
-    path.join(packageDirectory, "react.d.ts"),
-    "export { useSelector as use$, useSelector, useSelector as useValue };",
-    "utf8",
-  );
-  await writeFile(
-    path.join(root, "legacy.ts"),
-    `
-      import { use$ } from "@legendapp/state/react";
-      export function read(value: string) { return use$(() => value); }
-    `,
-    "utf8",
-  );
-
-  const report = await analyzePath(root);
-
-  assert.equal(requireValue(report.practices[0]).action, "replace-legacy-use-value");
-  assert.equal(requireValue(report.practices[0]).disposition, "style");
-  assert.match(
-    requireValue(report.practices[0]).evidence.join("\n") ?? "",
-    /alias of useSelector in the installed @legendapp\/state@3\.0\.0-beta\.48/u,
   );
 });
 

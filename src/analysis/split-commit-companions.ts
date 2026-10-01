@@ -1,7 +1,6 @@
-import type { SetterMutation, SplitCommitCompanion, StateCandidate, StateUsage } from "./model.js";
+import type { SetterMutation, StateCandidate, StateUsage } from "./model.js";
 import { collectSetterMutations, groupSettableStatesByOwner } from "./companion-writes.js";
 import { executionOwner, executionUnit, functionEntryKey } from "../core/execution-units.js";
-import type { ComponentPropHostDispatch } from "../rules/child-contract/host-event-dispatch.js";
 import type { ExecutionUnit } from "../core/execution-units.js";
 import { PAIRED_CLUSTER_SIZE } from "./constants.js";
 import type { ProgramReach } from "../project/source-components/write-units.js";
@@ -9,7 +8,6 @@ import type { SourceAnalysis } from "./proofs/contracts.js";
 import { fileReach } from "../project/source-components/synchronous-reach.js";
 import { localReachResolver } from "../project/source-components/reach-resolvers.js";
 import { programReach } from "../project/source-components/write-units.js";
-import { runsOnlyInHostEvents } from "../rules/child-contract/host-event-dispatch.js";
 import ts from "typescript";
 
 const PROMISE_CALLBACK_METHODS: ReadonlySet<string> = new Set(["catch", "finally", "then"]);
@@ -22,43 +20,37 @@ interface CommandWrite {
   readonly commands: ReadonlySet<string>;
   /** Entries of the functions whose stretches run the write. */
   readonly functions: ReadonlySet<string>;
-  /** React commits the write with the rest of the host event that runs it, on every renderer. */
-  readonly inHostEvent: boolean;
   /** The entry of the write's function when a suspension in that function precedes the write. */
   readonly resumedIn: string | null;
   /** A promise settlement starts the write's stretch: it follows a suspension or is a callback. */
   readonly settled: boolean;
-  readonly stretches: ReadonlySet<string>;
 }
 
 /**
  * A converted state publishes through `useSyncExternalStore`, whose notification React commits on
  * the sync lane in a microtask; a setter called outside a React event waits for the default lane.
- * React 19 renders both lanes together when they are pending at that flush, so a companion misses
- * it only when a promise settlement resumes the companion's write in another function. React 18
- * renders the sync lane alone, so a companion written in the same stretch commits apart too. Every
- * renderer commits what a React host event runs before it suspends at once, as it did before.
+ * React renders both lanes together when they are pending at that flush, so a companion misses it
+ * only when a promise settlement resumes the companion's write in another function.
  *
  * For each state, the rendered React states of its owner that the renderer may commit apart from it.
  */
 export function findSplitCommitCompanions(
   analysis: SourceAnalysis,
-): ReadonlyMap<StateCandidate, readonly SplitCommitCompanion[]> {
+): ReadonlyMap<StateCandidate, readonly StateCandidate[]> {
   const reach = programReach([fileReach(analysis.sourceFile, localReachResolver)]);
-  const componentProp: ComponentPropHostDispatch = (componentName, propName) =>
-    analysis.childContracts?.componentCallbackPropRunsOnlyInHostEvents(componentName, propName) ??
-    false;
   return new Map(
     [...groupSettableStatesByOwner(analysis.states)]
       .filter(([, ownerStates]) => ownerStates.length >= PAIRED_CLUSTER_SIZE)
       .flatMap(([owner, ownerStates]) => {
         const render = functionEntryKey(owner);
         const writes = collectSetterMutations(owner, ownerStates).map((mutation) =>
-          commandWrite(mutation, componentProp, (unit) =>
+          commandWrite(mutation, (unit) =>
             reach.callingUnits(unit).filter(({ entry }) => entry !== render),
           ),
         );
-        return ownerStates.map((state) => [state, companionsOf(state, writes, analysis)] as const);
+        return ownerStates.map(
+          (state) => [state, companionsOf(state, writes, analysis.usageByState)] as const,
+        );
       }),
   );
 }
@@ -66,23 +58,19 @@ export function findSplitCommitCompanions(
 /** A promise callback runs in its own stretch, in the command that registered it. */
 function commandWrite(
   { call, state }: SetterMutation,
-  componentProp: ComponentPropHostDispatch,
   callingUnits: ProgramReach["callingUnits"],
 ): CommandWrite {
   const unit = executionUnit(call);
   const registration = promiseRegistration(call);
   const stretches = registration ? [unit] : callingUnits(unit);
   const callers = callingUnits(commandEntry(unit, registration));
-  const settled = unit.resumed || registration !== null;
   return {
     callers: new Set(callers.map(({ key }) => key)),
     commands: new Set(callers.map(({ entry }) => entry)),
     functions: new Set(stretches.map(({ entry }) => entry)),
-    inHostEvent: !settled && runsOnlyInHostEvents(call, componentProp),
     resumedIn: unit.resumed ? unit.entry : null,
-    settled,
+    settled: unit.resumed || registration !== null,
     state,
-    stretches: new Set(stretches.map(({ key }) => key)),
   };
 }
 
@@ -106,49 +94,39 @@ function promiseRegistration(node: ts.Node): ts.CallExpression | null {
     : null;
 }
 
-/** A companion written in another stretch as well as the same one still commits apart. */
 function companionsOf(
   state: StateCandidate,
   writes: readonly CommandWrite[],
-  { syncLaneRendersAlone, usageByState }: SourceAnalysis,
-): SplitCommitCompanion[] {
-  const splits = new Map<StateCandidate, boolean>();
-  for (const converted of writes.filter((write) => write.state === state && !write.inHostEvent)) {
-    for (const companion of writes) {
-      const sameStretch = intersects(converted.stretches, companion.stretches);
-      if (
-        companion.state !== state &&
-        intersects(converted.commands, companion.commands) &&
-        (sameStretch
-          ? syncLaneRendersAlone
-          : settlesApart(converted, companion, syncLaneRendersAlone)) &&
-        isObservedByCommits(usageByState.get(companion.state))
-      ) {
-        splits.set(companion.state, sameStretch && (splits.get(companion.state) ?? true));
-      }
-    }
-  }
-  return [...splits].map(([companion, sameStretch]) => ({ sameStretch, state: companion }));
+  usageByState: ReadonlyMap<StateCandidate, StateUsage>,
+): StateCandidate[] {
+  const converted = writes.filter((write) => write.state === state);
+  return [
+    ...new Set(
+      writes
+        .filter(
+          (companion) =>
+            companion.state !== state &&
+            converted.some((write) => settlesApart(write, companion)) &&
+            isObservedByCommits(usageByState.get(companion.state)),
+        )
+        .map((companion) => companion.state),
+    ),
+  ];
 }
 
 /**
  * Stretches of one function are separated by a suspension that may already let React commit
  * between them, and so is a write that runs before its command first suspends from any later one.
- * Only a settlement resumes another function's stretch without that chance. React 19 renders a
+ * Only a settlement resumes another function's stretch without that chance. React renders a
  * companion that the converted write's function awaited earlier together with the sync-lane flush.
  */
-function settlesApart(
-  converted: CommandWrite,
-  companion: CommandWrite,
-  syncLaneRendersAlone: boolean,
-): boolean {
+function settlesApart(converted: CommandWrite, companion: CommandWrite): boolean {
   return (
     converted.settled &&
     companion.settled &&
+    intersects(converted.commands, companion.commands) &&
     !intersects(converted.functions, companion.functions) &&
-    (syncLaneRendersAlone ||
-      converted.resumedIn === null ||
-      !companion.callers.has(converted.resumedIn))
+    (converted.resumedIn === null || !companion.callers.has(converted.resumedIn))
   );
 }
 

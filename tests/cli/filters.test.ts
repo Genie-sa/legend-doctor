@@ -9,19 +9,19 @@ import test from "node:test";
 
 type CliReport = AnalysisReport & { hidden: { findings: number; practices: number } };
 
-test("--disposition change keeps only change findings and practices", async (testContext) => {
+test("--disposition candidate keeps only candidate findings and practices", async (testContext) => {
   const root = await writeFixtureRoot();
   testContext.after(() => rm(root, { force: true, recursive: true }));
 
-  const { stdout } = await run(process.execPath, [CLI_PATH, root, "--disposition", "change"]);
+  const { stdout } = await run(process.execPath, [CLI_PATH, root, "--disposition", "candidate"]);
   // SAFETY: the CLI exited successfully, so stdout is a serialized AnalysisReport.
   const report = JSON.parse(stdout) as AnalysisReport;
 
-  assert.equal(report.schemaVersion, 6);
+  assert.equal(report.schemaVersion, 7);
   assert.equal(report.findings.length, 0);
   assert.deepEqual(
     report.practices.map((practice) => [practice.action, practice.disposition]),
-    [["assign-observable-fields", "change"]],
+    [["assign-observable-fields", "candidate"]],
   );
 });
 

@@ -162,7 +162,7 @@ function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPractic
     owner.kind === "component" ? `\`${owner.name}\`` : `components calling \`${owner.name}\``;
   const consequence = `the read runs in \`${owner.name}\` outside a tracking context (a subscription hook, observer, or a reactive component), so ${subject} never re-render${owner.kind === "component" ? "s" : ""} when \`${path}\` changes`;
   const initializer = directRenderInitializer(read);
-  const hook = subscriptionHookCallee(scan.sourceFile, scan.installedLegendState);
+  const hook = subscriptionHookCallee(scan.sourceFile);
   const instruction = renderReadInstruction(read, { hook, initializer, path }, scan.sourceFile);
   return withEdits(
     {

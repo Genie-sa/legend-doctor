@@ -2,7 +2,6 @@ export { createAnalysisContext } from "./project/analyze-path/analysis-context.j
 export { analyzePath, analyzePathDetailed } from "./project/analyze-path/analyze-path.js";
 export { analyzeSource } from "./analysis/analyze-source.js";
 export { AnalysisProject, createAnalysisFile } from "./project/analysis-project.js";
-export { resolveInstalledLegendState } from "./project/legend-state-package.js";
 export { GitScopeError, resolveScopedFiles } from "./project/git-scope.js";
 export {
   PRACTICE_RULES,
@@ -45,16 +44,12 @@ export type {
   EffectAction,
   HookAction,
   HookFinding,
-  InstalledLegendState,
   LegendPracticeAction,
   LegendPracticeFinding,
-  LegendStateSource,
   ReportCapabilities,
   ReportScope,
   ReviewGuidance,
   SourcePosition,
   StateAction,
-  SyncExport,
   TextEdit,
-  UseValueExport,
 } from "./core/types.js";

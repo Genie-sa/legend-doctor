@@ -82,7 +82,7 @@ test("replaces namespace legacy selectors without matching unrelated functions",
   }
 });
 
-test("keeps replace-legacy-use-value as a change when no installed package is resolved", () => {
+test("marks replace-legacy-use-value as style because useValue is an alias of the legacy hooks", () => {
   const [finding] = analyzeLegendPractices({
     sourceText: `
     import { useSelector } from "@legendapp/state/react";
@@ -91,44 +91,6 @@ test("keeps replace-legacy-use-value as a change when no installed package is re
     fileName: "fixture.ts",
   });
   assert.equal(requireValue(finding).action, "replace-legacy-use-value");
-  assert.equal(requireValue(finding).disposition, "change");
-});
-
-test("marks replace-legacy-use-value as style when the installed useValue is an alias", () => {
-  const [finding] = analyzeLegendPractices({
-    sourceText: `
-      import { use$ } from "@legendapp/state/react";
-      export function read(value: string) { return use$(() => value); }
-    `,
-    fileName: "fixture.ts",
-    importedObservables: new Set(),
-    importedObservableFactories: new Set(),
-    installedLegendState: {
-      source: "installed",
-      syncExport: "available",
-      useValueExport: "alias",
-      version: "3.0.0-beta.48",
-    },
-  });
   assert.equal(requireValue(finding).disposition, "style");
-  assert.match(requireValue(finding).evidence.join("\n") ?? "", /no runtime effect/u);
-});
-
-test("suppresses replace-legacy-use-value when the installed package lacks useValue", () => {
-  const findings = analyzeLegendPractices({
-    sourceText: `
-      import { useSelector } from "@legendapp/state/react";
-      export function read(value: string) { return useSelector(() => value); }
-    `,
-    fileName: "fixture.ts",
-    importedObservables: new Set(),
-    importedObservableFactories: new Set(),
-    installedLegendState: {
-      source: "installed",
-      syncExport: "missing",
-      useValueExport: "missing",
-      version: "2.1.0",
-    },
-  });
-  assert.deepEqual(findings, []);
+  assert.match(requireValue(finding).evidence.join("\n"), /no runtime effect/u);
 });

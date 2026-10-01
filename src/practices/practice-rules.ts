@@ -27,10 +27,7 @@ export type PracticeRuleId =
   | "observable-tracking"
   | "observable-transactions";
 
-export type PracticeRuleGateReason =
-  | "legend-v2-tracking"
-  | "react-compiler"
-  | "use-value-export-missing";
+export type PracticeRuleGateReason = "react-compiler";
 
 export interface PracticeRuleGate {
   readonly detail: string;
@@ -65,29 +62,8 @@ const REACT_COMPILER_GATE: PracticeRuleGate = {
   reason: "react-compiler",
 };
 
-const USE_VALUE_MISSING_GATE: PracticeRuleGate = {
-  detail: "the installed @legendapp/state/react entry point does not export useValue",
-  reason: "use-value-export-missing",
-};
-
-const LEGEND_V2_TRACKING_GATE: PracticeRuleGate = {
-  detail:
-    "@legendapp/state 2.x can track render-time get() calls through enableReactTracking({ auto: true }), an app-wide setting the analyzer cannot see",
-  reason: "legend-v2-tracking",
-};
-
-const FIRST_VERSION_WITHOUT_AUTO_TRACKING = 3;
-
-function isLegendBeforeV3(capabilities: FileCapabilities): boolean {
-  const version = capabilities.legendState?.version;
-  const major = version === undefined ? Number.NaN : Number(version.split(".")[0]);
-  return Number.isInteger(major) && major < FIRST_VERSION_WITHOUT_AUTO_TRACKING;
-}
-
 export const PRACTICE_RULES: readonly PracticeRule[] = [
   {
-    disabledWhen: (capabilities) =>
-      isLegendBeforeV3(capabilities) ? LEGEND_V2_TRACKING_GATE : null,
     id: "plain-primitive-projection",
     needsObservableBindings: true,
     run: ({ imports, observableBindings, request }) =>
@@ -103,15 +79,12 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
       }),
   },
   {
-    disabledWhen: (capabilities) =>
-      capabilities.legendState?.useValueExport === "missing" ? USE_VALUE_MISSING_GATE : null,
     id: "legacy-use-value",
     needsObservableBindings: false,
     run: ({ imports, observableBindings, request }) =>
       findLegacyUseValuePractices({
         fileName: request.fileName,
         imports,
-        installedLegendState: request.capabilities.legendState,
         observableBindings,
         sourceFile: request.sourceFile,
       }),
@@ -121,8 +94,6 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
     needsObservableBindings: true,
     run: ({ imports, observableBindings, request }) =>
       collectTransactionFindings({
-        childContracts: request.childContracts,
-        concurrentRoot: request.capabilities.concurrentRoot,
         fileName: request.fileName,
         imports,
         observableBindings,
@@ -141,7 +112,6 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
         childContracts: request.childContracts,
         fileName: request.fileName,
         imports,
-        installedLegendState: request.capabilities.legendState,
         observableBindings,
         observableFields,
         sourceFile: request.sourceFile,
@@ -167,8 +137,6 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
       findObservableTogglePractices(request.sourceFile, request.fileName, observableBindings),
   },
   {
-    disabledWhen: (capabilities) =>
-      isLegendBeforeV3(capabilities) ? LEGEND_V2_TRACKING_GATE : null,
     id: "observable-tracking",
     needsObservableBindings: true,
     run: ({ imports, observableBindings, request }) =>
@@ -177,7 +145,6 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
         fileName: request.fileName,
         imports,
         legendBabel: request.capabilities.legendBabel,
-        installedLegendState: request.capabilities.legendState,
         observableBindings,
         sourceFile: request.sourceFile,
       }),

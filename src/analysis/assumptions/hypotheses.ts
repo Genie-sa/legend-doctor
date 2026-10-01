@@ -89,9 +89,7 @@ function atomicTransitionHypothesis(scope: HypothesisScope): Hypothesis {
 function splitCommitHypothesis(scope: HypothesisScope): Hypothesis {
   const { inputs } = scope;
   const { splitCommitCompanions, state } = inputs;
-  const companionNames = joinNames(
-    splitCommitCompanions.map((companion) => companion.state.valueName),
-  );
+  const companionNames = joinNames(splitCommitCompanions.map((companion) => companion.valueName));
   return {
     inputs: { ...inputs, splitCommitCompanions: [] },
     question: `Converted alone, \`${state.valueName}\` may commit apart from React state ${companionNames} in the same transition; confirm no render, effect, or reader depends on them changing in the same commit.`,

@@ -1,11 +1,9 @@
 import { AnalysisProject, isSupportedAnalysisFile } from "../analysis-project.js";
 import { readFile, readdir } from "node:fs/promises";
-import type { InstalledLegendState } from "../legend-state-package.js";
 import type { SourceIndex } from "../source-components/source-components.js";
 import { buildSourceIndexFromFiles } from "../source-components/source-components.js";
 import { loadWorkspaceSources } from "../workspace/source-closure.js";
 import path from "node:path";
-import { resolveInstalledLegendState } from "../legend-state-package.js";
 
 const IGNORED_DIRECTORIES = new Set([
   ".git",
@@ -21,7 +19,6 @@ const IGNORED_DIRECTORIES = new Set([
 const SOURCE_READ_BATCH_SIZE = 64;
 
 export interface AnalysisContext {
-  installedLegendState: InstalledLegendState | null;
   project: AnalysisProject;
   sourceIndex: SourceIndex;
   root: string;
@@ -42,7 +39,6 @@ export async function createAnalysisContextFromFiles(
   const resolution = await loadWorkspaceSources(root, sources);
   const project = new AnalysisProject(sources);
   return {
-    installedLegendState: await resolveInstalledLegendState(root),
     project,
     root,
     sourceIndex: buildSourceIndexFromFiles(root, project.files, resolution),

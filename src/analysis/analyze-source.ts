@@ -1,6 +1,5 @@
 import { DEFAULT_MATERIALITY, EMPTY_BINDINGS } from "./constants.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "./model.js";
-import type { HookFinding, InstalledLegendState } from "../core/types.js";
 import type { ParsedSourceAnalysisOptions, SourceAnalysis } from "./proofs/contracts.js";
 import {
   SOURCE_FILE_OPTIONS,
@@ -21,6 +20,7 @@ import { effectCandidate, stateCandidate } from "./candidates.js";
 import type { AnalysisFile } from "../project/analysis-project.js";
 import type { ChildContractResolver } from "../rules/child-contract/model.js";
 import type { ConfirmationSet } from "./assumptions/confirmations.js";
+import type { HookFinding } from "../core/types.js";
 import type { HookImports } from "../core/imports.js";
 import type { MaterialityPolicy } from "./constants.js";
 import type { ReactCommitContext } from "../rules/react-commit-sensitivity/react-commit-sensitivity.js";
@@ -50,10 +50,8 @@ export function analyzeSource(
 
 export interface SourceTextAnalysisOptions {
   readonly confirmations?: ConfirmationSet | null;
-  readonly legendState?: InstalledLegendState | null;
   readonly materiality?: MaterialityPolicy;
   readonly sourceComponents?: ReadonlySet<string>;
-  readonly syncLaneRendersAlone?: boolean;
 }
 
 export function analyzeSourceWith(
@@ -61,10 +59,8 @@ export function analyzeSourceWith(
   fileName: string,
   {
     confirmations = null,
-    legendState = null,
     materiality = DEFAULT_MATERIALITY,
     sourceComponents = new Set(),
-    syncLaneRendersAlone = false,
   }: SourceTextAnalysisOptions,
 ): HookFinding[] {
   const sourceFile = ts.createSourceFile(
@@ -78,12 +74,10 @@ export function analyzeSourceWith(
     childContracts: null,
     confirmations,
     deferredCallbackHooks: new Map(),
-    legendState,
     legendValueBridges: new Map(),
     materiality,
     sourceComponents,
     stateFlow: new StateFlowIndex(),
-    syncLaneRendersAlone,
   });
 }
 
@@ -94,13 +88,11 @@ export interface SourceAnalysisRequest {
   readonly deferredCallbackHooks?: ReadonlyMap<string, ReadonlySet<number>>;
   readonly file: AnalysisFile;
   readonly hookImports?: HookImports | null;
-  readonly legendState?: InstalledLegendState | null;
   readonly legendValueBridges?: ReadonlyMap<string, ReadonlySet<string>>;
   readonly materiality?: MaterialityPolicy;
   readonly reportFileName: string;
   readonly sourceComponents?: ReadonlySet<string>;
   readonly stateFlow?: StateFlowIndex;
-  readonly syncLaneRendersAlone?: boolean;
 }
 
 export function analyzeSourceFile({
@@ -110,13 +102,11 @@ export function analyzeSourceFile({
   deferredCallbackHooks = new Map(),
   file,
   hookImports,
-  legendState = null,
   legendValueBridges = new Map(),
   materiality = DEFAULT_MATERIALITY,
   reportFileName,
   sourceComponents = new Set(),
   stateFlow = new StateFlowIndex(),
-  syncLaneRendersAlone = false,
 }: SourceAnalysisRequest): HookFinding[] {
   return analyzeParsedSource(file.sourceFile, reportFileName, {
     analysisRoot,
@@ -124,12 +114,10 @@ export function analyzeSourceFile({
     confirmations,
     deferredCallbackHooks,
     imports: hookImports ?? collectHookImports(file.sourceFile),
-    legendState,
     legendValueBridges,
     materiality,
     sourceComponents,
     stateFlow,
-    syncLaneRendersAlone,
   });
 }
 
@@ -181,14 +169,13 @@ function sourceAnalysisBase(
     confirmations = null,
     deferredCallbackHooks,
     imports = collectHookImports(sourceFile),
-    legendState,
     legendValueBridges,
     materiality = DEFAULT_MATERIALITY,
     sourceComponents,
     stateFlow,
   } = options;
   const { effects, localComponents, reactCommit, states, unmatchedStateCalls, usageByState } =
-    hookInventory(sourceFile, imports, legendState);
+    hookInventory(sourceFile, imports);
   return {
     ...ownerBindingIndexes(sourceFile, imports),
     ...commitScopedIndexes(reactCommit, effects),
@@ -200,7 +187,6 @@ function sourceAnalysisBase(
     fileName,
     imports,
     knownComponents: new Set([...localComponents, ...sourceComponents]),
-    legendState,
     legendValueBridges,
     localComponents,
     materiality,
@@ -214,8 +200,7 @@ function sourceAnalysisBase(
     sourceFile,
     stateFlow,
     states,
-    subscriptionHook: subscriptionHookCallee(sourceFile, legendState),
-    syncLaneRendersAlone: options.syncLaneRendersAlone ?? false,
+    subscriptionHook: subscriptionHookCallee(sourceFile),
     unmatchedStateCalls,
     usageByState,
   };
@@ -231,15 +216,15 @@ interface HookInventory {
 }
 
 /** Every hook call in the file with its usage, the raw material every proof reads. */
-function hookInventory(
-  sourceFile: ts.SourceFile,
-  imports: HookImports,
-  legendState: InstalledLegendState | null,
-): HookInventory {
+function hookInventory(sourceFile: ts.SourceFile, imports: HookImports): HookInventory {
   const reactCommit = collectReactCommitContext(sourceFile, imports);
   const effects = reactCommit.effectCalls.map((call) => effectCandidate(call, imports));
   const { states, unmatchedStateCalls } = collectStateCandidates(sourceFile, imports);
-  const usageScope = stateUsageScope({ effects, imports, legendState, reactCommit });
+  const usageScope: StateUsageScope = {
+    effectNodes: reactCommit.lifecycleRegions,
+    imports,
+    persistenceSinks: persistenceSinkEffects(effects),
+  };
   return {
     effects,
     localComponents: collectLocalComponents(sourceFile, imports),
@@ -247,26 +232,6 @@ function hookInventory(
     states,
     unmatchedStateCalls,
     usageByState: new Map(states.map((state) => [state, collectStateUsage(state, usageScope)])),
-  };
-}
-
-interface StateUsageInputs {
-  readonly effects: readonly EffectCandidate[];
-  readonly imports: HookImports;
-  readonly legendState: InstalledLegendState | null;
-  readonly reactCommit: ReactCommitContext;
-}
-
-function stateUsageScope({
-  effects,
-  imports,
-  legendState,
-  reactCommit,
-}: StateUsageInputs): StateUsageScope {
-  return {
-    effectNodes: reactCommit.lifecycleRegions,
-    imports,
-    persistenceSinks: persistenceSinkEffects(effects, legendState),
   };
 }
 

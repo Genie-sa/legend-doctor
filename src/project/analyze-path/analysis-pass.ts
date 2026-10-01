@@ -4,7 +4,6 @@ import type {
   AnalysisReport,
   DisabledRule,
   HookFinding,
-  InstalledLegendState,
   LegendPracticeFinding,
   ReportScope,
 } from "../../core/types.js";
@@ -22,12 +21,10 @@ import {
 } from "./coverage-stages.js";
 import type { AnalysisContext } from "./analysis-context.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
-import { ConcurrentRootResolver } from "../concurrent-root-workspace.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import type { FileCapabilities } from "../capabilities.js";
 import type { FunctionCoverageEntry } from "./coverage-stages.js";
 import type { HookImports } from "../../core/imports.js";
-import { InstalledLegendStateResolver } from "../installed-legend-state-resolver.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
 import { SCHEMA_VERSION } from "../../core/types.js";
 import { StateFlowIndex } from "../state-flow/state-flow.js";
@@ -35,7 +32,6 @@ import type { SubscriptionInventory } from "../../core/subscriptions.js";
 import { buildSubscriptionAnalysis } from "../../report/subscription-plans.js";
 import { collectHookImports } from "../../core/imports.js";
 import { createChildContractResolver } from "./child-contracts.js";
-import { disabledEffectRules } from "../../rules/effects/browser-storage-persistence.js";
 import { disabledPracticeRules } from "../../practices/practice-rules.js";
 import { filesWhere } from "../capabilities.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
@@ -69,7 +65,6 @@ interface AnalysisPassOptions {
   coverage: AnalysisCoverageLedger | null;
   includeDetails: boolean;
   materiality: MaterialityPolicy;
-  syncLaneFiles: ReadonlySet<string>;
 }
 
 interface AnalysisAccumulator {
@@ -84,10 +79,7 @@ interface AnalysisPass extends AnalysisPassOptions {
   accumulator: AnalysisAccumulator;
   compiledFiles: ReadonlySet<string>;
   legendBabelFiles: ReadonlySet<string>;
-  concurrentFiles: ReadonlySet<string>;
-  legendStates: ReadonlyMap<string, InstalledLegendState | null>;
   rootCompiles: boolean;
-  rootRendersConcurrently: boolean;
 }
 
 export function analysisFileEntries(
@@ -127,22 +119,11 @@ export async function runAnalysisPass(
 ): Promise<AnalysisPass> {
   const reactCompiler = new ToolchainResolver(REACT_COMPILER);
   const legendBabel = new ToolchainResolver(LEGEND_BABEL);
-  const concurrentRoots = new ConcurrentRootResolver();
   const practiceFiles = legendPracticeFiles(entries, options.includeDetails);
-  const [
-    compiledFiles,
-    legendBabelFiles,
-    rootCompiles,
-    concurrentFiles,
-    rootRendersConcurrently,
-    legendStates,
-  ] = await Promise.all([
+  const [compiledFiles, legendBabelFiles, rootCompiles] = await Promise.all([
     filesWhere(practiceFiles, (file) => reactCompiler.packageEnablesFile(file)),
     filesWhere(practiceFiles, (file) => legendBabel.packageEnablesFile(file)),
     reactCompiler.enablesDirectory(options.context.root),
-    filesWhere(practiceFiles, (file) => concurrentRoots.rendersFileConcurrently(file)),
-    concurrentRoots.rendersDirectoryConcurrently(options.context.root),
-    installedLegendStates(entries, options.context.installedLegendState),
   ]);
   const pass: AnalysisPass = {
     ...options,
@@ -154,11 +135,8 @@ export async function runAnalysisPass(
       subscriptions: [],
     },
     compiledFiles,
-    concurrentFiles,
     legendBabelFiles,
-    legendStates,
     rootCompiles,
-    rootRendersConcurrently,
   };
   for (const entry of entries) {
     analyzeFileEntry(entry, pass);
@@ -177,19 +155,6 @@ function legendPracticeFiles(
         (includeDetails || mayContainLegendPractice(entry.analysisFile)),
     )
     .map((entry) => entry.file);
-}
-
-async function installedLegendStates(
-  entries: readonly AnalysisFileEntry[],
-  rootInstall: InstalledLegendState | null,
-): Promise<ReadonlyMap<string, InstalledLegendState | null>> {
-  const resolver = new InstalledLegendStateResolver(rootInstall);
-  const files = entries.filter((entry) => isSupportedEntry(entry)).map((entry) => entry.file);
-  return new Map(
-    await Promise.all(
-      files.map(async (file) => [file, await resolver.resolveForFile(file)] as const),
-    ),
-  );
 }
 
 function analyzeFileEntry(entry: AnalysisFileEntry, pass: AnalysisPass): void {
@@ -244,11 +209,8 @@ function hookFindings(
   pass: AnalysisPass,
   { childContracts, hookImports, stateFlow }: HookFindingScope,
 ): readonly HookFinding[] {
-  const { legendState } = fileCapabilities(entry, pass);
-  recordDisabledRules(pass.accumulator.disabledRules, disabledEffectRules(legendState));
   return analyzeSourceFile({
     file: entry.analysisFile,
-    legendState,
     reportFileName: entry.reportFileName,
     sourceComponents: pass.context.sourceIndex.componentsFor(entry.file),
     stateFlow,
@@ -259,15 +221,12 @@ function hookFindings(
     materiality: pass.materiality,
     confirmations: pass.confirmations,
     analysisRoot: pass.analysisRoot,
-    syncLaneRendersAlone: pass.syncLaneFiles.has(entry.file),
   });
 }
 
 function fileCapabilities(entry: SupportedAnalysisFileEntry, pass: AnalysisPass): FileCapabilities {
   return {
-    concurrentRoot: pass.concurrentFiles.has(entry.file),
     legendBabel: pass.legendBabelFiles.has(entry.file),
-    legendState: pass.legendStates.get(entry.file) ?? null,
     reactCompiler: pass.compiledFiles.has(entry.file),
   };
 }
@@ -376,11 +335,9 @@ export function analysisReport(
     hooks: { effects, states, total: states + effects },
     practices,
     capabilities: {
-      concurrentRoot: pass.rootRendersConcurrently,
       disabledRules: [...disabledRules.values()].toSorted((left, right) =>
         left.rule.localeCompare(right.rule),
       ),
-      legendState: pass.context.installedLegendState,
       reactCompiler: pass.rootCompiles,
     },
     schemaVersion: SCHEMA_VERSION,

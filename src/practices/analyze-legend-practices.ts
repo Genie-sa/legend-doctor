@@ -13,7 +13,6 @@ import type { AnalysisFile } from "../project/analysis-project.js";
 import type { ChildContractResolver } from "../rules/child-contract/model.js";
 import type { FileCapabilities } from "../project/capabilities.js";
 import type { HookImports } from "../core/imports.js";
-import type { InstalledLegendState } from "../project/legend-state-package.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import type { LegendPracticesRequest } from "./model.js";
 import { NO_CAPABILITIES } from "../project/capabilities.js";
@@ -40,7 +39,6 @@ export interface LegendPracticesSourceRequest {
   readonly importedObservableFactories?: ReadonlySet<string>;
   readonly importedObservableKeys?: ReadonlyMap<string, ReadonlySet<string>>;
   readonly importedObservables?: ReadonlySet<string>;
-  readonly installedLegendState?: InstalledLegendState | null;
   readonly sourceText: string;
 }
 
@@ -52,7 +50,6 @@ export function analyzeLegendPractices({
   importedObservableFactories = new Set(),
   importedObservableKeys = new Map(),
   importedObservables = new Set(),
-  installedLegendState = null,
   sourceText,
 }: LegendPracticesSourceRequest): LegendPracticeFinding[] {
   const sourceFile = ts.createSourceFile(
@@ -63,7 +60,7 @@ export function analyzeLegendPractices({
     fileName.endsWith(".tsx") || fileName.endsWith(".jsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   return analyzeParsedLegendPractices({
-    capabilities: { ...NO_CAPABILITIES, legendState: installedLegendState },
+    capabilities: NO_CAPABILITIES,
     childContracts: null,
     fileName,
     importedObservableArrayPaths,

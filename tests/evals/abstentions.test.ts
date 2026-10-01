@@ -50,15 +50,13 @@ function report(findings: HookFinding[]): AnalysisReport {
   return {
     files: 1,
     capabilities: {
-      concurrentRoot: false,
       disabledRules: [],
-      legendState: null,
       reactCompiler: false,
     },
     findings,
     hooks: { effects, states, total: findings.length },
     practices: [],
-    schemaVersion: 6,
+    schemaVersion: 7,
   };
 }
 

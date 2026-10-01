@@ -2,7 +2,7 @@
 
 Field-level detail for the JSON report. Read [README.md](README.md) first.
 
-Version-gate consumers with `schemaVersion`, currently `6`.
+Version-gate consumers with `schemaVersion`, currently `7`.
 
 Grouped state findings may also include additive `transitions` evidence. `writes` lists direct
 setter calls with state names, line/column positions, handler identities, and enclosing control
@@ -18,6 +18,10 @@ literal. Group reviews name unresolved pairs by exact source location. These are
 facts, not a complete migration plan or new permission to convert a review finding. Transported
 setters still depend on the existing child-contract proofs and are not listed as direct writes.
 
+Schema 7 removes `capabilities.legendState` and `capabilities.concurrentRoot`, and the `legend-v2-tracking`,
+`sync-export-missing`, and `use-value-export-missing` gate reasons. The analyzer assumes React 19 or later, the React
+Native New Architecture, and the latest `@legendapp/state` v3, so it no longer resolves versions or renderer roots.
+
 Schema 6 retires the `derive-computed-observable` practice action, which no pinned application, private slice,
 expert replay, or audited scan proposed as a change. No field changes.
 
@@ -31,38 +35,26 @@ and `detector`: no detector consumed the former semantic stage. The experimental
 
 Important fields:
 
-| Field          | Meaning                                                                     |
-| -------------- | --------------------------------------------------------------------------- |
-| `status`       | `ok` or `error`                                                             |
-| `root`         | Base directory for every finding path                                       |
-| `analyzer`     | Tool `version` and compiled `build`                                         |
-| `findings`     | React state and effect findings                                             |
-| `practices`    | Legend State practice findings                                              |
-| `hidden`       | Findings removed by filters                                                 |
-| `capabilities` | Legend State version and exports, React Compiler status, and disabled rules |
-| `scope`        | Active scope flag and loaded context file count                             |
+| Field          | Meaning                                         |
+| -------------- | ----------------------------------------------- |
+| `status`       | `ok` or `error`                                 |
+| `root`         | Base directory for every finding path           |
+| `analyzer`     | Tool `version` and compiled `build`             |
+| `findings`     | React state and effect findings                 |
+| `practices`    | Legend State practice findings                  |
+| `hidden`       | Findings removed by filters                     |
+| `capabilities` | React Compiler status and disabled rules        |
+| `scope`        | Active scope flag and loaded context file count |
 
 Compare reports only when `analyzer.build` matches.
 
-`capabilities.legendState` is `null` when no version is known. Otherwise, `source` says where the version came from:
-
-| `source`    | Meaning                                                                                                                    |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `installed` | The nearest installed `@legendapp/state`; `useValueExport` and `syncExport` are read from its declarations and export map. |
-| `lockfile`  | Nothing is installed, and the nearest lockfile pins exactly one version; its exports come from the published release.      |
-
-A lockfile version newer than the verified releases reports `unknown` exports and gates no rule.
-
-`capabilities.disabledRules` lists each rule the resolved toolchain switched off, with its `rule`, `reason`,
+`capabilities.disabledRules` lists each rule the project's toolchain switched off, with its `rule`, `reason`,
 `detail`, and the number of analyzed `files` that skipped it. A disabled rule reports nothing, so a missing
 finding is not a clean file.
 
-| `disabledRules` reason     | Rules                                               | Meaning                                                                                                        |
-| -------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `legend-v2-tracking`       | `plain-primitive-projection`, `observable-tracking` | `@legendapp/state` 2.x can auto-track render `get()` calls through an app-wide setting the analyzer cannot see |
-| `react-compiler`           | `observable-clone-writes`                           | The React Compiler memoizes by reference, so in-place observable writes would leave memoized consumers stale   |
-| `sync-export-missing`      | `browser-storage-persistence`                       | The resolved package has no `sync` entry point; storage-writing effects stay `keep-effect`                     |
-| `use-value-export-missing` | `legacy-use-value`                                  | The resolved `@legendapp/state/react` entry point does not export `useValue`                                   |
+| `disabledRules` reason | Rules                     | Meaning                                                                                                      |
+| ---------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `react-compiler`       | `observable-clone-writes` | The React Compiler memoizes by reference, so in-place observable writes would leave memoized consumers stale |
 
 Every `review-state` and `review-effect` finding has an `abstentionReason`. It names the main fact or safety rule that
 blocked a proven edit.
@@ -213,8 +205,7 @@ findings cover every use of its `Memo` import, each carries every rename and the
 like `useValue`. Messages and edits keep the callee the source calls, so `use$(x$.get())` becomes `use$(x$)` and
 leaves the rename to `replace-legacy-use-value`; that finding's edits still compose because an in-place edit never
 touches the callee. A new subscription uses the hook the file already imports, preferring `useValue`; when none is
-imported, the edit adds `useValue` beside a retained `@legendapp/state/react` specifier, or `useSelector` when the
-installed or locked Legend State exports no `useValue`. The field is omitted when the edit would drop a comment or
+imported, the edit adds `useValue` beside a retained `@legendapp/state/react` specifier. The field is omitted when the edit would drop a comment or
 a type assertion, when a render read follows an early return or sits in JSX, a branch, or an iteration callback,
 when only a new import declaration would bring the hook into scope, when a render read would reuse a legacy
 binding that the file's legacy migration removes, when a destructure is annotated or its call has type arguments,
@@ -222,7 +213,7 @@ when a legacy binding is referenced other than by a reported call, and when a `M
 specifier another rule adds `useValue` beside. Hoisting instructions, `move-*`, `split-*`, and batching stay prose;
 a render initializer below an early return or `throw` is told to move above it. Every other instruction that names a
 subscription hook, including `useState` and `useEffect` findings, follows the same choice. An instruction for other
-files, such as the consumers of a context, names `useValue`, or `useSelector` when the package lacks `useValue`.
+files, such as the consumers of a context, names `useValue`.
 
 The unit suite applies each supported edit and typechecks the result against the installed `@legendapp/state`
 and React types. The corpus eval applies every emitted edit in memory, per finding and per file, and fails when a

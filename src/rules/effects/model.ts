@@ -1,7 +1,6 @@
 import type { StateCandidate, StateUsage } from "../../analysis/model.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { HookImports } from "../../core/imports.js";
-import type { InstalledLegendState } from "../../core/types.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
 
@@ -22,7 +21,6 @@ export interface CommittedRefContext {
 export interface EffectClassificationContext extends CommittedRefContext {
   readonly childContracts: ChildContractResolver | null;
   readonly imports: HookImports;
-  readonly legendState: InstalledLegendState | null;
   readonly moduleScopeBindings: ReadonlySet<string>;
   readonly stateBySetter: ReadonlyMap<string, StateCandidate>;
   readonly stateByValue: ReadonlyMap<string, StateCandidate>;

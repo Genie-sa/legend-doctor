@@ -17,15 +17,13 @@ function evaluation(practices: LegendPracticeFinding[]): Evaluation {
           repository: "repo",
           root: "/repo/feature",
           report: {
-            schemaVersion: 6,
+            schemaVersion: 7,
             files: 1,
             hooks: { total: 0, states: 0, effects: 0 },
             findings: [],
             practices,
             capabilities: {
-              concurrentRoot: false,
               disabledRules: [],
-              legendState: null,
               reactCompiler: false,
             },
           },

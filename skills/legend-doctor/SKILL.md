@@ -37,10 +37,9 @@ a `message` naming the fix, and `next` commands when one applies. `--fail-on cha
 still has a proven edit, which makes the scan usable as a CI gate; `gate.matched` in the JSON carries the count. Every
 `review-state` and `review-effect` finding has one stable, kebab-case `abstentionReason` naming its primary blocker or
 preservation constraint; non-review findings omit that field. Use the code for automation and the finding's message
-for source-reading guidance. `capabilities.disabledRules` lists the rules the installed toolchain switched off (for
-example `observable-clone-writes` under the React Compiler, or `browser-storage-persistence` when the installed
-`@legendapp/state` has no `sync` entry point) with a stable `reason`, so a missing finding can be told apart from a
-clean file.
+for source-reading guidance. `capabilities.disabledRules` lists the rules the project's toolchain switched off (such as
+`observable-clone-writes` under the React Compiler) with a stable `reason`, so a missing finding can be told apart from
+a clean file.
 
 ## Dispositions
 
@@ -49,7 +48,7 @@ clean file.
 | `change`    | Apply the instruction. Structural proof is complete.                                            |
 | `candidate` | Inspect the named source. Edit only when it proves the missing timing, ownership, or type fact. |
 | `keep`      | Preserve the current React or lifecycle boundary.                                               |
-| `style`     | Apply only when the installed Legend API supports the equivalent form.                          |
+| `style`     | Optional cleanup with no runtime effect.                                                        |
 
 Candidate practices are visible with `--disposition candidate` and hidden by `--actionable`; they are outside
 optimization precision scoring.

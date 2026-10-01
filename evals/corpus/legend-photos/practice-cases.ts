@@ -1,5 +1,31 @@
 import type { GoldPracticeCase } from "../contracts.js";
 
+const LEGACY_USE_VALUE =
+  "The pinned lockfile resolves @legendapp/state 3.0.0-beta.30, which predates `useValue`; the supported baseline is the latest v3, where `useValue` is an alias of useSelector, so the rename changes no subscription.";
+
+const legacyUseValueLines = {
+  "App.tsx": [27],
+  "components/ColorPicker.tsx": [13],
+  "components/Img.tsx": [32],
+  "features/Filmstrip.tsx": [24, 43, 45],
+  "features/FullscreenPhoto.tsx": [91, 92, 95, 96],
+  "features/HotkeyHelp.tsx": [23, 24],
+  "features/MainSidebar.tsx": [15, 16, 17],
+  "features/Photo.tsx": [18],
+  "features/PhotosView.tsx": [55, 56, 57, 60, 117, 118, 119],
+  "features/PhotosViewContainer.tsx": [25, 28],
+  "hooks/useBreakpoints.tsx": [25],
+  "legend-kit/react-native/windowDimensions.tsx": [48],
+  "plugin-system/PluginRenderer.tsx": [14],
+  "plugins/PluginFlagReject.tsx": [37, 92],
+  "plugins/PluginFullscreenPhotoInfo.tsx": [15],
+  "plugins/PluginRating.tsx": [75],
+  "settings/GeneralSettings.tsx": [11, 12],
+  "settings/HotkeySettings.tsx": [17, 64, 66],
+  "settings/LibrarySettings.tsx": [10],
+  "theme/ThemeProvider.tsx": [43],
+};
+
 export const legendPhotosPracticeCases = [
   {
     action: "use-peek-for-snapshot",
@@ -15,29 +41,6 @@ export const legendPhotosPracticeCases = [
     line: 113,
     rationale:
       "The same onLoad callback reads the selected photo once to seed the opening animation.",
-    target: "legend-photos",
-  },
-  {
-    action: "batch-observable-writes",
-    file: "features/FullscreenPhoto.tsx",
-    line: 118,
-    rationale: "Setting open and open-or-closing together is one fullscreen opening transition.",
-    target: "legend-photos",
-  },
-  {
-    action: "batch-observable-writes",
-    file: "features/FullscreenPhoto.tsx",
-    line: 175,
-    rationale:
-      "Uncovering window controls and clearing open-or-closing belong to one closing transition.",
-    target: "legend-photos",
-  },
-  {
-    action: "batch-observable-writes",
-    file: "features/FullscreenPhoto.tsx",
-    line: 197,
-    rationale:
-      "The close animation completion clears the photo and the open flag as one transition.",
     target: "legend-photos",
   },
   {
@@ -65,10 +68,11 @@ export const legendPhotosPracticeCases = [
   },
   {
     action: "batch-observable-writes",
+    enforced: "known-miss",
     file: "settings/HotkeySettings.tsx",
     line: 104,
     rationale:
-      "Entering edit mode and clearing accumulated keys are one transition that the observing effect should see together.",
+      "Known miss (non-React observer): the useObserveEffect at line 110 reads isEditing$ and accumulatedKeys$, so a separate write runs it with edit mode on and the previous keys still accumulated, which can save stale keys.",
     target: "legend-photos",
   },
   {
@@ -87,4 +91,14 @@ export const legendPhotosPracticeCases = [
       "useObservable of an existing global observable only wraps it; the provider can use themeState$ directly.",
     target: "legend-photos",
   },
+  ...Object.entries(legacyUseValueLines).flatMap(([file, lines]) =>
+    lines.map((line) => ({
+      action: "replace-legacy-use-value" as const,
+      disposition: "style" as const,
+      file,
+      line,
+      rationale: LEGACY_USE_VALUE,
+      target: "legend-photos",
+    })),
+  ),
 ] as const satisfies readonly GoldPracticeCase[];

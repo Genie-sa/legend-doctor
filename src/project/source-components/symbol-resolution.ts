@@ -29,7 +29,6 @@ const DECLARED_SYMBOL_LOOKUPS = {
   "framework-event-component": (record: ModuleRecord): NameLookup =>
     record.frameworkEventComponents,
   hook: (record: ModuleRecord): NameLookup => record.hookDeclarations,
-  "host-element-component": (record: ModuleRecord): NameLookup => record.hostElementComponents,
   "legend-value-hook": (record: ModuleRecord): NameLookup => record.legendValueHooks,
   "legend-value-writer": (record: ModuleRecord): NameLookup => record.legendValueWriters,
   observable: (record: ModuleRecord): NameLookup => record.observableDeclarations,

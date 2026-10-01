@@ -72,7 +72,7 @@ Output
   Stdout is one JSON document, on success and on failure alike, and nothing
   is written to stderr.
 
-JSON contract (schemaVersion 6)
+JSON contract (schemaVersion 7)
   A completed scan is the report object with:
     status          "ok"
     root            directory every location.file is relative to
@@ -81,12 +81,8 @@ JSON contract (schemaVersion 6)
     files, hooks    scan size; under a scope flag, files counts the analyzed
                     subset and scope { mode, ref?, contextFiles } names the
                     flag and how many files loaded for cross-file proofs
-    capabilities    { legendState, reactCompiler, concurrentRoot,
-                    disabledRules }: the installed @legendapp/state (version,
-                    useValue export, and sync export) or null, whether the
-                    root enables the React Compiler, whether every React
-                    renderer in the root's workspace creates only concurrent
-                    roots, and the rules those facts switched off, each
+    capabilities    { reactCompiler, disabledRules }: whether the root enables
+                    the React Compiler, and the rules that switched off, each
                     with a stable reason and the number of files that skipped
                     it
     findings        useState and useEffect findings; every review-state and

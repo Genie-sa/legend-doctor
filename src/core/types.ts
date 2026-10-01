@@ -4,7 +4,7 @@ import type { StateTransitionEvidence } from "./state-transitions.js";
 type Confidence = "certain" | "probable";
 
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public JSON protocol version.
-const SCHEMA_VERSION = 6 as const;
+const SCHEMA_VERSION = 7 as const;
 
 const ABSTENTION_REASONS = [
   "async-command-origin-unresolved",
@@ -171,12 +171,7 @@ const REVIEW_KINDS = [
 ] as const;
 
 /** Why `capabilities.disabledRules` switched a rule off for the installed toolchain. */
-const CAPABILITY_GATE_REASONS = [
-  "legend-v2-tracking",
-  "react-compiler",
-  "sync-export-missing",
-  "use-value-export-missing",
-] as const;
+const CAPABILITY_GATE_REASONS = ["react-compiler"] as const;
 
 type CapabilityGateReason = (typeof CAPABILITY_GATE_REASONS)[number];
 
@@ -319,24 +314,6 @@ interface AnalysisReport {
   scope?: ReportScope;
 }
 
-type UseValueExport = "alias" | "distinct" | "missing" | "unknown";
-
-type SyncExport = "available" | "missing" | "unknown";
-
-/** Where the version came from: the installed package, or the nearest lockfile when none is installed. */
-const LEGEND_STATE_SOURCES = ["installed", "lockfile"] as const;
-
-type LegendStateSource = (typeof LEGEND_STATE_SOURCES)[number];
-
-interface InstalledLegendState {
-  source: LegendStateSource;
-  /** Whether the installed package exposes the sync entry point that carries `synced` and `syncObservable`. */
-  syncExport: SyncExport;
-  /** How the installed react entry point exports useValue relative to useSelector. */
-  useValueExport: UseValueExport;
-  version: string;
-}
-
 interface DisabledRule {
   detail: string;
   /** Analyzed files in which the rule was skipped. */
@@ -346,11 +323,7 @@ interface DisabledRule {
 }
 
 interface ReportCapabilities {
-  /** Every React renderer in the analysis root's workspace creates only concurrent roots. */
-  concurrentRoot: boolean;
   disabledRules: DisabledRule[];
-  /** The analysis root's Legend State; each file's rules read the install its own package resolves. */
-  legendState: InstalledLegendState | null;
   /** The analysis root's package or bundler config enables the React Compiler. */
   reactCompiler: boolean;
 }
@@ -367,7 +340,6 @@ export {
   EFFECT_ACTIONS,
   HOOK_DISPOSITIONS,
   LEGEND_PRACTICE_ACTIONS,
-  LEGEND_STATE_SOURCES,
   PRACTICE_DISPOSITIONS,
   REVIEW_KINDS,
   SCHEMA_VERSION,
@@ -385,8 +357,6 @@ export type {
   EffectAction,
   HookAction,
   HookFinding,
-  InstalledLegendState,
-  LegendStateSource,
   RankedQuestion,
   LegendPracticeAction,
   LegendPracticeFinding,
@@ -399,8 +369,6 @@ export type {
   SourcePosition,
   StateAction,
   StateAssumption,
-  SyncExport,
   TextEdit,
-  UseValueExport,
   Verification,
 };

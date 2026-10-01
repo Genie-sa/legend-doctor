@@ -55,7 +55,6 @@ export function classifyEffect(request: EffectClassificationRequest): Classified
     childContracts,
     effect,
     imports,
-    legendState,
     moduleScopeBindings,
     nonProductionHarness,
     reactNamespaces,
@@ -79,7 +78,6 @@ export function classifyEffect(request: EffectClassificationRequest): Classified
   const context: EffectClassificationContext = {
     childContracts,
     imports,
-    legendState,
     moduleScopeBindings,
     reactNamespaces,
     stateBySetter,
@@ -162,7 +160,7 @@ function dependencyEffectClassification(
   }
   if (observableSourced && !inline.hasCleanup) {
     return (
-      persistedObservableClassification(effect, inline) ??
+      persistedObservableClassification(effect) ??
       observableReactionClassification(effect, callback, inline)
     );
   }

@@ -3,62 +3,7 @@ import { analyzeLegendPractices } from "../../src/practices/analyze-legend-pract
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const WITHOUT_USE_VALUE = {
-  source: "lockfile",
-  syncExport: "available",
-  useValueExport: "missing",
-  version: "3.0.0-beta.30",
-} as const;
-
-test("subscribes a render read with useSelector when the installed Legend State has no useValue", () => {
-  const source = `import { observable } from "@legendapp/state";
-import { useMount } from "@legendapp/state/react";
-
-declare function track(): void;
-
-const counter$ = observable({ count: 0 });
-
-export function Counter() {
-  useMount(track);
-  const count = counter$.count.get();
-  return <p>{count}</p>;
-}
-`;
-  const findings = analyzeLegendPractices({
-    fileName: "fixture.tsx",
-    installedLegendState: {
-      source: "installed",
-      syncExport: "available",
-      useValueExport: "missing",
-      version: "3.0.0-alpha.1",
-    },
-    sourceText: source,
-  });
-  assert.deepEqual(
-    findings.map((finding) => finding.action),
-    ["use-value-for-render-read"],
-  );
-  assert.match(findings[0]?.message ?? "", /with `useSelector\(counter\$\.count\)`/u);
-  assertVerifiedEdits(
-    source,
-    `import { observable } from "@legendapp/state";
-import { useMount, useSelector } from "@legendapp/state/react";
-
-declare function track(): void;
-
-const counter$ = observable({ count: 0 });
-
-export function Counter() {
-  useMount(track);
-  const count = useSelector(counter$.count);
-  return <p>{count}</p>;
-}
-`,
-    findings,
-  );
-});
-
-test("subscribes a render read with the legacy hook the file already imports", () => {
+test("names the legacy hook the file already imports and leaves the edit to the legacy migration", () => {
   const source = `import { observable } from "@legendapp/state";
 import { use$ as useLegend } from "@legendapp/state/react";
 
@@ -70,27 +15,11 @@ export function Counter() {
   return <p>{label}{count}</p>;
 }
 `;
-  const findings = analyzeLegendPractices({
-    fileName: "fixture.tsx",
-    installedLegendState: WITHOUT_USE_VALUE,
-    sourceText: source,
-  }).filter((finding) => finding.action === "use-value-for-render-read");
-  assert.match(findings[0]?.message ?? "", /with `useLegend\(counter\$\.count\)`/u);
-  assertVerifiedEdits(
-    source,
-    `import { observable } from "@legendapp/state";
-import { use$ as useLegend } from "@legendapp/state/react";
-
-const counter$ = observable({ count: 0, label: "" });
-
-export function Counter() {
-  const label = useLegend(counter$.label);
-  const count = useLegend(counter$.count);
-  return <p>{label}{count}</p>;
-}
-`,
-    findings,
+  const finding = analyzeLegendPractices({ fileName: "fixture.tsx", sourceText: source }).find(
+    (candidate) => candidate.action === "use-value-for-render-read",
   );
+  assert.match(finding?.message ?? "", /with `useLegend\(counter\$\.count\)`/u);
+  assert.equal(finding?.edits, undefined);
 });
 
 test("keeps the legacy callee when narrowing, and composes with the legacy migration", () => {
@@ -139,7 +68,7 @@ export function Profile() {
   assert.deepEqual(
     findings.map((finding) => [finding.action, finding.disposition]),
     [
-      ["replace-legacy-use-value", "change"],
+      ["replace-legacy-use-value", "style"],
       ["pass-observable-to-use-value", "change"],
     ],
   );
@@ -153,7 +82,7 @@ export function Profile() {
   );
 });
 
-test("collapses a legacy direct selector only when no legacy migration carries it", () => {
+test("leaves a legacy direct selector to the legacy migration", () => {
   const source = `import { observable } from "@legendapp/state";
 import * as Legend from "@legendapp/state/react";
 
@@ -164,23 +93,6 @@ export function Profile() {
   return <p>{name}</p>;
 }
 `;
-  const withoutUseValue = analyzeLegendPractices({
-    fileName: "fixture.tsx",
-    installedLegendState: WITHOUT_USE_VALUE,
-    sourceText: source,
-  });
-  assert.deepEqual(
-    withoutUseValue.map((finding) => [finding.action, finding.disposition]),
-    [["pass-observable-to-use-value", "style"]],
-  );
-  assertVerifiedEdits(
-    source,
-    source.replace(
-      "Legend.useSelector(() => profile$.name.get())",
-      "Legend.useSelector(profile$.name)",
-    ),
-    withoutUseValue,
-  );
   assert.deepEqual(
     analyzeLegendPractices({ fileName: "fixture.tsx", sourceText: source }).map(
       (finding) => finding.action,

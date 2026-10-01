@@ -46,8 +46,8 @@ export function renderInitializerEdits(
   ) {
     return null;
   }
-  const reference = subscriptionHookReference(scan, scan.installedLegendState);
-  if (!reference || (reference.legacy && scan.installedLegendState?.useValueExport !== "missing")) {
+  const reference = subscriptionHookReference(scan);
+  if (!reference || reference.legacy) {
     return null;
   }
   const path = method.expression.getText(scan.sourceFile);
