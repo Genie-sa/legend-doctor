@@ -47,6 +47,31 @@ export class StateFlowIndex {
   }
 }
 
+/** Every path through `fn` that runs `call` also runs `companion` before the next `await`. */
+export function proveAccompanied(
+  fn: RuntimeFunctionLike,
+  call: ts.CallExpression,
+  companion: ts.CallExpression,
+): boolean {
+  if (!fn.body || !ts.isBlock(fn.body) || !nodeWithinFunction(companion, fn)) {
+    return false;
+  }
+  const { paths, unknown } = lowerStatements(
+    relevantStatements(fn.body, call, companion),
+    [{ awaitEpoch: 0, events: [], termination: null }],
+    { breakable: false, left: call, right: companion },
+  );
+  return (
+    !unknown &&
+    paths.every(({ events }) => {
+      const write = events.find((event) => event.call === call);
+      return (
+        !write || events.some(({ call: run, epoch }) => run === companion && epoch === write.epoch)
+      );
+    })
+  );
+}
+
 function proveCoexecution(
   fn: RuntimeFunctionLike,
   left: ts.CallExpression,

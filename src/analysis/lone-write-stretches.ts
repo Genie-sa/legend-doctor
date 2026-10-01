@@ -15,6 +15,7 @@ import { lexicalBinding } from "../core/lexical-bindings.js";
 import { localReachResolver } from "../project/source-components/reach-resolvers.js";
 import { mutationsWriteTogether } from "./mutations.js";
 import { programReach } from "../project/source-components/write-units.js";
+import { proveAccompanied } from "../project/state-flow/state-flow.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../core/analysis-ast.js";
 
@@ -28,13 +29,22 @@ export function classifyCowrittenState(
   classifyAlone: (state: StateCandidate) => ClassifiedState,
 ): ClassifiedState {
   const classified = classifyState(inputs);
-  if (
+  const proof =
     ["move-state-down", "review-state", "use-observable", "use-ref"].includes(classified.action) &&
     inputs.hasCompanionWrites &&
     inputs.usage.setterReferences === inputs.usage.setterCalls &&
-    !inputs.usage.shadowed &&
-    ownerRendersEveryWrite(inputs.state, analysis, classifyAlone)
-  ) {
+    !inputs.usage.shadowed
+      ? companionRenderProof(inputs.state, analysis, classifyAlone)
+      : null;
+  if (proof === "bailable" && classified.action === "use-ref") {
+    return {
+      action: "review-state",
+      abstentionReason: "no-proven-optimization",
+      confidence: "certain",
+      message: `Review \`${inputs.state.valueName}\` as cleanup only; each write lands in one render with a write of another state this owner renders, so a ref saves a render only when that state already holds the written value.`,
+    };
+  }
+  if (proof === "fresh") {
     return {
       action: "keep-state",
       confidence: "certain",
@@ -60,32 +70,46 @@ export function classifyCowrittenState(
     : classified;
 }
 
-/** Each write shares a block, before any await, with a fresh object or array for a rendered state. */
-function ownerRendersEveryWrite(
+/**
+ * Each write shares a stretch with a write of a rendered state that stays in React: "fresh" when a
+ * fresh object or array in the same block always renders, "bailable" when React may bail out on it.
+ */
+function companionRenderProof(
   state: StateCandidate,
   { stateFlow, states, usageByState }: SourceAnalysis,
   classifyAlone: (state: StateCandidate) => ClassifiedState,
-): boolean {
+): "bailable" | "fresh" | null {
   const ownerStates = states.filter((other) => other.owner === state.owner);
   const mutations = collectSetterMutations(state.owner, ownerStates);
+  const writes = mutations.filter((write) => write.state === state);
   const rendering = mutations.filter(
-    ({ call, state: other }) =>
+    ({ state: other }) =>
       other !== state &&
-      (call.arguments[0]?.kind === ts.SyntaxKind.ArrayLiteralExpression ||
-        call.arguments[0]?.kind === ts.SyntaxKind.ObjectLiteralExpression) &&
       !usageByState.get(other)?.shadowed &&
       (usageByState.get(other)?.localRenderReads ?? 0) > 0 &&
       ["keep-state", "review-state"].includes(classifyAlone(other).action),
   );
-  return mutations.every(
-    (write) =>
-      write.state !== state ||
-      rendering.some(
+  const fresh = rendering.filter(
+    ({ call }) =>
+      call.arguments[0]?.kind === ts.SyntaxKind.ArrayLiteralExpression ||
+      call.arguments[0]?.kind === ts.SyntaxKind.ObjectLiteralExpression,
+  );
+  if (
+    writes.every((write) =>
+      fresh.some(
         (companion) =>
           companion.call.parent.parent === write.call.parent.parent &&
           mutationsWriteTogether(write, companion, stateFlow),
       ),
-  );
+    )
+  ) {
+    return "fresh";
+  }
+  return writes.every((write) =>
+    rendering.some((companion) => proveAccompanied(write.region, write.call, companion.call)),
+  )
+    ? "bailable"
+    : null;
 }
 
 /**

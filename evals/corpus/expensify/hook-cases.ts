@@ -1138,8 +1138,11 @@ export const expensifyHookCases = [
     line,
     name: line === 13 ? "nextScreen" : "prevScreen",
     rationale:
-      "The effect-derived route cursor never renders and is consumed only by returned navigation commands; a ref is valid once the returned callback boundary is proven.",
+      line === 13
+        ? "The effect-derived route cursor never renders and is consumed only by returned navigation commands, but its only write lands with setCurrentScreenIndex(currentIndex), which renders the hook's owner unless the index is unchanged; a ref saves that render only on the first step, where the index stays 0."
+        : "The effect-derived route cursor never renders and is consumed only by returned navigation commands; a ref is valid once the returned callback boundary is proven.",
     target: "expensify-review-duplicates-state",
+    ...(line === 13 && { enforced: false as const }),
   })),
   {
     action: "use-ref",
