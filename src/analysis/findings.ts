@@ -22,6 +22,7 @@ import type { FindingsScope } from "./finding-clusters.js";
 import type { HookFinding } from "../core/types.js";
 import type { ResolvedStateClassification } from "./assumptions/review-assumptions.js";
 import type { StateClassificationInputs } from "./verdicts/classification-context.js";
+import { classifyCowrittenState } from "./lone-write-stretches.js";
 import { classifyState } from "./verdicts/classify-state.js";
 import { effectFindingFor } from "./effect-findings.js";
 import { hasLazyStateInitializer } from "../rules/effect-drafts/effect-drafts.js";
@@ -182,7 +183,7 @@ function baseStateClassification(
     ) ??
     derivedStateClassification(state, effectProofs.derivedStates.has(state)) ??
     effectProofs.legendValueMirrors.get(state) ??
-    classifyState(inputs)
+    classifyCowrittenState(inputs, analysis)
   );
 }
 
