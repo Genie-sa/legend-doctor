@@ -12,10 +12,10 @@ import type { ClusterMemberContext } from "./observable-clusters.js";
 import type { ClusterPairUsage } from "./cluster-pairs.js";
 import { MIN_REPEATED_SETTER_CALLS } from "../constants.js";
 import type { StateFlowIndex } from "../../project/state-flow/state-flow.js";
-import { callbackIsEventRooted } from "../../rules/state-proofs/event-roots.js";
 import { distinctClusterPair } from "./cluster-pairs.js";
 import { hasStateInitializer } from "../../rules/deferred-reveal/deferred-reveal.js";
 import { jsxOpeningForAttribute } from "../callbacks/local-callbacks.js";
+import { plainCallbackIsEventRooted } from "../../rules/state-proofs/event-roots.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
 import ts from "typescript";
 
@@ -219,16 +219,5 @@ function controlledValueSetterCall(call: ts.CallExpression, state: StateCandidat
 
 export function mutationIsEventRooted(mutation: SetterMutation, state: StateCandidate): boolean {
   const { region } = mutation;
-  return (
-    region !== state.owner &&
-    (ts.isArrowFunction(region) ||
-      ts.isFunctionDeclaration(region) ||
-      ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted({
-      callback: region,
-      owner: state.owner,
-      dependencyName: "",
-      seen: new Set(),
-    })
-  );
+  return region !== state.owner && plainCallbackIsEventRooted(region, state.owner);
 }
