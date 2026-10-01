@@ -3,6 +3,7 @@ import type { HookImports } from "../core/imports.js";
 import type { LegendPracticeFinding } from "../core/types.js";
 import type { LegendPracticesRequest } from "./model.js";
 import type { ObservableFieldFacts } from "../rules/observable-reads/field-writes.js";
+import type { SubscriptionInventory } from "../core/subscriptions.js";
 import { collectTransactionFindings } from "./transaction-runs.js";
 import { findInPlaceMemoKeyPractices } from "../rules/in-place-memo-keys/in-place-memo-keys.js";
 import { findLegacyUseValuePractices } from "../rules/legacy-use-value.js";
@@ -38,6 +39,8 @@ export interface PracticeRuleGate {
 
 export interface PracticeRuleInput {
   readonly imports: HookImports;
+  /** Collects unresolved inventory entries when the caller reports subscription inventory. */
+  readonly inventory: SubscriptionInventory[] | undefined;
   readonly observableBindings: ReadonlySet<string>;
   readonly observableFields: ObservableFieldFacts;
   readonly request: LegendPracticesRequest;
@@ -129,9 +132,9 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
   {
     id: "observable-reads",
     needsObservableBindings: false,
-    run: ({ imports, observableBindings, observableFields, request }) =>
+    run: ({ imports, inventory, observableBindings, observableFields, request }) =>
       findObservableReadPractices({
-        inventory: request.subscriptionInventory,
+        inventory,
         primitivePaths: request.importedObservablePrimitivePaths ?? new Set(),
         plainSeedPaths: request.importedObservablePlainSeedPaths ?? new Set(),
         plainConstants: request.plainConstants,

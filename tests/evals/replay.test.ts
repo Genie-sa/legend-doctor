@@ -91,6 +91,7 @@ function report(findings: HookFinding[], practices: LegendPracticeFinding[] = []
       inventory: [
         {
           binding: "isOpen",
+          callLocation: { column: 18, file: "button.tsx", line: 9 },
           derivations: [],
           location: { column: 9, file: "button.tsx", line: 9 },
           observable: "open$",

@@ -243,7 +243,9 @@ work but does not reread or reparse files.
 
 - `inventory` records each recognized imported `useValue` call in eligible scanned files, including its
   `use$` and `useSelector` aliases. Each entry contains its source location, binding, observable, classified
-  reads, derivations, and a `status`. Unresolved entries have explicit `reasons`; they are not findings.
+  reads, derivations, and a `status`. `location` is the binding, or the call when the result is not bound;
+  `callLocation` is the call. A practice finding from any rule at either one sets the `status`. Unresolved
+  entries have explicit `reasons`; they are not findings.
 - Each read has a `kind` that says when the owner evaluates it.
 - A `useValue(() => …)` selector whose every tracked read is a proven `path$.get()` also carries
   `selector: { tracks, result }`. `tracks` lists the tracked paths, and `result` is the value `useValue`
@@ -296,12 +298,13 @@ gate leaves no smaller boundary to extract. A JSX tag name chosen by a gate stay
 | `event-or-callback-consumer`             | An event handler or other deferred callback reads the value                                        |
 | `excluded-by-report-filter`              | A report filter hid the finding at this call, so its plan is withheld                              |
 | `memo-consumer`                          | A `useMemo` callback or dependency list reads the value                                            |
-| `no-render-consumer`                     | Neither the returned JSX nor a render callback inside it reads the value                           |
+| `no-render-consumer`                     | Every read is classified, and neither the returned JSX nor a render callback inside it reads it    |
 | `observable-binding-not-proven`          | The argument is neither a proven observable path nor a selector function                           |
 | `overlapping-parent-subscription`        | Another subscription in the owner already tracks this path or an ancestor                          |
 | `owner-commit-or-snapshot-work`          | A render snapshot, or an effect, cache, or ref that a subscription-only render could redo          |
 | `owner-not-proven`                       | The call is bound to a name, but no enclosing component or hook body is proven                     |
 | `render-callback-consumer`               | A synchronous callback inside the returned JSX reads the value once per item                       |
+| `render-consumer-not-proven`             | No read is proven to render, but an `unknown` read may still reach the returned JSX                |
 | `returned-result`                        | The result is returned, so its consumers live outside this owner                                   |
 | `selector-calls-unproven-function`       | The selector calls something other than a tracked `get()`, a known global, or a snapshot method    |
 | `selector-function-not-proven`           | The selector takes parameters or is async or a generator                                           |

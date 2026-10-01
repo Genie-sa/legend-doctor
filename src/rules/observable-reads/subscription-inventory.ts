@@ -9,6 +9,7 @@ import type { LegendPracticeFinding } from "../../core/types.js";
 import type { ObservableReadScan } from "./model.js";
 import type { SubscriptionFlow } from "./subscription-flow.js";
 import type { UseValueBinding } from "./use-value-bindings.js";
+import { hasInventoryAnchor } from "../../core/subscriptions.js";
 import { hasUnprovenOwnerWork } from "./owner-subscription-work.js";
 import { isUseValueCall } from "./observable-paths.js";
 import { staticMemberPrefix } from "./selector-expressions.js";
@@ -25,40 +26,44 @@ type BindingAnalysis =
   | { readonly binding: ProvenBinding; readonly flow: SubscriptionFlow }
   | { readonly binding: Extract<UseValueBinding, { kind: "unproven" }>; readonly flow: null };
 
-export function subscriptionInventory(
-  scan: ObservableReadScan,
-  findings: readonly LegendPracticeFinding[],
-): SubscriptionInventory[] {
+/** Entries start `unresolved`; `resolveSubscriptionInventory` settles them once every practice rule has run. */
+export function subscriptionInventory(scan: ObservableReadScan): SubscriptionInventory[] {
   const inventory: SubscriptionInventory[] = [];
   visit(scan.sourceFile, (node) => {
     if (ts.isCallExpression(node) && isUseValueCall(node, scan.imports)) {
-      inventory.push(inventoryEntry(node, scan, findings));
+      inventory.push(inventoryEntry(node, scan));
     }
   });
   return inventory;
 }
 
-function inventoryEntry(
-  call: ts.CallExpression,
-  scan: ObservableReadScan,
+export function resolveSubscriptionInventory(
+  entry: SubscriptionInventory,
   findings: readonly LegendPracticeFinding[],
 ): SubscriptionInventory {
+  const anchored = findings.filter((finding) => hasInventoryAnchor(entry, finding.location));
+  if (anchored.length === 0) {
+    return entry;
+  }
+  const status = anchored.some((finding) => finding.subscription) ? "planned" : "other-action";
+  return { ...entry, status, reasons: [], ruleGates: [] };
+}
+
+function inventoryEntry(call: ts.CallExpression, scan: ObservableReadScan): SubscriptionInventory {
   const declaration = wrappedResultDeclaration(call);
   const analysis = bindingAnalysis(call, scan);
   const { binding, flow } = analysis;
   const use = flow?.use;
   const location = subscriptionLocation(declaration ?? call, scan);
-  const finding = findings.find(
-    (item) => item.location.line === location.line && item.location.column === location.column,
-  );
   const entry: SubscriptionInventory = {
     location,
+    callLocation: subscriptionLocation(call, scan),
     owner: use ? subscriptionOwner(use) : "unresolved",
     binding: use?.localName ?? null,
     observable: inventoryObservable(binding, scan),
-    status: inventoryStatus(finding),
-    reasons: finding ? [] : inventoryReasons(analysis, scan),
-    ruleGates: finding ? [] : ruleGates(declaration, scan),
+    status: "unresolved",
+    reasons: inventoryReasons(analysis, scan),
+    ruleGates: ruleGates(declaration, scan),
     reads:
       flow?.reads.map((read) => ({
         location: subscriptionLocation(read.node, scan),
@@ -140,13 +145,4 @@ function overlapsOwnerSubscription(binding: ProvenBinding, scan: ObservableReadS
     const prefix = staticMemberPrefix(path);
     return prefix === null || otherSubscriptionTracksAncestor(binding.use, prefix, scan);
   });
-}
-
-function inventoryStatus(
-  finding: LegendPracticeFinding | undefined,
-): SubscriptionInventory["status"] {
-  if (finding?.subscription) {
-    return "planned";
-  }
-  return finding ? "other-action" : "unresolved";
 }

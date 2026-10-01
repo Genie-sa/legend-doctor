@@ -27,6 +27,7 @@ export const SUBSCRIPTION_INVENTORY_REASONS = [
   "owner-commit-or-snapshot-work",
   "owner-not-proven",
   "render-callback-consumer",
+  "render-consumer-not-proven",
   "returned-result",
   "selector-calls-unproven-function",
   "selector-function-not-proven",
@@ -83,7 +84,9 @@ export interface SubscriptionCut {
 }
 
 export interface SubscriptionInventory {
+  /** The binding's declaration, or the call when its result is not bound. */
   location: SourceLocation;
+  callLocation: SourceLocation;
   owner: string;
   binding: string | null;
   observable: string | null;
@@ -99,6 +102,19 @@ export interface SubscriptionInventory {
     kind: (typeof SUBSCRIPTION_READ_KINDS)[number];
   }[];
   derivations: SubscriptionCut["derivations"];
+}
+
+/** A practice finding about a `useValue` call sits at its binding or at the call itself. */
+export function hasInventoryAnchor(
+  entry: SubscriptionInventory,
+  location: SourceLocation,
+): boolean {
+  return [entry.location, entry.callLocation].some(
+    (anchor) =>
+      anchor.file === location.file &&
+      anchor.line === location.line &&
+      anchor.column === location.column,
+  );
 }
 
 export interface SubscriptionCosts {
