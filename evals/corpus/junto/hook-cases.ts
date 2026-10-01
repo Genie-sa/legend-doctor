@@ -562,4 +562,38 @@ export const juntoHookCases = [
     rationale: `${rationale as string} React re-runs that render before committing; an observable written there would notify subscribers mid-render.`,
     target: "junto-renderer",
   })),
+  ...[
+    [
+      "components/work/TaskBoard.tsx",
+      2317,
+      "creationRules",
+      "TaskCreationPath receives the bare setter and nothing else that writes board state, so each rule toggle rerenders the 1,000-line TaskBoard today; only TaskCreationPath renders the rules and createTask reads them as a command snapshot.",
+    ],
+    [
+      "components/work/TaskBoard.tsx",
+      2319,
+      "activeLane",
+      "The drag-over callback writes only the hovered lane on every target change and rerenders the whole TaskBoard; the lane columns are its only readers. Drag start and end write it with other states in one stretch, which React 19 commits once.",
+    ],
+    [
+      "components/work/TaskBoard.tsx",
+      2321,
+      "editingTaskId",
+      "Starting an edit writes only this id and rerenders the whole TaskBoard; the lane columns compare it per card. saveTaskTitle clears it with other states in one stretch, which React 19 commits once.",
+    ],
+    [
+      "components/work/TaskOperatorPanel.tsx",
+      180,
+      "defectTarget",
+      "DefectTargetPicker receives the bare setter and no other callback, so each pick rerenders the 47-element operator panel; only the picker and the send-back Button read it, and reset writes it with the other drafts in one stretch.",
+    ],
+  ].map(([file, line, name, rationale]) => ({
+    action: "use-observable" as const,
+    file: file as string,
+    hook: "useState" as const,
+    line: line as number,
+    name: name as string,
+    rationale: rationale as string,
+    target: "junto-renderer",
+  })),
 ] as const satisfies readonly GoldHookCase[];

@@ -453,6 +453,16 @@ export const formbricksHookCases = [
       "The confirmation input is nested inside the same DeleteDialog boundary whose disabled prop consumes it, so no smaller independent owner cut is proven.",
     target: "formbricks-delete-organization",
   },
+  {
+    action: "use-observable",
+    file: "theme-styling.tsx",
+    hook: "useState",
+    line: 82,
+    name: "confirmSuggestColorsOpen",
+    rationale:
+      "The suggest-colors button opens the confirmation by writing only this flag, which rerenders the styling forms and the survey preview today; handleSuggestColors closes it with the preview color in one stretch, which React 19 commits once.",
+    target: "formbricks-theme-styling",
+  },
   ...[
     [
       106,
@@ -481,6 +491,13 @@ export const formbricksHookCases = [
       "use-observable",
       true,
       "Independent row toggles make this a real keyed selection model; row membership and toolbar summaries can subscribe separately while refresh commands reset it atomically.",
+    ],
+    [
+      121,
+      "isBulkDeleteDialogOpen",
+      "use-observable",
+      true,
+      "The toolbar's bulk-delete command opens the dialog by writing only this flag, which rerenders the whole 55-element records table today; the finally block closes it with isDeleting in one stretch, which React 19 commits once.",
     ],
     [
       122,

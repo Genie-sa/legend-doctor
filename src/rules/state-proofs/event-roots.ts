@@ -16,7 +16,7 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isHookDependencyReference } from "./callback-sites.js";
 import ts from "typescript";
 
-const EVENT_HANDLER_PROP = /^on[A-Z]/u;
+export const EVENT_HANDLER_PROP = /^on[A-Z]/u;
 
 export const USE_CALLBACK_HOOK: ReadonlySet<string> = new Set(["useCallback"]);
 

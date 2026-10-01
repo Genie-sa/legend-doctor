@@ -1,7 +1,10 @@
 import { actions, requireValue } from "./harness.js";
-import { analyzeSource } from "../../src/analysis/analyze-source.js";
+import { analyzeSource, analyzeSourceWith } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import test from "node:test";
+
+/** React 18 may commit an observable apart from its companions, so a lone write stretch does not convert. */
+const REACT_18 = { syncLaneRendersAlone: true };
 
 test("keeps observable ownership when a sibling command opens one exact leaf", () => {
   assert.deepEqual(
@@ -73,7 +76,7 @@ test("isolates visibility when companion writes occur only while closing", () =>
     "review-state",
   );
 
-  const nonVisibility = analyzeSource(
+  const nonVisibility = analyzeSourceWith(
     `
     import { useState } from "react";
     function Control(_props: unknown) { return null; }
@@ -88,6 +91,7 @@ test("isolates visibility when companion writes occur only while closing", () =>
     }
   `,
     "fixture.tsx",
+    REACT_18,
   );
   assert.equal(
     requireValue(nonVisibility.find((finding) => finding.name === "active")).action,
@@ -132,7 +136,7 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
     `if (nextOpen) setDraft("next"); setOpen(nextOpen);`,
     `nextOpen = false; if (!nextOpen) setDraft(""); setOpen(nextOpen);`,
   ]) {
-    const unsafe = analyzeSource(
+    const unsafe = analyzeSourceWith(
       `
       import { useState } from "react";
       function Dialog(_props: unknown) { return null; }
@@ -147,6 +151,7 @@ test("proves a controlled boolean forwards only guarded close companions", () =>
       }
     `,
       "fixture.tsx",
+      REACT_18,
     );
     assert.equal(
       requireValue(unsafe.find((finding) => finding.name === "open")).action,
