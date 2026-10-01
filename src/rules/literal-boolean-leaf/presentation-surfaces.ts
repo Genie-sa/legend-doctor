@@ -188,7 +188,7 @@ function presentationProjections(
   for (const renderNode of usage.directRenderNodes) {
     const declaration = findAncestorUntil(renderNode, ts.isVariableDeclaration, state.owner);
     const aliases =
-      declaration?.initializer && containsJsx(declaration.initializer)
+      declaration?.initializer && expressionContainsJsx(declaration.initializer)
         ? null
         : oneHopRenderProjectionReferences(state.owner, [renderNode], (query) =>
             isSafeProjectionExpression({
@@ -233,18 +233,4 @@ function jsxElementsWithin(node: ts.Node): number {
     }
   });
   return elements;
-}
-
-function containsJsx(node: ts.Node): boolean {
-  let found = false;
-  visit(node, (candidate) => {
-    if (
-      ts.isJsxElement(candidate) ||
-      ts.isJsxFragment(candidate) ||
-      ts.isJsxSelfClosingElement(candidate)
-    ) {
-      found = true;
-    }
-  });
-  return found;
 }

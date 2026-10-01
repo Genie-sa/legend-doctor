@@ -15,6 +15,7 @@ import { isSafeJsxProjectionReference, jsxElementCount } from "../state-proofs/j
 import type { ObjectDraftProofs } from "./object-draft.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { enclosingJsxElement } from "../state-proofs/unique-repeated-selection.js";
 import { extractedJsxElementCount } from "../../analysis/subtree/extracted-render-work.js";
 import { hasIndependentRenderCutWitness } from "../state-proofs/render-cut-witness.js";
 import { isRenderGateReference } from "../deferred-reveal/render-gates.js";
@@ -53,7 +54,7 @@ function collectLeafSinks(
     Math.floor(jsxElementCount(state.owner) * LEAF_JSX_ELEMENT_FRACTION),
   );
   for (const reference of references) {
-    const subtree = nearestJsxElement(reference, state.owner);
+    const subtree = enclosingJsxElement(reference, state.owner);
     if (!subtree || extractedJsxElementCount(subtree, state.owner) > maximumLeafSize) {
       return false;
     }
@@ -90,7 +91,7 @@ function projectionSinks(
 ): readonly ts.Identifier[] | null {
   let references: readonly ts.Identifier[] = [initial];
   for (let hop = 0; hop < MAXIMUM_PROJECTION_HOPS; hop += 1) {
-    if (references.every((reference) => nearestJsxElement(reference, state.owner))) {
+    if (references.every((reference) => enclosingJsxElement(reference, state.owner))) {
       return references.every(
         (reference) =>
           !isRenderGateReference(reference, state.owner) &&
@@ -171,18 +172,6 @@ function bindingReferences(owner: RuntimeFunctionLike, binding: ts.Identifier): 
     }
   });
   return references;
-}
-
-function nearestJsxElement(
-  node: ts.Node,
-  owner: RuntimeFunctionLike,
-): ts.JsxElement | ts.JsxSelfClosingElement | null {
-  return findAncestorUntil(
-    node,
-    (candidate): candidate is ts.JsxElement | ts.JsxSelfClosingElement =>
-      ts.isJsxElement(candidate) || ts.isJsxSelfClosingElement(candidate),
-    owner,
-  );
 }
 
 function uniqueReturnedExpression(owner: RuntimeFunctionLike): ts.Expression | null {

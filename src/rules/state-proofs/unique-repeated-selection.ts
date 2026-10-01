@@ -141,10 +141,10 @@ function clauseReturnsEvery(clause: ts.CaseClause, nodes: readonly ts.Node[]): b
 
 /** All render nodes sit under one JSX leaf whose `key` is the clause literal. */
 function nodesShareOneKeyedLeaf(nodes: readonly ts.Node[], clause: ts.CaseClause): boolean {
-  const leaf = nearestJsxElement(nodes[0]!, clause);
+  const leaf = enclosingJsxElement(nodes[0]!, clause);
   return (
     leaf !== null &&
-    nodes.every((node) => nearestJsxElement(node, clause) === leaf) &&
+    nodes.every((node) => enclosingJsxElement(node, clause) === leaf) &&
     jsxKeyMatchesLiteral(leaf, clause.expression)
   );
 }
@@ -154,7 +154,7 @@ function isPrimitiveLiteral(expression: ts.Expression): boolean {
   return ts.isStringLiteralLike(value) || ts.isNumericLiteral(value);
 }
 
-function nearestJsxElement(
+export function enclosingJsxElement(
   node: ts.Node,
   boundary: ts.Node,
 ): ts.JsxElement | ts.JsxSelfClosingElement | null {
