@@ -146,7 +146,7 @@ test("does not treat deferred or non-event callback adapters as event roots", ()
   }
 });
 
-test("isolates a Promise-chain status rendered through one reachable JSX callback leaf", () => {
+test("keeps a Promise-chain status whose leaf renders inside an unresolved render callback", () => {
   const [finding] = analyzeSource(
     `
     import { useState } from "react";
@@ -165,8 +165,7 @@ test("isolates a Promise-chain status rendered through one reachable JSX callbac
   `,
     "fixture.tsx",
   );
-  assert.equal(requireValue(finding).action, "use-observable");
-  assert.match(requireValue(finding).message ?? "", /async completion boundary/u);
+  assert.notEqual(requireValue(finding).action, "use-observable");
 });
 
 test("requires a Promise-chain leaf alias to be live, unique, and non-repeated", () => {

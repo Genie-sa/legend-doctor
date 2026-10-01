@@ -12,6 +12,7 @@ import { isEvaluationInert } from "../../core/analysis-ast.js";
 import { mutationRegionOnlyCallsStateSetters } from "../../rules/effect-drafts/draft-mutations.js";
 import { nearestMutationFunction } from "../mutations.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
+import { valueCallSitesPassThrough } from "./pass-through-leaf.js";
 
 export function intrinsicStateVerdict(context: StateClassificationContext): ClassifiedState | null {
   const { isPropertyLocalObjectDraft, state, usage } = context;
@@ -223,7 +224,7 @@ export function lazyCallbackLeafVerdict(
 
 export function asyncStatusVerdict(context: StateClassificationContext): ClassifiedState | null {
   const { isAsyncLeafStatus, state, usage } = context;
-  if (isAsyncLeafStatus) {
+  if (isAsyncLeafStatus && valueCallSitesPassThrough(context, { editableChildren: false })) {
     const [target] = [...usage.valueTargets];
     const callSiteCount = usage.valueTransportSites.size;
     const boundary = asyncStatusBoundaryLabel(callSiteCount, target);

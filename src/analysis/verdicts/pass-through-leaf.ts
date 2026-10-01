@@ -23,6 +23,31 @@ export function passThroughScope({
   };
 }
 
+/**
+ * Whether a leaf subscriber can wrap every element that receives the value without the element's
+ * parent noticing. With `editableChildren`, a call site whose component is declared in this file or
+ * resolves to source needs no wrapper, since that child can subscribe itself.
+ */
+export function valueCallSitesPassThrough(
+  context: StateClassificationContext,
+  { editableChildren }: { readonly editableChildren: boolean },
+): boolean {
+  const { childContracts, localComponents, usage } = context;
+  const scope = passThroughScope(context);
+  const editable = (tag: string): boolean =>
+    editableChildren &&
+    (localComponents.has(tag) || Boolean(childContracts?.resolveComponent(tag)));
+  return [...usage.transportNodes.values()]
+    .flat()
+    .filter((node): node is ts.JsxAttribute => ts.isJsxAttribute(node))
+    .map((attribute) => attribute.parent.parent)
+    .filter((callSite) => usage.valueTransportSites.has(callSite.getStart()))
+    .every(
+      (callSite) =>
+        editable(callSite.tagName.getText()) || wrappedElementIsPassedThrough(callSite, scope),
+    );
+}
+
 export interface PassThroughLeaf {
   readonly callSites: number;
   readonly propName: string;

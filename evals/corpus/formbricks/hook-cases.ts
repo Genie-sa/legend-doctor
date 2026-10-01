@@ -609,6 +609,11 @@ export const formbricksHookCases = [
     rationale:
       "The first pending transition is an independent event-rooted write immediately before awaited work, and one stable status leaf can subscribe without changing the command, await, or later close/reset transitions.",
     target: target as string,
+    ...(name === "isDuplicating" && {
+      enforced: false as const,
+      rationale:
+        "The first pending transition is an independent event-rooted write immediately before awaited work, and one stable status leaf can subscribe without changing the command, await, or later close/reset transitions. Not enforced (2026-10-01): real win; parent pass-through unprovable statically. The receiving parent is the external Radix `DropdownMenuGroup`.",
+    }),
   })),
   ...[
     ["formbricks-dashboard-control", "dashboard-control-bar.tsx", 53, "isDeleting"],
@@ -626,6 +631,11 @@ export const formbricksHookCases = [
         ? "The save command is published through a source-resolved action array whose stable IconBar consumer defers every onClick; only DashboardControlBar subscribes while the dashboard owner stays stable."
         : "Manual review proves this leaf update remains outside the component's React transition, but the conservative owner boundary abstains instead of building a partial transition call graph.",
     target: target as string,
+    ...(line === 193 && {
+      enforced: false as const,
+      rationale:
+        "The save command is published through a source-resolved action array whose stable IconBar consumer defers every onClick; only DashboardControlBar subscribes while the dashboard owner stays stable. Not enforced (2026-10-01): real win; parent pass-through unprovable statically. The receiving parent is the local `PageContentWrapper`, which the pass-through proof does not resolve to a host.",
+    }),
   })),
   {
     action: "keep-state",
@@ -639,12 +649,13 @@ export const formbricksHookCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "chart-dropdown-menu.tsx",
     hook: "useState",
     line: 33,
     name: "isDeleting",
     rationale:
-      "The source-resolved delete command reaches awaited work through the default intrinsic button branch, while the menu item and dialog are two non-repeated status leaves; separate subscribers remove the owner render without changing the later dialog close.",
+      "The source-resolved delete command reaches awaited work through the default intrinsic button branch, while the menu item and dialog are two non-repeated status leaves; separate subscribers remove the owner render without changing the later dialog close. Not enforced (2026-10-01): real win; parent pass-through unprovable statically. The receiving parent is the external Radix `DropdownMenuGroup` for the menu item.",
     target: "formbricks-chart-menu",
   },
   {
