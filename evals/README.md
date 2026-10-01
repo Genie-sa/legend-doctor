@@ -51,6 +51,7 @@ Pinned public repositories, each at a fixed commit with focused source roots whe
 - `gptme/gptme` (web UI)
 - `equanimitech/zenborg`
 - `skastr0/junto` (renderer)
+- `skastr0/fractals` (expert replay only: no target is scanned at its pin)
 
 Repository source is never copied into this project. Each corpus entry pins a commit and a source location, and the
 runner scans local checkouts. A label enters the corpus only after manual review of the source it points at.
@@ -82,7 +83,8 @@ node dist/evals/run.js --complete \
   --repo nori=/path/to/Nori \
   --repo gptme=/path/to/gptme \
   --repo zenborg=/path/to/zenborg \
-  --repo junto=/path/to/junto
+  --repo junto=/path/to/junto \
+  --repo fractals=/path/to/fractals
 ```
 
 `--complete` requires every repository in the loaded corpus, including an optional private slice. Missing paths fail
@@ -130,11 +132,14 @@ recommend:
 
 | Repository                | Commits | Scope                                                                                                                                | Enforced | Non-enforced | Excluded |
 | ------------------------- | ------: | ------------------------------------------------------------------------------------------------------------------------------------ | -------: | -----------: | -------: |
-| `LegendApp/legend-apps`   |      41 | Jay Meistrich's July and September 2026 performance sweeps in Music, Slides, Markdown, Code, Chat History, Diff, and shared packages |       43 |          104 |      115 |
+| `LegendApp/legend-apps`   |      49 | Jay Meistrich's July and September 2026 performance sweeps in Music, Slides, Markdown, Code, Chat History, Diff, and shared packages |       46 |          114 |      133 |
 | `LegendApp/legend-music`  |      11 | Jay Meistrich's subscription, observer, and timer commits                                                                            |       16 |           25 |       30 |
 | `LegendApp/legend-photos` |       4 | Jay Meistrich's selection, image, plugin, and filmstrip commits                                                                      |        1 |            0 |        5 |
 | `nonbili/NouTube`         |       1 | The maintainer's feed and library modal commit                                                                                       |        3 |            1 |        8 |
 | `nonbili/Nori`            |       1 | The maintainer's bookmark drawer commit                                                                                              |        0 |            0 |        1 |
+| `skastr0/junto`           |      10 | The maintainer's renderer subscription, selector, and observer commits                                                               |       16 |           20 |       17 |
+| `equanimitech/zenborg`    |       1 | The maintainer's drag-performance commit that drops an unread subscription                                                           |        1 |            0 |        1 |
+| `skastr0/fractals`        |       2 | The maintainer's session-list virtualization and render-churn commits                                                                |        1 |            2 |       16 |
 
 A deletion that stops subscribing to a lazily synced store, such as a `synced()` persisted store, is non-enforced: the
 subscription is what activates the load, so a later `peek()` can read the default instead of the persisted value.
@@ -142,8 +147,9 @@ subscription is what activates the load, so a later `peek()` can read the defaul
 For every supplied repository, the runner extracts the parent tree from the checkout's object store with `git archive`
 into a temporary directory, scans its source root, and prints `Expert replay recall: x/y`: enforced cases where a
 proven `change` finding at the labeled line carries the expert's action or a listed equivalent. Recall on September 28,
-2026 is 23/63. Each miss names what the analyzer reported there, including abstention reasons, subscription-inventory
-blockers, and the gate at which the targeted rule abstained (`ruleGates`). Non-enforced cases are reported separately
+2026 is 23/63; on October 1, with 21 enforced labels from new expert commits, it is 22/84. Each miss names what the
+analyzer reported there, including abstention reasons, subscription-inventory blockers, and the gate at which the
+targeted rule abstained (`ruleGates`). Non-enforced cases are reported separately
 and list any proven change the analyzer makes there, since that contradicts the audit; neither misses nor non-enforced
 flags fail the run. A label whose parent line no longer contains its `source` text fails, as does a parent missing
 from the checkout. A full-history clone contains every parent; for a shallow checkout, fetch each one by SHA:
@@ -176,7 +182,7 @@ in `evals/performance-budgets.ts`:
   counter, so wall time with that margin stands in for one.
 
 Baselines come from CI run 36409722431 on ubuntu-latest (4 CPUs, 16 GB) with the analyzer at 51f2d32, and for gptme,
-zenborg, and junto from CI run 36444683516 at c478731:
+zenborg, and junto from CI run 36444683516 at c478731, and for fractals from CI run 36894444846 at 1b0e659:
 
 | Repository                | Baseline | Limit |
 | ------------------------- | -------: | ----: |
@@ -193,6 +199,7 @@ zenborg, and junto from CI run 36444683516 at c478731:
 | `open-webui-react-native` |     3.1s |   60s |
 | `legend-music`            |     2.4s |   60s |
 | `nori`                    |     2.2s |   60s |
+| `fractals`                |     2.0s |   60s |
 | `legend-photos`           |     1.2s |   60s |
 
 Each scan prints its wall time, peak RSS, file count, and hook count, so the job log shows trends before a limit

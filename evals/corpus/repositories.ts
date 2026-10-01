@@ -2,6 +2,7 @@ import type { CorpusRepository } from "./contracts.js";
 import { excalidrawRepository } from "./excalidraw/repository.js";
 import { expensifyRepository } from "./expensify/repository.js";
 import { formbricksRepository } from "./formbricks/repository.js";
+import { fractalsRepository } from "./fractals/repository.js";
 import { gptmeRepository } from "./gptme/repository.js";
 import { hoaluRepository } from "./hoalu/repository.js";
 import { juntoRepository } from "./junto/repository.js";
@@ -30,4 +31,5 @@ export const repositories: readonly CorpusRepository[] = [
   gptmeRepository,
   zenborgRepository,
   juntoRepository,
+  fractalsRepository,
 ];

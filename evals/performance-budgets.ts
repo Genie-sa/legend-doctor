@@ -21,7 +21,7 @@ export const SCAN_TIME_FLOOR_SECONDS = 60;
 /**
  * Whole-app scan wall time of each repository root on ubuntu-latest (4 CPUs, 16 GB), from the scan
  * budget step of CI run 36409722431 with the analyzer at 51f2d32; gptme, zenborg and junto from CI
- * run 36444683516 at c478731.
+ * run 36444683516 at c478731; fractals from CI run 36894444846 at 1b0e659.
  */
 export const SCAN_BASELINE_SECONDS: ReadonlyMap<string, number> = new Map([
   ["legend-music", 2.4],
@@ -38,6 +38,7 @@ export const SCAN_BASELINE_SECONDS: ReadonlyMap<string, number> = new Map([
   ["gptme", 3.9],
   ["zenborg", 3.7],
   ["junto", 13.6],
+  ["fractals", 2],
 ]);
 
 export function scanTimeLimitSeconds(baselineSeconds: number): number {

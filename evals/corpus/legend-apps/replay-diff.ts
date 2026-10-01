@@ -657,6 +657,130 @@ const diffSearchCompareOwnership = {
   root: "apps/diff/src",
 } as const satisfies ReplayCommit;
 
+const coWrittenMirrorRationale =
+  "The setter writes the observable and this state together, and render reads only the state, so the owner renders once per change either way; useValue removes the duplicate copy, not a render.";
+
+const mergeSyntaxMoveRationale =
+  "Part of moving mergeSyntaxByPath into an observable that merge rows read; it removes no render by itself.";
+
+const observableUiState = {
+  cases: [
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 1609,
+      rationale: coWrittenMirrorRationale,
+      source: 'useState("")',
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 1611,
+      rationale: coWrittenMirrorRationale,
+      source: "useState<DiffRecoverableError | null>(null)",
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 1612,
+      rationale: coWrittenMirrorRationale,
+      source: "useState<DiffRecoverableError | null>(null)",
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 1614,
+      rationale:
+        "setLoadingSourceValue writes loadingSource$ inside this state's updater, and the owner renders loadingSource, so it renders once per change either way; moving the write out of the updater is a correctness fix.",
+      source: "useState<DiffOpenSource | null>(null)",
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 1616,
+      rationale:
+        "setSidebarCollapsedValue writes sidebarCollapsed$ inside this state's updater, and the owner renders sidebarCollapsed, so it renders once per toggle either way.",
+      source: "useState(false)",
+    },
+    {
+      action: "use-value",
+      expected: "non-enforced",
+      file: "DiffViewerWindow.tsx",
+      line: 1633,
+      rationale:
+        "handleSplitViewResize builds a new rounded metrics object on every resize event, so this state re-renders the owner even when no field changed, while a useValue on splitPaneMetrics$ skips a set whose fields all match; the saving rests on native resize events repeating rounded metrics, a runtime fact.",
+      source: "useState({",
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 1639,
+      rationale:
+        "The pane height is a rounded number co-written with diffPaneHeight$; useState already bails out on an equal number, so useValue renders the owner exactly as often.",
+      source: "useState(0)",
+    },
+  ],
+  commit: "afaec7452b2ec51840b8bd37f2505dcbbfc5eb02",
+  parent: "98c8fe59b4ac4428ff2763f4da254d93fa13bd38",
+  repository,
+  root,
+} as const satisfies ReplayCommit;
+
+const localizedMergeSyntax = {
+  cases: [
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 1877,
+      rationale:
+        "The leaf half of the merge syntax move: the row subscribes to its file's entry and derives syntax lines and tokens from a new rowIndex prop.",
+      source: "function DiffMergeLineRow({",
+    },
+    {
+      action: "use-observable",
+      expected: "non-enforced",
+      file: "DiffViewerWindow.tsx",
+      line: 2037,
+      rationale:
+        "mergeSyntaxByPath is read only in renderMergeRow and in a version memo for an extraData object no caller reads, so an owner-held observable stops each highlight result from re-rendering DiffLoadedBody; the rows receive per-row derivations, so the leaf cut also needs DiffMergeLineRow to take a rowIndex prop and derive them itself.",
+      source: "useState<Map<string, DiffMergeSyntaxState>>(() => new Map())",
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 2062,
+      rationale:
+        "Deletes a version memo that feeds only mergeListExtraData, which no caller reads; it cost only memo bookkeeping.",
+      source: "const mergeSyntaxVersion = useMemo(",
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 2066,
+      rationale: "Drops the deleted version from an extraData memo that no caller reads.",
+      source: "const mergeListExtraData = useMemo(() => ({",
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 2145,
+      rationale: mergeSyntaxMoveRationale,
+      source: "const renderMergeRow = useCallback(",
+    },
+    {
+      expected: "excluded",
+      file: "DiffViewerWindow.tsx",
+      line: 2189,
+      rationale: mergeSyntaxMoveRationale,
+      source: "useEffect(() => {",
+    },
+  ],
+  commit: "bb325a532c9ef2d1cb993284767fc37c30db32b2",
+  parent: "f06e018aebd363d6d1689e01720368921d568ef3",
+  repository,
+  root,
+} as const satisfies ReplayCommit;
+
 /** Jay Meistrich's Diff viewer subscription commits, classified against each parent tree. */
 export const legendAppsDiffReplayCommits: readonly ReplayCommit[] = [
   collapseSubscriptions,
@@ -671,4 +795,6 @@ export const legendAppsDiffReplayCommits: readonly ReplayCommit[] = [
   removeLineSubscriptions,
   narrowTokenRedraws,
   diffSearchCompareOwnership,
+  observableUiState,
+  localizedMergeSyntax,
 ];
