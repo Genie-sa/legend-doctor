@@ -15,7 +15,9 @@ import {
 import { BROAD_OWNER_JSX_ELEMENTS } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { isLiteralBooleanLeafState } from "../../rules/literal-boolean-leaf/literal-boolean-leaf.js";
+import { passThroughScope } from "./pass-through-leaf.js";
 import ts from "typescript";
+import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
 function stateIsTransportOnly(usage: StateUsage): boolean {
   return (
@@ -122,6 +124,7 @@ export function compactTransportCutVerdict(
     stateIsTransportOnly(usage) &&
     stateHasSingleTransportTarget(usage) &&
     branchCallSite !== null &&
+    wrappedElementIsPassedThrough(branchCallSite.opening, passThroughScope(context)) &&
     companionWritesAllowTransportCut(context) &&
     hasSafeCommands &&
     hasDirectPrimitiveInitializer(state) &&

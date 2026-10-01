@@ -410,13 +410,14 @@ export const expensifyHookCases = [
     [177, "cardNumber", "use-observable"],
   ].map(([line, name, action]) => ({
     action: action as "review-state" | "use-observable",
+    ...(line === 177 && { enforced: false as const }),
     file: "PaymentCardForm.tsx",
     hook: "useState" as const,
     line: line as number,
     name: name as string,
     rationale:
       line === 177
-        ? "A direct string draft is rendered by one stable InputWrapper; isolate its high-frequency updates from the rest of the payment form."
+        ? "A direct string draft is rendered by one stable InputWrapper; isolate its high-frequency updates from the rest of the payment form. Not enforced: the parent `FormProvider` renders `children` through a `typeof children === 'function'` branch, which the pass-through proof abstains on, and then forwards them through `FormWrapper` into `FormElement`, which spreads them onto a react-native `View`."
         : "The expiration draft snapshots external Onyx form state, so direct primitive initialization does not prove ownership.",
     target: "expensify-payment-card",
   })),
