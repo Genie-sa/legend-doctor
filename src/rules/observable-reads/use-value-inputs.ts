@@ -3,6 +3,7 @@ import {
   RESERVED_OBSERVABLE_MEMBERS,
   directGetReceiver,
   directObservableReadPath,
+  isExpressionSelector,
   isUseValueCall,
   provenObservablePath,
 } from "./observable-paths.js";
@@ -46,12 +47,7 @@ export function directObservableSelectorPath(
   selector: ts.Expression,
   observableBindings: ReadonlySet<string>,
 ): ts.Expression | null {
-  if (
-    (!ts.isArrowFunction(selector) && !ts.isFunctionExpression(selector)) ||
-    selector.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ||
-    selector.parameters.length > 0 ||
-    ts.isBlock(selector.body)
-  ) {
+  if (!isExpressionSelector(selector)) {
     return null;
   }
   return (

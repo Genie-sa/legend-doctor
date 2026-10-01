@@ -41,7 +41,7 @@ export function identifiedUseValueDeclaration(
   ) {
     return null;
   }
-  const observable = provenObservablePath(call.arguments[0]!, scan.observableBindings);
+  const observable = subscribedObservablePath(call.arguments[0]!, scan.observableBindings);
   const owner = findAncestor(declaration, isRuntimeFunctionLike);
   if (!observable || !owner?.body) {
     return null;
@@ -60,6 +60,28 @@ export function isValueReferenceTo(
     node !== declarationName &&
     !isNonValueIdentifier(node)
   );
+}
+
+/** A parameterless, synchronous selector whose body is the one expression it returns. */
+export function isExpressionSelector(
+  node: ts.Node,
+): node is ts.ArrowFunction & { readonly body: ts.Expression } {
+  return (
+    ts.isArrowFunction(node) &&
+    node.parameters.length === 0 &&
+    !ts.isBlock(node.body) &&
+    !node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+  );
+}
+
+/** The observable a `useValue` input subscribes to: `x$` itself, or a selector that only returns `x$.get()`. */
+export function subscribedObservablePath(
+  input: ts.Expression,
+  observableBindings: ReadonlySet<string>,
+): ts.Expression | null {
+  return isExpressionSelector(input)
+    ? directObservableReadPath(input.body, observableBindings)
+    : provenObservablePath(input, observableBindings);
 }
 
 export function directObservableReadPath(

@@ -4,7 +4,7 @@ import {
   RESERVED_OBSERVABLE_MEMBERS,
   isUseValueCall,
   isValueReferenceTo,
-  provenObservablePath,
+  subscribedObservablePath,
 } from "./observable-paths.js";
 import { bindingDeclarationCount, isDeclarationName } from "../../core/analysis-ast.js";
 import {
@@ -34,7 +34,7 @@ export function narrowUseValueFinding(
   ) {
     return null;
   }
-  const observable = provenObservablePath(call.arguments[0]!, scan.observableBindings);
+  const observable = subscribedObservablePath(call.arguments[0]!, scan.observableBindings);
   if (!observable) {
     return null;
   }
