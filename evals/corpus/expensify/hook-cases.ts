@@ -1036,13 +1036,23 @@ export const expensifyHookCases = [
     target: target as string,
   })),
   {
-    action: "review-effect",
+    action: "keep-state",
+    file: "MapViewImpl.web.tsx",
+    hook: "useState",
+    line: 75,
+    name: "mapRef",
+    rationale:
+      "`setRef` (:82) passes every ref target of the `<Map>` component to `setMapRef`, so the state holds the map's imperative handle, which the effects drive directly (:140, :164, :191). A ref target is not plain data an observable can store, so `mapRef` stays React state.",
+    target: "expensify-map-reset-boundaries",
+  },
+  {
+    action: "keep-effect",
     file: "MapViewImpl.web.tsx",
     hook: "useEffect",
     line: 173,
     name: null,
     rationale:
-      "The resolved callback performs guarded imperative map geometry work; resolving its binding does not prove a safer lifecycle replacement.",
+      "The resolved callback performs guarded imperative map geometry work after commit, and its only React state input, `mapRef`, stays React state because it holds a ref target; the other dependencies are props, so no Legend effect action applies.",
     target: "expensify-map-reset-boundaries",
   },
   {

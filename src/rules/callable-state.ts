@@ -7,7 +7,7 @@ import { nodeWithin, visit, visitSkippingNestedRuntimeFunctions } from "../core/
 import type { StateCandidate } from "../analysis/model.js";
 import ts from "typescript";
 
-interface LocalDeclarations {
+export interface LocalDeclarations {
   readonly callableReactTypes: ReadonlySet<string>;
   readonly types: ReadonlyMap<
     string,
@@ -118,7 +118,7 @@ function declaredTypeMayBeCallable(
   );
 }
 
-function localDeclarations(sourceFile: ts.SourceFile): LocalDeclarations {
+export function localDeclarations(sourceFile: ts.SourceFile): LocalDeclarations {
   const cached = localDeclarationsCache.get(sourceFile);
   if (cached) {
     return cached;

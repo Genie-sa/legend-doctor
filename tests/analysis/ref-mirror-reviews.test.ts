@@ -94,7 +94,7 @@ test("keeps a forwarded ref snapshot in React post-commit timing", () => {
         return <VirtualGrid container={container} />;
       }
     `),
-    ["review-state", "keep-effect"],
+    ["keep-state", "keep-effect"],
   );
 });
 
