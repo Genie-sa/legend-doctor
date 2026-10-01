@@ -147,7 +147,8 @@ subscription is what activates the load, so a later `peek()` can read the defaul
 For every supplied repository, the runner extracts the parent tree from the checkout's object store with `git archive`
 into a temporary directory, scans its source root, and prints `Expert replay recall: x/y`: enforced cases where a
 proven `change` finding at the labeled line carries the expert's action or a listed equivalent. Recall on September 28,
-2026 is 23/63; on October 1, with 21 enforced labels from new expert commits, it is 22/84. Each miss names what the
+2026 is 23/63; on October 1, with 21 enforced labels from new expert commits, it is 22/84, and 26/84 once
+primitive projections accept effect dependency entries their comparison guards. Each miss names what the
 analyzer reported there, including abstention reasons, subscription-inventory blockers, and the gate at which the
 targeted rule abstained (`ruleGates`). Non-enforced cases are reported separately
 and list any proven change the analyzer makes there, since that contradicts the audit; neither misses nor non-enforced

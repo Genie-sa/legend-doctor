@@ -120,7 +120,7 @@ function soleConstStatement(declaration: ts.VariableDeclaration): ts.VariableSta
 }
 
 function confinedProjection(raw: RawSubscription, scan: ProjectionScan): Projection | null {
-  const sites = projectionSites(raw.owner.owner, raw.declaration.name);
+  const sites = projectionSites(raw.owner.owner, raw.declaration.name, scan.imports);
   const path = staticPropertyPath(raw.observable);
   const domain = observableValueDomain(raw.observable, scan);
   if (
@@ -247,6 +247,7 @@ function projectionEdits(projection: Projection, scan: ProjectionScan): readonly
     return [
       hook,
       ...projection.sites.map((site) => replaceNode(scan, site.comparison, projection.name)),
+      ...projection.dependencies.map((entry) => replaceNode(scan, entry, projection.name)),
     ];
   }
   const { statement } = projection.merged;
@@ -282,7 +283,11 @@ function projectionInstruction(
   }
   const comparison = projection.sites[0].comparison.getText(scan.sourceFile);
   const count = projection.sites.length;
-  return `Replace \`const ${raw}\` with \`${selector}\` and replace ${count === 1 ? `\`${comparison}\`` : `the ${count} \`${comparison}\` comparisons`} with \`${projection.name}\`.`;
+  const dependencies =
+    projection.dependencies.length > 0
+      ? `, and list \`${projection.name}\` in place of \`${projection.raw.declaration.name.text}\` in the guarded effect's dependencies`
+      : "";
+  return `Replace \`const ${raw}\` with \`${selector}\` and replace ${count === 1 ? `\`${comparison}\`` : `the ${count} \`${comparison}\` comparisons`} with \`${projection.name}\`${dependencies}.`;
 }
 
 function projectionEvidence(projection: Projection, scan: ProjectionScan): readonly string[] {
