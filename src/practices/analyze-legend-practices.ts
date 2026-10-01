@@ -19,6 +19,7 @@ import { NO_CAPABILITIES } from "../project/capabilities.js";
 import type { ObservableContextReader } from "../project/source-components/observable-contexts.js";
 import type { ObservableFieldFacts } from "../rules/observable-reads/field-writes.js";
 import type { ObservableInPlaceWrites } from "../project/source-components/observable-in-place-writes.js";
+import type { ReadersIgnoreIdentity } from "../rules/in-place-memo-keys/identity-readers.js";
 import type { SubscriptionInventory } from "../core/subscriptions.js";
 import { collectHookImports } from "../core/imports.js";
 import { enabledPracticeRules } from "./practice-rules.js";
@@ -91,6 +92,7 @@ export interface LegendPracticesFileRequest {
   readonly includeFindings?: boolean;
   readonly observableContextReaders?: ReadonlyMap<string, ObservableContextReader>;
   readonly observableInPlaceWrites?: ObservableInPlaceWrites;
+  readonly observableReadersIgnoreIdentity?: ReadersIgnoreIdentity;
   readonly reportFileName: string;
   readonly stableContextRead?: (localName: string) => boolean;
 }
@@ -112,6 +114,7 @@ export function analyzeLegendPracticesFile({
   includeFindings = true,
   observableContextReaders = localObservableContextReaders(moduleRecord(file.sourceFile)),
   observableInPlaceWrites = new Map(),
+  observableReadersIgnoreIdentity,
   reportFileName,
   stableContextRead = provesNoContextRead,
 }: LegendPracticesFileRequest): LegendPracticeFinding[] {
@@ -131,6 +134,7 @@ export function analyzeLegendPracticesFile({
     importedObservables,
     observableContextReaders,
     observableInPlaceWrites,
+    observableReadersIgnoreIdentity,
     sourceFile: file.sourceFile,
     stableContextRead,
   });

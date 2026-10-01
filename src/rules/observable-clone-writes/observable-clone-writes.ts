@@ -1,6 +1,7 @@
 import {
   isEvaluationInert,
   rootIdentifier,
+  staticPropertyPath,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { observableSetTarget, observableTargetStartsAsArray } from "./observable-targets.js";
@@ -8,6 +9,7 @@ import { snapshotBindingIsReadOnly, snapshotTarget } from "./snapshot-bindings.j
 import type { ArrayOriginScan } from "./observable-targets.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import { RESERVED_OBSERVABLE_MEMBERS } from "../observable-reads/observable-paths.js";
+import type { ReadersIgnoreIdentity } from "../in-place-memo-keys/identity-readers.js";
 import { expressionReferencesName } from "../../core/binding-references.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
@@ -28,6 +30,7 @@ interface SnapshotAppendContext {
 export interface CloneWriteScan extends ArrayOriginScan {
   readonly fileName: string;
   readonly observableBindings: ReadonlySet<string>;
+  readonly readersIgnoreIdentity: ReadersIgnoreIdentity;
 }
 
 export function findObservableCloneWritePractices(scan: CloneWriteScan): LegendPracticeFinding[] {
@@ -40,7 +43,7 @@ export function findObservableCloneWritePractices(scan: CloneWriteScan): LegendP
     const write =
       narrowObservableObjectWrite(node, sourceFile, observableBindings) ??
       narrowObservableArrayAppend(node, scan);
-    if (!write) {
+    if (!write || !containerIdentityIsUnread(node, scan)) {
       return;
     }
     const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
@@ -55,6 +58,13 @@ export function findObservableCloneWritePractices(scan: CloneWriteScan): LegendP
     });
   });
   return findings;
+}
+
+/** The narrowed write mutates the container in place, so a reader keyed on its identity goes stale. */
+function containerIdentityIsUnread(write: ts.CallExpression, scan: CloneWriteScan): boolean {
+  const target = observableSetTarget(write, scan.observableBindings);
+  const [root, ...path] = (target && staticPropertyPath(target)) ?? [];
+  return root !== undefined && scan.readersIgnoreIdentity(root, { path, replaced: write });
 }
 
 function narrowObservableObjectWrite(
