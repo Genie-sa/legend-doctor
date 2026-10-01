@@ -39,11 +39,13 @@ import type { MaterialityPolicy } from "../constants.js";
 import { closureConfinedReferences } from "./closure-confinement.js";
 import { commonRenderGateSubtree } from "../../rules/deferred-reveal/render-gates.js";
 import { effectSplitProjectionSubtree } from "./effect-split.js";
+import { enclosingElementsStayMounted } from "../../rules/child-contract/element-identity.js";
 import { extractedJsxElementCount } from "./extracted-render-work.js";
 import { hasAncestorInSet } from "../ast-helpers.js";
 import { isUniquelySelectedRepeatedProjection } from "../../rules/state-proofs/unique-repeated-selection.js";
 import { nearestNestedFunction } from "../../core/ast.js";
 import { ownerDeclaresBinding } from "../owner-scan.js";
+import { passThroughScope } from "../verdicts/pass-through-leaf.js";
 import type ts from "typescript";
 import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
@@ -189,12 +191,13 @@ function projectionCallAllowlist(
 function directRenderSubtree(
   state: StateCandidate,
   usage: StateUsage,
-  { materiality }: RenderSubtreeScope,
+  { childContracts, materiality }: RenderSubtreeScope,
 ): StateSubtree | null {
-  return boundedDirectSubtree(state, [...usage.directRenderNodes, ...usage.setterCallNodes], {
-    materiality,
-    movedDeclarations: [],
-  });
+  return boundedDirectSubtree(
+    state,
+    [...usage.directRenderNodes, ...usage.deferredReadNodes, ...usage.setterCallNodes],
+    { childContracts, materiality, movedDeclarations: [] },
+  );
 }
 
 /**
@@ -205,7 +208,7 @@ function directRenderSubtree(
 function closureConfinedSubtree(
   state: StateCandidate,
   usage: StateUsage,
-  { materiality, projectionAllowed }: StateSubtreeOptions,
+  { childContracts, materiality, projectionAllowed }: StateSubtreeOptions,
 ): StateSubtree | null {
   if (
     !projectionAllowed ||
@@ -222,6 +225,7 @@ function closureConfinedSubtree(
     return null;
   }
   const subtree = boundedDirectSubtree(state, confined.nodes, {
+    childContracts,
     materiality,
     movedDeclarations: confined.movedDeclarations,
   });
@@ -236,6 +240,7 @@ function subtreeIsReturnRoot(subtree: StateSubtree, returned: ts.Expression): bo
 }
 
 interface DirectSubtreeScope {
+  readonly childContracts: ChildContractResolver | null;
   readonly materiality: MaterialityPolicy;
   readonly movedDeclarations: readonly string[];
 }
@@ -243,7 +248,7 @@ interface DirectSubtreeScope {
 function boundedDirectSubtree(
   state: StateCandidate,
   nodes: readonly ts.Node[],
-  { materiality, movedDeclarations }: DirectSubtreeScope,
+  { childContracts, materiality, movedDeclarations }: DirectSubtreeScope,
 ): StateSubtree | null {
   const direct = lowestCommonJsxSubtree(nodes, state.owner);
   if (!direct) {
@@ -257,7 +262,15 @@ function boundedDirectSubtree(
   ) {
     return null;
   }
-  return stateSubtreeResult("direct", direct, { movedDeclarations, renderNodes: nodes, state });
+  const cut = stateSubtreeResult("direct", direct, {
+    movedDeclarations,
+    renderNodes: nodes,
+    state,
+  });
+  const scope = passThroughScope({ childContracts, state });
+  return cut.unstable || enclosingElementsStayMounted(direct, scope)
+    ? cut
+    : { ...cut, unstable: true };
 }
 
 interface ProjectionSubtreeScope extends StateSubtreeOptions {

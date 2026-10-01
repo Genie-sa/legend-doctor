@@ -11,7 +11,7 @@ import { wrappedElementIsPassedThrough } from "../../rules/child-contract/elemen
 export function passThroughScope({
   childContracts,
   state,
-}: StateClassificationContext): PassThroughScope {
+}: Pick<StateClassificationContext, "childContracts" | "state">): PassThroughScope {
   return {
     owner: state.owner,
     resolveComponent: (file, name) =>

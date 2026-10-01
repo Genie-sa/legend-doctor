@@ -182,7 +182,7 @@ function isConditionallyEvaluated(node: ts.Node, boundary: ts.Node): boolean {
   return false;
 }
 
-export function hasUnstableSubtreeLifetime(node: JsxSubtreeNode, boundary: ts.Node): boolean {
+export function hasUnstableSubtreeLifetime(node: ts.Node, boundary: ts.Node): boolean {
   let renderReturns = 0;
   visitSkippingNestedRuntimeFunctions(boundary, (current) => {
     if (ts.isReturnStatement(current) && current.expression) {

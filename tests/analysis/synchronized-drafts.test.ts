@@ -1,3 +1,4 @@
+import type { HookFinding } from "../../src/core/types.js";
 import { analyzeSource } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import { requireValue } from "./harness.js";
@@ -225,4 +226,56 @@ test("treats TypeScript-only JSX wrappers as direct draft transport", () => {
     "region",
     "zip",
   ]);
+});
+
+function dirtyDraftFinding(derivation: string, rendered = ""): HookFinding | undefined {
+  return analyzeSource(
+    `
+    import { useCallback, useEffect, useMemo, useState } from "react";
+    export function Settings({ initialOn, onDirtyChange }: { initialOn: boolean; onDirtyChange: (dirty: boolean) => void }) {
+      const [on, setOn] = useState(initialOn);
+      useEffect(() => { setOn(initialOn); }, [initialOn]);
+      ${derivation}
+      return <main>
+        <Header /><Summary /><Help /><Preview /><Footer /><Aside /><Status /><Actions /><Toolbar /><Navigation /><Content />
+        <input type="checkbox" checked={on} onChange={event => setOn(event.target.checked)} />${rendered}
+      </main>;
+    }
+  `,
+    "fixture.tsx",
+  ).find((finding) => finding.name === "on");
+}
+
+test("keeps a draft whose render derivation reaches a hook through a const chain", () => {
+  for (const derivation of [
+    `const dirty = on !== initialOn; const anyDirty = dirty || false;
+     useEffect(() => { onDirtyChange(anyDirty); }, [onDirtyChange, anyDirty]);`,
+    `const dirty = on !== initialOn; const anyDirty = dirty || false;
+     useEffect(() => { onDirtyChange(anyDirty); });`,
+    `const dirty = on !== initialOn; const label = useMemo(() => (dirty ? "Unsaved" : "Saved"), [dirty]);`,
+  ]) {
+    assert.doesNotMatch(
+      requireValue(dirtyDraftFinding(derivation)).message,
+      /synchronization effect/u,
+      derivation,
+    );
+  }
+});
+
+test("migrates a draft whose derivations feed only render output and commands", () => {
+  for (const [derivation, rendered] of [
+    [
+      `const dirty = on !== initialOn; const label = dirty ? "Unsaved" : "Saved";`,
+      `<p>{label}</p>`,
+    ],
+    [
+      `const save = useCallback(() => onDirtyChange(on), [on, onDirtyChange]);
+       const submit = useCallback(() => save(), [save]);`,
+      `<button onClick={submit}>Save</button>`,
+    ],
+  ] as const) {
+    const finding = requireValue(dirtyDraftFinding(derivation, rendered));
+    assert.equal(finding.action, "use-observable", derivation);
+    assert.match(finding.message, /synchronization effect/u, derivation);
+  }
 });

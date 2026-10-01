@@ -4,7 +4,13 @@ import {
   isDeclarationName,
   isNonValueIdentifier,
 } from "../../core/analysis-ast.js";
-import { findAncestorUntil, nearestNestedFunction, nodeWithin, visit } from "../../core/ast.js";
+import {
+  findAncestorUntil,
+  identifiersNamed,
+  nearestNestedFunction,
+  nodeWithin,
+  visit,
+} from "../../core/ast.js";
 import { isJsxNode, isSynchronousRenderCallback } from "../state-proofs/callback-sites.js";
 import {
   isSafeJsxProjectionReference,
@@ -16,49 +22,61 @@ import { expressionDependsOnBinding } from "../state-proofs/binding-lookup.js";
 import { repeatedRenderHasStableItemKey } from "../state-proofs/unique-repeated-selection.js";
 import ts from "typescript";
 
+const NO_HOOKS: ReadonlySet<string> = new Set();
+
 export function stateControlsHookOrRepeatedBoundary(state: StateCandidate): boolean {
-  let unsafe = false;
-  visit(state.owner.body, (node) => {
-    if (
-      unsafe ||
-      !ts.isIdentifier(node) ||
-      node.text !== state.valueName ||
-      isDeclarationName(node) ||
-      isNonValueIdentifier(node) ||
-      node.parent === state.call.parent
-    ) {
-      return;
-    }
-    if (referenceControlsHookOrRepeatedBoundary(node, state.owner)) {
-      unsafe = true;
-      return;
-    }
-    const declaration = findAncestorUntil(node, ts.isVariableDeclaration, state.owner);
-    if (
-      !declaration?.initializer ||
-      !ts.isIdentifier(declaration.name) ||
-      !nodeWithin(node, declaration.initializer) ||
-      !ts.isVariableDeclarationList(declaration.parent) ||
-      (declaration.parent.flags & ts.NodeFlags.Const) === 0 ||
-      bindingDeclarationCount(state.owner, declaration.name.text) !== 1
-    ) {
-      return;
-    }
-    const aliasName = declaration.name.text;
-    visit(state.owner.body, (reference) => {
+  const controls = (name: string): boolean =>
+    valueReferences(state, name).some((reference) =>
+      referenceControlsHookOrRepeatedBoundary(reference, state.owner),
+    );
+  return (
+    controls(state.valueName) ||
+    valueReferences(state, state.valueName).some((reference) => {
+      const alias = constAliasName(reference, state.owner);
+      return alias !== null && controls(alias);
+    }) ||
+    renderDerivations(state).some((name) =>
+      valueReferences(state, name).some((reference) => referenceFeedsHook(reference, state.owner)),
+    )
+  );
+}
+
+/** Render-time `const` derivations of the state, transitively; a hook reading one would go stale. */
+function renderDerivations(state: StateCandidate): readonly string[] {
+  const names = [state.valueName];
+  for (const name of names) {
+    for (const reference of valueReferences(state, name)) {
+      const alias = constAliasName(reference, state.owner);
       if (
-        ts.isIdentifier(reference) &&
-        reference.text === aliasName &&
-        reference !== declaration.name &&
-        !isDeclarationName(reference) &&
-        !isNonValueIdentifier(reference) &&
-        referenceControlsHookOrRepeatedBoundary(reference, state.owner)
+        alias !== null &&
+        !names.includes(alias) &&
+        nearestNestedFunction(reference, state.owner) === null &&
+        !referenceFeedsHook(reference, state.owner)
       ) {
-        unsafe = true;
+        names.push(alias);
       }
-    });
-  });
-  return unsafe;
+    }
+  }
+  return names.slice(1);
+}
+
+function valueReferences(state: StateCandidate, name: string): ts.Identifier[] {
+  return identifiersNamed(state.owner.body, name).filter(
+    (node) =>
+      !isDeclarationName(node) && !isNonValueIdentifier(node) && node.parent !== state.call.parent,
+  );
+}
+
+function constAliasName(reference: ts.Identifier, owner: RuntimeFunctionLike): string | null {
+  const declaration = findAncestorUntil(reference, ts.isVariableDeclaration, owner);
+  return declaration?.initializer &&
+    ts.isIdentifier(declaration.name) &&
+    nodeWithin(reference, declaration.initializer) &&
+    ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+    bindingDeclarationCount(owner, declaration.name.text) === 1
+    ? declaration.name.text
+    : null;
 }
 
 function referenceControlsHookOrRepeatedBoundary(
@@ -187,6 +205,19 @@ export function hasStaleUseCallbackCapture(state: StateCandidate): boolean {
     }
   });
   return stale;
+}
+
+function referenceFeedsHook(reference: ts.Identifier, owner: RuntimeFunctionLike): boolean {
+  return (
+    findAncestorUntil(
+      reference,
+      (node): node is ts.CallExpression =>
+        ts.isCallExpression(node) &&
+        isHookCallOtherThan(node, NO_HOOKS) &&
+        node.arguments.some((argument) => nodeWithin(reference, argument)),
+      owner,
+    ) !== null
+  );
 }
 
 function hookResultFeedsLifecycle(call: ts.CallExpression, owner: RuntimeFunctionLike): boolean {

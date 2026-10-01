@@ -2,6 +2,7 @@ import type { ChildComponentSource, ComponentSourceResolver } from "./model.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import type { HostTagImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { hasUnstableSubtreeLifetime } from "../state-proofs/jsx-subtrees.js";
 import { isHostTag } from "../../core/imports.js";
 import { rendersPassThroughHost } from "./pass-through-hosts.js";
 import ts from "typescript";
@@ -20,6 +21,15 @@ const MAX_FORWARDING_DEPTH = 3;
 
 /** React Native's Android `ScrollView` clones this element to inject `style` and its `children`. */
 const CLONED_ELEMENT_PROP = "refreshControl";
+
+/** React Native's `Modal` renders nothing while hidden, unmounting its children. */
+const CHILD_UNMOUNTING_HOST = /(?:^|\.)\$?Modal$/u;
+
+interface ForwardingStep {
+  readonly depth: number;
+  readonly file: string | null;
+  readonly mounted?: boolean;
+}
 
 export interface ElementIdentityScope {
   readonly hostTags: HostTagImports;
@@ -77,13 +87,31 @@ export function wrappedElementIsPassedThrough(node: ts.Node, scope: PassThroughS
   );
 }
 
+/**
+ * Proves that every element enclosing `node` keeps it mounted for the owner's lifetime: a host other
+ * than `Modal`, or a source component that renders its `children` unconditionally.
+ */
+export function enclosingElementsStayMounted(node: ts.Node, scope: PassThroughScope): boolean {
+  const step = { depth: MAX_FORWARDING_DEPTH, file: null, mounted: true };
+  for (let current = replacedElement(node); ;) {
+    const parent = receivingElement(current, scope.owner);
+    if (parent === null) {
+      return true;
+    }
+    if (parent === undefined || !forwardsChildren(parent.openingElement, scope, step)) {
+      return false;
+    }
+    current = parent;
+  }
+}
+
 function forwardsChildren(
   element: ts.JsxOpeningLikeElement,
   scope: PassThroughScope,
-  { depth, file }: { readonly depth: number; readonly file: string | null },
+  { depth, file, mounted = false }: ForwardingStep,
 ): boolean {
   if (rendersPassThroughHost(element)) {
-    return true;
+    return !mounted || !CHILD_UNMOUNTING_HOST.test(element.tagName.getText());
   }
   const tag = element.tagName.getText();
   const slotted = element.attributes.properties.some(
@@ -91,25 +119,30 @@ function forwardsChildren(
   );
   const source = depth > 0 && !slotted ? scope.resolveComponent(file, tag) : null;
   const receivers =
-    source && !CHILD_OBSERVATION.test(source.body.getText()) ? childrenReceivers(source) : null;
-  return (
-    receivers?.every((receiver) =>
-      forwardsChildren(receiver, scope, { depth: depth - 1, file: source?.file ?? null }),
-    ) ?? false
-  );
+    source && !CHILD_OBSERVATION.test(source.body.getText())
+      ? childrenReceivers(source, mounted)
+      : null;
+  const next = { depth: depth - 1, file: source?.file ?? null, mounted };
+  return receivers?.every((receiver) => forwardsChildren(receiver, scope, next)) ?? false;
 }
 
 /**
  * The elements a component hands its `children` to, directly or through a props spread. Its own
  * output and reads of other props need no proof; any other use of `children` or the props abstains.
  */
-function childrenReceivers(source: ChildComponentSource): ts.JsxOpeningLikeElement[] | null {
+function childrenReceivers(
+  source: ChildComponentSource,
+  mounted: boolean,
+): ts.JsxOpeningLikeElement[] | null {
   const carriers = childrenCarriers(source.owner.parameters[0]?.name);
   const receivers: ts.JsxOpeningLikeElement[] = [];
   let forwardsOnly = carriers !== null;
   visit(source.body, (node) => {
     if (forwardsOnly && ts.isIdentifier(node) && carriers?.has(node.text)) {
-      const receiver = childrenReceiver(node, source.owner);
+      const receiver =
+        mounted && hasUnstableSubtreeLifetime(node, source.owner)
+          ? undefined
+          : childrenReceiver(node, source.owner);
       forwardsOnly = receiver !== undefined;
       if (receiver) {
         receivers.push(receiver);
