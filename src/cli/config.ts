@@ -1,6 +1,8 @@
 import { isAction, isMaterialityTier } from "./options.js";
+import { isJsonObject, isJsonString } from "../core/json.js";
 import { readFile, stat } from "node:fs/promises";
 import type { Action } from "./options.js";
+import type { JsonValue } from "../core/json.js";
 import type { MaterialityTier } from "../analysis/constants.js";
 import { UsageError } from "./usage-error.js";
 import path from "node:path";
@@ -14,12 +16,6 @@ export interface ScanConfig {
   /** Absolute path of the file the values came from, or null when no file was found. */
   readonly source: string | null;
 }
-
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-
-type JsonValue = boolean | number | string | null | readonly JsonValue[] | JsonObject;
 
 const EMPTY_CONFIG: ScanConfig = { ignoreActions: [], materiality: null, source: null };
 
@@ -91,14 +87,6 @@ function parseMateriality(value: JsonValue | undefined, label: string): Material
     throw new UsageError(`${label}: materiality must be "broad" or "compact"`);
   }
   return value;
-}
-
-function isJsonObject(value: JsonValue | undefined): value is JsonObject {
-  return value instanceof Object && !Array.isArray(value);
-}
-
-function isJsonString(value: JsonValue | undefined): value is string {
-  return value?.constructor === String;
 }
 
 function ancestors(start: string): readonly string[] {

@@ -1,3 +1,4 @@
+import { parseJsonFields } from "../core/json.js";
 import path from "node:path";
 import { readOptionalText } from "./read-optional-text.js";
 import { readdir } from "node:fs/promises";
@@ -106,7 +107,7 @@ async function manifestEnables(manifestPath: string, toolchain: Toolchain): Prom
 }
 
 function readManifestFacts(text: string, packages: readonly string[]): ManifestFacts | null {
-  const manifest = parseJsonObject(text);
+  const manifest = parseJsonFields(text);
   if (manifest === null) {
     return null;
   }
@@ -151,17 +152,4 @@ async function anyFileMatches(filePaths: readonly string[], config: RegExp): Pro
     return true;
   }
   return anyFileMatches(rest, config);
-}
-
-function parseJsonObject(text: string): ReadonlyMap<string, unknown> | null {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (!(parsed instanceof Object)) {
-      return null;
-    }
-    const entries: readonly (readonly [string, unknown])[] = Object.entries(parsed);
-    return new Map(entries);
-  } catch {
-    return null;
-  }
 }

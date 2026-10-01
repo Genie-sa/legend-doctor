@@ -1,13 +1,10 @@
+import type { JsonObject, JsonValue } from "../core/json.js";
 import type { SubscriptionEnvironment, SubscriptionMeasurement } from "../core/subscriptions.js";
 import type { AnalysisReport } from "../core/types.js";
 import { applySubscriptionMeasurements } from "../report/subscription-measurements.js";
+import { isJsonString } from "../core/json.js";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-type JsonValue = boolean | number | string | null | readonly JsonValue[] | JsonObject;
 
 export async function attachSubscriptionMeasurements(
   report: AnalysisReport,
@@ -50,9 +47,6 @@ function isMissingFile(cause: unknown): cause is Error & { code: "ENOENT" } {
 function isObject(value: JsonValue | SubscriptionMeasurement | undefined): value is JsonObject {
   return value instanceof Object && !Array.isArray(value);
 }
-function isString(value: JsonValue | undefined): value is string {
-  return value?.constructor === String;
-}
 function isCount(value: JsonValue | undefined): value is number {
   return value?.constructor === Number && Number.isSafeInteger(value) && Number(value) >= 0;
 }
@@ -87,11 +81,11 @@ function parseEnvironment(value: JsonValue | undefined): SubscriptionEnvironment
     return null;
   }
   const { runtime, platform, configuration } = value;
-  return isString(runtime) &&
+  return isJsonString(runtime) &&
     runtime.trim() &&
-    isString(platform) &&
+    isJsonString(platform) &&
     platform.trim() &&
-    isString(configuration) &&
+    isJsonString(configuration) &&
     configuration.trim()
     ? { runtime, platform, configuration }
     : null;
@@ -102,9 +96,9 @@ function parseMeasurement(
 ): SubscriptionMeasurement | null {
   if (
     !isObject(value) ||
-    !isString(value.planId) ||
-    !isString(value.fingerprint) ||
-    !isString(value.scenario) ||
+    !isJsonString(value.planId) ||
+    !isJsonString(value.fingerprint) ||
+    !isJsonString(value.scenario) ||
     !value.scenario.trim() ||
     !isCount(value.samples) ||
     value.samples === 0 ||
