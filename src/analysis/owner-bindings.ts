@@ -1,5 +1,9 @@
 import type { EffectStateScope, StateCandidate, StateUsage } from "./model.js";
-import { bindingDeclarationCount, collectBindingNames } from "../core/analysis-ast.js";
+import {
+  bindingDeclarationCount,
+  collectBindingNames,
+  unwrapTransparentExpression,
+} from "../core/analysis-ast.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../core/ast.js";
 import type { HookImports } from "../core/imports.js";
 import { MUTATION_PROPERTY_NAMES } from "./constants.js";
@@ -47,14 +51,14 @@ export function collectUseValueBindings(
     if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name) || !node.initializer) {
       return;
     }
-    if (
-      !ts.isCallExpression(node.initializer) ||
-      !isObservableSubscriptionHookCall(node.initializer, imports)
-    ) {
-      return;
-    }
+    const initializer = unwrapTransparentExpression(node.initializer);
     const owner = findAncestor(node, isRuntimeFunctionLike);
-    if (!owner || bindingDeclarationCount(owner, node.name.text) !== 1) {
+    if (
+      !ts.isCallExpression(initializer) ||
+      !isObservableSubscriptionHookCall(initializer, imports) ||
+      !owner ||
+      bindingDeclarationCount(owner, node.name.text) !== 1
+    ) {
       return;
     }
     const ownerBindings = bindings.get(owner) ?? new Set<string>();

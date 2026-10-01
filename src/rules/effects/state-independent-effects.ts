@@ -39,6 +39,8 @@ export interface EffectStateDependencies {
   /** Whether a Legend binding or an unresolvable owner binding is reached anywhere. */
   readonly opaque: boolean;
   readonly schedule: EffectStateDependency | null;
+  /** Every dependency the schedule reaches, of which `schedule` is the strongest. */
+  readonly scheduled: readonly EffectStateDependency[];
   /** Every local React state the callback or its dependency array reaches. */
   readonly states: readonly StateCandidate[];
 }
@@ -66,7 +68,8 @@ export function analyzeEffectStateDependencies(
 ): EffectStateDependencies {
   if (!effect.owner || !effect.dependencies) {
     const unresolved: EffectStateDependency = { kind: "unresolved", name: "owner" };
-    return { body: unresolved, opaque: true, schedule: unresolved, states: [] };
+    const scheduled = [unresolved];
+    return { body: unresolved, opaque: true, schedule: unresolved, scheduled, states: [] };
   }
   const scope: IndependenceScope = {
     callback,
@@ -82,6 +85,7 @@ export function analyzeEffectStateDependencies(
     body: strongestDependency(body),
     opaque: reached.some((dependency) => !isStateDependency(dependency)),
     schedule: strongestDependency(schedule),
+    scheduled: schedule,
     states: [
       ...new Set(
         reached.flatMap((dependency) => (isStateDependency(dependency) ? [dependency.state] : [])),

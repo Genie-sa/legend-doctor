@@ -252,9 +252,10 @@ test("when one assumed fact leaves another blocker, both are asked in one two-fa
 
 const TITLE_EFFECT = `
   import { useEffect, useState } from "react";
+  import { publishTitle } from "./title";
   export function Panel() {
     const [filter, setFilter] = useState("");
-    useEffect(() => { document.title = filter ? "filtered" : "all"; }, [filter]);
+    useEffect(() => { publishTitle(filter ? "filtered" : "all"); }, [filter]);
     return <main>${CHROME}
       <input value={filter} onChange={(e) => setFilter(e.target.value)} />
       <p>{filter ? "filtered" : "all"}</p>

@@ -16,6 +16,7 @@ import {
   keepLifecycleAliasEffect,
   keepLifecycleEffect,
   keepPairedMountEffect,
+  keepRenderlessReactionEffect,
   keepStateIndependentEffect,
   keepStateSnapshotEffect,
   ownershipDirectiveEffect,
@@ -29,6 +30,7 @@ import {
   isExactCommittedPreviousValueGuard,
   isExactLatestValueRefMirror,
 } from "./committed-ref-mirrors.js";
+import { isRenderlessReaction, observableReactionClassification } from "./observable-reactions.js";
 import type { EffectStateDependency } from "./state-independent-effects.js";
 import { analyzeEffectStateDependencies } from "./state-independent-effects.js";
 import { callbackIsCommittedRefIntegration } from "./committed-ref-integration.js";
@@ -38,7 +40,6 @@ import { findAncestorUntil } from "../../core/ast.js";
 import { findMutationSiteReset } from "./mutation-site-resets.js";
 import { findPureDerivedSetter } from "./derived-setters.js";
 import { isDependencyDrivenExternalCommandEffect } from "./external-command-effects.js";
-import { observableReactionClassification } from "./observable-reactions.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
@@ -177,17 +178,16 @@ function stateDependencyClassification(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   inline: InlineEffectContext,
 ): ClassifiedEffect {
-  const { body, opaque, schedule, states } = analyzeEffectStateDependencies(
-    effect,
-    callback,
-    inline,
-  );
+  const dependencies = analyzeEffectStateDependencies(effect, callback, inline);
+  const { body, opaque, schedule, states } = dependencies;
   const stateDependencies = opaque ? [] : states;
   if (body?.kind === "setter") {
     return reviewStateWritingEffect(body.state.valueName, stateDependencies);
   }
   if (schedule) {
-    return reviewStateScheduledEffect(schedule, stateDependencies);
+    return isRenderlessReaction(effect, dependencies, inline)
+      ? keepRenderlessReactionEffect()
+      : reviewStateScheduledEffect(schedule, stateDependencies);
   }
   if (body?.kind === "unresolved") {
     return reviewCausalOwnerEffect();

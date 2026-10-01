@@ -1,6 +1,12 @@
 import type { ClassifiedEffect, EffectCandidate } from "../../analysis/model.js";
-import { identifiersNamed, nodeWithin } from "../../core/ast.js";
-import { isDeclarationName, isNonValueIdentifier } from "../../core/analysis-ast.js";
+import { calledCode, incidentalObservableReads } from "./incidental-observable-reads.js";
+import { identifiersNamed, nearestNestedFunction, nodeWithin, visit } from "../../core/ast.js";
+import {
+  isDeclarationName,
+  isNonValueIdentifier,
+  rootIdentifier,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
 import {
   keepParentRenderedReactionEffect,
   keepRenderedReactionEffect,
@@ -9,10 +15,15 @@ import {
   reviewUntrackableCallEffect,
   reviewUntrackableReadsEffect,
 } from "./effect-verdicts.js";
+import type { EffectStateDependencies } from "./state-independent-effects.js";
 import type { InlineEffectContext } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { incidentalObservableReads } from "./incidental-observable-reads.js";
+import { localReachResolver } from "../../project/source-components/reach-resolvers.js";
 import ts from "typescript";
+
+/** Legend writes, including the array and set mutations an observable proxies. */
+const OBSERVABLE_WRITE_PATTERN =
+  /^(?:add|assign|clear|delete|pop|push|reverse|set|shift|sort|splice|toggle|unshift)$/u;
 
 /** A dependency effect whose every dependency is a `useValue` snapshot or a stable `useObservable` handle. */
 export function observableReactionClassification(
@@ -94,4 +105,64 @@ function useValueDependenciesAreEffectOnly(
           nodeWithin(reference, call),
       ),
   );
+}
+
+/**
+ * An effect that writes no React state or observable causes no render, and when the owner renders
+ * every value that schedules it, an observable reaction keeps those subscriptions and removes none.
+ */
+export function isRenderlessReaction(
+  effect: EffectCandidate,
+  { body, scheduled }: EffectStateDependencies,
+  inline: InlineEffectContext,
+): boolean {
+  return (
+    body?.kind !== "unresolved" &&
+    scheduled.every(
+      ({ kind, name }) =>
+        (kind === "legend" && inline.useObservableBindings.has(name)) ||
+        ((kind === "legend" || kind === "value") && rendersOutsideEffect(name, effect)),
+    ) &&
+    !callsUnseenWriter(effect, inline)
+  );
+}
+
+function rendersOutsideEffect(name: string, { call, owner }: EffectCandidate): boolean {
+  return identifiersNamed(owner?.body, name).some(
+    (reference) =>
+      owner !== null &&
+      nearestNestedFunction(reference, owner) === null &&
+      !isDeclarationName(reference) &&
+      !isNonValueIdentifier(reference) &&
+      !nodeWithin(reference, call),
+  );
+}
+
+/** An observable write, or a call into, or handing over, application code that may write one. */
+function callsUnseenWriter(
+  { callback }: EffectCandidate,
+  { childContracts, stateByValue, useValueBindings }: InlineEffectContext,
+): boolean {
+  const resolver = childContracts?.reachResolver?.() ?? localReachResolver;
+  const snapshot = (expression: ts.Expression): boolean => {
+    const name = rootIdentifier(expression)?.text ?? "";
+    return stateByValue.has(name) || useValueBindings.has(name);
+  };
+  const runsCode = (expression: ts.Expression): boolean => {
+    const root = rootIdentifier(expression);
+    return root !== null && calledCode(root, expression, resolver).kind !== "external";
+  };
+  let writes = false;
+  visit(callback?.body, (node) => {
+    if (ts.isCallExpression(node)) {
+      const callee = unwrapTransparentExpression(node.expression);
+      writes ||=
+        (ts.isPropertyAccessExpression(callee) &&
+          OBSERVABLE_WRITE_PATTERN.test(callee.name.text)) ||
+        runsCode(callee) ||
+        snapshot(callee) ||
+        node.arguments.some((argument) => runsCode(argument) && !snapshot(argument));
+    }
+  });
+  return writes;
 }

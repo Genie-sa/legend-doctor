@@ -226,6 +226,16 @@ export function keepStateIndependentEffect(): ClassifiedEffect {
   };
 }
 
+export function keepRenderlessReactionEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "probable",
+    derivedState: null,
+    message:
+      "Keep this React effect; it writes no React state or observable, and the owner renders every value that schedules it, so an observable reaction would remove no render.",
+  };
+}
+
 export function reviewStateReactionEffect(
   valueName: string,
   stateDependencies: readonly StateCandidate[],

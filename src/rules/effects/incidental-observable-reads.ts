@@ -263,7 +263,7 @@ function isObservableReceiver(
 }
 
 /** What calling a name runs; a React hook handle, like a global, runs no application code. */
-function calledCode(
+export function calledCode(
   root: ts.Identifier,
   callee: ts.Expression,
   resolver: ReachResolver,
