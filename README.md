@@ -26,6 +26,8 @@ npm install --save-dev legend-doctor
 
 Scan the smallest folder that contains the related components, hooks, and observables together. One file rarely
 holds enough proof.
+Scans skip `.git`, `.github`, `.next`, `.turbo`, `.wrangler`, `.yarn`, `build`, `coverage`, `dist`, `node_modules`, and
+`vendor` directories.
 
 ## Use it with a coding agent
 
