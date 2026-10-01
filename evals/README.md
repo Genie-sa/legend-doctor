@@ -182,7 +182,7 @@ in `evals/performance-budgets.ts`:
   counter, so wall time with that margin stands in for one.
 
 Baselines come from CI run 36409722431 on ubuntu-latest (4 CPUs, 16 GB) with the analyzer at 51f2d32, and for gptme,
-zenborg, and junto from CI run 36444683516 at c478731:
+zenborg, and junto from CI run 36444683516 at c478731, and for fractals from CI run 36894444846 at 1b0e659:
 
 | Repository                | Baseline | Limit |
 | ------------------------- | -------: | ----: |
@@ -199,7 +199,7 @@ zenborg, and junto from CI run 36444683516 at c478731:
 | `open-webui-react-native` |     3.1s |   60s |
 | `legend-music`            |     2.4s |   60s |
 | `nori`                    |     2.2s |   60s |
-| `fractals`                |     2.2s |   60s |
+| `fractals`                |     2.0s |   60s |
 | `legend-photos`           |     1.2s |   60s |
 
 Each scan prints its wall time, peak RSS, file count, and hook count, so the job log shows trends before a limit
