@@ -6,6 +6,7 @@ import type { AnalysisContext } from "./analysis-context.js";
 import type { ChildComponentSource } from "../../rules/child-contract/model.js";
 import type { ReactComponentWrappers } from "../../core/react-component-wrappers.js";
 import type { SourceHookDeclaration } from "../../rules/source-callback-contract/model.js";
+import { compoundComponentName } from "../source-components/module-bindings.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
@@ -90,23 +91,32 @@ function declarationHookOwner(
     : null;
 }
 
-/** The source of the component that `name` binds in `file`, followed through imports and re-exports. */
+/** The source of the component that `name` (or a `Compound.Part` tag) binds in `file`, followed through imports and re-exports. */
 export function componentSource(
   context: AnalysisContext,
   file: string,
   name: string,
 ): ChildComponentSource | null {
-  const resolved = context.sourceIndex.componentDeclarationFor(file, name);
+  const [compound = name, part, ...nestedParts] = name.split(".");
+  const resolved =
+    nestedParts.length === 0 ? context.sourceIndex.componentDeclarationFor(file, compound) : null;
   const analysisFile = resolved ? context.project.getFile(resolved.file) : null;
   if (!resolved || !analysisFile) {
     return null;
   }
-  return findComponentDeclaration({
-    deferredCallbackHooks: context.sourceIndex.deferredCallbackHooksFor(resolved.file),
-    file: resolved.file,
-    localName: resolved.localName,
-    sourceFile: analysisFile.sourceFile,
-  });
+  const declaration =
+    part === undefined
+      ? findComponentDeclaration({
+          deferredCallbackHooks: context.sourceIndex.deferredCallbackHooksFor(resolved.file),
+          file: resolved.file,
+          localName: resolved.localName,
+          sourceFile: analysisFile.sourceFile,
+        })
+      : null;
+  const member = declaration
+    ? null
+    : compoundComponentName(analysisFile.sourceFile, resolved.localName, part);
+  return declaration ?? (member === null ? null : componentSource(context, resolved.file, member));
 }
 
 export function findComponentDeclaration(

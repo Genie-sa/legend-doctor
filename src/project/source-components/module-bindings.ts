@@ -1,9 +1,9 @@
 import type { ComponentFunction, ModuleRecordDraft, ModuleSignals } from "./model.js";
+import { propertyNameText, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import type { ReactComponentWrappers } from "../../core/react-component-wrappers.js";
 import { bindingContainsName } from "../../core/binding-references.js";
 import { isReactComponentWrapper } from "../../core/react-component-wrappers.js";
 import ts from "typescript";
-import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 const MAX_OBJECT_ASSIGN_ALIAS_DEPTH = 4;
 
@@ -132,7 +132,7 @@ function collectDefaultDeferredOwner(
   }
 }
 
-function staticAssignedComponentName(
+export function staticAssignedComponentName(
   sourceFile: ts.SourceFile,
   exportedName: string,
   components: ReadonlyMap<string, ComponentFunction>,
@@ -165,7 +165,54 @@ function nextObjectAssignAlias(
 }
 
 function objectAssignAliasTarget(sourceFile: ts.SourceFile, current: string): string | null {
-  const declarations = variableDeclarationsNamed(sourceFile, current);
+  const root = staticObjectAssignCall(sourceFile, current)?.arguments[0];
+  return root && ts.isIdentifier(root) ? root.text : null;
+}
+
+/** The identifier that `compound.part` (or `compound` itself) names in `const compound = Object.assign(Root, { part })`. */
+export function compoundComponentName(
+  sourceFile: ts.SourceFile,
+  compound: string,
+  part: string | undefined,
+): string | null {
+  const call =
+    topLevelValueDeclarationCount(sourceFile, "Object") === 0
+      ? staticObjectAssignCall(sourceFile, compound)
+      : null;
+  const [root, ...partObjects] = call?.arguments ?? [];
+  if (!root || !ts.isIdentifier(root)) {
+    return null;
+  }
+  return part === undefined ? root.text : compoundPartName(partObjects, part);
+}
+
+function compoundPartName(partObjects: readonly ts.Expression[], part: string): string | null {
+  const properties = partObjects.flatMap((argument) => {
+    const parts = unwrapTransparentExpression(argument);
+    return ts.isObjectLiteralExpression(parts) ? [...parts.properties] : [];
+  });
+  const matches = properties.filter(
+    (property) => property.name && propertyNameText(property.name) === part,
+  );
+  const [property] = matches;
+  if (
+    !property ||
+    matches.length !== 1 ||
+    properties.some((candidate) => ts.isSpreadAssignment(candidate))
+  ) {
+    return null;
+  }
+  if (ts.isShorthandPropertyAssignment(property)) {
+    return property.name.text;
+  }
+  const value = ts.isPropertyAssignment(property)
+    ? unwrapTransparentExpression(property.initializer)
+    : null;
+  return value && ts.isIdentifier(value) ? value.text : null;
+}
+
+function staticObjectAssignCall(sourceFile: ts.SourceFile, name: string): ts.CallExpression | null {
+  const declarations = variableDeclarationsNamed(sourceFile, name);
   const declaration = declarations.length === 1 ? declarations[0] : null;
   const initializer = declaration?.initializer
     ? unwrapTransparentExpression(declaration.initializer)
@@ -186,7 +233,12 @@ function objectAssignAliasTarget(sourceFile: ts.SourceFile, current: string): st
   ) {
     return null;
   }
-  return initializer.arguments[0].text;
+  return initializer;
+}
+
+export function isObjectAssignCall(expression: ts.Expression): boolean {
+  const call = unwrapTransparentExpression(expression);
+  return ts.isCallExpression(call) && isObjectAssignCallee(call.expression);
 }
 
 function isObjectAssignCallee(callee: ts.Expression): boolean {
