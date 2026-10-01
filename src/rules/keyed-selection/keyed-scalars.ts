@@ -1,6 +1,5 @@
 import { LIST_SIZED_OWNER_JSX_ELEMENTS, MAX_CONSUMER_JSX_SHARE } from "./model.js";
 import type { StateCandidate, StateUsage } from "../../analysis/model.js";
-import { callbackIsEventRooted, isInsideJsxEventCallback } from "../state-proofs/event-roots.js";
 import { findAncestorUntil, nearestNestedFunction, nodeWithin } from "../../core/ast.js";
 import {
   hasDirectPrimitiveInitializer,
@@ -8,6 +7,10 @@ import {
   stateMayHoldCallable,
 } from "../state-proofs/state-proofs.js";
 import { isHookDependencyReference, isJsxNode } from "../state-proofs/callback-sites.js";
+import {
+  isInsideJsxEventCallback,
+  plainCallbackIsEventRooted,
+} from "../state-proofs/event-roots.js";
 import { isRepeatedScalarKeyProjection, isSelectedItemLookup } from "./scalar-key-comparisons.js";
 import {
   isSafeJsxProjectionReference,
@@ -151,15 +154,7 @@ function classifySecondaryReference(
 ): SecondaryReferenceKind {
   const callback = nearestNestedFunction(reference, state.owner);
   if (callback) {
-    return (ts.isArrowFunction(callback) ||
-      ts.isFunctionDeclaration(callback) ||
-      ts.isFunctionExpression(callback)) &&
-      callbackIsEventRooted({
-        callback,
-        owner: state.owner,
-        dependencyName: reference.text,
-        seen: new Set(),
-      })
+    return plainCallbackIsEventRooted(callback, state.owner, reference.text)
       ? "deferred"
       : "unsafe";
   }
@@ -189,12 +184,7 @@ function isDeferredHookDependency(reference: ts.Identifier, state: StateCandidat
   return (
     candidate !== undefined &&
     (ts.isArrowFunction(candidate) || ts.isFunctionExpression(candidate)) &&
-    callbackIsEventRooted({
-      callback: candidate,
-      owner: state.owner,
-      dependencyName: reference.text,
-      seen: new Set(),
-    })
+    plainCallbackIsEventRooted(candidate, state.owner, reference.text)
   );
 }
 

@@ -3,8 +3,8 @@ import { containsAwaitOrYield, isAsync, setterRegionIsSynchronous } from "./sync
 import { isDeclarationName, isNonValueIdentifier } from "../../core/analysis-ast.js";
 import { nearestNestedFunction, nodeWithin, visit } from "../../core/ast.js";
 import type { CallbackBinding } from "./listener-callbacks.js";
-import { callbackIsEventRooted } from "../state-proofs/event-roots.js";
 import { hasDirectPrimitiveInitializer } from "../state-proofs/state-proofs.js";
+import { plainCallbackIsEventRooted } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
 type ValueReferenceVerdict = "ignored" | "listener-read" | "unsafe";
@@ -88,17 +88,9 @@ function referenceInEventRootedCallback(node: ts.Node, state: StateCandidate): b
   return (
     callback !== null &&
     callback !== state.owner &&
-    (ts.isArrowFunction(callback) ||
-      ts.isFunctionDeclaration(callback) ||
-      ts.isFunctionExpression(callback)) &&
     !isAsync(callback) &&
     !containsAwaitOrYield(callback.body) &&
-    callbackIsEventRooted({
-      callback,
-      owner: state.owner,
-      dependencyName: state.valueName,
-      seen: new Set(),
-    })
+    plainCallbackIsEventRooted(callback, state.owner, state.valueName)
   );
 }
 

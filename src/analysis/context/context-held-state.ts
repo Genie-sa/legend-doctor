@@ -447,7 +447,7 @@ function contextMessage(
   const hidden = survey.files.length - MAX_LISTED_CONSUMER_FILES;
   const more = hidden > 0 ? ` and ${hidden} more` : "";
   const plural = survey.files.length === 1 ? "" : "s";
-  return `Replace the context-held React state (${quoted}) with observables published through \`${contextName}\`: create ${observables} with \`useObservable\` in the provider, put the observables themselves in the provider value so its identity no longer changes on writes, and turn each setter into the observable's \`set\`. In the ${survey.files.length} consumer file${plural} (${listed}${more}) replace each destructured field with \`useValue\` on that observable at the same statement, so a consumer re-renders only for the fields it reads and writers never subscribe; the provider stops rendering on these writes.`;
+  return `Replace the context-held React state (${quoted}) with observables published through \`${contextName}\`: create ${observables} with \`useObservable\` in the provider, put the observables themselves in the provider value so its identity no longer changes on writes, and turn each setter into the observable's \`set\`. In the ${survey.files.length} consumer file${plural} (${listed}${more}) replace each destructured field with \`useValue\` on that observable at the same statement, narrowed to the path the consumer reads when it uses only part of an object (\`useValue(${names[0]}$.field)\`, not \`useValue(${names[0]}$)\`), so a consumer re-renders only for the values it reads and writers never subscribe; the provider stops rendering on these writes.`;
 }
 
 function shortFileName(file: string): string {

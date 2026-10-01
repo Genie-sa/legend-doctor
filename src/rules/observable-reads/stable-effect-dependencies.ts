@@ -5,6 +5,11 @@ import {
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import {
+  identifiedUseValueDeclaration,
+  isUseValueCall,
+  provenObservablePath,
+} from "./observable-paths.js";
+import {
   isReactEffectCall,
   resolveLifecycleCallback,
 } from "../react-commit-sensitivity/effect-lifecycle.js";
@@ -13,7 +18,6 @@ import type { ObservableReadScan } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { bindingContainsName } from "../../core/binding-references.js";
 import { hasStableSourceBinding } from "./independent-subscription-bindings.js";
-import { identifiedUseValueDeclaration } from "./observable-paths.js";
 import { isReactHookCall } from "../../core/imports.js";
 import { isUseObservableCall } from "../in-place-memo-keys/memo-dependencies.js";
 import { primitiveType } from "./primitive-paths.js";
@@ -45,9 +49,9 @@ export function hasStableEffectDependencies(
 
 /**
  * A value that keeps its identity when only an unrelated subscription rerenders the owner:
- * literals and primitive props, other `useValue` results, `useRef` and `useObservable` handles,
- * `useState` tuple members, zero-argument reads of an imported context-reader hook, and
- * `useMemo`/`useCallback` results whose own dependencies are stable. Counting the subscription
+ * literals and primitive props, other `useValue` results and their static fields, `useRef` and
+ * `useObservable` handles, `useState` tuple members, zero-argument reads of an imported
+ * context-reader hook, and `useMemo`/`useCallback` results whose own dependencies are stable. Counting the subscription
  * being cut as stable is harmless: a dependency on it is a memo or effect consumer, which blocks
  * the cut by itself.
  */
@@ -107,7 +111,7 @@ function stableHookResult(declaration: ts.VariableDeclaration, scope: StabilityS
   const { scan } = scope;
   const call = declaration.initializer;
   if (!call || !ts.isCallExpression(call)) {
-    return false;
+    return call !== undefined && subscriptionMember(call, scan);
   }
   return (
     identifiedUseValueDeclaration(declaration, scan) !== null ||
@@ -115,6 +119,26 @@ function stableHookResult(declaration: ts.VariableDeclaration, scope: StabilityS
     isUseObservableCall(call, scan.imports) ||
     stableCache(call, scope) ||
     isContextRead(call, scope)
+  );
+}
+
+/**
+ * `useValue(user$)?.id`: a static field of another subscription's snapshot. That subscription
+ * tracks the whole value, so the field changes only on a render it causes itself.
+ */
+function subscriptionMember(initializer: ts.Expression, scan: ObservableReadScan): boolean {
+  let receiver = unwrapTransparentExpression(initializer);
+  if (!ts.isPropertyAccessExpression(receiver)) {
+    return false;
+  }
+  while (ts.isPropertyAccessExpression(receiver)) {
+    receiver = unwrapTransparentExpression(receiver.expression);
+  }
+  return (
+    ts.isCallExpression(receiver) &&
+    receiver.arguments.length === 1 &&
+    isUseValueCall(receiver, scan.imports) &&
+    provenObservablePath(receiver.arguments[0]!, scan.observableBindings) !== null
   );
 }
 

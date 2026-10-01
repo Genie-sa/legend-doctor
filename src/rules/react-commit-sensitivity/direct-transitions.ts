@@ -17,8 +17,8 @@ import {
 } from "../../core/analysis-ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { callbackIsEventRooted } from "../state-proofs/event-roots.js";
 import { localFunctionBinding } from "../state-proofs/binding-lookup.js";
+import { plainCallbackIsEventRooted } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
 interface DirectTransitionContext {
@@ -131,14 +131,7 @@ function callbackReadsOwnerFunction(
 
 function isEventRootedTransition(node: ts.CallExpression, owner: RuntimeFunctionLike): boolean {
   const caller = findAncestor(node, isRuntimeFunctionLike);
-  return (
-    caller !== null &&
-    caller !== owner &&
-    (ts.isArrowFunction(caller) ||
-      ts.isFunctionDeclaration(caller) ||
-      ts.isFunctionExpression(caller)) &&
-    callbackIsEventRooted({ callback: caller, owner, dependencyName: "", seen: new Set() })
-  );
+  return caller !== null && caller !== owner && plainCallbackIsEventRooted(caller, owner);
 }
 
 function referenceIsCalledOrListed(node: ts.Node): boolean {

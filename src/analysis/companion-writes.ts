@@ -10,6 +10,7 @@ import {
 } from "../core/ast.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
 import type { StateFlowIndex } from "../project/state-flow/state-flow.js";
+import { groupStatesByOwner } from "./ast-helpers.js";
 import { isVisibilityTransitionAttribute } from "./membership-toggle.js";
 import ts from "typescript";
 
@@ -23,16 +24,7 @@ export interface StateCompanionWrites {
 export function groupSettableStatesByOwner(
   states: readonly StateCandidate[],
 ): ReadonlyMap<RuntimeFunctionLike, StateCandidate[]> {
-  const byOwner = new Map<RuntimeFunctionLike, StateCandidate[]>();
-  for (const state of states) {
-    if (!state.setterName) {
-      continue;
-    }
-    const ownerStates = byOwner.get(state.owner) ?? [];
-    ownerStates.push(state);
-    byOwner.set(state.owner, ownerStates);
-  }
-  return byOwner;
+  return groupStatesByOwner(states.filter((state) => state.setterName));
 }
 
 interface CompanionWriteSinks {

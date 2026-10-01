@@ -1,4 +1,4 @@
-import type { DraftEffect, EffectDraftProofs, SetterMutation } from "./model.js";
+import type { DraftEffect, EffectDraftProofs } from "./model.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "../../analysis/model.js";
 import {
   expressionDependsOnBinding,
@@ -13,7 +13,7 @@ import {
 } from "../../core/ast.js";
 import { isDeclarationName, isDirectJsxAttributeExpression } from "../../core/analysis-ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { callbackIsEventRooted } from "../state-proofs/event-roots.js";
+import { plainCallbackIsEventRooted } from "../state-proofs/event-roots.js";
 import ts from "typescript";
 
 interface DraftEditProof {
@@ -46,18 +46,7 @@ function isEventRootedEditRegion(
   proofs: EffectDraftProofs,
 ): boolean {
   const region = proofs.nearestMutationFunction(call, state.owner);
-  return (
-    region !== state.owner &&
-    (ts.isArrowFunction(region) ||
-      ts.isFunctionDeclaration(region) ||
-      ts.isFunctionExpression(region)) &&
-    callbackIsEventRooted({
-      callback: region,
-      owner: state.owner,
-      dependencyName: "",
-      seen: new Set(),
-    })
-  );
+  return region !== state.owner && plainCallbackIsEventRooted(region, state.owner);
 }
 
 function isIndependentEdit(
@@ -222,12 +211,10 @@ export function hasExternalCompanionWrites(
   members: readonly StateCandidate[],
 ): boolean {
   const memberSet = new Set(members);
-  const stateBySetter = new Map(
-    draft.context.states.flatMap((state) =>
-      state.owner === draft.owner && state.setterName ? [[state.setterName, state] as const] : [],
-    ),
+  const mutations = draft.context.proofs.collectSetterMutations(
+    draft.owner,
+    draft.context.states.filter((state) => state.owner === draft.owner),
   );
-  const mutations = collectSetterMutations(draft.owner, stateBySetter, draft.context.proofs);
   return mutations.some(
     (memberMutation) =>
       memberSet.has(memberMutation.state) &&
@@ -242,22 +229,4 @@ export function hasExternalCompanionWrites(
           ),
       ),
   );
-}
-
-function collectSetterMutations(
-  owner: RuntimeFunctionLike,
-  stateBySetter: ReadonlyMap<string, StateCandidate>,
-  proofs: EffectDraftProofs,
-): SetterMutation[] {
-  const mutations: SetterMutation[] = [];
-  visit(owner.body, (node) => {
-    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
-      return;
-    }
-    const state = stateBySetter.get(node.expression.text);
-    if (state) {
-      mutations.push({ call: node, region: proofs.nearestMutationFunction(node, owner), state });
-    }
-  });
-  return mutations;
 }

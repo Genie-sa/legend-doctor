@@ -7,6 +7,7 @@ import {
   scriptKindForFile,
   visit,
 } from "../core/ast.js";
+import { calledSubscriptionHook, subscriptionHookCallee } from "../core/use-value-import.js";
 import { collectHookImports, isReactHookCall } from "../core/imports.js";
 import { collectLocalComponents, collectPureProjectionImports } from "./owner-scan.js";
 import {
@@ -37,7 +38,6 @@ import { collectOwnershipProofs } from "./proofs/ownership-proofs.js";
 import { collectReactCommitContext } from "../rules/react-commit-sensitivity/react-commit-sensitivity.js";
 import { collectStateUsage } from "./state-usage.js";
 import { persistenceSinkEffects } from "../rules/effects/browser-storage-persistence.js";
-import { subscriptionHookCallee } from "../core/use-value-import.js";
 import ts from "typescript";
 
 export function analyzeSource(
@@ -174,6 +174,7 @@ function sourceAnalysisBase(
     ...ownerBindingIndexes(sourceFile, imports),
     ...commitScopedIndexes(reactCommit, effects),
     analysisRoot,
+    calledSubscriptionHook: calledSubscriptionHook(sourceFile),
     childContracts,
     confirmations,
     deferredCallbackHooks,

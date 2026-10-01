@@ -1,10 +1,13 @@
 import {
+  calleeName,
   findAncestorUntil,
   nodeWithin,
   visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../../core/ast.js";
 import type { JsxSubtreeNode } from "../deferred-reveal/jsx-subtrees.js";
+import { MAX_LEAF_SUBTREE_RATIO } from "../../analysis/constants.js";
+import { REACT_EFFECT_HOOKS } from "../../project/source-components/import-signals.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isSafeProjectionExpression } from "../deferred-reveal/safe-projections.js";
 import { jsxSubtreeAncestors } from "../deferred-reveal/jsx-subtrees.js";
@@ -13,6 +16,8 @@ import ts from "typescript";
 export const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 
 const jsxElementCounts = new WeakMap<ts.Node, number>();
+
+const ownerJsxElementCounts = new WeakMap<RuntimeFunctionLike, number>();
 
 export function isSafeJsxProjectionReference(
   node: ts.Node,
@@ -98,8 +103,20 @@ export function jsxElementCountIn(node: ts.Node): number {
   return count;
 }
 
+/** JSX built inside an effect callback, such as navigation header options, is not owner render work. */
 export function jsxElementCount(owner: RuntimeFunctionLike): number {
-  return owner.body ? jsxElementCountIn(owner.body) : 0;
+  const cached = ownerJsxElementCounts.get(owner);
+  if (cached !== undefined || !owner.body) {
+    return cached ?? 0;
+  }
+  let count = jsxElementCountIn(owner.body);
+  visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
+    if (ts.isCallExpression(node) && REACT_EFFECT_HOOKS.has(calleeName(node.expression) ?? "")) {
+      count -= node.arguments[0] ? jsxElementCountIn(node.arguments[0]) : 0;
+    }
+  });
+  ownerJsxElementCounts.set(owner, count);
+  return count;
 }
 
 /** The owner's JSX elements less those that only another return statement renders. */
@@ -121,6 +138,37 @@ export function branchJsxElementCount(node: ts.Node, owner: RuntimeFunctionLike)
     count -= jsxElementCountIn(returned);
   }
   return count;
+}
+
+function gatedLeaf(site: ts.Node, owner: RuntimeFunctionLike): ts.Node | null {
+  const attribute = ts.isJsxAttribute(site)
+    ? site
+    : findAncestorUntil(site, ts.isJsxAttribute, owner);
+  if (!attribute) {
+    return findAncestorUntil(site, ts.isJsxExpression, owner);
+  }
+  return attribute.name.getText() === "key"
+    ? (jsxSubtreeAncestors(attribute, owner)[0] ?? null)
+    : null;
+}
+
+/**
+ * Wrapping a site in a leaf subscriber saves nothing when that one leaf renders most of the owner:
+ * a child read re-renders the whole expression it gates and a `key` read remounts its element.
+ * Other attribute reads re-render only their own element, since a wrapper can take its children.
+ */
+export function leafSiteCoversOwner(
+  sites: readonly ts.Node[],
+  owner: RuntimeFunctionLike,
+): boolean {
+  return sites.some((site) => {
+    const leaf = gatedLeaf(site, owner);
+    return (
+      leaf !== null &&
+      jsxElementCountIn(leaf) / branchJsxElementCount(leaf, owner) > MAX_LEAF_SUBTREE_RATIO &&
+      !hasRepeatedJsxRenderWorkOutside(owner, leaf)
+    );
+  });
 }
 
 export function hasRepeatedJsxRenderWorkOutside(

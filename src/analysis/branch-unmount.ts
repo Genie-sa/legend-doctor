@@ -9,11 +9,11 @@ import { mutationsMayCoexecute, nearestMutationFunction } from "./mutations.js";
 import { MIN_REPEATED_SETTER_CALLS } from "./constants.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
 import type { StateFlowIndex } from "../project/state-flow/state-flow.js";
-import { callbackIsEventRooted } from "../rules/state-proofs/event-roots.js";
 import { directBranchReturnCallSite } from "./return-call-sites.js";
 import { hasStateInitializer } from "../rules/deferred-reveal/deferred-reveal.js";
 import { jsxSubtreeForOpening } from "./ast-helpers.js";
 import { mutationRegionOnlyCallsStateSetters } from "../rules/effect-drafts/draft-mutations.js";
+import { plainCallbackIsEventRooted } from "../rules/state-proofs/event-roots.js";
 import { stateHasNoEffectOrDeferredUse } from "./verdicts/transport-verdicts.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../core/analysis-ast.js";
@@ -220,18 +220,7 @@ function isBranchUnmountReset(
     return false;
   }
   const region = nearestMutationFunction(reset, state.owner);
-  if (
-    region === state.owner ||
-    (!ts.isArrowFunction(region) &&
-      !ts.isFunctionDeclaration(region) &&
-      !ts.isFunctionExpression(region)) ||
-    !callbackIsEventRooted({
-      callback: region,
-      owner: state.owner,
-      dependencyName: "",
-      seen: new Set(),
-    })
-  ) {
+  if (region === state.owner || !plainCallbackIsEventRooted(region, state.owner)) {
     return false;
   }
   const closeCalls = controllerUsage.setterCallNodes.filter(

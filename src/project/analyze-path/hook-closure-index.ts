@@ -1,5 +1,6 @@
 import type { AnalysisContext } from "./analysis-context.js";
 import type { AnalysisFile } from "../analysis-project.js";
+import { parseJsonFields } from "../../core/json.js";
 import { pathIdentityKey } from "../../core/path-identity.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
@@ -370,19 +371,10 @@ export function isPublishedManifest(index: ClosureIndex, manifest: string): bool
 }
 
 function manifestIsPublished(text: string | undefined): boolean {
-  const fields = text === undefined ? null : parseJsonObject(text);
+  const fields = text === undefined ? null : parseJsonFields(text);
   return (
     fields === null ||
     (fields.get("private") !== true &&
       ["exports", "main", "module"].some((field) => fields.get(field) !== undefined))
   );
-}
-
-function parseJsonObject(text: string): ReadonlyMap<string, unknown> | null {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed instanceof Object ? new Map(Object.entries(parsed)) : null;
-  } catch {
-    return null;
-  }
 }

@@ -92,6 +92,19 @@ test("an answer recorded for a different fingerprint is stale and not applied", 
   assert.equal(requireValue(converted).action, "use-observable");
 });
 
+test("a confirmed render cut wraps read sites that capture parent props in Computed, not Memo", () => {
+  const id = "src/panel.tsx::Panel::filter::render-cut-unproven";
+  const { fingerprint, research } = requireValue(requireValue(states(FILTERED_LIST)[0]).assumption);
+  assert.match(requireValue(research[1]).check, /can become a `Computed` block/u);
+  const confirmed = new ConfirmationSet([{ answer: "yes", fingerprint, id }]);
+  const { message } = requireValue(states(FILTERED_LIST, confirmed)[0]);
+  assert.match(message, /leaf subscriber \(a `Computed` block or a small wrapper/u);
+  assert.match(
+    message,
+    /Use `Memo` only for a block that reads nothing else from the owner's render/u,
+  );
+});
+
 test("group questions point at every member's declaration and write sites", () => {
   const [open] = states(CO_WRITTEN_DRAWER);
   const { research } = requireValue(requireValue(open).assumption);
@@ -347,4 +360,66 @@ test("ranked group outcomes count conversions even when the first member stays b
   assert.equal(question?.name, "error");
   assert.equal(question?.ifConfirmed, "use-observable");
   assert.equal(question?.convertingCount, 1);
+});
+
+const MENU_ITEMS = Array.from({ length: 12 }, (_value, index) => `<li>Item ${index}</li>`).join("");
+
+test("no leaf question is asked when the leaves would render most of the owner", () => {
+  const owners = {
+    gate: `export function Menu() {
+      const [open, setOpen] = useState(false);
+      return <div>
+        <button aria-expanded={open} onClick={() => setOpen(true)}>Menu</button>
+        {open && <ul>${MENU_ITEMS}</ul>}
+      </div>;
+    }`,
+    key: `export function Board({ rows }: { rows: string[] }) {
+      const [version, setVersion] = useState(0);
+      return <section key={version}>${CHROME}<button onClick={() => setVersion(version + 1)} />
+        <ul>{rows.filter((row) => row.length > version).map((row) => <li key={row}>{row}</li>)}</ul>
+      </section>;
+    }`,
+    transport: `export function Panel() {
+      const [open, setOpen] = useState(false);
+      return <main><Header /><button onClick={() => setOpen(true)}>Open</button>
+        <Popover open={open} onOpenChange={setOpen} anchor="top" />
+        {open ? <ul>${MENU_ITEMS}</ul> : null}
+      </main>;
+    }`,
+  };
+  for (const [readSites, owner] of Object.entries(owners)) {
+    const [state] = states(`import { useState } from "react";\n${owner}`);
+    assert.equal(requireValue(state).action, "review-state", readSites);
+    assert.equal(requireValue(state).assumption, undefined, readSites);
+  }
+});
+
+test("small leaves in a broad owner keep their leaf question", () => {
+  const owners = {
+    branch: `export function Panel({ rows }: { rows: string[] }) {
+      const [filter, setFilter] = useState("");
+      if (rows.length === 0) return <p>Empty</p>;
+      return <main>${CHROME}<input value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <ul>{rows.filter((row) => row.includes(filter)).map((row) => <li key={row}>{row}</li>)}</ul>
+      </main>;
+    }`,
+    distinct: `export function Panel({ rows }: { rows: string[] }) {
+      const [filter, setFilter] = useState("");
+      return <main>${CHROME}<input value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <p>{rows.filter((row) => row.includes(filter)).length}</p>
+      </main>;
+    }`,
+    container: `export function Panel({ rows }: { rows: string[] }) {
+      const [dense, setDense] = useState(false);
+      return <main className={dense ? "dense" : "roomy"}>${CHROME}<button onClick={() => setDense(true)} />
+        <p>{rows.filter((row) => dense || row.length < 9).length}</p>
+      </main>;
+    }`,
+  };
+  for (const [readSites, owner] of Object.entries(owners)) {
+    const [state] = states(`import { useState } from "react";\n${owner}`);
+    const { assumption } = requireValue(state);
+    assert.deepEqual(assumption?.facts, ["render-cut-unproven"], readSites);
+    assert.equal(assumption?.ifConfirmed, "use-observable", readSites);
+  }
 });
