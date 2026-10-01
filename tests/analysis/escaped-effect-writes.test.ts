@@ -12,7 +12,8 @@ function searchPanel(body: string): HookFinding {
     `
     import { useEffect, useState } from "react";
     declare function useServerSearch(query: string): string[] | undefined;
-    export function SearchPanel({ query, rows }: { query: string; rows: string[] }) {
+    declare function useRegister(setter: (value: string) => void): void;
+    export function SearchPanel({ query }: { query: string }) {
       const [debounced, setDebounced] = useState("");
       ${body}
       return (
@@ -42,19 +43,18 @@ test("a detached effect write leaves an escaped state blocked on its escape", ()
   assert.doesNotMatch(question, /both reads and writes/u);
 });
 
-test("a detached effect write leaves a shadowed state without a confirmable question", () => {
-  const finding = searchPanel(
-    `${DETACHED_WRITE}\nconst labels = rows.map((row) => { const debounced = row.trim(); return debounced; });`,
-  );
+test("a detached effect write leaves an escaped setter blocked on its escape before the leaf cut", () => {
+  const finding = searchPanel(`${DETACHED_WRITE}\nuseRegister(setDebounced);`);
   assert.equal(finding.action, "review-state");
   assert.equal(finding.abstentionReason, "ownership-flow-unresolved");
-  assert.equal(finding.assumption, undefined);
+  const { facts, question } = requireValue(finding.assumption);
+  assert.deepEqual(facts, ["ownership-flow-unresolved", "render-cut-unproven"]);
+  assert.match(question, /escapes to code this analysis cannot follow/u);
+  assert.doesNotMatch(question, /both reads and writes/u);
 });
 
-test("an effect that reads and writes a shadowed state asks nothing the leaf wrap cannot answer", () => {
-  const finding = searchPanel(
-    `${READ_AND_WRITE}\nconst labels = rows.map((row) => { const debounced = row.trim(); return debounced; });`,
-  );
+test("an effect that reads and writes an escaped state asks nothing the leaf wrap cannot answer", () => {
+  const finding = searchPanel(`${READ_AND_WRITE}\nconst results = useServerSearch(debounced);`);
   assert.equal(finding.action, "review-state");
   assert.equal(finding.abstentionReason, "effect-write-ownership-unresolved");
   assert.equal(finding.assumption, undefined);

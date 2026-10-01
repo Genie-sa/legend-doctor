@@ -9,6 +9,7 @@ const CHROME =
 
 interface Verdict {
   readonly action: HookFinding["action"];
+  readonly facts: readonly string[] | null;
   readonly message: string;
   readonly reason: HookFinding["abstentionReason"] | null;
 }
@@ -18,6 +19,7 @@ function verdict(source: string, name: string): Verdict {
   const finding = requireValue(findings.find((candidate) => candidate.name === name));
   return {
     action: finding.action,
+    facts: finding.assumption?.facts ?? null,
     message: finding.message,
     reason: finding.abstentionReason ?? null,
   };
@@ -79,6 +81,40 @@ function registeredBoard(parameter: string): string {
     }
   `;
 }
+
+function syncedSearch(effect: string, rowName: string): string {
+  return `
+    import { useEffect, useState } from "react";
+    export function SearchPanel({ query, rows }: { query: string; rows: string[] }) {
+      const [debounced, setDebounced] = useState("");
+      ${effect}
+      const labels = rows.map((row) => { const ${rowName} = row.trim(); return ${rowName}; });
+      return (
+        <main>
+          ${CHROME}
+          <p>{debounced}</p>
+          <p>{labels.length}</p>
+        </main>
+      );
+    }
+  `;
+}
+
+const DETACHED_WRITE = "useEffect(() => { setDebounced(query); }, [query]);";
+const READ_AND_WRITE =
+  "useEffect(() => { if (debounced !== query) setDebounced(query); }, [query, debounced]);";
+
+test("a row-local const named like the state leaves an effect-written state convertible", () => {
+  const shadowed = verdict(syncedSearch(DETACHED_WRITE, "debounced"), "debounced");
+  assert.equal(shadowed.action, "use-observable");
+  assert.deepEqual(shadowed, verdict(syncedSearch(DETACHED_WRITE, "label"), "debounced"));
+});
+
+test("a row-local const named like the state keeps the effect-write question of its control", () => {
+  const shadowed = verdict(syncedSearch(READ_AND_WRITE, "debounced"), "debounced");
+  assert.deepEqual(shadowed.facts, ["effect-write-ownership-unresolved", "render-cut-unproven"]);
+  assert.deepEqual(shadowed, verdict(syncedSearch(READ_AND_WRITE, "label"), "debounced"));
+});
 
 test("a callback parameter named like the state is its own binding, not a read of the state", () => {
   const shadowed = verdict(dialogPanel("open"), "open");
