@@ -439,9 +439,9 @@ them apart. `syncObservable` persistence queues changes until a microtask, so it
 
 A legacy root also commits writes once when they run synchronously inside a React event handler, because React DOM and
 the React Native renderer dispatch host events inside `batchedUpdates`. The finding is the same review when the writes'
-function reaches nothing but host event props: a lowercase DOM element or a `requireNativeComponent` view, directly,
-through `useCallback` or a plain alias, through a call from such a handler, or through a child that only forwards the
-prop to one. Any other use, an `await` before the writes, or a timer around them keeps the change. React Native's
+function reaches nothing but host event props: a lowercase DOM element, a `styled.input` style wrapper of one, or a
+`requireNativeComponent` view, directly, through `useCallback` or a plain alias, through a call from such a handler, or
+through a child that only forwards the prop to one. Any other use, an `await` before the writes, or a timer around them keeps the change. React Native's
 `Pressable` stays a change because its source is not visible to the analysis.
 
 ### Preserve a conditional child's mount behavior

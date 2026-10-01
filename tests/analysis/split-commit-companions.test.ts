@@ -296,3 +296,42 @@ test("the split-commit review asks whether an intermediate commit is acceptable"
   );
   assert.equal(error?.assumption?.ifConfirmed, "use-observable");
 });
+
+function dragBoard(element: string): string {
+  return `
+    import { useState } from "react";
+    import { Draggable } from "react-draggable";
+    import { report } from "./report";
+    export function Board({ children }: { children: React.ReactNode }) {
+      const [dragging, setDragging] = useState(false);
+      const [origin, setOrigin] = useState("");
+      const startDrag = () => {
+        setDragging(true);
+      };
+      report(dragging);
+      return (
+        <section>
+          ${CHROME}
+          <p>{origin}</p>
+          ${element}
+        </section>
+      );
+    }
+  `;
+}
+
+const CO_WRITE = `() => { setOrigin("top"); startDrag(); }`;
+
+test("React 18 abstains on a co-write in a component's event prop that React may not dispatch", () => {
+  const source = dragBoard(`<Draggable onStart={${CO_WRITE}}>{children}</Draggable>`);
+  assert.equal(verdict(states(source).get("origin")), "use-observable");
+  assert.equal(
+    verdict(states(source, true).get("origin")),
+    "review-state/atomic-transition-unproven",
+  );
+});
+
+test("React 18 commits the co-writes of a host element's event prop once", () => {
+  const source = dragBoard(`<button onClick={${CO_WRITE}}>Drop</button>`);
+  assert.equal(verdict(states(source, true).get("origin")), "use-observable");
+});

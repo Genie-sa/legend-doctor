@@ -38,6 +38,8 @@ export interface ModuleRecord {
   deferredCallbackHooks: ReadonlyMap<string, ReadonlySet<number>>;
   frameworkEventComponents: ReadonlySet<string>;
   hookDeclarations: ReadonlyMap<string, ComponentFunction>;
+  /** Styled wrappers of an intrinsic element, which pass every event prop to that element. */
+  hostElementComponents: ReadonlySet<string>;
   imports: ReadonlyMap<string, ImportBinding>;
   legendValueHooks: ReadonlyMap<string, string>;
   legendValueWriters: ReadonlyMap<string, string>;
@@ -74,6 +76,7 @@ export type SourceSymbolKind =
   | "deferred-callback-hook"
   | "framework-event-component"
   | "hook"
+  | "host-element-component"
   | "legend-value-hook"
   | "legend-value-writer"
   | "observable"
@@ -137,6 +140,8 @@ export interface CompilerContext {
 export interface StyledComponentCandidate {
   exported: boolean;
   factory: string;
+  /** The target is an intrinsic tag, as in `styled.input`, rather than a component binding. */
+  intrinsic: boolean;
   name: string;
   targetRoot: string;
 }
@@ -148,6 +153,7 @@ export interface ModuleRecordDraft {
   deferredCallbackOwners: Map<string, ReadonlyMap<string, ReadonlySet<number>>>;
   frameworkEventComponents: Set<string>;
   hookDeclarations: Map<string, ComponentFunction>;
+  hostElementComponents: Set<string>;
   imports: Map<string, ImportBinding>;
   legendValueHooks: Map<string, string>;
   legendValueWriters: Map<string, string>;

@@ -1,15 +1,15 @@
 import type { SetterMutation, SplitCommitCompanion, StateCandidate, StateUsage } from "./model.js";
-import { callbackIsEventRooted, isPlainFunction } from "../rules/state-proofs/event-roots.js";
 import { collectSetterMutations, groupSettableStatesByOwner } from "./companion-writes.js";
 import { executionOwner, executionUnit, functionEntryKey } from "../core/execution-units.js";
+import type { ComponentPropHostDispatch } from "../rules/child-contract/host-event-dispatch.js";
 import type { ExecutionUnit } from "../core/execution-units.js";
 import { PAIRED_CLUSTER_SIZE } from "./constants.js";
 import type { ProgramReach } from "../project/source-components/write-units.js";
-import type { RuntimeFunctionLike } from "../core/ast.js";
 import type { SourceAnalysis } from "./proofs/contracts.js";
 import { fileReach } from "../project/source-components/synchronous-reach.js";
 import { localReachResolver } from "../project/source-components/reach-resolvers.js";
 import { programReach } from "../project/source-components/write-units.js";
+import { runsOnlyInHostEvents } from "../rules/child-contract/host-event-dispatch.js";
 import ts from "typescript";
 
 const PROMISE_CALLBACK_METHODS: ReadonlySet<string> = new Set(["catch", "finally", "then"]);
@@ -45,13 +45,16 @@ export function findSplitCommitCompanions(
   analysis: SourceAnalysis,
 ): ReadonlyMap<StateCandidate, readonly SplitCommitCompanion[]> {
   const reach = programReach([fileReach(analysis.sourceFile, localReachResolver)]);
+  const componentProp: ComponentPropHostDispatch = (componentName, propName) =>
+    analysis.childContracts?.componentCallbackPropRunsOnlyInHostEvents(componentName, propName) ??
+    false;
   return new Map(
     [...groupSettableStatesByOwner(analysis.states)]
       .filter(([, ownerStates]) => ownerStates.length >= PAIRED_CLUSTER_SIZE)
       .flatMap(([owner, ownerStates]) => {
         const render = functionEntryKey(owner);
         const writes = collectSetterMutations(owner, ownerStates).map((mutation) =>
-          commandWrite(mutation, owner, (unit) =>
+          commandWrite(mutation, componentProp, (unit) =>
             reach.callingUnits(unit).filter(({ entry }) => entry !== render),
           ),
         );
@@ -63,7 +66,7 @@ export function findSplitCommitCompanions(
 /** A promise callback runs in its own stretch, in the command that registered it. */
 function commandWrite(
   { call, state }: SetterMutation,
-  component: RuntimeFunctionLike,
+  componentProp: ComponentPropHostDispatch,
   callingUnits: ProgramReach["callingUnits"],
 ): CommandWrite {
   const unit = executionUnit(call);
@@ -71,20 +74,11 @@ function commandWrite(
   const stretches = registration ? [unit] : callingUnits(unit);
   const callers = callingUnits(commandEntry(unit, registration));
   const settled = unit.resumed || registration !== null;
-  const owner = executionOwner(call);
   return {
     callers: new Set(callers.map(({ key }) => key)),
     commands: new Set(callers.map(({ entry }) => entry)),
     functions: new Set(stretches.map(({ entry }) => entry)),
-    inHostEvent:
-      !settled &&
-      isPlainFunction(owner) &&
-      callbackIsEventRooted({
-        callback: owner,
-        dependencyName: "",
-        owner: component,
-        seen: new Set(),
-      }),
+    inHostEvent: !settled && runsOnlyInHostEvents(call, componentProp),
     resumedIn: unit.resumed ? unit.entry : null,
     settled,
     state,
