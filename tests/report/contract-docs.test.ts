@@ -20,6 +20,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { FAILURE_REASONS } from "../../src/cli/failures.js";
 import { HELP } from "../../src/cli/help.js";
 import { UNAVAILABLE_SOURCE_REASONS } from "../../src/project/source-components/source-context.js";
+import { analyzeSource } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
@@ -162,5 +163,27 @@ test("every ACTIONS.md link resolves to a file, and every EXAMPLES.md anchor to 
   assert.deepEqual(
     broken.map(([link]) => link),
     [],
+  );
+});
+
+test("the derived-state example in EXAMPLES.md yields the actions it documents", () => {
+  const [, section = ""] = readDocument("EXAMPLES.md").split(
+    "### Calculate derived values during render",
+  );
+  const before = /\/\/ Before\n(?<body>[\s\S]+?)\n\n\/\/ After/u.exec(section)?.groups?.body;
+  assert.ok(before);
+  const findings = analyzeSource(
+    `
+    import { useEffect, useState } from "react";
+    export function Cart({ price, quantity }: { price: number; quantity: number }) {
+      ${before}
+      return <output>{total}</output>;
+    }
+  `,
+    "Cart.tsx",
+  );
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["delete-derived-state", "delete-effect"],
   );
 });
