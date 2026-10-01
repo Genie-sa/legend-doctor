@@ -21,8 +21,8 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
 | [`move-to-event`](EXAMPLES.md#move-event-owned-work-to-the-event)                    | A second transition caused by an event-following effect     |
 | [`use-observe-effect`](EXAMPLES.md#react-to-an-observable-without-rendering)         | A component render used only to run an external reaction    |
-| [`use-mount`](EXAMPLES.md#express-proven-lifecycle-intent)                           | Equivalent one-time setup ceremony                          |
-| [`use-unmount`](EXAMPLES.md#express-proven-lifecycle-intent)                         | Equivalent teardown ceremony                                |
+| [`use-mount`](EXAMPLES.md#keep-empty-dependency-lifecycle-effects)                   | Nothing; never emitted, the effect stays `keep-effect`      |
+| [`use-unmount`](EXAMPLES.md#keep-empty-dependency-lifecycle-effects)                 | Nothing; never emitted, the effect stays `keep-effect`      |
 | [`persist-observable`](EXAMPLES.md#persist-an-observable-instead-of-writing-storage) | A hand-written storage write for a value Legend can persist |
 
 ### Legend reads

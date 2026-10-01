@@ -80,26 +80,26 @@ export const hoaluHookCases = [
     target: "hoalu-app",
   },
   {
-    action: "use-unmount",
+    action: "keep-effect",
     file: "components/files/use-files-upload.ts",
     hook: "useEffect",
     line: 129,
     name: null,
     rationale:
-      "The empty-dependency effect performs no setup and only revokes object URLs from a stable ref during teardown.",
+      "The empty-dependency effect performs no setup and only revokes object URLs from a stable ref during teardown. Legend's useUnmount(fn) is useMount(() => fn), which runs this same useEffect in production, so the rewrite removes no render or lifecycle cost.",
     target: "hoalu-app",
   },
   ...[
     ["components/providers/ui-provider.tsx", 9],
     ["hooks/use-theme.ts", 117],
   ].map(([file, line]) => ({
-    action: "use-mount" as const,
+    action: "keep-effect" as const,
     file: file as string,
     hook: "useEffect" as const,
     line: line as number,
     name: null,
     rationale:
-      "The empty-dependency setup invokes stable module initialization and has no cleanup or render-time capture.",
+      "The empty-dependency setup invokes stable module initialization and has no cleanup. Legend's useMount runs this same useEffect in production and still replays a cleanup-free setup under Strict Mode, so the rewrite removes no render or lifecycle cost.",
     target: "hoalu-app",
   })),
   {

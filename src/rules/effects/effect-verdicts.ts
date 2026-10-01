@@ -35,34 +35,12 @@ export function unresolvedCallbackEffect(): ClassifiedEffect {
   };
 }
 
-export function unmountEffect(): ClassifiedEffect {
+export function keepLifecycleAliasEffect(alias: "useMount" | "useUnmount"): ClassifiedEffect {
   return {
-    action: "use-unmount",
-    confidence: "probable",
+    action: "keep-effect",
+    confidence: "certain",
     derivedState: null,
-    message:
-      "Replace this teardown-only empty-dependency effect with `useUnmount` if once-only Legend lifecycle semantics are intended.",
-  };
-}
-
-export function useMountEffect(): ClassifiedEffect {
-  return {
-    action: "use-mount",
-    confidence: "probable",
-    derivedState: null,
-    message:
-      "Replace this module-global, setup-only effect with `useMount` if suppressing React Strict Mode's development replay is intended.",
-  };
-}
-
-export function reviewEmptyDependencySetupEffect(): ClassifiedEffect {
-  return {
-    action: "review-effect",
-    abstentionReason: "lifecycle-equivalence-unproven",
-    confidence: "probable",
-    derivedState: null,
-    message:
-      "Review this empty-dependency setup before choosing `useMount`; suppressing React Strict Mode's development replay changes lifecycle semantics.",
+    message: `Keep this React effect; Legend's \`${alias}\` runs this same empty-dependency \`useEffect\` in production, so rewriting it removes no render or lifecycle cost.`,
   };
 }
 

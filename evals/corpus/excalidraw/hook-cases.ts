@@ -131,19 +131,26 @@ export const excalidrawHookCases = [
       "The source-resolved search input and exact filter share one directly returned repeated producer, so one subscriber can keep the filter single-run while typing skips the owner's collection preprocessing without changing state lifetime.",
     target: "excalidraw",
   },
-  ...[
-    ["components/ColorPicker/ColorInput.tsx", 37],
-    ["components/LibraryMenuItems.tsx", 83],
-  ].map(([file, line]) => ({
-    action: "review-effect" as const,
-    file: file as string,
-    hook: "useEffect" as const,
-    line: line as number,
+  {
+    action: "review-effect",
+    file: "components/ColorPicker/ColorInput.tsx",
+    hook: "useEffect",
+    line: 37,
     name: null,
     rationale:
       "Mixed external cleanup, focus timing, prop synchronization, or first-render restoration requires lifecycle review.",
     target: "excalidraw",
-  })),
+  },
+  {
+    action: "keep-effect",
+    file: "components/LibraryMenuItems.tsx",
+    hook: "useEffect",
+    line: 83,
+    name: null,
+    rationale:
+      "The empty-dependency effect restores the first render's scroll position through a ref, with no cleanup and no state write. Its only Legend rewrite, useMount, runs this same useEffect in production and still replays a cleanup-free setup under Strict Mode, so no Legend action removes a cost.",
+    target: "excalidraw",
+  },
   ...[
     ["components/ColorPicker/ColorInput.tsx", 64],
     ["components/ColorPicker/Picker.tsx", 143],
@@ -176,12 +183,13 @@ export const excalidrawHookCases = [
     ["components/TTDDialog/MermaidToExcalidraw.tsx", 128],
     ["components/ConvertElementTypePopup.tsx", 180],
   ].map(([file, line]) => ({
-    action: "use-unmount" as const,
+    action: "keep-effect" as const,
     file: file as string,
     hook: "useEffect" as const,
     line: line as number,
     name: null,
-    rationale: "The empty-dependency effect contains only module-level unmount cleanup.",
+    rationale:
+      "The empty-dependency effect contains only module-level unmount cleanup. Legend's useUnmount(fn) is useMount(() => fn), which runs this same useEffect in production, so the rewrite removes no render or lifecycle cost.",
     target: "excalidraw",
   })),
   {

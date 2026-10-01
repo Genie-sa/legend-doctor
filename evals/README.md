@@ -113,7 +113,10 @@ records the runtime evidence behind the 17 Slides replay labels it moved to non-
 proof behind cross-microtask atomic-transition reviews and the three formbricks labels it moved to review. The [replay sweep audit](audit-2026-09-28-replay-sweep.md)
 re-audits every remaining replay miss, moves four labels whose edit saves nothing alone to non-enforced, and records the
 yield of each candidate proof. The [unseen-app pin audit](audit-2026-09-28-unseen-apps.md) records the gptme, zenborg, and junto labels and the known
-false positives they carry. A red corpus job remains a real gate; unit-suite success does not override it.
+false positives they carry. On October 1 the 14 `use-mount` and `use-unmount` labels and one first-render scroll
+restoration review moved to `keep-effect`: Legend's `useMount` runs the same `useEffect` in production, and
+`tests/runtime/lifecycle-aliases.test.ts` pins the only difference, a skipped teardown in Strict Mode's simulated
+development unmount. A red corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay
 

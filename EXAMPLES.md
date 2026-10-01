@@ -13,14 +13,7 @@ The snippets assume these imports when needed:
 
 ```tsx
 import { batch, type Observable } from "@legendapp/state";
-import {
-  Computed,
-  useMount,
-  useObservable,
-  useObserveEffect,
-  useUnmount,
-  useValue,
-} from "@legendapp/state/react";
+import { Computed, useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { $React } from "@legendapp/state/react-web";
 ```
 
@@ -678,19 +671,21 @@ useEffect(() => {
 }, [selectedId]);
 ```
 
-### Express proven lifecycle intent
+### Keep empty-dependency lifecycle effects
 
-Use `use-mount` and `use-unmount` only when lifecycle timing is proven equivalent.
+Legend's `useMount(fn)` runs `useEffect(fn, [])` in production, and `useUnmount(fn)` is `useMount(() => fn)`. Rewriting
+an empty-dependency effect with either removes no render or lifecycle cost, so the effect is `keep-effect`.
 
 ```tsx
-useEffect(() => start(), []); // Before
-useMount(() => start()); // After
+useEffect(() => {
+  preload();
+}, []);
 
-useEffect(() => () => stop(), []); // Before
-useUnmount(() => stop()); // After
+useEffect(() => () => clearTimeout(timer.current), []);
 ```
 
-Keep the React effect when Strict Mode replay, setup work, or cleanup ownership could change.
+The only difference is in development under Strict Mode: `useUnmount` skips the teardown of the simulated unmount. A
+cleanup-free `useMount` setup still runs twice there, as the React effect does.
 
 ### Persist an observable instead of writing storage
 

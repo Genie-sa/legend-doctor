@@ -272,6 +272,6 @@ test("does not apply a detached or unrelated React effect comment", () => {
     `,
   ]) {
     const [finding] = analyzeSource(source, "fixture.tsx");
-    assert.equal(requireValue(finding).action, "use-unmount");
+    assert.match(requireValue(finding).message, /`useUnmount` runs this same/u);
   }
 });

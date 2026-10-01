@@ -9,23 +9,20 @@ import {
   isSubscriptionCall,
   soleReturnStatementBody,
 } from "./callback-shape.js";
-import { capturesOwnerSnapshot, isSetupOnlyMountCandidate } from "./setup-only-mount.js";
 import {
   committedRefEffect,
   harnessEffect,
   keepExternalIntegrationEffect,
+  keepLifecycleAliasEffect,
   keepLifecycleEffect,
   keepPairedMountEffect,
   keepStateIndependentEffect,
   keepStateSnapshotEffect,
   ownershipDirectiveEffect,
   reviewCausalOwnerEffect,
-  reviewEmptyDependencySetupEffect,
   reviewStateReactionEffect,
   reviewStateWritingEffect,
-  unmountEffect,
   unresolvedCallbackEffect,
-  useMountEffect,
 } from "./effect-verdicts.js";
 import {
   isCommittedPropRefSnapshot,
@@ -33,10 +30,10 @@ import {
   isExactLatestValueRefMirror,
 } from "./committed-ref-mirrors.js";
 import type { EffectStateDependency } from "./state-independent-effects.js";
-import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { analyzeEffectStateDependencies } from "./state-independent-effects.js";
 import { callbackIsCommittedRefIntegration } from "./committed-ref-integration.js";
 import { callbackReadsSynchronously } from "./synchronous-dependency-reads.js";
+import { capturesOwnerSnapshot } from "./owner-snapshot-captures.js";
 import { findAncestorUntil } from "../../core/ast.js";
 import { findMutationSiteReset } from "./mutation-site-resets.js";
 import { findPureDerivedSetter } from "./derived-setters.js";
@@ -135,32 +132,21 @@ function emptyDependencyClassification(
   inline: InlineEffectContext,
 ): ClassifiedEffect {
   if (isCleanupOnly(callback)) {
-    return unmountEffect();
+    return keepLifecycleAliasEffect("useUnmount");
   }
-  if (!inline.hasCleanup && effect.owner) {
-    const mounted = mountClassification(callback, effect.owner, inline);
-    if (mounted) {
-      return mounted;
-    }
+  if (inline.hasCleanup) {
+    return keepPairedMountEffect();
   }
-  if (!inline.hasCleanup && !callbackCallsKnownSetter(callback, inline.stateBySetter)) {
-    return reviewEmptyDependencySetupEffect();
-  }
-  return keepPairedMountEffect();
-}
-
-function mountClassification(
-  callback: ts.ArrowFunction | ts.FunctionExpression,
-  owner: RuntimeFunctionLike,
-  inline: InlineEffectContext,
-): ClassifiedEffect | null {
   if (
-    !capturesOwnerSnapshot(callback, owner, inline) &&
-    callbackIsCommittedRefIntegration(callback, owner, inline)
+    effect.owner &&
+    !capturesOwnerSnapshot(callback, effect.owner, inline) &&
+    callbackIsCommittedRefIntegration(callback, effect.owner, inline)
   ) {
     return committedRefEffect();
   }
-  return isSetupOnlyMountCandidate(callback, owner, inline) ? useMountEffect() : null;
+  return callbackCallsKnownSetter(callback, inline.stateBySetter)
+    ? keepPairedMountEffect()
+    : keepLifecycleAliasEffect("useMount");
 }
 
 function dependencyEffectClassification(

@@ -98,7 +98,7 @@ test("does not confuse a sibling state setter with an external subscription", ()
   );
 });
 
-test("does not let a sibling setter suppress a module-global mount candidate", () => {
+test("does not let a sibling setter turn a module-global mount effect into paired setup", () => {
   const findings = analyzeSource(
     `
     import { useEffect, useState } from "react";
@@ -114,9 +114,9 @@ test("does not let a sibling setter suppress a module-global mount candidate", (
   `,
     "fixture.tsx",
   );
-  assert.equal(
-    requireValue(findings.find((finding) => finding.hook === "useEffect")).action,
-    "use-mount",
+  assert.match(
+    requireValue(findings.find((finding) => finding.hook === "useEffect")).message,
+    /`useMount` runs this same/u,
   );
 });
 
