@@ -260,3 +260,35 @@ test("a private package that installs React renders its own files with that Reac
     assert.equal(verdict, expected, label);
   }
 });
+
+test("a published library renders with the lowest React its peer range admits", async () => {
+  const workspace = {
+    ...NPM_LOCKFILE,
+    "package.json": manifest({ workspaces: ["apps/*", "packages/*"] }),
+    "apps/web/package.json": manifest({ dependencies: { react: "19.0.0" }, name: "web" }),
+  };
+  for (const [label, peerDependencies, expected] of [
+    ["React 17 and 18 admitted", { react: "^17.0.2 || ^18.2.0 || ^19.0.0" }, true],
+    ["React 18 lower bound", { react: ">=18.2.0" }, true],
+    ["unparseable range", { react: "workspace:*" }, true],
+    ["React 19 only", { react: "^19.0.0" }, false],
+    ["any version", { react: "*" }, false],
+  ] as const) {
+    const file = "packages/ui/src/app.tsx";
+    const packageJson = JSON.stringify({
+      devDependencies: { react: "19.0.0" },
+      name: "ui",
+      peerDependencies,
+    });
+    let verdict = !expected;
+    await withProject(
+      { ...workspace, "packages/ui/package.json": packageJson, [file]: "export {};" },
+      async (root) => {
+        const absolute = path.join(root, file);
+        const aloneFiles = await filesRenderingSyncLaneAlone([absolute]);
+        verdict = aloneFiles.has(absolute);
+      },
+    );
+    assert.equal(verdict, expected, label);
+  }
+});

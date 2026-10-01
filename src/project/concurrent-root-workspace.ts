@@ -1,3 +1,4 @@
+import { minVersion, validRange } from "semver";
 import type { Package } from "@manypkg/get-packages";
 import { domRootInventory } from "./dom-root-creation.js";
 import { getPackages } from "@manypkg/get-packages";
@@ -147,11 +148,30 @@ async function directoryRendersSyncLaneAlone(directory: string): Promise<boolean
   }
   const catalogs = await workspaceCatalogs(workspace.rootDir);
   const owner = owningPackage(workspace, directory);
+  const peerRange = owner && publishedReactPeerRange(owner);
+  if (peerRange) {
+    return admitsReactBelowUnifiedLanes(resolveRange("react", peerRange, catalogs));
+  }
   const reactPackages = owner && installsOwnReact(owner) ? [owner] : workspace.packages;
   return reactPackages.some((pkg) => {
     const minimum = localMinimumVersion(pkg, "react", catalogs);
     return minimum !== null && compareVersions(minimum, FIRST_UNIFIED_LANES_REACT) < 0;
   });
+}
+
+/** A published package's consumers bring any React its constraining peer range admits. */
+function publishedReactPeerRange(pkg: Package): string | null {
+  const { packageJson } = pkg;
+  const range = packageJson.peerDependencies?.["react"];
+  return packageJson.private !== true && range !== undefined && !ANY_VERSION.test(range.trim())
+    ? range
+    : null;
+}
+
+/** Whether the lowest React a range admits, alternatives included, is below 19; an invalid range may admit one. */
+function admitsReactBelowUnifiedLanes(range: string | null): boolean {
+  const lowest = range !== null && validRange(range) !== null ? minVersion(range) : null;
+  return lowest === null || lowest.major < FIRST_UNIFIED_LANES_REACT.major;
 }
 
 /** A published package or a React peer range defers to its consumers' React. */
