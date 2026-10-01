@@ -278,6 +278,17 @@ export function groupStatesByOwner(
   return byOwner;
 }
 
+export function ownerSetterNames(
+  states: readonly StateCandidate[],
+  owner: RuntimeFunctionLike,
+): ReadonlySet<string> {
+  return new Set(
+    states.flatMap((candidate) =>
+      candidate.owner === owner && candidate.setterName ? [candidate.setterName] : [],
+    ),
+  );
+}
+
 export function isInsideImportedCallback(node: ts.Node, hookNames: ReadonlySet<string>): boolean {
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
     if (

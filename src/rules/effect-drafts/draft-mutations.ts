@@ -1,4 +1,4 @@
-import type { DraftEffect, EffectDraftProofs, SetterMutation } from "./model.js";
+import type { DraftEffect, EffectDraftProofs } from "./model.js";
 import type { EffectCandidate, StateCandidate, StateUsage } from "../../analysis/model.js";
 import {
   expressionDependsOnBinding,
@@ -211,12 +211,10 @@ export function hasExternalCompanionWrites(
   members: readonly StateCandidate[],
 ): boolean {
   const memberSet = new Set(members);
-  const stateBySetter = new Map(
-    draft.context.states.flatMap((state) =>
-      state.owner === draft.owner && state.setterName ? [[state.setterName, state] as const] : [],
-    ),
+  const mutations = draft.context.proofs.collectSetterMutations(
+    draft.owner,
+    draft.context.states.filter((state) => state.owner === draft.owner),
   );
-  const mutations = collectSetterMutations(draft.owner, stateBySetter, draft.context.proofs);
   return mutations.some(
     (memberMutation) =>
       memberSet.has(memberMutation.state) &&
@@ -231,22 +229,4 @@ export function hasExternalCompanionWrites(
           ),
       ),
   );
-}
-
-function collectSetterMutations(
-  owner: RuntimeFunctionLike,
-  stateBySetter: ReadonlyMap<string, StateCandidate>,
-  proofs: EffectDraftProofs,
-): SetterMutation[] {
-  const mutations: SetterMutation[] = [];
-  visit(owner.body, (node) => {
-    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
-      return;
-    }
-    const state = stateBySetter.get(node.expression.text);
-    if (state) {
-      mutations.push({ call: node, region: proofs.nearestMutationFunction(node, owner), state });
-    }
-  });
-  return mutations;
 }

@@ -5,9 +5,9 @@ import {
 } from "../core/analysis-ast.js";
 import type { HookImports } from "../core/imports.js";
 import type { ObservableWrite } from "./model.js";
+import { containsAwaitOrYield } from "../rules/listener-ref-state/synchronous-regions.js";
 import { expressionIsObservablePath } from "./observable-paths.js";
 import ts from "typescript";
-import { visit } from "../core/ast.js";
 
 interface SetCall {
   argument: ts.Expression;
@@ -58,16 +58,6 @@ export function observableWrite(
     property: field?.name.text ?? null,
     root: root.text,
   };
-}
-
-function containsAwaitOrYield(node: ts.Node): boolean {
-  let found = false;
-  visit(node, (current) => {
-    if (ts.isAwaitExpression(current) || ts.isYieldExpression(current)) {
-      found = true;
-    }
-  });
-  return found;
 }
 
 export function isInsideBatch(call: ts.CallExpression, imports: HookImports): boolean {
