@@ -269,13 +269,13 @@ export const outlineHookCases = [
     target: "outline-export-csv",
   },
   {
-    action: "use-observable",
+    action: "review-state",
     file: "ShareSettingsPopover.tsx",
     hook: "useState",
     line: 59,
     name: "isUploading",
     rationale:
-      "The file-input event owns the complete upload interval, and the two state-independent logo branches can subscribe separately without rerendering the forty-three-element sharing popover.",
+      "The `LogoButton` call site (:256) is the trigger child of the local `DropdownMenu`, which renders it inside `MenuTrigger`, a Radix `Trigger asChild`; the Slot clones that child to merge the trigger's handlers and ref, so a leaf subscriber there would take them instead of the button.",
     target: "outline-share-settings",
   },
   {

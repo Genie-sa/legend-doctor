@@ -52,14 +52,13 @@ export const crossRepositoryHookCases = [
     target: target as string,
   })),
   {
-    action: "review-state",
-    enforced: false,
+    action: "move-state-down",
     file: "CustomFilter.tsx",
     hook: "useState",
     line: 141,
     name: "isDownloading",
     rationale:
-      "Known false positive (Slot clones the leaf): the async-status rule wraps the `PopoverTriggerButton` call site (:388), which is the child of `<DropdownMenuTrigger asChild>`; the Radix Slot would clone the leaf subscriber instead of the button and drop the trigger's handlers and ref.",
+      "Every read sits in the download `DropdownMenu` (:382) and every write in `handleDownloadResponses`, which is used only there. Extracting that whole menu, its asChild trigger included, keeps the Slot and its button together, so the download interval stops rerendering the filter bar. A leaf around the trigger's `PopoverTriggerButton` alone would be cloned by the Slot.",
     target: "formbricks-custom-filter",
   },
   {
@@ -123,6 +122,11 @@ export const crossRepositoryHookCases = [
     rationale:
       "One stable control or dialog owns the pending surface while independently rendered siblings prove a material owner cut; preserve the exact async start and completion boundaries.",
     target: target as string,
+    ...(file === "Authentication.tsx" && {
+      enforced: false as const,
+      rationale:
+        "One stable control or dialog owns the pending surface while independently rendered siblings prove a material owner cut; preserve the exact async start and completion boundaries. Not enforced (2026-10-01): real win; parent pass-through unprovable statically. The receiving parent is the styled-component `Flex`.",
+    }),
   })),
   ...[
     ["formbricks-survey-list", "survey-list.tsx", 182],
@@ -154,16 +158,18 @@ export const crossRepositoryHookCases = [
       41,
       "isDownloading",
       "DropdownMenuTrigger",
+      "the external Radix `DropdownMenu` root",
     ],
-    ["outline-invite", "Invite.tsx", 36, "isSaving", "Button"],
-  ].map(([target, file, line, name, leaf]) => ({
+    ["outline-invite", "Invite.tsx", 36, "isSaving", "Button", "the styled-component `Flex`"],
+  ].map(([target, file, line, name, leaf, parent]) => ({
     action: "use-observable" as const,
     file: file as string,
     hook: "useState" as const,
     line: line as number,
     name: name as string,
-    rationale: `The async flag's prop and label or icon projections are contained by one stable ${leaf} leaf; preserve the command boundary and subscribe only there.`,
+    rationale: `The async flag's prop and label or icon projections are contained by one stable ${leaf} leaf; preserve the command boundary and subscribe only there.${parent ? ` Not enforced (2026-10-01): real win; parent pass-through unprovable statically. The receiving parent is ${parent}.` : ""}`,
     target: target as string,
+    ...(parent !== undefined && { enforced: false as const }),
   })),
   ...[
     ["excalidraw", "components/TTDDialog/Chat/ChatMessage.tsx", 33, "canRetry"],

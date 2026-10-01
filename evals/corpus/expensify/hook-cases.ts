@@ -374,15 +374,21 @@ export const expensifyHookCases = [
     rationale:
       "A source-resolved deferred option command owns this failure flag and one stable DecisionModal is its only subscriber; converting the literal commands preserves callback timing while removing broad page rerenders.",
     target: target as string,
+    ...(line !== 94 && {
+      enforced: false as const,
+      rationale:
+        "A source-resolved deferred option command owns this failure flag and one stable DecisionModal is its only subscriber; converting the literal commands preserves callback timing while removing broad page rerenders. Not enforced (2026-10-01): real win; parent pass-through unprovable statically. The receiving parent is the local `ScreenWrapper`, which the pass-through proof does not resolve to a host.",
+    }),
   })),
   {
     action: "use-observable",
+    enforced: false,
     file: "ImportTagsOptionsPage.tsx",
     hook: "useState",
     line: 62,
     name: "isDownloadFailureModalVisible",
     rationale:
-      "A direct UI command owns this failure flag and one stable DecisionModal is its only subscriber.",
+      "A direct UI command owns this failure flag and one stable DecisionModal is its only subscriber. Not enforced (2026-10-01): real win; parent pass-through unprovable statically. The receiving parent is the local `AccessOrNotFoundWrapper`, which the pass-through proof does not resolve to a host.",
     target: "expensify-import-tags-options",
   },
   {

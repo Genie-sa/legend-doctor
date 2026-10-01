@@ -6,6 +6,7 @@ import {
 } from "../return-call-sites.js";
 import { competingSubscriptionsNote, isCustomHookOwner } from "../ast-helpers.js";
 import { isStructuralLegendCandidate, legendCandidateMessage } from "../finding-format.js";
+import { passThroughLeaf, valueCallSitesPassThrough } from "./pass-through-leaf.js";
 import {
   setterCallsAssignBooleanLiterals,
   stateHasNoEffectOrDeferredUse,
@@ -18,7 +19,6 @@ import type { StateClassificationContext } from "./classification-context.js";
 import { forwardedSetterProp } from "./setter-forwarding.js";
 import { isCohesiveDelayedPendingState } from "../delayed-pending.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
-import { passThroughLeaf } from "./pass-through-leaf.js";
 import { setterOwnedByValueTransitionCallSite } from "../controlled-leaf-cuts.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
 
@@ -114,7 +114,8 @@ export function renderReadVerdict(context: StateClassificationContext): Classifi
     usage.repeatedTransport &&
     usage.deferredReads === 0 &&
     usage.setterCalls === 0 &&
-    !stateMayHoldCallable(state)
+    !stateMayHoldCallable(state) &&
+    valueCallSitesPassThrough(context, { editableChildren: true })
   ) {
     return {
       action: "use-observable",

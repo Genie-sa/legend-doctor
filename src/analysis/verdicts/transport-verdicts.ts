@@ -8,6 +8,7 @@ import {
   jsxElementCount,
   nearestRepeatedRenderCall,
 } from "../../rules/state-proofs/jsx-subtrees.js";
+import { passThroughScope, valueCallSitesPassThrough } from "./pass-through-leaf.js";
 import {
   setterOwnedByValueCallSite,
   setterOwnedByValueTransitionCallSite,
@@ -15,7 +16,6 @@ import {
 import { BROAD_OWNER_JSX_ELEMENTS } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { isLiteralBooleanLeafState } from "../../rules/literal-boolean-leaf/literal-boolean-leaf.js";
-import { passThroughScope } from "./pass-through-leaf.js";
 import ts from "typescript";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
@@ -209,7 +209,8 @@ export function visibilityTransportVerdict(
       localComponents,
       materiality,
       sourceComponents,
-    })
+    }) &&
+    valueCallSitesPassThrough(context, { editableChildren: false })
   ) {
     const target = [...usage.valueTargets][0] ?? "the receiving child";
     return {

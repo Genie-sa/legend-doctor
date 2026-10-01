@@ -3,6 +3,7 @@ import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import type { HostTagImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isHostTag } from "../../core/imports.js";
+import { rendersPassThroughHost } from "./pass-through-hosts.js";
 import ts from "typescript";
 
 /** The React APIs and element field through which a component can observe its children's types. */
@@ -16,12 +17,6 @@ const CHILD_OBSERVATION = new RegExp(
 
 /** How many forwarding components a wrapped element may pass through before reaching a host. */
 const MAX_FORWARDING_DEPTH = 3;
-
-/** Beyond the owner's file only intrinsic tags count as hosts, since host imports are per file. */
-const INTRINSIC_HOST_TAGS: HostTagImports = {
-  hostComponents: new Set(),
-  hostNamespaces: new Set(),
-};
 
 /** React Native's Android `ScrollView` clones this element to inject `style` and its `children`. */
 const CLONED_ELEMENT_PROP = "refreshControl";
@@ -61,7 +56,6 @@ export function replacedElementTypeIsUnobserved(
 }
 
 export interface PassThroughScope {
-  readonly hostTags: HostTagImports;
   readonly owner: RuntimeFunctionLike;
   /** Resolves a tag against the imports of `file`, or of the owner's file when `file` is `null`. */
   readonly resolveComponent: (file: string | null, name: string) => ChildComponentSource | null;
@@ -69,7 +63,7 @@ export interface PassThroughScope {
 
 /**
  * Proves that wrapping the element at `node` in a leaf subscriber is invisible to every element that
- * receives it: the owner's output, a host element, or a source component that only renders its
+ * receives it: the owner's output, a pass-through host, or a source component that only renders its
  * `children` or spreads its props onto elements meeting the same contract, down to a host. No
  * component on that chain may take `asChild`, render a `Slot`, inspect or clone its children, or
  * read another element's `.props`.
@@ -88,10 +82,10 @@ function forwardsChildren(
   scope: PassThroughScope,
   { depth, file }: { readonly depth: number; readonly file: string | null },
 ): boolean {
-  const tag = element.tagName.getText();
-  if (isHostTag(tag, file === null ? scope.hostTags : INTRINSIC_HOST_TAGS)) {
+  if (rendersPassThroughHost(element)) {
     return true;
   }
+  const tag = element.tagName.getText();
   const slotted = element.attributes.properties.some(
     (property) => ts.isJsxAttribute(property) && property.name.getText() === "asChild",
   );
@@ -153,11 +147,22 @@ function childrenReceiver(
   if (ts.isPropertyAccessExpression(parent) && parent.name.text !== "children") {
     return null;
   }
-  const element = receivingElement(
-    ts.isPropertyAccessExpression(parent) ? parent : reference,
-    owner,
-  );
+  const read = ts.isPropertyAccessExpression(parent) ? parent : reference;
+  if (testsTruthiness(read)) {
+    return null;
+  }
+  const element = receivingElement(read, owner);
   return element ? element.openingElement : element;
+}
+
+/** `!children` or `if (children)`: an element and its leaf wrapper are both truthy. */
+function testsTruthiness(read: ts.Expression): boolean {
+  const { parent } = read;
+  return (
+    (ts.isPrefixUnaryExpression(parent) && parent.operator === ts.SyntaxKind.ExclamationToken) ||
+    (ts.isIfStatement(parent) && parent.expression === read) ||
+    (ts.isConditionalExpression(parent) && parent.condition === read)
+  );
 }
 
 /**

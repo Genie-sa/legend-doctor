@@ -5,11 +5,13 @@ import { isStructuralLegendCandidate, legendCandidateMessage } from "../finding-
 import type { StateClassificationContext } from "./classification-context.js";
 import { hasNoEffectReads } from "../state-usage.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
+import { passThroughScope } from "./pass-through-leaf.js";
 import { repeatedSubscriptionSuffix } from "../subtree/materiality.js";
 import { stateFeedsReturnedSwitchCommand } from "../../rules/command-only-state/returned-switch-command.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
 import { statePublishesReadOnlyGetter } from "../../rules/command-only-state/published-getter.js";
 import { stateReadCallbackEscapesThroughUnknownHook } from "../../rules/command-only-state/unknown-hook-escape.js";
+import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
 export function refCommandSnapshotVerdict(
   context: StateClassificationContext,
@@ -205,7 +207,12 @@ export function confinedSubtreeVerdict(
 ): ClassifiedState | null {
   const { hasCompanionWrites, state, subtree, usage } = context;
   const directSubtree = subtree?.kind === "direct" ? subtree : null;
-  if (directSubtree && !hasCompanionWrites) {
+  if (
+    directSubtree &&
+    !hasCompanionWrites &&
+    (directSubtree.repeated ||
+      wrappedElementIsPassedThrough(directSubtree.node, passThroughScope(context)))
+  ) {
     if (directSubtree.repeated) {
       return {
         action: "use-observable",
