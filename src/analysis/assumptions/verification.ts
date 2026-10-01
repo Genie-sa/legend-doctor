@@ -17,9 +17,7 @@ export function verificationFor(
       : "drive one full mount and, when the effect has a cleanup, one unmount";
   return {
     expect:
-      assumption.ifConfirmed === "use-mount"
-        ? "the setup runs exactly once per mount in both versions, and the DOM after mount is identical"
-        : `renders of the owner per update drop from one per write to zero (or one, when the owner still reads the value); the leaf subscriber renders instead; the DOM after every step is identical between versions`,
+      "renders of the owner per update drop from one per write to zero (or one, when the owner still reads the value); the leaf subscriber renders instead; the DOM after every step is identical between versions",
     harness: HARNESS,
     steps: [
       `import { mountDom, count } from "${HARNESS}" in a node:test file; mountDom gives a jsdom root, render, click, input, and signal helpers, and count tallies renders by name`,

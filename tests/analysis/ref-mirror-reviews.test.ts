@@ -1,4 +1,4 @@
-import { actions } from "./harness.js";
+import { actions, requireValue } from "./harness.js";
 import { analyzeSource } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -66,7 +66,7 @@ test("reviews unproven or behaviorally different ref mirror effects", () => {
     effects.map((finding) => finding.action),
     [
       "keep-effect",
-      "review-effect",
+      "keep-effect",
       "keep-effect",
       "keep-effect",
       "keep-effect",
@@ -98,9 +98,9 @@ test("keeps a forwarded ref snapshot in React post-commit timing", () => {
   );
 });
 
-test("reviews empty ref effects that intentionally capture a render snapshot", () => {
-  assert.deepEqual(
-    actions(`
+test("keeps an empty ref effect that captures a render snapshot as lifecycle, not committed-ref work", () => {
+  const [effect] = analyzeSource(
+    `
       import { useEffect, useRef } from "react";
       export function Screen({ scrollPosition }: { scrollPosition: number }) {
         const containerRef = useRef<HTMLDivElement>(null);
@@ -109,9 +109,11 @@ test("reviews empty ref effects that intentionally capture a render snapshot", (
         }, []);
         return <div ref={containerRef} />;
       }
-    `),
-    ["review-effect"],
+    `,
+    "fixture.tsx",
   );
+  assert.equal(requireValue(effect).action, "keep-effect");
+  assert.match(requireValue(effect).message, /`useMount` runs this same/u);
 });
 
 test("keeps a direct latest-value ref mirror in post-commit timing", () => {

@@ -4,7 +4,6 @@ import type {
   EffectCandidate,
   StateCandidate,
 } from "./model.js";
-import { applyEffectReview, effectAssumption } from "./assumptions/effect-assumptions.js";
 import { effectEvidence, findingFor } from "./finding-format.js";
 import {
   keepEffectForKeptState,
@@ -14,7 +13,6 @@ import {
 import { EMPTY_STATE_CANDIDATES } from "./constants.js";
 import type { HookFinding } from "../core/types.js";
 import type { StateAnalysisResult } from "./proofs/contracts.js";
-import path from "node:path";
 
 const PAIRED_DRAFT_EFFECT_CLASSIFICATION: ClassifiedEffect = {
   action: "review-effect",
@@ -37,28 +35,45 @@ export function effectFindingFor(
   if (!base) {
     return null;
   }
-  const followed = stateFollowingEffectClassification(base, stateFindings) ?? base;
-  const assumed = effectAssumption(followed, {
-    confirmations: analysis.confirmations,
-    effect,
-    reportFile: path.normalize(analysis.fileName),
-    sourceFile: analysis.sourceFile,
-  });
-  const classification = assumed?.confirmed ?? followed;
+  const classification = stateFollowingEffectClassification(base, stateFindings) ?? base;
   const scope = effect.owner ? ownership.effectStateScopes.get(effect.owner) : undefined;
   const finding = findingFor(effect.call, classification, {
-    evidence: [
-      ...effectEvidence(effect, analysis.sourceFile, scope?.bySetter ?? EMPTY_STATE_CANDIDATES),
-      ...(assumed?.confirmed
-        ? [`assumption confirmed by ${assumed.assumption.id}: ${assumed.assumption.question}`]
-        : []),
-    ],
+    evidence: effectEvidence(
+      effect,
+      analysis.sourceFile,
+      scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
+    ),
     fileName: analysis.fileName,
     hook: "useEffect",
     name: null,
     sourceFile: analysis.sourceFile,
   });
-  return applyEffectReview(finding, { assumed, followed, stateFindings });
+  const waitsOn =
+    classification.action === "review-effect"
+      ? waitsOnQuestions(classification.stateDependencies, stateFindings)
+      : [];
+  if (waitsOn.length > 0) {
+    finding.waitsOn = waitsOn;
+  }
+  return finding;
+}
+
+/**
+ * A review effect that waits on a state's verdict names the open questions that would settle it,
+ * so the agent answers the state instead of hunting for a fact about the effect.
+ */
+function waitsOnQuestions(
+  dependencies: readonly StateCandidate[] | undefined,
+  stateFindings: ReadonlyMap<StateCandidate, HookFinding>,
+): string[] {
+  return [
+    ...new Set(
+      (dependencies ?? []).flatMap((state) => {
+        const assumption = stateFindings.get(state)?.assumption;
+        return assumption && assumption.status !== "confirmed" ? [assumption.id] : [];
+      }),
+    ),
+  ].toSorted();
 }
 
 const MIGRATING_STATE_ACTIONS: ReadonlySet<HookFinding["action"]> = new Set([

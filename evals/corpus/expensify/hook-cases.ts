@@ -231,19 +231,15 @@ export const expensifyHookCases = [
       "Location errors are published with geolocation result and loading transitions; an independent dismiss path does not make the other writes safe to split across React and Legend ownership.",
     target: "expensify-address-search",
   },
-  ...[
-    [66, "keep-effect"],
-    [84, "keep-effect"],
-    [367, "use-unmount"],
-  ].map(([line, action]) => ({
-    action: action as "keep-effect" | "use-unmount",
+  ...[66, 84, 367].map((line) => ({
+    action: "keep-effect" as const,
     file: "index.tsx",
     hook: "useEffect" as const,
-    line: line as number,
+    line,
     name: null,
     rationale:
       line === 367
-        ? "The empty-dependency effect contains only unmount invalidation of the geolocation callback guard."
+        ? "The empty-dependency effect contains only unmount invalidation of the geolocation callback guard. Legend's useUnmount(fn) is useMount(() => fn), which runs this same useEffect in production, so the rewrite removes no render or lifecycle cost."
         : "The effect owns paired child-presence setup and cleanup against a changing callback dependency.",
     target: "expensify-address-search",
   })),
@@ -317,13 +313,13 @@ export const expensifyHookCases = [
     target: "expensify-domain-group-create",
   })),
   {
-    action: "use-unmount",
+    action: "keep-effect",
     file: "DomainGroupCreatePage.tsx",
     hook: "useEffect",
     line: 72,
     name: null,
     rationale:
-      "The effect has no setup work and only clears the preferred-policy resource on unmount.",
+      "The effect has no setup work and only clears the preferred-policy resource on unmount. Legend's useUnmount(fn) is useMount(() => fn), which runs this same useEffect in production, so the rewrite removes no render or lifecycle cost.",
     target: "expensify-domain-group-create",
   },
   {
@@ -513,8 +509,8 @@ export const expensifyHookCases = [
     [
       148,
       null,
-      "use-unmount",
-      "The empty-dependency cleanup only clears the form draft on unmount.",
+      "keep-effect",
+      "The empty-dependency cleanup only clears the form draft on unmount. Legend's useUnmount(fn) is useMount(() => fn), which runs this same useEffect in production, so the rewrite removes no render or lifecycle cost.",
     ],
   ].map(([line, name, action, rationale]) => ({
     action: action as HookAction,
@@ -646,13 +642,13 @@ export const expensifyHookCases = [
     target: "expensify-import-multi-level-tags",
   },
   {
-    action: "use-mount",
+    action: "keep-effect",
     file: "ImportMultiLevelTagsSettingsPage.tsx",
     hook: "useEffect",
     line: 59,
     name: null,
     rationale:
-      "This setup-only effect writes fixed imported configuration flags and captures no owner-local value; useMount is appropriate when suppressing development replay is intentional.",
+      "This setup-only effect writes fixed imported configuration flags and captures no owner-local value. Legend's useMount runs this same useEffect in production and still replays a cleanup-free setup under Strict Mode, so the rewrite removes no render or lifecycle cost.",
     target: "expensify-import-multi-level-tags",
   },
   ...[
@@ -700,13 +696,13 @@ export const expensifyHookCases = [
     target: "expensify-onboarding-personal-details",
   },
   {
-    action: "use-mount",
+    action: "keep-effect",
     file: "BaseOnboardingPersonalDetails.tsx",
     hook: "useEffect",
     line: 83,
     name: null,
     rationale:
-      "This empty-dependency setup only clears a module-owned onboarding error and captures no changing component value; useMount expresses the intended once-only setup.",
+      "This empty-dependency setup only clears a module-owned onboarding error and captures no changing component value. Legend's useMount runs this same useEffect in production and still replays a cleanup-free setup under Strict Mode, so the rewrite removes no render or lifecycle cost.",
     target: "expensify-onboarding-personal-details",
   },
   ...[
@@ -1007,13 +1003,13 @@ export const expensifyHookCases = [
     ["expensify-emoji-picker-dropdown-lifecycle", "EmojiPickerButtonDropdown.tsx", 47],
     ["expensify-add-reaction-lifecycle", "AddReactionBubble.tsx", 68],
   ].map(([target, file, line]) => ({
-    action: "use-unmount" as const,
+    action: "keep-effect" as const,
     file: file as string,
     hook: "useEffect" as const,
     line: line as number,
     name: null,
     rationale:
-      "The empty-dependency effect returns an existing cleanup function without running setup work.",
+      "The empty-dependency effect returns an existing cleanup function without running setup work. Legend's useUnmount(fn) is useMount(() => fn), which runs this same useEffect in production, so the rewrite removes no render or lifecycle cost.",
     target: target as string,
   })),
   {

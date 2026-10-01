@@ -1,6 +1,6 @@
+import { analyzeSource, analyzeSourceWith } from "../../src/analysis/analyze-source.js";
 import { ConfirmationSet } from "../../src/analysis/assumptions/confirmations.js";
 import type { HookFinding } from "../../src/core/types.js";
-import { analyzeSourceWith } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import { rankedQuestions } from "../../src/analysis/assumptions/ranked-questions.js";
 import { requireValue } from "./harness.js";
@@ -250,11 +250,10 @@ test("when one assumed fact leaves another blocker, both are asked in one two-fa
   assert.ok(assumption.research.some((step) => /read in render here/u.test(step.check)));
 });
 
-const MOUNT_AND_TITLE = `
+const TITLE_EFFECT = `
   import { useEffect, useState } from "react";
   export function Panel() {
     const [filter, setFilter] = useState("");
-    useEffect(() => { analytics.track("panel-open"); warmCache(); }, []);
     useEffect(() => { document.title = filter ? "filtered" : "all"; }, [filter]);
     return <main>${CHROME}
       <input value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -263,41 +262,12 @@ const MOUNT_AND_TITLE = `
   }
 `;
 
-function effects(source: string, confirmations: ConfirmationSet | null = null): HookFinding[] {
-  return analyzeSourceWith(source, "src/panel.tsx", { confirmations }).filter(
-    (finding) => finding.hook === "useEffect",
-  );
+function effects(source: string): HookFinding[] {
+  return analyzeSource(source, "src/panel.tsx").filter((finding) => finding.hook === "useEffect");
 }
 
-test("an empty-dependency setup effect asks whether useMount's once-only semantics are intended", () => {
-  const [mount] = effects(MOUNT_AND_TITLE);
-  const found = requireValue(mount);
-  assert.equal(found.abstentionReason, "lifecycle-equivalence-unproven");
-  const assumption = requireValue(found.assumption);
-  assert.equal(assumption.id, "src/panel.tsx::Panel::useEffect@L5::lifecycle-equivalence-unproven");
-  assert.equal(assumption.ifConfirmed, "use-mount");
-  assert.deepEqual(assumption.facts, ["lifecycle-equivalence-unproven"]);
-  assert.match(assumption.question, /replacing it with `useMount`/u);
-  assert.equal(requireValue(assumption.research[0]).line, 5);
-  assert.match(
-    requireValue(assumption.research[1]).check,
-    /idempotent or intentionally once-only/u,
-  );
-  const confirmed = requireValue(
-    effects(
-      MOUNT_AND_TITLE,
-      new ConfirmationSet([
-        { answer: "yes", fingerprint: assumption.fingerprint, id: assumption.id },
-      ]),
-    )[0],
-  );
-  assert.equal(confirmed.action, "use-mount");
-  assert.equal(confirmed.disposition, "change");
-  assert.match(requireValue(confirmed.evidence.at(-1)), /^assumption confirmed by .*useEffect@L5/u);
-});
-
 test("an effect waiting on a state's verdict names the state's open question", () => {
-  const [, title] = effects(MOUNT_AND_TITLE);
+  const [title] = effects(TITLE_EFFECT);
   const found = requireValue(title);
   assert.equal(found.abstentionReason, "effect-causal-owner-unresolved");
   assert.deepEqual(found.waitsOn, ["src/panel.tsx::Panel::filter::render-cut-unproven"]);

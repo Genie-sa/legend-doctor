@@ -77,7 +77,6 @@ blocked a proven edit.
 | `effect-callback-unresolved`        | The effect callback declaration or its captured inputs cannot be resolved                          |
 | `effect-causal-owner-unresolved`    | The event or external lifecycle that owns the effect is unknown, so its scheduling stays           |
 | `effect-write-ownership-unresolved` | The effect's writes cannot be proven to move without changing its schedule                         |
-| `lifecycle-equivalence-unproven`    | Mount, replay, dependency-change, or cleanup behavior may differ under a Legend hook               |
 | `mount-identity-unproven`           | A new subscriber could change keys, conditional returns, or a child's mount identity               |
 | `no-proven-optimization`            | No independent leaf or lifecycle cost is demonstrated, so no edit is proposed                      |
 | `ownership-flow-unresolved`         | A value or setter escapes into hooks, objects, spreads, or callbacks the analyzer cannot follow    |
@@ -161,9 +160,8 @@ Or let the tool write the entry, fingerprint included, and report the scan that 
 legend-doctor <root> --answer "src/panel.tsx::Panel::open::atomic-transition-unproven=yes" --note "both writes sit in fail()"
 ```
 
-A `review-effect` finding can carry the same block: an empty-dependency setup effect asks whether `useMount`'s once-only
-semantics are intended. An effect whose verdict waits on a React state instead lists that state's open question ids in
-`waitsOn`, so the answer that settles the state settles the effect.
+A `review-effect` finding whose verdict waits on a React state lists that state's open question ids in `waitsOn`, so
+the answer that settles the state settles the effect.
 
 When assuming the first blocker away still leaves a review verdict, the tool assumes the next one too and asks both
 facts in one question; the id then joins both reasons with `+`, and `facts` lists them in order. Two facts is the cap.

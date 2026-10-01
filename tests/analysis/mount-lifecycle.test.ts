@@ -3,61 +3,44 @@ import { analyzeSource } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("reviews setup-only empty effects because useMount changes Strict Mode semantics", () => {
-  assert.deepEqual(
-    actions(`
-      import { useEffect } from "react";
-      export function Analytics() {
-        useEffect(() => { trackVisit(); }, []);
+test("keeps empty-dependency effects that Legend's lifecycle hooks would only rename", () => {
+  for (const [effect, alias] of [
+    ["useEffect(() => () => clearTimeout(timer.current), []);", "useUnmount"],
+    ["useEffect(() => { preload(); }, []);", "useMount"],
+    ["useEffect(() => { client.warm(); }, []);", "useMount"],
+  ] as const) {
+    const [finding] = analyzeSource(
+      `
+      import { useEffect, useRef } from "react";
+      import { preload } from "./preload";
+      export function Screen({ client }: { client: { warm: () => void } }) {
+        const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+        ${effect}
         return null;
       }
-    `),
-    ["review-effect"],
-  );
+    `,
+      "fixture.tsx",
+    );
+    assert.equal(requireValue(finding).action, "keep-effect", effect);
+    assert.equal(requireValue(finding).disposition, "keep", effect);
+    assert.match(requireValue(finding).message, new RegExp(`\`${alias}\` runs this same`, "u"));
+  }
 });
 
-test("suggests useMount only for module-global setup without owner-local captures", () => {
+function emptyEffectMessage(body: string): string {
   const [finding] = analyzeSource(
     `
     import { useEffect } from "react";
-    import { warmCache } from "./cache";
-    export function App() {
-      useEffect(() => { warmCache(); }, []);
+    export function Screen() {
+      useEffect(() => { ${body} }, []);
       return null;
     }
   `,
     "fixture.tsx",
   );
-  assert.equal(requireValue(finding).action, "use-mount");
-  assert.equal(requireValue(finding).disposition, "candidate");
-
-  assert.deepEqual(
-    actions(`
-      import { useEffect } from "react";
-      export function App({ client }: { client: { warm: () => void } }) {
-        useEffect(() => { client.warm(); }, []);
-        return null;
-      }
-    `),
-    ["review-effect"],
-  );
-});
-
-test("keeps conditional useUnmount advice as a candidate", () => {
-  const [finding] = analyzeSource(
-    `
-    import { useEffect } from "react";
-    import { release } from "./resource";
-    export function App() {
-      useEffect(() => () => release(), []);
-      return null;
-    }
-  `,
-    "fixture.tsx",
-  );
-  assert.equal(requireValue(finding).action, "use-unmount");
-  assert.equal(requireValue(finding).disposition, "candidate");
-});
+  assert.equal(requireValue(finding).action, "keep-effect", body);
+  return requireValue(finding).message;
+}
 
 test("does not call returned setup work a teardown-only effect", () => {
   for (const cleanup of [
@@ -66,33 +49,13 @@ test("does not call returned setup work a teardown-only effect", () => {
     `cleanupRef.current`,
     `ready ? cleanupA : cleanupB`,
   ]) {
-    assert.deepEqual(
-      actions(`
-        import { useEffect } from "react";
-        export function Screen() {
-          useEffect(() => { return ${cleanup}; }, []);
-          return null;
-        }
-      `),
-      ["keep-effect"],
-      cleanup,
-    );
+    assert.doesNotMatch(emptyEffectMessage(`return ${cleanup};`), /useUnmount/u, cleanup);
   }
 });
 
 test("recognizes direct returned cleanup function values", () => {
   for (const cleanup of [`() => release()`, `function cleanup() { release(); }`, `cleanup`]) {
-    assert.deepEqual(
-      actions(`
-        import { useEffect } from "react";
-        export function Screen() {
-          useEffect(() => { return ${cleanup}; }, []);
-          return null;
-        }
-      `),
-      ["use-unmount"],
-      cleanup,
-    );
+    assert.match(emptyEffectMessage(`return ${cleanup};`), /`useUnmount` runs this same/u, cleanup);
   }
 });
 

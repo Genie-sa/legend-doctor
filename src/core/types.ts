@@ -15,7 +15,6 @@ const ABSTENTION_REASONS = [
   "effect-callback-unresolved",
   "effect-causal-owner-unresolved",
   "effect-write-ownership-unresolved",
-  "lifecycle-equivalence-unproven",
   "mount-identity-unproven",
   "no-proven-optimization",
   "ownership-flow-unresolved",
@@ -60,9 +59,10 @@ interface RankedQuestion {
  * What a confirmed answer turns a finding into. Deletions need a full proof and keeps need none;
  * a group member another blocker still holds reports `review-state` with a `nextBlocker`.
  */
-type AssumptionOutcome =
-  | Exclude<StateAction, "delete-derived-state" | "delete-unused-state" | "keep-state">
-  | "use-mount";
+type AssumptionOutcome = Exclude<
+  StateAction,
+  "delete-derived-state" | "delete-unused-state" | "keep-state"
+>;
 
 /** One member of a co-written group and what confirming the group does to it. */
 interface AssumptionGroupMember {

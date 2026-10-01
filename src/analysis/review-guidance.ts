@@ -17,8 +17,6 @@ const NEXT_CHECK = {
     "Identify the event or external lifecycle that owns this effect. Preserve its scheduling until the replacement has a causal and timing proof.",
   "effect-write-ownership-unresolved":
     "Inspect the effect's reads, dependencies, writes, and cleanup. Prove which write targets can move without changing its schedule.",
-  "lifecycle-equivalence-unproven":
-    "Check mount, replay, dependency changes, and cleanup. Establish the intended lifecycle before choosing a Legend hook.",
   "mount-identity-unproven":
     "Trace keys, conditional returns, and repeated children. Keep state ownership and the same child mount identity when introducing a subscriber.",
   "no-proven-optimization":
