@@ -22,11 +22,13 @@ test("uses cross-file observable provenance for batching findings", async () => 
     await writeFile(
       path.join(root, "screen.ts"),
       `
+        import { observe } from "@legendapp/state";
         import { player$ } from "./state/player";
         export function fail(message: string) {
           player$.error.set(message);
           player$.loading.set(false);
         }
+        observe(() => { player$.error.get(); player$.loading.get(); });
       `,
       "utf8",
     );

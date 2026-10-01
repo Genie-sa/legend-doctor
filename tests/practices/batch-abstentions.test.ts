@@ -12,6 +12,7 @@ test("recognizes namespace observable and batch calls", () => {
         state$.first.set("one");
         state$.second.set("two");
       });
+      state$.onChange(() => {});
     `),
     [],
   );
@@ -26,6 +27,7 @@ test("does not report writes already enclosed by batch", () => {
         state$.open.set(false);
         state$.value.set("");
       });
+      state$.onChange(() => {});
     `),
     [],
   );
@@ -52,6 +54,7 @@ test("does not recommend a partial batch beside an unproven set call", () => {
         state$.first.set("one");
         state$.second.set("two");
       }
+      state$.onChange(() => {});
     `),
     [],
   );
@@ -63,6 +66,7 @@ test("does not recommend production migrations in tests, stories, or demos", () 
     const state$ = observable({ first: "", second: "" });
     state$.first.set("one");
     state$.second.set("two");
+    state$.onChange(() => {});
   `;
   for (const fileName of ["store.test.ts", "__tests__/store.ts", "stories/store.ts"]) {
     assert.deepEqual(analyzeLegendPractices({ sourceText: source, fileName }), [], fileName);
@@ -76,6 +80,7 @@ test("does not batch repeated writes to the same observable path", () => {
       const phase$ = observable("idle");
       phase$.set("closing");
       phase$.set("closed");
+      phase$.onChange(() => {});
     `),
     [],
   );
@@ -88,6 +93,7 @@ test("does not batch parent and child writes together", () => {
       const state$ = observable({ open: false, value: "" });
       state$.set({ open: false, value: "" });
       state$.open.set(true);
+      state$.onChange(() => {});
     `),
     [],
   );
@@ -102,6 +108,7 @@ test("does not infer stable paths through dynamic observable keys", () => {
         rows$[id].first.set("one");
         rows$[id].second.set("two");
       }
+      rows$.onChange(() => {});
     `),
     [],
   );
@@ -115,6 +122,7 @@ test("does not cross control flow or unrelated statements", () => {
       state$.open.set(false);
       notify();
       state$.value.set("");
+      state$.onChange(() => {});
     `),
     [],
   );
@@ -129,6 +137,7 @@ test("does not recommend an async batch callback", () => {
         state$.first.set(await first());
         state$.second.set("done");
       }
+      state$.onChange(() => {});
     `),
     [],
   );
@@ -144,6 +153,7 @@ test("rejects shadowed observable binding names", () => {
         state$.first.set("one");
         state$.second.set("two");
       }
+      state$.onChange(() => {});
     `),
     [],
   );

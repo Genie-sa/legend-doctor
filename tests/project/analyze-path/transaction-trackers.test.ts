@@ -4,10 +4,15 @@ import test from "node:test";
 import { withProject } from "../with-project.js";
 
 const PLAYER = `
-import { observable } from "@legendapp/state";
+import { observable, observe } from "@legendapp/state";
 
 const player$ = observable({ index: 0, playing: false });
 const queue$ = observable({ count: 0 });
+
+observe(() => {
+  player$.index.get();
+  player$.playing.get();
+});
 
 export function play(index: number) {
   player$.index.set(index);
@@ -20,7 +25,7 @@ export function enqueue(index: number, count: number) {
 }
 `;
 
-test("React already renders separate writes once, so combining them is a review naming the remaining observers", async () => {
+test("React renders separate writes once, so only writes a non-React tracker spans are combined", async () => {
   await withProject(
     {
       "package.json": JSON.stringify({ name: "app", private: true }),
@@ -32,16 +37,14 @@ test("React already renders separate writes once, so combining them is a review 
         ({ practice }) => practice === "assign" || practice === "batch",
       );
       assert.deepEqual(
-        transactions.map(({ action, disposition }) => ({ action, disposition })),
-        [
-          { action: "assign-observable-fields", disposition: "candidate" },
-          { action: "batch-observable-writes", disposition: "candidate" },
-        ],
+        transactions.map(({ action, disposition, location }) => ({
+          action,
+          disposition,
+          line: location.line,
+        })),
+        [{ action: "assign-observable-fields", disposition: "change", line: 13 }],
       );
-      for (const { message } of transactions) {
-        assert.match(message, /^Review only: React already renders these writes once\./u);
-        assert.match(message, /only when a non-React observer/u);
-      }
+      assert.match(transactions[0]?.message ?? "", /observers publish once/u);
     },
   );
 });

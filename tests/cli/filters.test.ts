@@ -21,7 +21,7 @@ test("--disposition candidate keeps only candidate findings and practices", asyn
   assert.equal(report.findings.length, 0);
   assert.deepEqual(
     report.practices.map((practice) => [practice.action, practice.disposition]),
-    [["assign-observable-fields", "candidate"]],
+    [["use-computed-for-parent-reads", "candidate"]],
   );
 });
 
@@ -37,17 +37,17 @@ test("--ignore-action hides the named actions and counts them as hidden", async 
     CLI_PATH,
     root,
     "--ignore-action",
-    "assign-observable-fields",
+    "use-computed-for-parent-reads",
   ]);
   // SAFETY: same contract as above.
   const report = JSON.parse(stdout) as CliReport;
 
   assert.equal(
-    before.practices.some((practice) => practice.action === "assign-observable-fields"),
+    before.practices.some((practice) => practice.action === "use-computed-for-parent-reads"),
     true,
   );
   assert.equal(
-    report.practices.some((practice) => practice.action === "assign-observable-fields"),
+    report.practices.some((practice) => practice.action === "use-computed-for-parent-reads"),
     false,
   );
   assert.equal(report.findings.length, before.findings.length);
