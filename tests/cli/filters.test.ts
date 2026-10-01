@@ -179,13 +179,14 @@ test("--actionable hides a co-written member its group's yes leaves under review
 test("--actionable keeps a co-written member when no shown review carries its group's question", async () => {
   const source = `
     import { useState } from "react";
-    export function Panel({ onAdd }: { onAdd: (name: string) => void }) {
+    export function Panel({ onAdd }: { onAdd: (name: string) => Promise<void> | undefined }) {
       const [name, setName] = useState("");
       const [adding, setAdding] = useState(false);
-      const submit = () => {
+      const submit = async () => {
         if (!name.trim()) return;
-        onAdd(name);
+        const saving = onAdd(name);
         setName("");
+        if (saving) await saving;
         setAdding(false);
       };
       return <main>${CHROME}
