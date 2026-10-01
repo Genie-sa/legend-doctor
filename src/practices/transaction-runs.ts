@@ -2,6 +2,8 @@ import type { ObservableWrite, TransactionRun, TransactionScan } from "./model.j
 import { isEvaluationInert, unwrapTransparentExpression } from "../core/analysis-ast.js";
 import { isInsideBatch, observableWrite } from "./observable-writes.js";
 import type { LegendPracticeFinding } from "../core/types.js";
+import type { TrackerReads } from "./observable-trackers.js";
+import { fileTrackerReads } from "./observable-trackers.js";
 import { transactionFinding } from "./transaction-findings.js";
 import ts from "typescript";
 import { visit } from "../core/ast.js";
@@ -11,13 +13,18 @@ const MINIMUM_BATCH_WRITES = 2;
 interface RunAccumulator extends TransactionRun {
   findings: LegendPracticeFinding[];
   isComplete: boolean;
+  trackers: TrackerReads;
 }
 
 export function collectTransactionFindings(scan: TransactionScan): LegendPracticeFinding[] {
   const findings: LegendPracticeFinding[] = [];
+  const trackers = fileTrackerReads(scan);
+  if (trackers.length === 0) {
+    return findings;
+  }
   visit(scan.sourceFile, (node) => {
     if (ts.isBlock(node) || ts.isSourceFile(node)) {
-      findings.push(...blockTransactionFindings(node, scan));
+      findings.push(...blockTransactionFindings(node, scan, trackers));
     }
   });
   return findings;
@@ -26,11 +33,13 @@ export function collectTransactionFindings(scan: TransactionScan): LegendPractic
 function blockTransactionFindings(
   block: ts.Block | ts.SourceFile,
   scan: TransactionScan,
+  trackers: TrackerReads,
 ): LegendPracticeFinding[] {
   const accumulator: RunAccumulator = {
     conditionalWrites: [],
     findings: [],
     isComplete: true,
+    trackers,
     writes: [],
   };
   for (const statement of block.statements) {
@@ -75,7 +84,7 @@ function continuesRun(
 
 function flushRun(accumulator: RunAccumulator, scan: TransactionScan): void {
   if (accumulator.isComplete && accumulator.writes.length >= MINIMUM_BATCH_WRITES) {
-    const finding = transactionFinding(accumulator, scan);
+    const finding = transactionFinding(accumulator, scan, accumulator.trackers);
     if (finding) {
       accumulator.findings.push(finding);
     }

@@ -73,6 +73,7 @@ test("does not propagate observable provenance through shadowed roots or factori
   const actions = (shadows: string): string[] =>
     analyzeLegendPractices({
       sourceText: `
+      import { observe } from "@legendapp/state";
       import { createStore, shared$ } from "./store";
 
       const fromFactory$ = createStore();
@@ -82,6 +83,7 @@ test("does not propagate observable provenance through shadowed roots or factori
         fromFactory$.status.set("away");
         fromShared$.email.set(email);
       }
+      observe(() => { fromFactory$.status.get(); fromShared$.email.get(); });
 
       export function Screen() {
         ${shadows}

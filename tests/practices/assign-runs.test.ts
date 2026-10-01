@@ -6,12 +6,13 @@ import test from "node:test";
 test("assigns consecutive direct fields of one local observable", () => {
   const [finding] = analyzeLegendPractices({
     sourceText: `
-    import { observable } from "@legendapp/state";
+    import { observable, observe } from "@legendapp/state";
     const player$ = observable({ loading: false, error: null as string | null });
     export function fail(message: string) {
       player$.error.set(message);
       player$.loading.set(false);
     }
+    observe(() => { player$.error.get(); player$.loading.get(); });
   `,
     fileName: "fixture.ts",
   });
@@ -25,10 +26,11 @@ test("assigns consecutive direct fields of one local observable", () => {
 test("recognizes typed observable parameters", () => {
   assert.deepEqual(
     actions(`
-      import type { Observable } from "@legendapp/state";
+      import { observe, type Observable } from "@legendapp/state";
       export function reset(state$: Observable<{ open: boolean; value: string }>) {
         state$.open.set(false);
         state$.value.set("");
+        observe(() => { state$.open.get(); state$.value.get(); });
       }
     `),
     ["assign-observable-fields"],
@@ -38,9 +40,10 @@ test("recognizes typed observable parameters", () => {
 test("recognizes useObservable bindings", () => {
   assert.deepEqual(
     actions(`
-      import { useObservable } from "@legendapp/state/react";
+      import { useObservable, useObserve } from "@legendapp/state/react";
       export function useSelection() {
         const selection$ = useObservable({ anchor: -1, focus: -1 });
+        useObserve(() => { selection$.anchor.get(); selection$.focus.get(); });
         const clear = () => {
           selection$.anchor.set(-1);
           selection$.focus.set(-1);
@@ -55,10 +58,11 @@ test("recognizes useObservable bindings", () => {
 test("assigns direct fields under the same nested observable object", () => {
   const [finding] = analyzeLegendPractices({
     sourceText: `
-    import { observable } from "@legendapp/state";
+    import { observable, observe } from "@legendapp/state";
     const player$ = observable({ status: { loading: false, error: "" } });
     player$.status.loading.set(false);
     player$.status.error.set("failed");
+    observe(() => { player$.status.loading.get(); player$.status.error.get(); });
   `,
     fileName: "fixture.ts",
   });
@@ -69,11 +73,12 @@ test("assigns direct fields under the same nested observable object", () => {
 test("uses batch when a transaction spans observable roots", () => {
   assert.deepEqual(
     actions(`
-      import { observable } from "@legendapp/state";
+      import { observable, observe } from "@legendapp/state";
       const player$ = observable({ loading: false });
       const session$ = observable({ error: "" });
       player$.loading.set(false);
       session$.error.set("failed");
+      observe(() => { player$.loading.get(); session$.error.get(); });
     `),
     ["batch-observable-writes"],
   );
@@ -96,10 +101,11 @@ test("uses batch when assign would change updater or read ordering", () => {
   ]) {
     assert.deepEqual(
       actions(`
-        import { observable } from "@legendapp/state";
+        import { observable, observe } from "@legendapp/state";
         const state$ = observable({ first: 0, second: 0 });
         state$.first.set(1);
         ${secondWrite}
+        observe(() => { state$.first.get(); state$.second.get(); });
       `),
       ["batch-observable-writes"],
     );
@@ -109,7 +115,7 @@ test("uses batch when assign would change updater or read ordering", () => {
 test("recommends batch when a conditional same-root write follows an assign run", () => {
   const [finding, ...rest] = analyzeLegendPractices({
     sourceText: `
-    import { observable } from "@legendapp/state";
+    import { observable, observe } from "@legendapp/state";
     const player$ = observable({ index: -1, isPlaying: false, positionSec: 0, durationSec: 0 });
     export function play(index: number, track: { duration: number } | null) {
       player$.index.set(index);
@@ -117,6 +123,7 @@ test("recommends batch when a conditional same-root write follows an assign run"
       player$.positionSec.set(0);
       if (track) player$.durationSec.set(track.duration);
     }
+    observe(() => { player$.index.get(); player$.isPlaying.get(); });
   `,
     fileName: "fixture.ts",
   });
@@ -131,13 +138,14 @@ test("recommends batch when a conditional same-root write follows an assign run"
 test("recommends batch when a conditional same-root write interrupts an assign run", () => {
   const findings = analyzeLegendPractices({
     sourceText: `
-    import { observable } from "@legendapp/state";
+    import { observable, observe } from "@legendapp/state";
     const player$ = observable({ index: -1, isPlaying: false, durationSec: 0 });
     export function play(index: number, track: { duration: number } | null) {
       player$.index.set(index);
       if (track) { player$.durationSec.set(track.duration); }
       player$.isPlaying.set(true);
     }
+    observe(() => { player$.index.get(); player$.isPlaying.get(); });
   `,
     fileName: "fixture.ts",
   });
@@ -154,7 +162,7 @@ test("recommends batch when a conditional same-root write interrupts an assign r
 test("keeps the assign recommendation when the conditional writes another root", () => {
   const findings = analyzeLegendPractices({
     sourceText: `
-    import { observable } from "@legendapp/state";
+    import { observable, observe } from "@legendapp/state";
     const player$ = observable({ index: -1, isPlaying: false });
     const ui$ = observable({ toast: "" });
     export function play(index: number, track: { title: string } | null) {
@@ -162,6 +170,7 @@ test("keeps the assign recommendation when the conditional writes another root",
       player$.isPlaying.set(true);
       if (track) ui$.toast.set(track.title);
     }
+    observe(() => { player$.index.get(); player$.isPlaying.get(); });
   `,
     fileName: "fixture.ts",
   });
@@ -174,7 +183,7 @@ test("keeps the assign recommendation when the conditional writes another root",
 test("keeps the assign recommendation when the conditional branch mixes non-write statements", () => {
   const findings = analyzeLegendPractices({
     sourceText: `
-    import { observable } from "@legendapp/state";
+    import { observable, observe } from "@legendapp/state";
     const player$ = observable({ index: -1, isPlaying: false, durationSec: 0 });
     export function play(index: number, track: { duration: number } | null) {
       player$.index.set(index);
@@ -184,6 +193,7 @@ test("keeps the assign recommendation when the conditional branch mixes non-writ
         player$.durationSec.set(track.duration);
       }
     }
+    observe(() => { player$.index.get(); player$.isPlaying.get(); });
   `,
     fileName: "fixture.ts",
   });
@@ -196,13 +206,14 @@ test("keeps the assign recommendation when the conditional branch mixes non-writ
 test("emits nothing when a conditional write overlaps an unconditional path", () => {
   assert.deepEqual(
     actions(`
-      import { observable } from "@legendapp/state";
+      import { observable, observe } from "@legendapp/state";
       const player$ = observable({ index: -1, isPlaying: false });
       export function play(index: number, resume: boolean) {
         player$.index.set(index);
         player$.isPlaying.set(false);
         if (resume) player$.isPlaying.set(true);
       }
+      observe(() => { player$.index.get(); player$.isPlaying.get(); });
     `),
     [],
   );

@@ -19,7 +19,9 @@ test("--fail-on exits 3 with a gate summary when a shown finding matches", async
     status: string;
   };
   assert.equal(report.status, "ok");
-  assert.ok(report.practices.some((practice) => practice.action === "assign-observable-fields"));
+  assert.ok(
+    report.practices.some((practice) => practice.action === "use-computed-for-parent-reads"),
+  );
   assert.deepEqual(report.gate, { failOn: ["candidate"], matched: 1 });
 });
 

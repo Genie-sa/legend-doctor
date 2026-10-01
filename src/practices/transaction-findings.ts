@@ -1,7 +1,9 @@
 import type { ObservableWrite, TransactionRun, TransactionScan } from "./model.js";
 import type { LegendPracticeFinding } from "../core/types.js";
+import type { TrackerReads } from "./observable-trackers.js";
 import { expressionReferencesName } from "../core/binding-references.js";
 import { isEvaluationInert } from "../core/analysis-ast.js";
+import { trackerSpansWrites } from "./observable-trackers.js";
 import ts from "typescript";
 
 function hasDistinctNonOverlappingPaths(writes: readonly ObservableWrite[]): boolean {
@@ -30,22 +32,17 @@ function writeLocation(
 }
 
 /**
- * React commits writes from one synchronous stretch in one render, so only a non-React tracker spanning
- * several of the paths still observes the separate writes.
+ * React commits writes from one synchronous stretch in one render, so a transaction pays off only
+ * when one non-React tracker reads several of the written paths and would otherwise rerun per write.
  */
 export function transactionFinding(
   run: TransactionRun,
   scan: TransactionScan,
+  trackers: TrackerReads,
 ): LegendPracticeFinding | null {
-  const finding = renderTransactionFinding(run, scan);
-  return (
-    finding && {
-      ...finding,
-      disposition: "candidate",
-      evidence: [...finding.evidence, "React already commits these writes in one render"],
-      message: `Review only: React already renders these writes once. ${finding.message} Apply it only when a non-React observer (\`observe\`, a computed, or an \`onChange\` listener) reads several of these paths; persistence already saves them together.`,
-    }
-  );
+  return trackerSpansWrites(trackers, [...run.writes, ...run.conditionalWrites])
+    ? renderTransactionFinding(run, scan)
+    : null;
 }
 
 function renderTransactionFinding(

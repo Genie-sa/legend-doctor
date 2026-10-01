@@ -68,11 +68,10 @@ export const legendPhotosPracticeCases = [
   },
   {
     action: "batch-observable-writes",
-    enforced: "known-miss",
     file: "settings/HotkeySettings.tsx",
     line: 104,
     rationale:
-      "Known miss (non-React observer): the useObserveEffect at line 110 reads isEditing$ and accumulatedKeys$, so a separate write runs it with edit mode on and the previous keys still accumulated, which can save stale keys.",
+      "The useObserveEffect at line 110 reads isEditing$ and accumulatedKeys$, so a separate write runs it with edit mode on and the previous keys still accumulated, which can save stale keys; batching runs it once on the final state.",
     target: "legend-photos",
   },
   {

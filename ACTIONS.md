@@ -49,12 +49,12 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend writes
 
-| Action                                                               | Removes                                                                                         |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`narrow-observable-write`](EXAMPLES.md#write-the-changed-path)      | A parent clone and broad publication                                                            |
-| [`toggle-observable`](EXAMPLES.md#toggle-directly)                   | Boolean updater ceremony                                                                        |
-| [`assign-observable-fields`](EXAMPLES.md#publish-one-logical-update) | Separate publications to non-React observers; always a review, since React already renders once |
-| [`batch-observable-writes`](EXAMPLES.md#publish-one-logical-update)  | Separate publications to non-React observers; always a review, since React already renders once |
+| Action                                                               | Removes                                                                    |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`narrow-observable-write`](EXAMPLES.md#write-the-changed-path)      | A parent clone and broad publication                                       |
+| [`toggle-observable`](EXAMPLES.md#toggle-directly)                   | Boolean updater ceremony                                                   |
+| [`assign-observable-fields`](EXAMPLES.md#publish-one-logical-update) | Per-write reruns of one non-React tracker that reads several written paths |
+| [`batch-observable-writes`](EXAMPLES.md#publish-one-logical-update)  | Per-write reruns of one non-React tracker that reads several written paths |
 
 ### Legend ownership
 

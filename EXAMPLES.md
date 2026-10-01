@@ -416,9 +416,11 @@ batch(() => {
 
 This preserves an atomic transition: subscribers see one completed update.
 
-React already commits writes from one synchronous stretch in one render, so both actions are reviews: only a non-React
-observer that reads several of the written paths, such as `observe`, a computed, or an `onChange` listener, still sees
-them apart. `syncObservable` persistence queues changes until a microtask, so it saves them together either way.
+React already commits writes from one synchronous stretch in one render, so neither action saves a React render. Both
+appear only when one non-React tracker in the same file reads two or more of the written paths: an `observe`,
+`useObserve`, `useObserveEffect`, or `useComputed` body, or an `onChange` listener on a shared parent. Separate writes
+rerun that tracker once per write, on torn state in between. `syncObservable` persistence queues changes until a
+microtask, so it saves them together either way.
 
 ### Preserve a conditional child's mount behavior
 

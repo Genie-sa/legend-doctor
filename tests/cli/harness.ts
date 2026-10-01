@@ -12,13 +12,13 @@ export const CLI_PATH = path.join(import.meta.dirname, "..", "..", "src", "cli.j
 export async function writeFixtureRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-cli-"));
   await writeFile(
-    path.join(root, "store.ts"),
+    path.join(root, "label.tsx"),
     `
       import { observable } from "@legendapp/state";
-      export const player$ = observable({ index: -1, isPlaying: false });
-      export function play(index: number) {
-        player$.index.set(index);
-        player$.isPlaying.set(true);
+      import { Memo } from "@legendapp/state/react";
+      const ui$ = observable({ count: 0 });
+      export function Label({ label }: { label: string }) {
+        return <Memo>{() => <span>{label}: {ui$.count.get()}</span>}</Memo>;
       }
     `,
     "utf8",

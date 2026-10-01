@@ -17,17 +17,16 @@ in another function commits in a separate render even under React 19.
 - React 19 renders every update from one synchronous stretch in one commit; an observable's `useSyncExternalStore`
   notification and a `useState` update in the same stretch no longer split. Converting one co-written state alone
   tears nothing unless the writes settle apart.
-- A Legend `batch` or `assign` therefore never removes a React render. It is always a review, and it pays off only
-  when a non-React observer (`observe`, `useObserveEffect`, a computed, or an `onChange` listener) reads several of the
-  written paths and would otherwise run once per write, on torn state in between. Persistence already saves the
-  writes together.
+- A Legend `batch` or `assign` therefore never removes a React render. It pays off only when a non-React observer
+  (`observe`, `useObserveEffect`, a computed, or an `onChange` listener) reads several of the written paths and would
+  otherwise run once per write, on torn state in between. Persistence already saves the writes together.
 - `replace-legacy-use-value` is a style edit on every pin: `useValue` is an alias of `useSelector`, so the rename
   changes no subscription.
 
 ## Transaction labels
 
-Each label was audited for a non-React observer that reads two or more of the written paths. The analyzer does not
-prove such an observer yet, so every transaction finding is now a review.
+Each label was audited for a non-React observer that reads two or more of the written paths. The
+[tracker gate](#same-file-tracker-gate) below proves the same-file case; the other known misses need a cross-file proof.
 
 | Pinned source                                                                                                                                                                                                                                                                                                                         | Relabel      | Audit                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -35,12 +34,40 @@ prove such an observer yet, so every transaction finding is now a review.
 | legend-music `LocalAudioPlayer.tsx:771`, `:785`                                                                                                                                                                                                                                                                                       | `known-miss` | The `Playlist.tsx:319` scroll observer reads the index and track both transitions write; torn state skips the scroll.                                                              |
 | legend-music `systems/LibraryState.ts:52`                                                                                                                                                                                                                                                                                             | `known-miss` | `useLibraryTrackList.ts:543` reads selectedView and selectedPlaylistId.                                                                                                            |
 | legend-music `MediaLibrary/TrackList.tsx:155`                                                                                                                                                                                                                                                                                         | `known-miss` | `useLibraryTrackList.ts:543` reads playlistSort and playlistSortDirection.                                                                                                         |
-| legend-photos `settings/HotkeySettings.tsx:104`                                                                                                                                                                                                                                                                                       | `known-miss` | The `useObserveEffect` at line 110 reads isEditing$ and accumulatedKeys$; a torn run can save stale keys.                                                                          |
+| legend-photos `settings/HotkeySettings.tsx:104`                                                                                                                                                                                                                                                                                       | enforced     | The `useObserveEffect` at line 110 reads isEditing$ and accumulatedKeys$; a torn run can save stale keys. Enforced by the tracker gate.                                            |
 | legend-music `LocalAudioPlayer.tsx:257`, `:269`, `:423`, `:972`, `:1112`, `:1123`, `:1169`; `JumpSearchMenuDropdown/hooks.ts:32`; `Unregistered.tsx:27`; `usePlaylistSelection.ts:43`, `:48`; `systems/LibraryState.ts:317`, `:395`; `systems/LocalMusicState.ts:139`, `:856`, `:863`, `:866`, `:893`, `:933`, `:941`, `:948`, `:972` | retired      | No non-React observer reads two of the written paths: only React consumers, single-path `onChange` listeners, and debounced persistence, so React already renders the writes once. |
 | legend-photos `features/FullscreenPhoto.tsx:118`, `:175`, `:197`                                                                                                                                                                                                                                                                      | retired      | Same audit: only React consumers read the written paths.                                                                                                                           |
 
-Deleting a retired label makes the corpus assert absence: a later `change` finding there fails as unlabeled, while the
-review it now receives is unscored.
+Deleting a retired label makes the corpus assert absence: a later `change` finding there fails as unlabeled.
+
+## Same-file tracker gate
+
+A transaction finding is now emitted, as a `change`, only when one tracker in the same file reads two or more of the
+written paths: the synchronous `get()` calls in an `observe`, `useObserve`, `useObserveEffect`, or `useComputed` body, or
+an `onChange` listener on a parent of the written paths. Otherwise nothing is emitted; the transaction review is gone.
+
+- legend-photos `settings/HotkeySettings.tsx:104`: `known-miss` → enforced `batch-observable-writes`. The tracker is
+  the `useObserveEffect` at line 110, in the same component.
+- The five legend-music known misses stay: each spanning observer lives in another file (`Playlist.tsx`,
+  `CurrentSongOverlayController.tsx`, `useLibraryTrackList.ts`).
+- Not proven yet: trackers in another module, and `computed()` observables.
+
+Scored corpus, base `566aebb`: practice precision 99.5% (753/757 → 754/758), known practice misses 6/6 → 5/5, unscored
+transaction reviews 198 → 0. Hook precision and recall and expert replay recall are unchanged.
+
+| Application                                | Whole-application delta                                                           |
+| ------------------------------------------ | --------------------------------------------------------------------------------- |
+| legend-photos                              | `batch-observable-writes` review 4 → 0, change 0 → 1                              |
+| legend-music                               | `assign-observable-fields` review 15 → 0; `batch-observable-writes` review 15 → 0 |
+| legend-apps                                | `assign-observable-fields` review 19 → 0; `batch-observable-writes` review 19 → 0 |
+| noutube                                    | `assign-observable-fields` review 12 → 0; `batch-observable-writes` review 7 → 0  |
+| nori                                       | `assign-observable-fields` review 3 → 0; `batch-observable-writes` review 7 → 0   |
+| hoalu                                      | `batch-observable-writes` review 2 → 0                                            |
+| open-webui-react-native                    | `batch-observable-writes` review 1 → 0                                            |
+| gptme                                      | `assign-observable-fields` review 9 → 0; `batch-observable-writes` review 20 → 0  |
+| zenborg                                    | `assign-observable-fields` review 18 → 0; `batch-observable-writes` review 21 → 0 |
+| junto                                      | `assign-observable-fields` review 9 → 0; `batch-observable-writes` review 32 → 0  |
+| excalidraw, expensify, formbricks, outline | none                                                                              |
 
 ## Hook labels
 

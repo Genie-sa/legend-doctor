@@ -23,17 +23,17 @@ test("legend-doctor.config.json in the target hides its ignoreActions", async (t
 
   await writeFile(
     path.join(root, CONFIG_FILE_NAME),
-    JSON.stringify({ ignoreActions: ["assign-observable-fields"] }),
+    JSON.stringify({ ignoreActions: ["use-computed-for-parent-reads"] }),
     "utf8",
   );
   const report = await scan(root);
 
   assert.equal(
-    before.practices.some((practice) => practice.action === "assign-observable-fields"),
+    before.practices.some((practice) => practice.action === "use-computed-for-parent-reads"),
     true,
   );
   assert.equal(
-    report.practices.some((practice) => practice.action === "assign-observable-fields"),
+    report.practices.some((practice) => practice.action === "use-computed-for-parent-reads"),
     false,
   );
   assert.equal(report.hidden.practices, before.practices.length - report.practices.length);
@@ -51,13 +51,13 @@ test("the nearest config above the target applies and --ignore-action adds to it
   }
   await writeFile(
     path.join(parent, CONFIG_FILE_NAME),
-    JSON.stringify({ ignoreActions: ["assign-observable-fields"], materiality: "compact" }),
+    JSON.stringify({ ignoreActions: ["use-computed-for-parent-reads"], materiality: "compact" }),
     "utf8",
   );
 
   const fromConfig = await scan(root);
   assert.equal(
-    fromConfig.practices.some((practice) => practice.action === "assign-observable-fields"),
+    fromConfig.practices.some((practice) => practice.action === "use-computed-for-parent-reads"),
     false,
   );
 
@@ -67,7 +67,7 @@ test("the nearest config above the target applies and --ignore-action adds to it
     false,
   );
   assert.equal(
-    withFlag.practices.some((practice) => practice.action === "assign-observable-fields"),
+    withFlag.practices.some((practice) => practice.action === "use-computed-for-parent-reads"),
     false,
   );
 });
