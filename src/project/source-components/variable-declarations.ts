@@ -18,9 +18,9 @@ import {
 } from "../../core/analysis-ast.js";
 import { directObservableMembers, isObservableInitializer } from "./observable-declarations.js";
 import { directReactContextReader, isReactContextInitializer } from "./react-traits.js";
+import { isObjectAssignCall, staticAssignedComponentName } from "./module-bindings.js";
 import { declaredObservableContextType } from "./observable-contexts.js";
 import { isPlainConstantDeclaration } from "../../rules/observable-reads/plain-seed-paths.js";
-import { staticAssignedComponentName } from "./module-bindings.js";
 import { styledComponentTarget } from "./framework-event-components.js";
 import ts from "typescript";
 
@@ -342,7 +342,7 @@ function collectComponentVariableDeclaration(
   }
   const component = isComponentInitializer(declaration.initializer, signals.componentWrappers)
     ? componentFunction(declaration.initializer, signals.componentWrappers)
-    : compoundRootComponent(name, draft, signals);
+    : compoundRootComponent({ initializer: declaration.initializer, name }, draft, signals);
   if (!component) {
     return;
   }
@@ -353,10 +353,13 @@ function collectComponentVariableDeclaration(
 }
 
 function compoundRootComponent(
-  name: string,
+  { initializer, name }: { readonly initializer: ts.Expression; readonly name: string },
   draft: ModuleRecordDraft,
   signals: ModuleSignals,
 ): ComponentFunction | null {
+  if (!isObjectAssignCall(initializer)) {
+    return null;
+  }
   const root = staticAssignedComponentName(signals.sourceFile, name, draft.componentDeclarations);
   return root === null ? null : (draft.componentDeclarations.get(root) ?? null);
 }

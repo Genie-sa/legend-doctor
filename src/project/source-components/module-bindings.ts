@@ -236,6 +236,11 @@ function staticObjectAssignCall(sourceFile: ts.SourceFile, name: string): ts.Cal
   return initializer;
 }
 
+export function isObjectAssignCall(expression: ts.Expression): boolean {
+  const call = unwrapTransparentExpression(expression);
+  return ts.isCallExpression(call) && isObjectAssignCallee(call.expression);
+}
+
 function isObjectAssignCallee(callee: ts.Expression): boolean {
   return (
     ts.isPropertyAccessExpression(callee) &&
