@@ -43,7 +43,12 @@ Every condition must hold; a missing proof yields no finding.
    member as an `Observable`. A `?? fallback`, a `let` binding, a shadowed hook, or an untyped or union-typed member
    stays unproven.
 2. **Confinement.** Every owner reference to the raw value is one side of the same `===` or `!==` comparison against
-   the same operand. Loose `==`/`!=` is accepted only against `null` or `undefined`.
+   the same operand. Loose `==`/`!=` is accepted only against `null` or `undefined`. The one other reference allowed
+   is an entry in the dependency list of an effect that the comparison guards: the comparison is `!==`, the effect
+   callback starts with `if (raw !== operand) return;`, returns no cleanup, and lists the operand (a literal operand
+   needs no entry). Listing the boolean in place of the raw value then skips only the reruns in which the raw value
+   changed while the operand did not. A changed value cannot strictly equal an unchanged operand both times, so every
+   skipped run would have returned at the guard. The edit replaces the dependency entry with the selector's binding.
 3. **Stable operand.** The operand is fixed for the render: a literal, a parameter or prop that is never assigned, a
    `const` declared before the subscription, or a module constant, optionally through a static property path.
 4. **Domain.** The observable holds objects or at least three primitive values, taken from its declared type or its
@@ -82,7 +87,10 @@ audited research sites at the Legend Music pin. Its `DroppableZone` compares `ac
 as the reorder-controls package did before the upstream fix. Legend Music's provider, however, subscribes to
 `activeDropZone$` and rebuilds its context value on every render, so every zone renders anyway and the rule abstains.
 In the expert replay, the reorder-controls parent tree memoizes its provider value, and the rule reproduces the
-expert's edit at `DroppableZone.tsx:40`.
+expert's edit at `DroppableZone.tsx:40`. In the junto replay, the file, group, link, and text canvas nodes read
+`editNodeId` only in an effect that returns unless it equals `node.id`, starts editing, and clears it. The rule's
+`editNodeId !== node.id` selectors are the negation of the maintainer's four, with the same `node.id` dependency, so
+an edit request renders only its target.
 
 The earlier, narrower phase of this rule is documented in [the before/after evidence](plain-projection-before-after.md)
 and [the test ledger](plain-projection-test-ledger.md).

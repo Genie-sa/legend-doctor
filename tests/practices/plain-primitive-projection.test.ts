@@ -292,3 +292,86 @@ test("withholds a fresh name the file already uses", () => {
   );
   assert.deepEqual(findings(source), []);
 });
+
+const guardedEffect =
+  "const id = useValue(active$); useEffect(() => { if (id !== trackId) return; start(); }, [id, trackId]); return <div />;";
+
+test("selects a comparison that guards an effect listing the raw value", () => {
+  const [finding, ...rest] = findings(fixture(guardedEffect));
+  assert.equal(rest.length, 0);
+  assert.match(
+    finding?.message ?? "",
+    /with `idDiffers`, and list `idDiffers` in place of `id` in the guarded effect's dependencies\./u,
+  );
+});
+
+test("a literal operand needs no dependency entry", () => {
+  const source = fixture(
+    guardedEffect.replace("id !== trackId", "id !== null").replace("[id, trackId]", "[id]"),
+    'observable<string | null>("a")',
+  );
+  assert.equal(findings(source).length, 1);
+});
+
+for (const [name, source] of Object.entries({
+  cleanup: fixture(guardedEffect.replace("start(); }", "start(); return () => stop(); }")),
+  workBeforeGuard: fixture(guardedEffect.replace("{ if", "{ reset(); if")),
+  workInGuard: fixture(guardedEffect.replace("return;", "{ reset(); return; }")),
+  guardElse: fixture(guardedEffect.replace("return; start();", "return; else start();")),
+  equalSideReturn: fixture(guardedEffect.replace("id !== trackId", "id === trackId")),
+  looseGuard: fixture(
+    guardedEffect.replace("id !== trackId", "id != null").replace("[id, trackId]", "[id]"),
+    'observable<string | null>("a")',
+  ),
+  operandNotListed: fixture(guardedEffect.replace("[id, trackId]", "[id]")),
+  rawReadInEffect: fixture(guardedEffect.replace("start();", "start(id);")),
+  callbackDependency: fixture(
+    guardedEffect
+      .replace("useEffect(", "const run = useCallback(")
+      .replace("return <div />", "return <div onClick={run} />"),
+  ).replace("{ memo, useEffect, useRef }", "{ memo, useCallback, useEffect, useRef }"),
+})) {
+  test(`guarded-effect projection abstains on ${name}`, () =>
+    assert.deepEqual(findings(source), []));
+}
+
+test("guarded-effect edits replace the comparison and the dependency entry", () => {
+  const source = `import { observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
+import { useEffect, useState } from "react";
+
+const editing$ = observable<string>("");
+
+export function Card({ id }: { id: string }) {
+  const [editing, setEditing] = useState(false);
+  const editingId = useValue(editing$);
+  useEffect(() => {
+    if (editingId !== id) return;
+    setEditing(true);
+    editing$.set("");
+  }, [editingId, id]);
+  return <div data-editing={editing} />;
+}
+`;
+  assertVerifiedEdits(
+    source,
+    `import { observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
+import { useEffect, useState } from "react";
+
+const editing$ = observable<string>("");
+
+export function Card({ id }: { id: string }) {
+  const [editing, setEditing] = useState(false);
+  const editingIdDiffers = useValue(() => editing$.get() !== id);
+  useEffect(() => {
+    if (editingIdDiffers) return;
+    setEditing(true);
+    editing$.set("");
+  }, [editingIdDiffers, id]);
+  return <div data-editing={editing} />;
+}
+`,
+    findings(source),
+  );
+});

@@ -1,5 +1,9 @@
 import { bindingDeclarationCount, isAssignmentOperator } from "../../core/analysis-ast.js";
+import { EMPTY_STATE_CANDIDATES } from "../../analysis/constants.js";
+import type { HookImports } from "../../core/imports.js";
 import type { RenderFunction } from "../observable-tracking/render-owners.js";
+import { callbackHasCleanup } from "../effects/effects.js";
+import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
 import { ownerLevelReferences } from "../../core/scope-references.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
@@ -15,6 +19,8 @@ export interface ProjectionSites {
   readonly operand: ts.Expression;
   readonly operator: ts.EqualityOperator;
   readonly sites: readonly [ProjectionSite, ...ProjectionSite[]];
+  /** Entries that list the raw value in the dependencies of an effect the comparison guards. */
+  readonly dependencies: readonly ts.Identifier[];
 }
 
 const EQUALITY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
@@ -35,20 +41,36 @@ const LITERAL_KINDS: ReadonlySet<ts.SyntaxKind> = new Set([
 ]);
 
 /**
- * Every read of `raw` is one side of the same equality comparison against the same operand, so
- * the render depends on the raw value only through that comparison's boolean.
+ * Every read of `raw` is one side of the same equality comparison against the same operand, or an
+ * effect dependency entry that the comparison guards, so the render depends on the raw value only
+ * through that comparison's boolean.
  */
-export function projectionSites(owner: RenderFunction, raw: ts.Identifier): ProjectionSites | null {
+export function projectionSites(
+  owner: RenderFunction,
+  raw: ts.Identifier,
+  imports: HookImports,
+): ProjectionSites | null {
   if (bindingDeclarationCount(owner, raw.text) !== 1) {
     return null;
   }
-  const [first, ...rest] = ownerLevelReferences(owner, raw).map((reference) =>
-    comparisonSite(reference),
+  const references = ownerLevelReferences(owner, raw);
+  const dependencies = references.filter((reference) => !comparisonSite(reference));
+  const comparisons = uniformComparisons(
+    references.map((reference) => comparisonSite(reference)).filter((site) => site !== null),
   );
-  if (!first || rest.some((site) => site === null)) {
+  const projection = comparisons && { ...comparisons, dependencies };
+  return projection && dependencies.every((entry) => guardsEffect(entry, projection, imports))
+    ? projection
+    : null;
+}
+
+function uniformComparisons(
+  sites: readonly ProjectionSite[],
+): Omit<ProjectionSites, "dependencies"> | null {
+  const [first, ...others] = sites;
+  if (!first) {
     return null;
   }
-  const others = rest.filter((site) => site !== null);
   const operand = siteOperand(first);
   const operator = first.comparison.operatorToken.kind;
   const uniform = others.every(
@@ -59,6 +81,50 @@ export function projectionSites(owner: RenderFunction, raw: ts.Identifier): Proj
   return uniform && isEqualityOperator(operator)
     ? { operand, operator, sites: [first, ...others] }
     : null;
+}
+
+/**
+ * Listing the boolean in place of the raw value skips only the reruns in which the raw value
+ * changes while every other dependency, the operand included, keeps its value. A changed value
+ * cannot strictly equal an unchanged operand both times, so each skipped run takes the unequal
+ * side, which `if (raw !== operand) return;` turns into a no-op when there is no cleanup to rerun.
+ */
+function guardsEffect(
+  entry: ts.Identifier,
+  projection: ProjectionSites,
+  imports: HookImports,
+): boolean {
+  const { parent: dependencies } = entry;
+  const effect = dependencies.parent;
+  const callback = ts.isCallExpression(effect) ? effect.arguments[0] : undefined;
+  return (
+    projection.operator === ts.SyntaxKind.ExclamationEqualsEqualsToken &&
+    ts.isArrayLiteralExpression(dependencies) &&
+    ts.isCallExpression(effect) &&
+    effect.arguments[1] === dependencies &&
+    isReactEffectCall(effect, imports) &&
+    callback !== undefined &&
+    (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
+    ts.isBlock(callback.body) &&
+    !callbackHasCleanup(callback, EMPTY_STATE_CANDIDATES) &&
+    isLeadingGuard(callback.body.statements[0], projection) &&
+    (LITERAL_KINDS.has(projection.operand.kind) ||
+      dependencies.elements.some((element) => element.getText() === projection.operand.getText()))
+  );
+}
+
+/** `if (raw !== operand) return;` */
+function isLeadingGuard(statement: ts.Statement | undefined, projection: ProjectionSites): boolean {
+  if (!statement || !ts.isIfStatement(statement) || statement.elseStatement) {
+    return false;
+  }
+  const then = statement.thenStatement;
+  const exit = ts.isBlock(then) && then.statements.length === 1 ? then.statements[0]! : then;
+  return (
+    projection.sites.some((site) => site.comparison === statement.expression) &&
+    ts.isReturnStatement(exit) &&
+    !exit.expression
+  );
 }
 
 function siteOperand(site: ProjectionSite): ts.Expression {
