@@ -615,6 +615,233 @@ const sourceEditorPreparedDocument = {
   root: "packages/source-editor/src",
 } as const satisfies ReplayCommit;
 
+const selectionAnchorWindowRoundTrip = {
+  cases: [
+    {
+      action: "move-state-down",
+      equivalents: ["use-observable"],
+      expected: "non-enforced",
+      file: "MarkdownEditorWindow.tsx",
+      line: 65,
+      rationale:
+        "selectionAnchor mirrors MarkdownDocument's own derived anchor: the document's post-commit effect writes it through onSelectionAnchorChange and the window renders it only back into selectionToolbarAnchor, so every anchor change re-rendered the window and the whole unmemoized document a second time. Cutting the round trip needs MarkdownDocument to publish its anchor to the footer behind a new selectionToolbarEnabled prop, an API change in another package.",
+      source: "useState<MarkdownSelectionAnchor | null>(null)",
+    },
+  ],
+  commit: "d141408eb0069ede4d9d89664b09f5f19a72136e",
+  parent: "9c57aea5f5faf09f7815ee0267c8b45a93dc7b61",
+  repository,
+  root: "apps/markdown/src",
+} as const satisfies ReplayCommit;
+
+const selectionAnchorDocumentPublisher = {
+  cases: [
+    {
+      expected: "excluded",
+      file: "MarkdownDocument.tsx",
+      line: 2125,
+      rationale:
+        "The publisher effect now also writes selectionAnchor$ with the same post-commit timing; it adds a write and removes no run, and the render it saves belongs to the window state labeled under apps/markdown.",
+      source: effect,
+    },
+    {
+      expected: "excluded",
+      file: "MarkdownDocument.tsx",
+      line: 2128,
+      rationale: "The unmount cleanup also clears selectionAnchor$; no run changes.",
+      source: effect,
+    },
+    {
+      expected: "excluded",
+      file: "MarkdownDocument.tsx",
+      line: 2213,
+      rationale:
+        "The footer becomes a memo leaf subscribed to selectionAnchor$, but the document still renders on each anchor change it derives itself; the saved render is the window round trip labeled under apps/markdown.",
+      source: "const selectionToolbarFooter = useMemo(() => {",
+    },
+  ],
+  commit: "d141408eb0069ede4d9d89664b09f5f19a72136e",
+  parent: "9c57aea5f5faf09f7815ee0267c8b45a93dc7b61",
+  repository,
+  root: markdownDocumentRoot,
+} as const satisfies ReplayCommit;
+
+const markdownSessionObservable = {
+  cases: [
+    {
+      action: "use-observable",
+      expected: "non-enforced",
+      file: "MarkdownEditorWindow.tsx",
+      line: 65,
+      rationale:
+        "documentCommandState is read only by the menu-state effect in useMarkdownMenus, so each undo or redo availability change re-rendered the window and the unmemoized MarkdownDocument; dropping that render needs the effect in another module turned into an observer too.",
+      source: "useState<MarkdownDocumentCommandState>({",
+    },
+    {
+      expected: "excluded",
+      file: "useMarkdownDocumentSession.ts",
+      line: 23,
+      rationale:
+        "filename still renders the document gate, MarkdownDocument's filename prop, and the window options through an owner useValue, so the observable keeps every render.",
+      source: "useState<string | null>(null)",
+    },
+    {
+      expected: "excluded",
+      file: "useMarkdownDocumentSession.ts",
+      line: 24,
+      rationale:
+        "lastError still renders the error text through an owner useValue, so no render is removed.",
+      source: "setLastError] = useState<string | null>(null)",
+    },
+    {
+      action: "use-observable",
+      expected: "non-enforced",
+      file: "useMarkdownDocumentSession.ts",
+      line: 25,
+      rationale:
+        "isDirty renders nothing: the window passes it only to the menu-state and window-options effects in two other modules, and the transition callbacks read it, so every dirty flip re-rendered the window and MarkdownDocument and re-registered the native menu through new handler identities. The saving needs both effects turned into observers, which run their native calls at write time instead of after commit.",
+      source: "useState(false)",
+    },
+    {
+      action: "use-observable",
+      expected: "non-enforced",
+      file: "useMarkdownDocumentSession.ts",
+      line: 26,
+      rationale:
+        "saveState is read only by the menu-state effect in useMarkdownMenus, so each idle, saving, and saved transition re-rendered the window and MarkdownDocument; dropping that render needs the effect turned into an observer too.",
+      source: 'useState<MarkdownSaveState>("idle")',
+    },
+    {
+      expected: "excluded",
+      file: "useMarkdownDocumentSession.ts",
+      line: 27,
+      rationale:
+        "documentSource still selects the adapter, autoFocusFirstBlock, and the autosave policy through an owner useValue, so no render is removed.",
+      source: 'useState<DocumentSource>("untitled")',
+    },
+    {
+      expected: "excluded",
+      file: "useMarkdownMenus.ts",
+      line: 50,
+      rationale:
+        "revealInFinder reads the path at call time, so file switches no longer rebuild the handlers and re-run useNativeMenu's registration effect, but filename still renders the window; no action narrows a memo's dependencies to a call-time read.",
+      source: "const menuHandlers = useMemo<NativeMenuActionHandlers>(() => ({",
+    },
+    {
+      action: "use-observe-effect",
+      expected: "non-enforced",
+      file: "useMarkdownMenus.ts",
+      line: 103,
+      rationale:
+        "isDirty, saveState, and documentCommandState are React state at the parent, so the observer saves no render until all three move to the session observable, and the committed observer reads the whole session, adding updateMenuItems runs on lastError changes.",
+      source: effect,
+    },
+    {
+      action: "use-observe-effect",
+      expected: "non-enforced",
+      file: "useMarkdownWindows.ts",
+      line: 33,
+      rationale:
+        "filename and documentSource still render the window and isDirty is React state at the parent; the committed observer reads the whole session, so command-state and save-state changes now repeat setMarkdownEditorWindowOptions, native calls the dependency list skipped.",
+      source: effect,
+    },
+  ],
+  commit: "e94023f3cdf89a20c95f7e00f4addb071b6ce70d",
+  parent: "77eeb5f158835bbfb095cc2d6ab18b8b6f9f9e03",
+  repository,
+  root: "apps/markdown/src",
+} as const satisfies ReplayCommit;
+
+const textSelectionPublication = {
+  cases: [
+    {
+      action: "use-observable",
+      expected: "non-enforced",
+      file: "MarkdownDocument.tsx",
+      line: 332,
+      rationale:
+        "textSelectionAnchor renders nowhere; the owner reads it only through internalSelectionAnchor in the effect that publishes to selectionAnchor$. Dropping the owner render needs that publication moved into the setters, which publish at write time and gate on blockSelectionRef instead of the committed blockSelection.",
+      source: "setTextSelectionAnchor] = useState<MarkdownSelectionAnchor | null>(null)",
+    },
+    {
+      action: "move-to-event",
+      expected: "non-enforced",
+      file: "MarkdownDocument.tsx",
+      line: 2253,
+      rationale:
+        "The effect republishes the anchor after textSelectionAnchor or blockSelection commits. Publishing from the text-anchor setters drops the republication when a block selection clears, which matches only if every path that clears a block selection also clears the text anchor.",
+      source: effect,
+    },
+  ],
+  commit: "5583b36f980b25ac9abafbc1bef0ba80745b3f2a",
+  parent: "8680d1ec80c9f79791724d624504d52fe50d8209",
+  repository,
+  root: markdownDocumentRoot,
+} as const satisfies ReplayCommit;
+
+const markdownRowWidth = {
+  cases: [
+    {
+      action: "use-observable",
+      expected: "enforced",
+      file: "MarkdownBlockRow.tsx",
+      line: 230,
+      rationale:
+        "rowWidth renders only as the memoized MarkdownEditorInput's prop in the non-overlay active branch, and the inactive branch reads it in onPress, so each row's first onLayout from 700 to its measured width and every resize re-rendered the whole row. The single-call-site input can subscribe to a row-owned observable that onPress peeks.",
+      source: "useState(700)",
+    },
+  ],
+  commit: "48659c85f7ee0c13009b6015f4cc8ce2902b83c9",
+  parent: "5583b36f980b25ac9abafbc1bef0ba80745b3f2a",
+  repository,
+  root: markdownDocumentRoot,
+} as const satisfies ReplayCommit;
+
+const markdownLayoutMetrics = {
+  cases: [
+    {
+      action: "use-ref",
+      expected: "enforced",
+      file: "MarkdownDocument.tsx",
+      line: 328,
+      rationale:
+        "containerWindowY renders nowhere; blockIdAtWindowY and handleBlockWindowLayout read it at call time, and only a requestAnimationFrame measurement writes it, so each container measure re-rendered MarkdownDocument and changed renderMarkdownBlockRow's identity through handleBlockWindowLayout.",
+      source: "setContainerWindowY] = useState(0)",
+    },
+    {
+      action: "use-ref",
+      expected: "non-enforced",
+      file: "MarkdownDocument.tsx",
+      line: 331,
+      rationale:
+        "contentContainerOffsetX is read only inside updateTextSelectionAnchor, but the container onLayout handler writes it together with the rendered inactiveOverlayWidth; the ref saves a render only when the container is wider than resolvedContentMaxWidth, so the offset changes while the clamped width stays equal, a layout fact.",
+      source: "setContentContainerOffsetX] = useState(0)",
+    },
+  ],
+  commit: "dcebe48720c671a815b5be50f2af47ed84e45c69",
+  parent: "48659c85f7ee0c13009b6015f4cc8ce2902b83c9",
+  repository,
+  root: markdownDocumentRoot,
+} as const satisfies ReplayCommit;
+
+const inactiveOverlayWidthLeaves = {
+  cases: [
+    {
+      action: "use-observable",
+      expected: "enforced",
+      file: "MarkdownDocument.tsx",
+      line: 335,
+      rationale:
+        "inactiveOverlayWidth renders only as props of the memoized MarkdownBlockSelectionAnchorPublisher and MarkdownOverlayEditorInput, and two callbacks read it at call time; the container onLayout handler writes no other React state, so each container resize re-rendered all of MarkdownDocument. Both children can subscribe to an owner observable.",
+      source: "setInactiveOverlayWidth] = useState(contentMaxWidth - contentHorizontalPadding * 2)",
+    },
+  ],
+  commit: "9bb020a21b530e1ee00346fbecdbee84f8ff6568",
+  parent: "dcebe48720c671a815b5be50f2af47ed84e45c69",
+  repository,
+  root: markdownDocumentRoot,
+} as const satisfies ReplayCommit;
+
 /** Jay Meistrich's Markdown, Code, Chat History, hotkey, and document-row commits, classified against each parent tree. */
 export const legendAppsDocumentsReplayCommits: readonly ReplayCommit[] = [
   markdownSessionChrome,
@@ -634,4 +861,11 @@ export const legendAppsDocumentsReplayCommits: readonly ReplayCommit[] = [
   markdownSelectionDrag,
   codeViewerPreparedDocument,
   sourceEditorPreparedDocument,
+  selectionAnchorWindowRoundTrip,
+  selectionAnchorDocumentPublisher,
+  markdownSessionObservable,
+  textSelectionPublication,
+  markdownRowWidth,
+  markdownLayoutMetrics,
+  inactiveOverlayWidthLeaves,
 ];

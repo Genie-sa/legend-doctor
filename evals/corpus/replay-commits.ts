@@ -1,4 +1,6 @@
 import type { ReplayCommit } from "./contracts.js";
+import { fractalsReplayCommits } from "./fractals/replay-commits.js";
+import { juntoReplayCommits } from "./junto/replay-commits.js";
 import { legendAppsDiffReplayCommits } from "./legend-apps/replay-diff.js";
 import { legendAppsDocumentsReplayCommits } from "./legend-apps/replay-documents.js";
 import { legendAppsMusicReplayCommits } from "./legend-apps/replay-music.js";
@@ -7,6 +9,7 @@ import { legendMusicReplayCommits } from "./legend-music/replay-commits.js";
 import { legendPhotosReplayCommits } from "./legend-photos/replay-commits.js";
 import { noriReplayCommits } from "./nori/replay-commits.js";
 import { noutubeReplayCommits } from "./noutube/replay-commits.js";
+import { zenborgReplayCommits } from "./zenborg/replay-commits.js";
 
 /** Expert commits replayed against their parent trees; CI fetches every `parent` by SHA. */
 export const replayCommits: readonly ReplayCommit[] = [
@@ -18,4 +21,7 @@ export const replayCommits: readonly ReplayCommit[] = [
   ...legendPhotosReplayCommits,
   ...noutubeReplayCommits,
   ...noriReplayCommits,
+  ...juntoReplayCommits,
+  ...zenborgReplayCommits,
+  ...fractalsReplayCommits,
 ];
