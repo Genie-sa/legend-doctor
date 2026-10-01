@@ -5,10 +5,10 @@ import {
   withoutCompanionWrites,
 } from "../verdicts/classification-context.js";
 import { isCustomHookOwner, runtimeFunctionName } from "../ast-helpers.js";
+import { jsxElementCount, leafSiteCoversOwner } from "../../rules/state-proofs/jsx-subtrees.js";
 import { AssumedLeafContracts } from "./assumed-leaf-contracts.js";
 import type { StateClassificationInputs } from "../verdicts/classification-context.js";
 import { asyncCommandHypothesis } from "./async-command-hypothesis.js";
-import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { lineOf } from "../../core/ast.js";
 import path from "node:path";
 import { pathIdentityKey } from "../../core/path-identity.js";
@@ -316,7 +316,8 @@ function renderCutHypothesis(scope: HypothesisScope): Hypothesis | null {
   if (
     isCustomHookOwner(state.owner) ||
     jsxElementCount(state.owner) < materiality.broadOwnerJsx ||
-    usage.directRenderNodes.length === 0
+    usage.directRenderNodes.length === 0 ||
+    leafSiteCoversOwner(usage.directRenderNodes, state.owner)
   ) {
     return null;
   }
@@ -359,7 +360,8 @@ export function leafWrapHypothesis(scope: HypothesisScope): Hypothesis | null {
   if (
     isCustomHookOwner(state.owner) ||
     jsxElementCount(state.owner) < materiality.broadOwnerJsx ||
-    usage.directRenderNodes.length + transports.length === 0
+    usage.directRenderNodes.length + transports.length === 0 ||
+    leafSiteCoversOwner([...usage.directRenderNodes, ...transports], state.owner)
   ) {
     return null;
   }

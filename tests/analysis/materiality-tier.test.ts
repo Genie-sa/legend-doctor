@@ -68,3 +68,34 @@ for (const source of [
     assert.equal(compact?.materiality, undefined);
   });
 }
+
+test("JSX built inside an effect callback does not count toward the owner's size", () => {
+  const header =
+    "<Row><A /><B /><C /><D /><E /><F /><G /><H /><I /><J /><K /><L /><M /><N /></Row>";
+  const screen = (headerSetup: string, rendered: string): string => `
+    import { useEffect, useState } from "react";
+    export function Screen({ navigation }: { navigation: { setOptions(options: object): void } }) {
+      const [height, setHeight] = useState(0);
+      ${headerSetup}
+      return <Area>${rendered}
+        <View style={{ paddingBottom: height }}><Title /><Body /></View>
+        <Sticky><View onLayout={(e) => setHeight(e.nativeEvent.layout.height)}><Toolbar /></View></Sticky>
+      </Area>;
+    }
+  `;
+  const [effectHeader] = analyzeSourceWith(
+    screen(
+      `useEffect(() => { navigation.setOptions({ headerRight: () => ${header} }); }, [navigation]);`,
+      "",
+    ),
+    "fixture.tsx",
+    {},
+  );
+  assert.equal(requireValue(effectHeader).action, "review-state");
+  const [renderedHeader] = analyzeSourceWith(
+    screen(`const headerRight = () => ${header};`, "<Stack options={{ headerRight }} />"),
+    "fixture.tsx",
+    {},
+  );
+  assert.equal(requireValue(renderedHeader).action, "use-observable");
+});
