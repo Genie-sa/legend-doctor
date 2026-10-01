@@ -2,6 +2,9 @@ import ts from "typescript";
 
 import { unwrapTransparentExpression } from "./analysis-ast.js";
 
+const LEGEND_WRAPPER_EXPORTS: ReadonlySet<string> = new Set(["observer", "reactiveObserver"]);
+const REACT_WRAPPER_EXPORTS: ReadonlySet<string> = new Set(["memo", "forwardRef"]);
+
 export interface ReactComponentWrappers {
   names: ReadonlySet<string>;
   namespaces: ReadonlySet<string>;
@@ -11,10 +14,7 @@ export function collectReactComponentWrappers(sourceFile: ts.SourceFile): ReactC
   const names = new Set<string>();
   const namespaces = new Set<string>();
   for (const statement of sourceFile.statements) {
-    const clause = reactImportClause(statement);
-    if (clause) {
-      collectWrapperBindings(clause, names, namespaces);
-    }
+    collectImportedWrappers(statement, names, namespaces);
   }
   addConstAliases(sourceFile, names);
   return { names, namespaces };
@@ -32,11 +32,27 @@ export function isReactComponentWrapper(
         (expression.name.text === "memo" || expression.name.text === "forwardRef");
 }
 
-function reactImportClause(statement: ts.Statement): ts.ImportClause | null {
+function collectImportedWrappers(
+  statement: ts.Statement,
+  names: Set<string>,
+  namespaces: Set<string>,
+): void {
+  const reactClause = moduleImportClause(statement, "react");
+  if (reactClause) {
+    collectWrapperBindings(reactClause, names, namespaces);
+    return;
+  }
+  const legendBindings = moduleImportClause(statement, "@legendapp/state/react")?.namedBindings;
+  if (legendBindings && ts.isNamedImports(legendBindings)) {
+    collectWrapperNames(legendBindings, LEGEND_WRAPPER_EXPORTS, names);
+  }
+}
+
+function moduleImportClause(statement: ts.Statement, moduleName: string): ts.ImportClause | null {
   if (
     !ts.isImportDeclaration(statement) ||
     !ts.isStringLiteral(statement.moduleSpecifier) ||
-    statement.moduleSpecifier.text !== "react"
+    statement.moduleSpecifier.text !== moduleName
   ) {
     return null;
   }
@@ -60,16 +76,20 @@ function collectWrapperBindings(
     namespaces.add(namedBindings.name.text);
     return;
   }
-  collectWrapperNames(namedBindings, names);
+  collectWrapperNames(namedBindings, REACT_WRAPPER_EXPORTS, names);
 }
 
-function collectWrapperNames(namedImports: ts.NamedImports, names: Set<string>): void {
+function collectWrapperNames(
+  namedImports: ts.NamedImports,
+  wrapperExports: ReadonlySet<string>,
+  names: Set<string>,
+): void {
   for (const element of namedImports.elements) {
     if (element.isTypeOnly) {
       continue;
     }
     const imported = element.propertyName?.text ?? element.name.text;
-    if (imported === "memo" || imported === "forwardRef") {
+    if (wrapperExports.has(imported)) {
       names.add(element.name.text);
     }
   }
