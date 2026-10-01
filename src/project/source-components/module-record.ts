@@ -15,7 +15,19 @@ import { moduleImportSignals } from "./import-signals.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
+const recordsBySource = new WeakMap<ts.SourceFile, ModuleRecord>();
+
 export function moduleRecord(sourceFile: ts.SourceFile): ModuleRecord {
+  const cached = recordsBySource.get(sourceFile);
+  if (cached) {
+    return cached;
+  }
+  const record = buildModuleRecord(sourceFile);
+  recordsBySource.set(sourceFile, record);
+  return record;
+}
+
+function buildModuleRecord(sourceFile: ts.SourceFile): ModuleRecord {
   const draft = emptyModuleRecordDraft(sourceFile);
   const signals = moduleSignals(sourceFile);
   for (const statement of sourceFile.statements) {
