@@ -1,6 +1,7 @@
 import type { InPlaceMemoKeyScan, RawValueBinding, RelativeWrite, StaleMemo } from "./model.js";
 import { ARRAY_MUTATORS } from "../../project/source-components/observable-in-place-writes.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
+import { lineOf } from "../../core/ast.js";
 import { primitiveMemoName } from "./primitive-selection.js";
 
 const LISTED_WRITES = 3;
@@ -39,7 +40,7 @@ function provenMessage(
   const selected = memo && memos.length === 1 ? primitiveMemoName(binding, memo, scan) : null;
   if (memo && selected) {
     const callee = binding.call.expression.getText(scan.sourceFile);
-    return `Select the primitive instead of a snapshot: replace the useMemo at line ${lineOf(memo, scan)} with \`const ${selected} = ${callee}(() => …)\` computing the same expression from \`${binding.sourceText}.get()\` in place of \`${binding.name}\`, and delete \`const ${binding.name} = ${binding.call.getText(scan.sourceFile)}\`. The in-place write at ${describeWrites(writes)} keeps the reference, so the memo keeps a stale result; the selector reruns on every render, and an observable write rerenders the component only when \`${selected}\` changes.`;
+    return `Select the primitive instead of a snapshot: replace the useMemo at line ${lineOf(memo.call, scan.sourceFile)} with \`const ${selected} = ${callee}(() => …)\` computing the same expression from \`${binding.sourceText}.get()\` in place of \`${binding.name}\`, and delete \`const ${binding.name} = ${binding.call.getText(scan.sourceFile)}\`. The in-place write at ${describeWrites(writes)} keeps the reference, so the memo keeps a stale result; the selector reruns on every render, and an observable write rerenders the component only when \`${selected}\` changes.`;
   }
   return `${snapshotInstruction(binding, writes, scan)}. The in-place write at ${describeWrites(writes)} keeps the reference, so ${memoList(memos, scan)} keyed on \`${binding.name}\` keeps a stale result while the component rerenders. If the derivation is cheap, compute it without useMemo instead.`;
 }
@@ -80,7 +81,7 @@ function holdsArray(
 }
 
 function memoEvidence(memo: StaleMemo, binding: RawValueBinding, scan: InPlaceMemoKeyScan): string {
-  const line = lineOf(memo, scan);
+  const line = lineOf(memo.call, scan.sourceFile);
   const others =
     memo.otherDependencies.length === 0
       ? "every other dependency keeps its identity across renders"
@@ -89,16 +90,10 @@ function memoEvidence(memo: StaleMemo, binding: RawValueBinding, scan: InPlaceMe
 }
 
 function memoList(memos: readonly StaleMemo[], scan: InPlaceMemoKeyScan): string {
-  const lines = memos.map((memo) => lineOf(memo, scan));
+  const lines = memos.map((memo) => lineOf(memo.call, scan.sourceFile));
   return lines.length === 1
     ? `the useMemo at line ${lines[0]}`
     : `the useMemos at lines ${lines.join(", ")}`;
-}
-
-function lineOf(memo: StaleMemo, scan: InPlaceMemoKeyScan): number {
-  return (
-    scan.sourceFile.getLineAndCharacterOfPosition(memo.call.getStart(scan.sourceFile)).line + 1
-  );
 }
 
 function distinctWrites(memos: readonly StaleMemo[]): RelativeWrite[] {

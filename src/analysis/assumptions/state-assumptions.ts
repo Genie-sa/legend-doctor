@@ -2,6 +2,7 @@ import type {
   AbstentionReason,
   AssumptionStatus,
   ResearchStep,
+  StateAction,
   StateAssumption,
 } from "../../core/types.js";
 import type { ClassifiedState, StateCandidate } from "../model.js";
@@ -31,12 +32,15 @@ export interface StateAssumptionResult {
   readonly confirmed: ClassifiedState | null;
 }
 
-type ConfirmableAction = StateAssumption["ifConfirmed"];
-
 const FINGERPRINT_LENGTH = 12;
 
 /** Deleting state needs a complete proof; an assumed fact can only justify moving or rehoming it. */
-function confirmableAction(classified: ClassifiedState): ConfirmableAction | null {
+export function confirmableAction(
+  classified: ClassifiedState,
+): Exclude<
+  StateAction,
+  "delete-derived-state" | "delete-unused-state" | "keep-state" | "review-state"
+> | null {
   const { action } = classified;
   if (
     action === "delete-derived-state" ||

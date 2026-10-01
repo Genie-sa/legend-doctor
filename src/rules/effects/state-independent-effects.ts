@@ -9,6 +9,7 @@ import {
 import { identifiersNamed, isRuntimeFunctionLike, nodeWithin, visit } from "../../core/ast.js";
 import type { EffectClassificationContext } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { containsFunctionLike } from "./command-support-calls.js";
 import ts from "typescript";
 
 export type EffectStateDependency =
@@ -286,7 +287,10 @@ function dependenciesOfInitializer(
   if (isStateHook(hookName, scope.context)) {
     return [{ kind: LEGEND_STATE_HOOKS.has(hookName) ? "legend" : "unresolved", name }];
   }
-  if (!ts.isCallExpression(value) || !value.arguments.some(containsFunctionLike)) {
+  if (
+    !ts.isCallExpression(value) ||
+    !value.arguments.some((argument) => containsFunctionLike(argument))
+  ) {
     return [];
   }
   return value.arguments.flatMap((argument) => dependenciesOfNode(argument, scope));
@@ -313,16 +317,6 @@ function isStateHook(hookName: string, context: EffectClassificationContext): bo
     imports.legacyUseValue.has(hookName) ||
     imports.useObservable.has(hookName)
   );
-}
-
-function containsFunctionLike(node: ts.Node): boolean {
-  let found = false;
-  visit(node, (candidate) => {
-    if (ts.isFunctionLike(candidate)) {
-      found = true;
-    }
-  });
-  return found;
 }
 
 function withinTypeNode(node: ts.Node, boundary: ts.Node): boolean {
