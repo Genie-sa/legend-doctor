@@ -44,6 +44,16 @@ export function keepLifecycleAliasEffect(alias: "useMount" | "useUnmount"): Clas
   };
 }
 
+export function keepLayoutEffect(): ClassifiedEffect {
+  return {
+    action: "keep-effect",
+    confidence: "certain",
+    derivedState: null,
+    message:
+      "Keep this layout effect; it runs after DOM mutation and before paint, no derived-state deletion or event move is proven for it, and an observable reaction or a deferred effect would run its work after the first paint.",
+  };
+}
+
 export function keepPairedMountEffect(): ClassifiedEffect {
   return {
     action: "keep-effect",

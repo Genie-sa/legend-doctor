@@ -64,7 +64,7 @@ test("tracks state reads and writes through React lifecycle callback bindings", 
   assert.match(requireValue(stateFor("AliasedInsertion")).evidence[1] ?? "", /effects 1/u);
   assert.equal(requireValue(stateFor("NamedEffect")).action, "use-observable");
   assert.match(requireValue(stateFor("NamedEffect")).evidence[2] ?? "", /effect writes 1/u);
-  assert.equal(findings.filter((finding) => finding.hook === "useEffect").length, 1);
+  assert.equal(findings.filter((finding) => finding.hook === "useEffect").length, 3);
 });
 
 test("does not isolate state whose update is scheduled by a React transition", () => {

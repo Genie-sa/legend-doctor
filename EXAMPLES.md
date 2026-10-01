@@ -670,6 +670,18 @@ useEffect(() => () => clearTimeout(timer.current), []);
 The only difference is in development under Strict Mode: `useUnmount` skips the teardown of the simulated unmount. A
 cleanup-free `useMount` setup still runs twice there, as the React effect does.
 
+### Keep layout work before paint
+
+A `useLayoutEffect` finding reports `hook: "useEffect"`. The effect runs after DOM mutation and before paint, so it
+can only be deleted with its derived state, move its write into the event, wait on the state it writes, or stay
+`keep-effect`. `use-observe-effect`, Legend persistence, and lifecycle aliases would run its work after the first paint.
+
+```tsx
+useLayoutEffect(() => {
+  setHeight(ref.current?.offsetHeight ?? 0);
+}, [label]);
+```
+
 ### Persist an observable instead of writing storage
 
 Use `persist-observable` when a dependency-driven effect only writes `localStorage` or `sessionStorage` and the value

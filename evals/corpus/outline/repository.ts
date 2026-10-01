@@ -24,7 +24,7 @@ export const outlineRepository = {
       states: 1,
     },
     {
-      effects: 1,
+      effects: 2,
       id: "outline-icon-panel",
       root: "app/components/IconPicker/components/IconPanel.tsx",
       states: 2,
@@ -36,7 +36,7 @@ export const outlineRepository = {
       states: 0,
     },
     {
-      effects: 2,
+      effects: 3,
       id: "outline-emoji-panel",
       root: "app/components/IconPicker/components/EmojiPanel.tsx",
       states: 3,
