@@ -286,7 +286,7 @@ function observablePathKey(
   return symbol ? [`${pathIdentityKey(symbol.file)}\0${symbol.localName}`, ...path.slice(1)] : null;
 }
 
-function isLocallyBound(identifier: ts.Identifier): boolean {
+export function isLocallyBound(identifier: ts.Identifier): boolean {
   for (
     let scope = findAncestor(identifier, isRuntimeFunctionLike);
     scope;

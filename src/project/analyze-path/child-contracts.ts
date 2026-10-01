@@ -14,6 +14,7 @@ import type {
 import { componentParentRerender, customHookSubscribes } from "./parent-rerenders.js";
 import { componentSource, findHookDeclaration } from "./source-declarations.js";
 import { findHookPresentationConsumer, hasSingleLeafConsumer } from "./hook-consumers.js";
+import { hookCallersAreObserved, observableIsNeverWritten } from "./never-stale-render-reads.js";
 import {
   propCallbackIsDeferred,
   propCallbackRunsOnlyInReactEffect,
@@ -23,6 +24,7 @@ import {
 } from "../../rules/child-contract/child-contract.js";
 import type { AnalysisContext } from "./analysis-context.js";
 import type { ReachResolver } from "../source-components/synchronous-reach.js";
+import type { RenderOwner } from "../../rules/observable-tracking/render-owners.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceIndex } from "../source-components/source-components.js";
 import { cached } from "./contract-cache.js";
@@ -180,6 +182,13 @@ class ChildContracts implements ChildContractResolver {
 
   public customHookSubscribes(owner: RuntimeFunctionLike, observable: ts.Expression): boolean {
     return customHookSubscribes(this.context, owner, observable);
+  }
+
+  public renderReadIsNeverStale(owner: RenderOwner, observable: ts.Expression): boolean {
+    return (
+      observableIsNeverWritten(this.context, observable) ||
+      hookCallersAreObserved(this.context, owner)
+    );
   }
 
   public componentPropCallbackIsDeferred(

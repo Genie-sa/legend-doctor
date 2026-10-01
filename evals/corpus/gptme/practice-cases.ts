@@ -119,15 +119,6 @@ export const gptmePracticeCases = [
       "`absoluteIndex` is `logOffsetValue + index` (line 968) inside rows keyed by `virtualItem.key` (line 1028); loading older messages moves `logOffset` (stores/conversations.ts:414), so a kept row's Memo still looks up `forkPoints$` at its old index and shows the branch indicator on the wrong message.",
     target: "gptme-webui",
   },
-  {
-    action: "use-value-for-render-read",
-    enforced: false,
-    file: "stores/tasks.ts",
-    line: 79,
-    rationale:
-      "Known false positive (nothing stale): the analyzer asks useTasksQuery to subscribe to `showArchived$`, but the observable is declared at line 24 and never written anywhere in webui/src, so the untracked reads at lines 79-80 can never be stale and the subscription removes no bug.",
-    target: "gptme-webui",
-  },
   ...Object.entries(legacyUseValueLines).flatMap(([file, lines]) =>
     lines.map((line) => ({
       action: "replace-legacy-use-value" as const,

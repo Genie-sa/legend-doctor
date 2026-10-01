@@ -58,7 +58,10 @@ function* importedObservableDeclarations(
   }
 }
 
-function exportedDeclaration(source: ts.SourceFile, name: string): ts.VariableDeclaration | null {
+export function exportedDeclaration(
+  source: ts.SourceFile,
+  name: string,
+): ts.VariableDeclaration | null {
   const declarations = source.statements
     .filter(ts.isVariableStatement)
     .flatMap((statement) => [...statement.declarationList.declarations])

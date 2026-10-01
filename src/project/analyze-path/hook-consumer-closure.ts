@@ -58,7 +58,7 @@ export function closedComponentBindings(
   );
 }
 
-function closedSymbolBindings(
+export function closedSymbolBindings(
   context: AnalysisContext,
   declaration: ResolvedSymbol,
   resolve: SymbolResolver,

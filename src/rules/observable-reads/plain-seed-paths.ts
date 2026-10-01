@@ -101,7 +101,7 @@ function hasStaticUniqueKeys(value: ts.ObjectLiteralExpression): boolean {
   });
 }
 
-function isPlainValue(seed: ts.Expression, plainConstants: ReadonlySet<string>): boolean {
+export function isPlainValue(seed: ts.Expression, plainConstants: ReadonlySet<string>): boolean {
   const value = unwrapTransparentExpression(seed);
   if (ts.isObjectLiteralExpression(value)) {
     return value.properties.every(

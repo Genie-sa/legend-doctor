@@ -13,6 +13,7 @@ test("proves untracked render reads through imported observables, leaving reacti
     `
       import { observable } from "@legendapp/state";
       export const state$ = observable({ ready: false, count: 0 });
+      export const increment = () => state$.count.set((count) => count + 1);
     `,
     "utf8",
   );
@@ -49,6 +50,7 @@ const SETTINGS_STORE = `
   import { observable } from "@legendapp/state";
   export const settings$ = observable({ lang: "en", theme: { dark: false } });
   export const other$ = observable("x");
+  export const setLang = (lang: string) => settings$.lang.set(lang);
 `;
 
 const SETTINGS_SCREEN = `
@@ -148,4 +150,108 @@ test("the Legend Babel plugin makes Computed, Memo, and Show element children tr
 
 test("Computed and Memo element children stay untracked without the Legend Babel plugin", async () => {
   assert.deepEqual(await babelChildrenRenderReadLines(null), [8, 10, 11, 12, 13]);
+});
+
+async function renderReadSites(files: Readonly<Record<string, string>>): Promise<string[]> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-never-stale-"));
+  try {
+    await Promise.all(
+      Object.entries(files).map(([name, text]) => writeFile(path.join(root, name), text, "utf8")),
+    );
+    const report = await analyzePath(root);
+    return report.practices
+      .filter((practice) => practice.action === "use-value-for-render-read")
+      .map((practice) => `${practice.location.file}:${practice.location.line}`);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}
+
+const LOCALE_STORE = `
+  import { observable } from "@legendapp/state";
+  import { getLocales } from "expo-localization";
+  export const tag$ = observable(getLocales()[0].languageTag ?? "en-US");
+  export const prefs$ = observable({ archived: false });
+`;
+
+const LOCALE_SCREEN = `
+  import { prefs$, tag$ } from "./store";
+  export function Screen() {
+    const lang = tag$.get();
+    const archived = prefs$.archived.get();
+    return <p lang={lang}>{archived ? "all" : "open"}</p>;
+  }
+`;
+
+test("a render read of an observable no source ever writes cannot go stale", async () => {
+  assert.deepEqual(
+    await renderReadSites({ "store.ts": LOCALE_STORE, "screen.tsx": LOCALE_SCREEN }),
+    [],
+  );
+});
+
+test("a write, alias, parent assign, or unknown escape anywhere keeps the render read", async () => {
+  const sites = (extra: string): Promise<string[]> =>
+    renderReadSites({ "store.ts": LOCALE_STORE, "screen.tsx": LOCALE_SCREEN, "extra.ts": extra });
+
+  assert.deepEqual(
+    await sites(`import { tag$ } from "./store"; export const reset = () => tag$.set("en");`),
+    ["screen.tsx:4"],
+  );
+  assert.deepEqual(
+    await sites(`import { prefs$ } from "./store"; const p$ = prefs$; p$.archived.set(true);`),
+    ["screen.tsx:5"],
+  );
+  assert.deepEqual(
+    await sites(`import { prefs$ } from "./store"; prefs$.assign({ archived: true });`),
+    ["screen.tsx:5"],
+  );
+  assert.deepEqual(
+    await sites(
+      `import { register } from "sync-lib"; import { tag$ } from "./store"; register(tag$);`,
+    ),
+    ["screen.tsx:4"],
+  );
+  assert.deepEqual(
+    await renderReadSites({
+      "store.ts": LOCALE_STORE.replace('getLocales()[0].languageTag ?? "en-US"', "loadTag()"),
+      "screen.tsx": LOCALE_SCREEN,
+    }),
+    ["screen.tsx:4"],
+  );
+});
+
+const THEME_STORE = `
+  import { observable } from "@legendapp/state";
+  export const theme$ = observable({ name: "light" });
+  export const toggle = () => theme$.name.set((name) => (name === "light" ? "dark" : "light"));
+`;
+
+function themeScreen(observerImport: string, plainCaller: string): string {
+  return `
+    ${observerImport}
+    import { theme$ } from "./store";
+    const useThemeName = () => theme$.name.get();
+    const useLabel = () => useThemeName().toUpperCase();
+    export const Badge = observer(function Badge() {
+      return <b>{useLabel()}</b>;
+    });
+    export const Title = observer(() => <h1>{useThemeName()}</h1>);
+    ${plainCaller}
+  `;
+}
+
+test("a hook read stays tracked when every caller renders inside a Legend observer", async () => {
+  const sites = (observerImport: string, plainCaller = ""): Promise<string[]> =>
+    renderReadSites({
+      "store.ts": THEME_STORE,
+      "screen.tsx": themeScreen(observerImport, plainCaller),
+    });
+  const legend = `import { observer } from "@legendapp/state/react";`;
+
+  assert.deepEqual(await sites(legend), []);
+  assert.deepEqual(await sites(legend, "export function Plain() { return <i>{useLabel()}</i>; }"), [
+    "screen.tsx:4",
+  ]);
+  assert.deepEqual(await sites(`import { observer } from "mobx-react-lite";`), ["screen.tsx:4"]);
 });

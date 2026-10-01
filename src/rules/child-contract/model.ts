@@ -1,4 +1,5 @@
 import type { ReachResolver } from "../../project/source-components/synchronous-reach.js";
+import type { RenderOwner } from "../observable-tracking/render-owners.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
 
@@ -110,6 +111,8 @@ export interface ChildContractResolver {
   componentIsUnreferenced: (owner: RuntimeFunctionLike) => boolean;
   /** A source-resolved custom hook the owner's render calls subscribes to this path or an ancestor. */
   customHookSubscribes: (owner: RuntimeFunctionLike, observable: ts.Expression) => boolean;
+  /** No closed-package source writes this observable, or every caller of the hook owner is an observer. */
+  renderReadIsNeverStale: (owner: RenderOwner, observable: ts.Expression) => boolean;
   /** Every source file that reads a React context created or imported here, with its reader hooks. */
   contextConsumers: (contextName: string) => readonly ContextConsumerSource[];
   /** How many `<Context.Provider>` sites the indexed sources render for this context. */

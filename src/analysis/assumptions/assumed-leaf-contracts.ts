@@ -6,6 +6,7 @@ import type {
   HookReturnMembers,
   ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
+import type { RenderOwner } from "../../rules/observable-tracking/render-owners.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
 
@@ -121,6 +122,10 @@ export class AssumedLeafContracts implements ChildContractResolver {
 
   public customHookSubscribes(owner: RuntimeFunctionLike, observable: ts.Expression): boolean {
     return this.#base.customHookSubscribes(owner, observable);
+  }
+
+  public renderReadIsNeverStale(owner: RenderOwner, observable: ts.Expression): boolean {
+    return this.#base.renderReadIsNeverStale(owner, observable);
   }
 
   public contextConsumers(contextName: string): readonly ContextConsumerSource[] {

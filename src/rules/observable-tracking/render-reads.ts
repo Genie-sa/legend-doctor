@@ -35,7 +35,8 @@ interface RenderRead {
  * and the owner never re-renders when it changes. Reads handed to Legend reactive inputs, which
  * track on their own, `useValue` arguments, reads handed to hooks as snapshots, `key` attributes,
  * reads that only guard observable writes, observer components, and paths already covered by a
- * `useValue` in the same owner or in a source-resolved custom hook it calls are left alone.
+ * `useValue` in the same owner or in a source-resolved custom hook it calls are left alone, as are
+ * observables no source writes and hooks whose every caller is an observer component.
  */
 export function renderReadFinding(
   call: ts.CallExpression,
@@ -64,7 +65,8 @@ function untrackedRenderRead(call: ts.CallExpression, scan: TrackingScan): Rende
     owner.tracked ||
     inBabelWrappedChild(call, owner.owner, scan) ||
     hasCoveringSubscription(owner.owner, path, scan) ||
-    scan.childContracts?.customHookSubscribes(owner.owner, observable)
+    scan.childContracts?.customHookSubscribes(owner.owner, observable) ||
+    scan.childContracts?.renderReadIsNeverStale(owner, observable)
   ) {
     return null;
   }
