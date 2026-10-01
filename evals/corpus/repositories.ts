@@ -1,6 +1,10 @@
 import type { CorpusRepository } from "./contracts.js";
+import { bbplayerRepository } from "./bbplayer/repository.js";
+import { campusRallyeRepository } from "./campus-rallye/repository.js";
 import { excalidrawRepository } from "./excalidraw/repository.js";
 import { expensifyRepository } from "./expensify/repository.js";
+import { fontsourceRepository } from "./fontsource/repository.js";
+import { foodAppExpoRepository } from "./food-app-expo/repository.js";
 import { formbricksRepository } from "./formbricks/repository.js";
 import { fractalsRepository } from "./fractals/repository.js";
 import { gptmeRepository } from "./gptme/repository.js";
@@ -13,6 +17,7 @@ import { noriRepository } from "./nori/repository.js";
 import { noutubeRepository } from "./noutube/repository.js";
 import { openWebuiReactNativeRepository } from "./open-webui-react-native/repository.js";
 import { outlineRepository } from "./outline/repository.js";
+import { socialAppRepository } from "./social-app/repository.js";
 import { zenborgRepository } from "./zenborg/repository.js";
 
 /** Public applications every contributor can check out; a private slice may extend this list. */
@@ -32,4 +37,9 @@ export const repositories: readonly CorpusRepository[] = [
   zenborgRepository,
   juntoRepository,
   fractalsRepository,
+  socialAppRepository,
+  fontsourceRepository,
+  foodAppExpoRepository,
+  campusRallyeRepository,
+  bbplayerRepository,
 ];

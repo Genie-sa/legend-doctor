@@ -39,6 +39,11 @@ export const SCAN_BASELINE_SECONDS: ReadonlyMap<string, number> = new Map([
   ["zenborg", 3.7],
   ["junto", 13.6],
   ["fractals", 2],
+  ["social-app", 13],
+  ["fontsource", 1.5],
+  ["food-app-expo", 1.5],
+  ["campus-rallye", 1.1],
+  ["bbplayer", 2.6],
 ]);
 
 export function scanTimeLimitSeconds(baselineSeconds: number): number {
