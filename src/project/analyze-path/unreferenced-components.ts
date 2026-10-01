@@ -7,6 +7,7 @@ import { closedComponentBindings } from "./hook-consumer-closure.js";
 import { declaredComponent } from "./parent-rerenders.js";
 import { isWithin } from "../workspace/packages.js";
 import { outsideRootSources } from "./hook-closure-outside.js";
+import { parseJsonFields } from "../../core/json.js";
 import path from "node:path";
 import ts from "typescript";
 
@@ -122,7 +123,7 @@ function applicationPackageDirectory(file: string): string | null {
     return null;
   }
   const text = ts.sys.readFile(manifest);
-  const fields = text === undefined ? null : manifestFields(text);
+  const fields = text === undefined ? null : parseJsonFields(text);
   return fields !== null && ENTRY_MANIFEST_FIELDS.every((field) => !fields.has(field))
     ? path.dirname(manifest)
     : null;
@@ -176,15 +177,6 @@ function calleeName(callee: ts.Expression): string {
     return callee.text;
   }
   return ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
-}
-
-function manifestFields(text: string): ReadonlyMap<string, unknown> | null {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed instanceof Object ? new Map(Object.entries(parsed)) : null;
-  } catch {
-    return null;
-  }
 }
 
 function toPosix(relative: string): string {

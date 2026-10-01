@@ -1,3 +1,5 @@
+import type { JsonObject, JsonValue } from "../../core/json.js";
+import { isJsonObject, isJsonString } from "../../core/json.js";
 import type { AssumptionAnswer } from "../../core/types.js";
 import { ConfirmationFormatError } from "./confirmation-format-error.js";
 
@@ -44,21 +46,7 @@ export class ConfirmationSet {
   }
 }
 
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-
-type JsonValue = boolean | number | string | null | readonly JsonValue[] | JsonObject;
-
 const ANSWERS: ReadonlySet<string> = new Set(["no", "yes"]);
-
-function isJsonObject(value: JsonValue | undefined): value is JsonObject {
-  return value instanceof Object && !Array.isArray(value);
-}
-
-function isJsonString(value: JsonValue | undefined): value is string {
-  return value?.constructor === String;
-}
 
 function isAnswer(value: string): value is AssumptionAnswer {
   return ANSWERS.has(value);
