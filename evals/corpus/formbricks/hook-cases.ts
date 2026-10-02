@@ -1546,4 +1546,34 @@ export const formbricksHookCases = [
       "Only the Collapsible root reads the value and receives the setter; the `open` parameter of the delete dialog's `setOpen` callback is a separate binding, so the state can move into a wrapper around the root.",
     target: "formbricks-quotas-card",
   },
+  {
+    action: "use-observable",
+    file: "index.tsx",
+    hook: "useState",
+    line: 63,
+    name: "openMobile",
+    rationale:
+      "The provider only hands `openMobile` to the memoized context value and lists its setter as a `toggleSidebar` dependency. Only `Sidebar` renders it, while `SidebarTrigger`, `SidebarRail`, and every `SidebarMenuButton` bind other fields by name, so an observable in the value stops the mobile sheet toggle from re-rendering them.",
+    target: "formbricks-sidebar",
+  },
+  {
+    action: "keep-state",
+    file: "index.tsx",
+    hook: "useState",
+    line: 67,
+    name: "_open",
+    rationale:
+      "`open = openProp ?? _open` fills the context value and the derived `state`, and `setOpen` reads it, so every write changes the value object whether or not `_open` is an observable.",
+    target: "formbricks-sidebar",
+  },
+  {
+    action: "keep-effect",
+    file: "index.tsx",
+    hook: "useEffect",
+    line: 90,
+    name: null,
+    rationale:
+      "Keep the keyboard-shortcut listener in React; it subscribes to `window` with cleanup keyed on `toggleSidebar`.",
+    target: "formbricks-sidebar",
+  },
 ] as const satisfies readonly GoldHookCase[];

@@ -16,24 +16,32 @@ interface StabilityScope {
   readonly owner: RuntimeFunctionLike;
 }
 
-/** Every `<Alias.Provider>` tag the module renders for these context aliases. */
+/** Every provider tag the module renders for these context aliases. */
 export function contextProviderElements(
   sourceFile: ts.SourceFile,
   aliases: ReadonlySet<string>,
 ): readonly ProviderElement[] {
   const elements: ProviderElement[] = [];
   visit(sourceFile, (node) => {
-    if (
-      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      ts.isPropertyAccessExpression(node.tagName) &&
-      node.tagName.name.text === "Provider" &&
-      ts.isIdentifier(node.tagName.expression) &&
-      aliases.has(node.tagName.expression.text)
-    ) {
+    if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) {
+      return;
+    }
+    const context = providedContext(node.tagName);
+    if (context && aliases.has(context.text)) {
       elements.push(node);
     }
   });
   return elements;
+}
+
+/**
+ * The context a provider tag names: `<Context.Provider>`, or a bare `<Context>`, which React 19
+ * renders as its provider.
+ */
+export function providedContext(tag: ts.JsxTagNameExpression): ts.Identifier | null {
+  const context =
+    ts.isPropertyAccessExpression(tag) && tag.name.text === "Provider" ? tag.expression : tag;
+  return ts.isIdentifier(context) ? context : null;
 }
 
 /**
