@@ -2,11 +2,10 @@ import type {
   AssumptionGroupMember,
   HookFinding,
   ResearchStep,
-  StateAction,
   StateAssumption,
 } from "../../core/types.js";
 import type { ClassifiedState, StateCandidate } from "../model.js";
-import { assumptionStatus, ownerFingerprint } from "./state-assumptions.js";
+import { assumptionStatus, confirmableAction, ownerFingerprint } from "./state-assumptions.js";
 import { isCustomHookOwner, runtimeFunctionName } from "../ast-helpers.js";
 import type { ConfirmationSet } from "./confirmations.js";
 import type { FindingsScope } from "../finding-clusters.js";
@@ -54,11 +53,6 @@ export interface GroupAssumptionResult {
   readonly group: NonNullable<HookFinding["group"]> | null;
 }
 
-type GroupConversion = Exclude<
-  StateAction,
-  "delete-derived-state" | "delete-unused-state" | "keep-state" | "review-state"
->;
-
 const GROUP_REASON = "atomic-transition-unproven";
 
 function quotedList(names: readonly string[]): string {
@@ -68,22 +62,8 @@ function quotedList(names: readonly string[]): string {
     : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
 }
 
-/** A group answer can move or rehome a member; it never deletes one or overrides a keep. */
-function groupConversion(alone: ClassifiedState): GroupConversion | null {
-  const { action } = alone;
-  if (
-    action === "delete-derived-state" ||
-    action === "delete-unused-state" ||
-    action === "keep-state" ||
-    action === "review-state"
-  ) {
-    return null;
-  }
-  return action;
-}
-
 function convertingOutcomes(outcomes: readonly GroupOutcome[]): GroupOutcome[] {
-  return outcomes.filter((outcome) => groupConversion(outcome.alone) !== null);
+  return outcomes.filter((outcome) => confirmableAction(outcome.alone) !== null);
 }
 
 function remainingLabel(alone: ClassifiedState): string {
@@ -92,7 +72,7 @@ function remainingLabel(alone: ClassifiedState): string {
 
 function outcomeLabel(outcome: GroupOutcome): AssumptionGroupMember {
   const { alone, member } = outcome;
-  const conversion = groupConversion(alone);
+  const conversion = confirmableAction(alone);
   if (conversion !== null) {
     return { name: member.valueName, outcome: conversion };
   }
@@ -113,7 +93,7 @@ function memberResearch(
   const { sourceFile } = scope.inputs;
   const names = quotedList(scope.members.map((candidate) => candidate.valueName));
   const remaining =
-    groupConversion(alone) === null
+    confirmableAction(alone) === null
       ? `; on its own it stays under review for ${remainingLabel(alone)}`
       : `; on its own it would become ${alone.action}`;
   const writes = scope.result.analysis.usageByState.get(member)?.setterCallNodes ?? [];
@@ -143,7 +123,7 @@ function memberResearch(
 function groupQuestion(owner: string, outcomes: readonly GroupOutcome[]): string {
   const names = quotedList(outcomes.map(({ member }) => member.valueName));
   const converting = convertingOutcomes(outcomes);
-  const blocked = outcomes.filter((outcome) => groupConversion(outcome.alone) === null);
+  const blocked = outcomes.filter((outcome) => confirmableAction(outcome.alone) === null);
   const converts =
     converting.length > 0
       ? ` A "yes" converts ${quotedList(converting.map(({ member }) => member.valueName))} into one observable object with a separate atomic update for each proven synchronous transition.`
@@ -162,7 +142,7 @@ function confirmedVerdict(
   hookOwned: boolean,
 ): ClassifiedState {
   const { alone } = outcome;
-  if (groupConversion(alone) === null) {
+  if (confirmableAction(alone) === null) {
     return alone;
   }
   const intro = cowrittenGroupIntro(
@@ -189,7 +169,7 @@ function confirmedGroup(
   return {
     confirmed: confirmedVerdict(own, converting, isCustomHookOwner(owner)),
     group:
-      groupConversion(own.alone) !== null && primary
+      confirmableAction(own.alone) !== null && primary
         ? {
             id,
             kind: "state-cluster",
@@ -237,7 +217,7 @@ export function groupAssumption(scope: GroupAssumptionScope): GroupAssumptionRes
       facts: [GROUP_REASON],
       fingerprint,
       id,
-      ifConfirmed: groupConversion(firstConversion.alone)!,
+      ifConfirmed: confirmableAction(firstConversion.alone)!,
       members: outcomes.map((outcome) => outcomeLabel(outcome)),
       question: groupQuestion(owner, outcomes),
       renderCost: jsxElementCount(inputs.state.owner),

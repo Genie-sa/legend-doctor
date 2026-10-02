@@ -1,8 +1,4 @@
-import {
-  bindCallbackPath,
-  isModuleBindingReference,
-  objectBindingOmitsProperty,
-} from "./prop-bindings.js";
+import { bindCallbackPath, objectBindingOmitsProperty } from "./prop-bindings.js";
 import { findAncestor, identifiersNamed, isRuntimeFunctionLike } from "../../core/ast.js";
 import {
   isDeclarationName,
@@ -11,6 +7,7 @@ import {
 } from "../../core/analysis-ast.js";
 import type { CallbackTrace } from "./model.js";
 import { MAX_CALLBACK_PATH_DEPTH } from "./model.js";
+import { isInsideModuleDeclaration } from "../../project/source-components/declaration-shapes.js";
 import ts from "typescript";
 
 interface ContextConsumerProbe {
@@ -72,7 +69,7 @@ function contextReaderVerdict(
   probe: ContextConsumerProbe,
 ): ContextConsumerVerdict {
   const { property, trace } = probe;
-  if (isDeclarationName(node) || isNonValueIdentifier(node) || isModuleBindingReference(node)) {
+  if (isDeclarationName(node) || isNonValueIdentifier(node) || isInsideModuleDeclaration(node)) {
     return "ignored";
   }
   const consumer = contextReaderConsumer(node);

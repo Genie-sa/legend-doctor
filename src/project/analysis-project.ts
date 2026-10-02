@@ -84,7 +84,7 @@ export function isSupportedAnalysisFile(fileName: string): boolean {
   return SOURCE_EXTENSIONS.has(path.extname(fileName).toLowerCase());
 }
 
-function compareText(left: string, right: string): number {
+export function compareText(left: string, right: string): number {
   if (left < right) {
     return -1;
   }

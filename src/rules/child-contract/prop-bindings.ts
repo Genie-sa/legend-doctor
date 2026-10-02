@@ -5,8 +5,8 @@ import {
   isNonValueIdentifier,
   propertyNameText,
 } from "../../core/analysis-ast.js";
-import { isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import ts from "typescript";
+import { visit } from "../../core/ast.js";
 
 function bindingElementNamed(
   elements: ts.NodeArray<ts.BindingElement>,
@@ -64,18 +64,6 @@ export function bindingElementPropertyName(element: ts.BindingElement): string |
     return propertyNameText(element.propertyName);
   }
   return ts.isIdentifier(element.name) ? element.name.text : null;
-}
-
-export function isModuleBindingReference(node: ts.Identifier): boolean {
-  for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
-    if (ts.isImportDeclaration(current) || ts.isExportDeclaration(current)) {
-      return true;
-    }
-    if (ts.isSourceFile(current) || isRuntimeFunctionLike(current)) {
-      return false;
-    }
-  }
-  return false;
 }
 
 export function objectBindingOmitsProperty(binding: ts.BindingName, property: string): boolean {

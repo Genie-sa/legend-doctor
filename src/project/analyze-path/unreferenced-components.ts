@@ -1,4 +1,10 @@
-import { findAncestor, identifiersNamed, isNonProductionHarness, visit } from "../../core/ast.js";
+import {
+  calleeName,
+  findAncestor,
+  identifiersNamed,
+  isNonProductionHarness,
+  visit,
+} from "../../core/ast.js";
 import type { AnalysisContext } from "./analysis-context.js";
 import type { ClosedBinding } from "./hook-consumer-closure.js";
 import type { ComponentTarget } from "./component-references.js";
@@ -166,17 +172,11 @@ function mountsRoot(sourceFile: ts.SourceFile): boolean {
   let mounts = false;
   if (importsRootModule) {
     visit(sourceFile, (node) => {
-      mounts ||= ts.isCallExpression(node) && ROOT_RENDER_CALLS.has(calleeName(node.expression));
+      mounts ||=
+        ts.isCallExpression(node) && ROOT_RENDER_CALLS.has(calleeName(node.expression) ?? "");
     });
   }
   return mounts;
-}
-
-function calleeName(callee: ts.Expression): string {
-  if (ts.isIdentifier(callee)) {
-    return callee.text;
-  }
-  return ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
 }
 
 function toPosix(relative: string): string {
