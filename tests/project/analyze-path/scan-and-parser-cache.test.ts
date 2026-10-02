@@ -18,6 +18,7 @@ test("scans source files deterministically and ignores generated directories", a
   const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-test-"));
   await mkdir(path.join(root, "src"));
   await mkdir(path.join(root, "node_modules"));
+  await mkdir(path.join(root, ".github", "actions", "deploy"), { recursive: true });
   await writeFile(
     path.join(root, "src", "component.tsx"),
     'import { useState } from "react"; export function C() { const [x] = useState(1); return <>{x}</>; }',
@@ -25,6 +26,10 @@ test("scans source files deterministically and ignores generated directories", a
   await writeFile(
     path.join(root, "node_modules", "ignored.tsx"),
     'import { useState } from "react"; export function C() { const [x] = useState(1); return <>{x}</>; }',
+  );
+  await writeFile(
+    path.join(root, ".github", "actions", "deploy", "index.js"),
+    'import { useState } from "react"; export function C() { const [x] = useState(1); return x; }',
   );
 
   const report = await analyzePath(root);

@@ -25,8 +25,9 @@ Target
             components, hooks, imports, re-exports, and observables; a
             single-file scan can hide the proof a safe finding needs.
             Files must be .ts, .tsx, .js, .jsx, .mts, .cts, .mjs, or .cjs.
-            Directories named .git, .next, .turbo, build, coverage, dist,
-            node_modules, and vendor are skipped. Stdin is not read.
+            Directories named .git, .github, .next, .turbo, .wrangler, .yarn,
+            build, coverage, dist, node_modules, and vendor are skipped.
+            Stdin is not read.
 
 Flags
   --actionable              Hide keep findings, reviews no answer converts,
