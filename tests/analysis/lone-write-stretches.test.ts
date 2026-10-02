@@ -178,8 +178,24 @@ test("a companion the owner never renders leaves the write's render to the state
   assert.equal(verdict(notes(EDIT, "<p>Notes</p>"), "editingId"), "use-ref");
 });
 
-test("a companion value that may already be held does not prove an owner render", () => {
+test("a companion value that may already be held leaves a ref no proven render to save", () => {
   const edit = "setEditingId(item.id); setOpen(true);";
+  assert.equal(verdict(notes(edit), "editingId"), "review-state/no-proven-optimization");
+});
+
+test("a guarded write followed by its companion in every path saves no proven render", () => {
+  const edit = "if (item.text) { setEditingId(item.id); } setOpen(false);";
+  assert.equal(verdict(notes(edit), "editingId"), "review-state/no-proven-optimization");
+});
+
+test("a companion after an await commits apart from the write", () => {
+  const edit = "setEditingId(item.id); await Promise.resolve(); setOpen(true);";
+  const source = notes(edit).replace("const edit = (item", "const edit = async (item");
+  assert.equal(verdict(source, "editingId"), "use-ref");
+});
+
+test("a companion that a branch skips leaves the write its own render", () => {
+  const edit = "setEditingId(item.id); if (item.text) setOpen(true);";
   assert.equal(verdict(notes(edit), "editingId"), "use-ref");
 });
 
