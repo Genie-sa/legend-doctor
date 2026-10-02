@@ -29,7 +29,7 @@ test("moves a transported useValue subscription into one source-proven child", a
   await writeFile(
     path.join(root, "screen.tsx"),
     `
-      import { useValue } from "@legendapp/state/react";
+      import { useSelector, useValue } from "@legendapp/state/react";
       import { useEffect } from "react";
       import { Palette } from "./palette";
       import { paletteOpen$ } from "./state";
@@ -38,18 +38,30 @@ test("moves a transported useValue subscription into one source-proven child", a
         useGlobalShortcuts();
         return <>{children}<Palette open={open} /></>;
       }
+      export function SelectorScreen() {
+        const open = useValue(() => paletteOpen$.get());
+        return <main><Palette open={open} /></main>;
+      }
+      export function LegacyScreen() {
+        const open = useSelector(() => paletteOpen$.get());
+        return <main><Palette open={open} /></main>;
+      }
     `,
     "utf8",
   );
 
   const report = await analyzePath(root);
-  const finding = report.practices.find(
+  const findings = report.practices.filter(
     (candidate) => candidate.action === "move-use-value-into-child",
   );
-  assert.equal(requireValue(finding).location.file, "screen.tsx");
-  assert.equal(requireValue(finding).location.line, 7);
-  assert.match(requireValue(finding).message ?? "", /pass `paletteOpen\$` to `Palette`/u);
-  assert.match(requireValue(finding).message ?? "", /subscribe inside the child/u);
+  assert.deepEqual(
+    findings.map(({ location }) => `${location.file}:${location.line}`),
+    ["screen.tsx:7", "screen.tsx:12", "screen.tsx:16"],
+  );
+  for (const { message } of findings) {
+    assert.match(message, /pass `paletteOpen\$` to `Palette`/u);
+    assert.match(message, /subscribe inside the child/u);
+  }
 });
 
 test("keeps transported useValue subscriptions without one stable primitive child contract", async (testContext) => {

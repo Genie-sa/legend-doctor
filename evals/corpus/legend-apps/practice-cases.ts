@@ -158,6 +158,15 @@ export const legendAppsPracticeCases = [
       "A native drag handler snapshots the zone checkDropZones just hit-tested; the handler is no tracking context.",
     target: "legend-apps-music",
   })),
+  {
+    action: "move-use-value-into-child",
+    disposition: "change",
+    file: "DiffViewerWindow.tsx",
+    line: 2157,
+    rationale:
+      "Only DiffMergeCenterGutter's `primaryColor` prop reads it. It is the display theme's primary (diffPalette.ts:91), while the row's border, muted, and foreground colors mix the syntax theme's foreground and background, so a primary-only theme change rerenders every merge row and both of its code panes today.",
+    target: "legend-apps-diff",
+  },
   ...diffDirectObservableLines.map((line) => ({
     action: "pass-observable-to-use-value" as const,
     disposition: "style" as const,

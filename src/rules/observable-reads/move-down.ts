@@ -11,6 +11,7 @@ import {
   isUseValueCall,
   isValueReferenceTo,
   provenObservablePath,
+  subscribedObservablePath,
 } from "./observable-paths.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import {
@@ -193,7 +194,7 @@ export function hasAncestorUseValueSubscription(
   owner: RuntimeFunctionLike,
   scan: ObservableReadScan,
 ): boolean {
-  const currentObservable = provenObservablePath(
+  const currentObservable = subscribedObservablePath(
     currentCall.arguments[0]!,
     scan.observableBindings,
   );
