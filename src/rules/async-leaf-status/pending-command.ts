@@ -2,6 +2,7 @@ import type { CommandRegion, PendingCommand } from "./model.js";
 import type { StateCandidate, StateUsage } from "../../analysis/model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { nearestMutationFunction } from "../../analysis/mutations.js";
+import { ownerSetterNames } from "../../analysis/ast-helpers.js";
 import ts from "typescript";
 
 export function pendingCommand(
@@ -34,17 +35,6 @@ export function isCommandRegion(region: ts.Node): region is CommandRegion {
     ts.isArrowFunction(region) ||
     ts.isFunctionDeclaration(region) ||
     ts.isFunctionExpression(region)
-  );
-}
-
-function ownerSetterNames(
-  states: readonly StateCandidate[],
-  owner: RuntimeFunctionLike,
-): ReadonlySet<string> {
-  return new Set(
-    states.flatMap((candidate) =>
-      candidate.owner === owner && candidate.setterName ? [candidate.setterName] : [],
-    ),
   );
 }
 

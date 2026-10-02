@@ -1,17 +1,12 @@
-import {
-  bindingDeclarationCount,
-  isDeclarationName,
-  isNonValueIdentifier,
-  unwrapTransparentExpression,
-} from "../../core/analysis-ast.js";
+import { bindingDeclarationCount, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import {
   findAncestorUntil,
   nearestNestedFunction,
   nodeWithin,
-  visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { bindingReferences } from "../../core/binding-references.js";
 import { isJsxNode } from "../../rules/state-proofs/callback-sites.js";
 import ts from "typescript";
 import { uniqueReturnedExpression } from "../return-call-sites.js";
@@ -70,7 +65,7 @@ export function collectionBindingIsReadOnly(
   declaration: ts.Identifier,
   owner: RuntimeFunctionLike,
 ): boolean {
-  return bindingReferences(owner, declaration.text, declaration).every((reference) => {
+  return bindingReferences(owner, declaration).every((reference) => {
     const access = reference.parent;
     if (!ts.isPropertyAccessExpression(access) || access.expression !== reference) {
       return false;
@@ -230,26 +225,6 @@ function isConditionallyEvaluatedWithin(node: ts.Node, boundary: ts.Node): boole
     }
   }
   return false;
-}
-
-export function bindingReferences(
-  owner: RuntimeFunctionLike,
-  name: string,
-  declaration: ts.Identifier,
-): ts.Identifier[] {
-  const references: ts.Identifier[] = [];
-  visit(owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node !== declaration &&
-      node.text === name &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node)
-    ) {
-      references.push(node);
-    }
-  });
-  return references;
 }
 
 export function isReadOnlyFilteredResultReference(

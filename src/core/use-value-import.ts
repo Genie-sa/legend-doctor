@@ -170,17 +170,24 @@ function importedSubscriptionHook(
 }
 
 /**
- * The callee an instruction for a new subscription names: the subscription hook the file already
- * imports from `@legendapp/state/react`, else `useValue`.
+ * The callee an instruction for a new subscription names: the file's `useValue` binding, else
+ * `useValue`. Legend State deprecates `use$` and `useSelector`, so new code never calls them.
  */
 export function subscriptionHookCallee(sourceFile: ts.SourceFile): string {
+  return importedUseValue(sourceFile, legendReactImports(sourceFile)) ?? USE_VALUE;
+}
+
+/**
+ * The subscription hook the file already calls, legacy aliases included, else `useValue`; it names
+ * the hook behind existing subscriptions.
+ */
+export function calledSubscriptionHook(sourceFile: ts.SourceFile): string {
   return importedSubscriptionHook(sourceFile, legendReactImports(sourceFile))?.callee ?? USE_VALUE;
 }
 
 /**
- * Resolves the callee of {@link subscriptionHookCallee} for an edit, adding a `useValue` specifier
- * beside a retained one when the file imports no subscription hook. Null when only a new import
- * declaration would do.
+ * Resolves the subscription hook an edit calls, adding a `useValue` specifier beside a retained one
+ * when the file imports no subscription hook. Null when only a new import declaration would do.
  */
 export function subscriptionHookReference(source: EditSource): SubscriptionHookReference | null {
   const clauses = legendReactImports(source.sourceFile);

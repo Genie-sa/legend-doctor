@@ -1,3 +1,5 @@
+import { isJsonObject, isJsonString } from "../../core/json.js";
+import type { JsonValue } from "../../core/json.js";
 import { parse as parseYaml } from "yaml";
 import path from "node:path";
 import { readOptionalText } from "../read-optional-text.js";
@@ -9,12 +11,6 @@ export interface WorkspaceLinkPolicy {
   /** `workspace:` specifiers link. */
   readonly workspaceProtocol: boolean;
 }
-
-interface JsonObject {
-  [key: string]: JsonValue;
-}
-
-type JsonValue = boolean | number | string | null | readonly JsonValue[] | JsonObject;
 
 const NO_LINKS = { semverRanges: false, workspaceProtocol: false } satisfies WorkspaceLinkPolicy;
 const RANGE_LINKS = { semverRanges: true, workspaceProtocol: false } satisfies WorkspaceLinkPolicy;
@@ -139,12 +135,4 @@ function parseDocument(text: string | null, parseText: (text: string) => JsonVal
     // A malformed settings file declares nothing, which leaves the manager's default.
     return null;
   }
-}
-
-function isJsonObject(value: JsonValue | undefined): value is JsonObject {
-  return value instanceof Object && !Array.isArray(value);
-}
-
-function isJsonString(value: JsonValue | undefined): value is string {
-  return value?.constructor === String;
 }

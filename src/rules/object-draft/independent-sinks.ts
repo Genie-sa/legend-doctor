@@ -1,20 +1,18 @@
 import {
   bindingDeclarationCount,
-  isDeclarationName,
-  isNonValueIdentifier,
   isPureExpression,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import {
   findAncestorUntil,
   nodeWithin,
-  visit,
   visitSkippingNestedRuntimeFunctions,
 } from "../../core/ast.js";
 import { isSafeJsxProjectionReference, jsxElementCount } from "../state-proofs/jsx-subtrees.js";
 import type { ObjectDraftProofs } from "./object-draft.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { bindingReferences } from "../../core/binding-references.js";
 import { enclosingJsxElement } from "../state-proofs/unique-repeated-selection.js";
 import { extractedJsxElementCount } from "../../analysis/subtree/extracted-render-work.js";
 import { hasIndependentRenderCutWitness } from "../state-proofs/render-cut-witness.js";
@@ -156,22 +154,6 @@ function safeStringTrim(
     receiver.expression.getText() === stateName &&
     stringProperties.has(receiver.name.text)
   );
-}
-
-function bindingReferences(owner: RuntimeFunctionLike, binding: ts.Identifier): ts.Identifier[] {
-  const references: ts.Identifier[] = [];
-  visit(owner.body, (node) => {
-    if (
-      ts.isIdentifier(node) &&
-      node !== binding &&
-      node.text === binding.text &&
-      !isDeclarationName(node) &&
-      !isNonValueIdentifier(node)
-    ) {
-      references.push(node);
-    }
-  });
-  return references;
 }
 
 function uniqueReturnedExpression(owner: RuntimeFunctionLike): ts.Expression | null {

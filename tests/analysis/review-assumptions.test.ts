@@ -92,6 +92,19 @@ test("an answer recorded for a different fingerprint is stale and not applied", 
   assert.equal(requireValue(converted).action, "use-observable");
 });
 
+test("a confirmed render cut wraps read sites that capture parent props in Computed, not Memo", () => {
+  const id = "src/panel.tsx::Panel::filter::render-cut-unproven";
+  const { fingerprint, research } = requireValue(requireValue(states(FILTERED_LIST)[0]).assumption);
+  assert.match(requireValue(research[1]).check, /can become a `Computed` block/u);
+  const confirmed = new ConfirmationSet([{ answer: "yes", fingerprint, id }]);
+  const { message } = requireValue(states(FILTERED_LIST, confirmed)[0]);
+  assert.match(message, /leaf subscriber \(a `Computed` block or a small wrapper/u);
+  assert.match(
+    message,
+    /Use `Memo` only for a block that reads nothing else from the owner's render/u,
+  );
+});
+
 test("group questions point at every member's declaration and write sites", () => {
   const [open] = states(CO_WRITTEN_DRAWER);
   const { research } = requireValue(requireValue(open).assumption);

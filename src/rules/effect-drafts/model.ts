@@ -1,4 +1,9 @@
-import type { EffectCandidate, StateCandidate, StateUsage } from "../../analysis/model.js";
+import type {
+  EffectCandidate,
+  SetterMutation,
+  StateCandidate,
+  StateUsage,
+} from "../../analysis/model.js";
 import type { RenderCutWitnessQuery } from "../state-proofs/render-cut-witness.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type ts from "typescript";
@@ -34,6 +39,10 @@ export interface DirectReturnCallSite {
  * names or path-specific exceptions while avoiding duplicate AST algorithms.
  */
 export interface EffectDraftProofs {
+  collectSetterMutations: (
+    owner: RuntimeFunctionLike,
+    ownerStates: readonly StateCandidate[],
+  ) => readonly SetterMutation[];
   directUniqueReturnCallSite: (
     usage: StateUsage,
     owner: RuntimeFunctionLike,
@@ -76,10 +85,4 @@ export interface DraftSynchronization {
   clusters: Map<StateCandidate, EffectDraftCluster>;
   effects: Set<EffectCandidate>;
   singletons: Set<StateCandidate>;
-}
-
-export interface SetterMutation {
-  call: ts.CallExpression;
-  region: RuntimeFunctionLike;
-  state: StateCandidate;
 }

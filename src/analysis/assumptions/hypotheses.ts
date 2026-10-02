@@ -35,6 +35,10 @@ export interface Hypothesis {
 
 const RENDER_READ_LINE_PREVIEW = 5;
 
+/** `Memo` is `React.memo(Computed)` that ignores new children, so it keeps its first render's parent values. */
+const MEMO_LIMIT =
+  "Use `Memo` only for a block that reads nothing else from the owner's render; it never re-renders with its parent.";
+
 type HypothesisBuilder = (scope: HypothesisScope) => Hypothesis | null;
 
 function ownerName(inputs: StateClassificationInputs): string {
@@ -329,8 +333,8 @@ function renderCutHypothesis(scope: HypothesisScope): Hypothesis | null {
       confidence: "probable",
       message:
         `Replace \`${state.valueName}\` with a component-lifetime observable and wrap each of its ` +
-        `${sites} render read sites in a leaf subscriber (a \`Memo\` block or a small wrapper ` +
-        `component calling \`${inputs.subscriptionHook}\`), leaving the rest of ${owner} unsubscribed.`,
+        `${sites} render read sites in a leaf subscriber (a \`Computed\` block or a small wrapper ` +
+        `component calling \`${inputs.subscriptionHook}\`), leaving the rest of ${owner} unsubscribed. ${MEMO_LIMIT}`,
     },
     inputs,
     question:
@@ -342,7 +346,7 @@ function renderCutHypothesis(scope: HypothesisScope): Hypothesis | null {
       ...stepsAt(
         scope,
         usage.directRenderNodes,
-        `\`${state.valueName}\` is read in render here; confirm the enclosing element can become a \`Memo\` block or a wrapper component without changing which elements mount`,
+        `\`${state.valueName}\` is read in render here; confirm the enclosing element can become a \`Computed\` block or a wrapper component without changing which elements mount`,
       ),
     ],
   };
@@ -380,8 +384,8 @@ export function leafWrapHypothesis(scope: HypothesisScope): Hypothesis | null {
       confidence: "probable",
       message:
         `Replace \`${state.valueName}\` with a component-lifetime observable and wrap each of its ` +
-        `${sites.join(" and ")} in a leaf subscriber (a \`Memo\` block or a small wrapper component ` +
-        `calling \`${inputs.subscriptionHook}\` and passing the plain value on), leaving the rest of ${owner} unsubscribed.`,
+        `${sites.join(" and ")} in a leaf subscriber (a \`Computed\` block or a small wrapper component ` +
+        `calling \`${inputs.subscriptionHook}\` and passing the plain value on), leaving the rest of ${owner} unsubscribed. ${MEMO_LIMIT}`,
     },
     inputs,
     question:
@@ -392,7 +396,7 @@ export function leafWrapHypothesis(scope: HypothesisScope): Hypothesis | null {
       ...stepsAt(
         scope,
         usage.directRenderNodes,
-        `\`${state.valueName}\` is read in render here; confirm the enclosing element can become a \`Memo\` block or a wrapper component without changing which elements mount`,
+        `\`${state.valueName}\` is read in render here; confirm the enclosing element can become a \`Computed\` block or a wrapper component without changing which elements mount`,
       ),
       ...stepsAt(
         scope,

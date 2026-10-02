@@ -8,6 +8,7 @@ import {
 import { nearestNestedFunction, visit } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isHookDependencyReference } from "../state-proofs/callback-sites.js";
+import { isLiteralBooleanSetter } from "../literal-boolean-leaf/boolean-setters.js";
 import { jsxElementCount } from "../state-proofs/jsx-subtrees.js";
 import { mutationRegionOnlyCallsStateSetters } from "../effect-drafts/draft-mutations.js";
 import ts from "typescript";
@@ -61,13 +62,9 @@ export function isEventOwnedLiteralBooleanState(
     usage.setterCalls === usage.setterCallNodes.length &&
     isEventOwnedScalarBase(state, usage, options) &&
     usage.setterCallNodes.every((call) => {
-      const [argument] = call.arguments;
       const callback = nearestNestedFunction(call, state.owner);
       return (
-        call.arguments.length === 1 &&
-        argument !== undefined &&
-        (argument.kind === ts.SyntaxKind.TrueKeyword ||
-          argument.kind === ts.SyntaxKind.FalseKeyword) &&
+        isLiteralBooleanSetter(call) &&
         callback !== null &&
         options.eventCallbacks.has(callback) &&
         mutationRegionOnlyCallsStateSetters(callback, new Set([state.setterName!]))

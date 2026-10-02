@@ -56,6 +56,17 @@ export function callbackIsEventRooted({
   });
 }
 
+export function plainCallbackIsEventRooted(
+  node: ts.Node,
+  owner: RuntimeFunctionLike,
+  dependencyName = "",
+): boolean {
+  return (
+    isPlainFunction(node) &&
+    callbackIsEventRooted({ callback: node, dependencyName, owner, seen: new Set() })
+  );
+}
+
 type AdditionalEventRoot = (
   callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
   owner: RuntimeFunctionLike,

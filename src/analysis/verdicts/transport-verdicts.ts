@@ -16,7 +16,7 @@ import {
 import { BROAD_OWNER_JSX_ELEMENTS } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { isLiteralBooleanLeafState } from "../../rules/literal-boolean-leaf/literal-boolean-leaf.js";
-import ts from "typescript";
+import { isLiteralBooleanSetter } from "../../rules/literal-boolean-leaf/boolean-setters.js";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
 function stateIsTransportOnly(usage: StateUsage): boolean {
@@ -72,14 +72,7 @@ export function controlledStateReadsAreEventOnly(usage: StateUsage): boolean {
 }
 
 export function setterCallsAssignBooleanLiterals(usage: StateUsage): boolean {
-  return usage.setterCallNodes.every((call) => {
-    const [argument] = call.arguments;
-    return (
-      call.arguments.length === 1 &&
-      argument !== undefined &&
-      (argument.kind === ts.SyntaxKind.TrueKeyword || argument.kind === ts.SyntaxKind.FalseKeyword)
-    );
-  });
+  return usage.setterCallNodes.every((call) => isLiteralBooleanSetter(call));
 }
 
 function ownerRenderCutIsMaterial(context: StateClassificationContext): boolean {

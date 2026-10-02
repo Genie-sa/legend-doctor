@@ -40,6 +40,8 @@ export interface ParsedSourceAnalysisOptions {
 
 export interface SourceAnalysis {
   readonly analysisRoot: string | null;
+  /** The subscription hook this file already calls, named when describing existing subscriptions. */
+  readonly calledSubscriptionHook: string;
   readonly childContracts: ChildContractResolver | null;
   readonly commitSensitiveOwners: ReadonlySet<RuntimeFunctionLike>;
   /** Answered review questions this scan honours, or null when none were supplied. */

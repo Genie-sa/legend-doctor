@@ -6,10 +6,10 @@ import {
 import { isKeyedLeafScalarState, isKeyedScalarWithSecondaryLeaf } from "./keyed-scalars.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { HookImports } from "../../core/imports.js";
-import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isImperativeRenderedCollectionState } from "./imperative-collection-reads.js";
 import { isKeyedLeafCollectionState } from "./keyed-collections.js";
 import { isKeyedLeafRecordState } from "./keyed-records.js";
+import { ownerSetterNames } from "../../analysis/ast-helpers.js";
 
 export interface KeyedSelectionAnalysis {
   collectionStates: ReadonlySet<StateCandidate>;
@@ -38,14 +38,13 @@ export interface KeyedSelectionInputs {
 
 function keyedCollectionStates(inputs: KeyedSelectionInputs): Set<StateCandidate> {
   const { imports, safeCommandStates, states, statesWithCompanionWrites, usageByState } = inputs;
-  const settersByOwner = ownerSetterNames(states);
   return new Set(
     states.filter(
       (state) =>
         safeCommandStates.has(state) &&
         isKeyedCollectionSelection({
           imports,
-          ownerSetters: settersByOwner.get(state.owner) ?? new Set(),
+          ownerSetters: ownerSetterNames(states, state.owner),
           state,
           statesWithCompanionWrites,
           usage: usageByState.get(state),
@@ -80,21 +79,6 @@ function keyedLeafSelections(
       );
     }),
   );
-}
-
-function ownerSetterNames(
-  states: readonly StateCandidate[],
-): Map<RuntimeFunctionLike, Set<string>> {
-  const settersByOwner = new Map<RuntimeFunctionLike, Set<string>>();
-  for (const state of states) {
-    if (!state.setterName) {
-      continue;
-    }
-    const setters = settersByOwner.get(state.owner) ?? new Set<string>();
-    setters.add(state.setterName);
-    settersByOwner.set(state.owner, setters);
-  }
-  return settersByOwner;
 }
 
 interface KeyedCollectionSelectionCheck {

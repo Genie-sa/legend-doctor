@@ -11,8 +11,6 @@ const run = promisify(execFile);
 /** 64 MiB, enough for the path list of any repository git can diff in one call. */
 const GIT_OUTPUT_LIMIT = 67_108_864;
 
-export type ScanScopeMode = "changed" | "since" | "staged";
-
 export type ScanScope =
   | { readonly mode: "changed" | "staged" }
   | { readonly mode: "since"; readonly ref: string };

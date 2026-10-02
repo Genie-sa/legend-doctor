@@ -2,13 +2,6 @@ import type { StateCandidate } from "../../analysis/model.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
-export function calleeName(callee: ts.Expression): string {
-  if (ts.isIdentifier(callee)) {
-    return callee.text;
-  }
-  return ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
-}
-
 export function soleExpressionStatementBody(
   callback: ts.ArrowFunction | ts.FunctionExpression,
 ): ts.Expression | null {

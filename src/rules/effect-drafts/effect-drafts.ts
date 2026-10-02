@@ -20,6 +20,7 @@ import {
 } from "./member-boundary-controls.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { hasDraftRenderCut } from "./draft-render-cuts.js";
+import { ownerSetterNames } from "../../analysis/ast-helpers.js";
 import { stateMayHoldCallable } from "../state-proofs/state-proofs.js";
 import { synchronousDraftSetters } from "./draft-setter-statements.js";
 import ts from "typescript";
@@ -91,11 +92,7 @@ function synchronizedDraftMatch(
 }
 
 function isCompleteDraftCluster(draft: DraftEffect, members: readonly StateCandidate[]): boolean {
-  const ownerSetters = new Set(
-    draft.context.states.flatMap((state) =>
-      state.owner === draft.owner && state.setterName ? [state.setterName] : [],
-    ),
-  );
+  const ownerSetters = ownerSetterNames(draft.context.states, draft.owner);
   const editProofs = members.map((state) => draftEditProof(state, draft, ownerSetters));
   if (
     !members.every((state) => isCompleteDraftMember(state, draft)) ||

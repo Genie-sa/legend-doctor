@@ -38,11 +38,11 @@ function classifyEffectFor(
   effectStateScopes: ReadonlyMap<RuntimeFunctionLike, EffectStateScope>,
 ): ClassifiedEffect {
   const {
+    calledSubscriptionHook,
     childContracts,
     imports,
     moduleScopeBindings,
     nonProductionHarness,
-    subscriptionHook,
     useObservableBindingsByOwner,
     useValueBindingsByOwner,
   } = analysis;
@@ -51,7 +51,7 @@ function classifyEffectFor(
     effect,
     stateBySetter: scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
     stateByValue: scope?.byValue ?? EMPTY_STATE_CANDIDATES,
-    subscriptionHook,
+    subscriptionHook: calledSubscriptionHook,
     usageBySetter: scope?.usageBySetter ?? EMPTY_STATE_USAGES,
     useValueBindings: effect.owner
       ? (useValueBindingsByOwner.get(effect.owner) ?? EMPTY_BINDINGS)

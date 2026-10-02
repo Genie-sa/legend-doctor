@@ -10,9 +10,9 @@ import {
   visitSkippingNestedRuntimeFunctions,
 } from "../core/ast.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
-import { callbackIsEventRooted } from "../rules/state-proofs/event-roots.js";
 import { jsxElementCount } from "../rules/state-proofs/jsx-subtrees.js";
 import { nearestMutationFunction } from "./mutations.js";
+import { plainCallbackIsEventRooted } from "../rules/state-proofs/event-roots.js";
 import { stateHasNoEffectOrDeferredUse } from "./verdicts/transport-verdicts.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../core/analysis-ast.js";
@@ -106,14 +106,11 @@ function scheduledPendingTimerDeclaration(
 function isAsyncEventCommand(command: RuntimeFunctionLike, owner: RuntimeFunctionLike): boolean {
   return (
     command !== owner &&
-    (ts.isArrowFunction(command) ||
-      ts.isFunctionDeclaration(command) ||
-      ts.isFunctionExpression(command)) &&
     command.body !== undefined &&
     ts.isBlock(command.body) &&
     (command.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) ??
       false) &&
-    callbackIsEventRooted({ callback: command, owner, dependencyName: "", seen: new Set() })
+    plainCallbackIsEventRooted(command, owner)
   );
 }
 

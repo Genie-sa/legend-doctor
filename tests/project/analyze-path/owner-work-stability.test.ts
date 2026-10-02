@@ -32,6 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLoggedToast, useToast } from "./toast";
 import { useThing } from "./thing";
 const state$ = observable({ open: false });
+const user$ = observable({ id: "", profile: { name: "" } });
 export function Screen(${parameters}) {
   const open = useValue(state$.open);
   ${setup}
@@ -92,6 +93,18 @@ const identityStable: readonly (readonly [string, Owner])[] = [
     {
       setup: "const attach = useCallback((element: unknown) => void element, []);",
       content: "<div ref={attach}/>",
+    },
+  ],
+  [
+    "an effect keyed on a field of another subscription",
+    { setup: "const userId = useValue(user$)?.id; useEffect(() => void userId, [userId]);" },
+  ],
+  [
+    "a memo keyed on a nested field of another subscription",
+    {
+      setup: `const name = useValue(user$.profile).name;
+      const greeting = useMemo(() => [name], [name]);`,
+      content: "<Pane data={greeting}/>",
     },
   ],
   [
@@ -156,6 +169,25 @@ const identityUnproven: readonly (readonly [string, Owner])[] = [
     },
   ],
   [
+    "an effect keyed on a method result of another subscription",
+    {
+      setup: `const name = useValue(user$.profile).name.trim();
+      useEffect(() => void name, [name]);`,
+    },
+  ],
+  [
+    "an effect keyed on a computed key of another subscription",
+    { setup: `const id = useValue(user$)["id"]; useEffect(() => void id, [id]);` },
+  ],
+  [
+    "an effect keyed on a field of a non-observable hook result",
+    { setup: "const id = useValue(useThing())?.id; useEffect(() => void id, [id]);" },
+  ],
+  [
+    "an effect keyed on a field of a selector",
+    { setup: "const id = useValue(() => user$.get())?.id; useEffect(() => void id, [id]);" },
+  ],
+  [
     "an effect keyed on a fresh object",
     { setup: "const options = { open: true }; useEffect(() => void options, [options]);" },
   ],
@@ -190,6 +222,24 @@ for (const content of ["<Pane source={node}/>", "<Pane ref={node}/>"]) {
     assert.equal(moved, false);
   });
 }
+
+test("a stable dependency still leaves an effect that reads the moved value in the owner", async (context) => {
+  const { entry, moved } = await analyzeOwner(context, {
+    setup: "const userId = useValue(user$)?.id; useEffect(() => void open, [userId, open]);",
+  });
+  assert.ok(entry.reasons.includes("effect-consumer"), entry.reasons.join(", "));
+  assert.equal(moved, false);
+});
+
+test("a stable dependency does not excuse a render-time ref snapshot", async (context) => {
+  const { entry, moved } = await analyzeOwner(context, {
+    setup: `const userId = useValue(user$)?.id; const node = useRef(0);
+    useEffect(() => void userId, [userId]); const seen = node.current;`,
+    content: "<Pane data={seen}/>",
+  });
+  assert.ok(entry.reasons.includes("owner-commit-or-snapshot-work"), entry.reasons.join(", "));
+  assert.equal(moved, false);
+});
 
 test("a stable ref leaves the next blocker visible in the inventory", async (context) => {
   const { entry, moved } = await analyzeOwner(context, {
