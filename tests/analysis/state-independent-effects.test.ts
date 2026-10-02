@@ -146,6 +146,25 @@ test("keeps prop-scheduled effects that only snapshot local React state or Legen
   }
 });
 
+test("a schedule reached through mutually recursive owner functions still reacts to their state", () => {
+  const findings = effects(`
+    import { useEffect, useState } from "react";
+    import { report } from "./telemetry";
+    export function Counter() {
+      const [count, setCount] = useState(0);
+      function total(): number { return count + rest(); }
+      function rest(): number { return total(); }
+      useEffect(() => { report(total()); }, [rest]);
+      return <section><h1>Title</h1><p>Intro</p><p>Body</p><p>More</p><input value={count} onChange={() => setCount(count + 1)} /></section>;
+    }
+  `);
+  assert.deepEqual(
+    findings.map((finding) => finding.action),
+    ["review-effect"],
+  );
+  assert.match(requireValue(findings[0]).message, /reacts to React state `count`/u);
+});
+
 test("reviews dependency effects that write local React state directly or through owner functions", () => {
   const findings = effects(`
     import { useCallback, useEffect, useState } from "react";

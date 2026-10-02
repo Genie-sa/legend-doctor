@@ -47,9 +47,12 @@ export interface EffectStateDependencies {
 interface IndependenceScope {
   readonly callback: ts.ArrowFunction | ts.FunctionExpression;
   readonly context: EffectClassificationContext;
+  /** The shallowest `resolving` depth a cycle has cut back to since the innermost binding began. */
+  cutDepth: number;
   readonly owner: RuntimeFunctionLike;
   readonly resolved: Map<string, readonly EffectStateDependency[]>;
-  readonly resolving: Set<string>;
+  /** Bindings being resolved, by their depth on the resolution stack. */
+  readonly resolving: Map<string, number>;
 }
 
 /**
@@ -72,9 +75,10 @@ export function analyzeEffectStateDependencies(
   const scope: IndependenceScope = {
     callback,
     context,
+    cutDepth: Number.POSITIVE_INFINITY,
     owner: effect.owner,
     resolved: new Map(),
-    resolving: new Set(),
+    resolving: new Map(),
   };
   const body = dependenciesOfNode(callback, scope);
   const schedule = dependenciesOfNode(effect.dependencies, scope);
@@ -154,18 +158,44 @@ function localStateDependency(
     : null;
 }
 
+/**
+ * A binding reached again while it is still being resolved contributes nothing new: its own frame
+ * already collects every dependency it reaches. A binding whose resolution cut such a cycle back to
+ * an enclosing binding misses that binding's other dependencies, so only the cycle's outermost
+ * binding is cached.
+ */
 function resolveOwnerBinding(
   name: string,
   scope: IndependenceScope,
 ): readonly EffectStateDependency[] {
   const known = scope.resolved.get(name);
-  if (known !== undefined || scope.resolving.has(name)) {
-    return known ?? [];
+  if (known !== undefined) {
+    return known;
   }
-  scope.resolving.add(name);
+  const activeDepth = scope.resolving.get(name);
+  if (activeDepth !== undefined) {
+    scope.cutDepth = Math.min(scope.cutDepth, activeDepth);
+    return [];
+  }
+  const depth = scope.resolving.size;
+  scope.resolving.set(name, depth);
+  return resolveActiveOwnerBinding(name, depth, scope);
+}
+
+function resolveActiveOwnerBinding(
+  name: string,
+  depth: number,
+  scope: IndependenceScope,
+): readonly EffectStateDependency[] {
+  const enclosingCutDepth = scope.cutDepth;
+  scope.cutDepth = Number.POSITIVE_INFINITY;
   const dependencies = resolveUncachedOwnerBinding(name, scope);
   scope.resolving.delete(name);
-  scope.resolved.set(name, dependencies);
+  const complete = scope.cutDepth >= depth;
+  scope.cutDepth = complete ? enclosingCutDepth : Math.min(enclosingCutDepth, scope.cutDepth);
+  if (complete) {
+    scope.resolved.set(name, dependencies);
+  }
   return dependencies;
 }
 
