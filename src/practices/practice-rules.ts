@@ -14,6 +14,7 @@ import { findObservableReadPractices } from "../rules/observable-reads/observabl
 import { findObservableTogglePractices } from "../rules/observable-toggle.js";
 import { findObservableTrackingPractices } from "../rules/observable-tracking/observable-tracking.js";
 import { findPrimitiveProjections } from "../rules/primitive-projection/primitive-projection.js";
+import { readersIgnoreIdentity } from "../rules/in-place-memo-keys/identity-readers.js";
 
 export type PracticeRuleId =
   | "plain-primitive-projection"
@@ -127,6 +128,10 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
         importedObservableArrayPaths: request.importedObservableArrayPaths,
         imports,
         observableBindings,
+        readersIgnoreIdentity:
+          request.observableReadersIgnoreIdentity ??
+          ((localName, container) =>
+            readersIgnoreIdentity(request.sourceFile, localName, container)),
         sourceFile: request.sourceFile,
       }),
   },
