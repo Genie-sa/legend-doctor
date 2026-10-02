@@ -132,7 +132,32 @@ function classifyStateAlone(state: StateCandidate, result: StateAnalysisResult):
       message: "",
     };
   }
-  return classifyState(withoutCompanionWrites(stateClassificationInputs(state, usage, result)));
+  const alone = classifyState(
+    withoutCompanionWrites(stateClassificationInputs(state, usage, result)),
+  );
+  return schedulingOverride(alone.action, { analysis: result.analysis, state, usage }) ?? alone;
+}
+
+interface SchedulingScope {
+  readonly analysis: SourceAnalysis;
+  readonly state: StateCandidate;
+  readonly usage: StateUsage;
+}
+
+/** React scheduling the state depends on keeps it in React whatever a verdict or an answer produced. */
+function schedulingOverride(
+  action: ClassifiedState["action"],
+  { analysis, state, usage }: SchedulingScope,
+): ClassifiedState | null {
+  return (
+    renderPhaseWriteOverride(state, usage, action) ??
+    opaqueInstanceOverride(state, action) ??
+    (action !== "review-state" &&
+    action !== "keep-state" &&
+    stateIsCommitSensitive(state, usage, analysis)
+      ? commitSensitiveStateClassification(state)
+      : null)
+  );
 }
 
 function sourceInputs(
@@ -215,19 +240,21 @@ function resolveStateVerdict(
     inputs,
     result,
   );
-  const { action } = resolved.classification;
+  const { assumption, classification } = resolved;
+  const scheduling: SchedulingScope = { analysis: result.analysis, state, usage };
   const override =
-    renderPhaseWriteOverride(state, usage, action) ??
-    opaqueInstanceOverride(state, action) ??
-    (action === "review-state" ? noSmallerBoundaryVerdict(inputs) : null) ??
-    (action !== "review-state" &&
-    action !== "keep-state" &&
-    stateIsCommitSensitive(state, usage, result.analysis)
-      ? commitSensitiveStateClassification(state)
-      : null);
+    schedulingOverride(classification.action, scheduling) ??
+    (classification.action === "review-state" ? noSmallerBoundaryVerdict(inputs) : null);
+  // A question is asked only when its "yes" survives the same overrides; group outcomes already do.
+  const overturnedQuestion =
+    assumption !== null &&
+    assumption.members === undefined &&
+    assumption.status !== "confirmed" &&
+    schedulingOverride(assumption.ifConfirmed, scheduling) !== null;
   return {
     ...resolved,
-    classification: override ?? resolved.classification,
+    assumption: overturnedQuestion ? null : assumption,
+    classification: override ?? classification,
     overridden: override !== null,
   };
 }
