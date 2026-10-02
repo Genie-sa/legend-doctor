@@ -1,6 +1,7 @@
 import type { StateCandidate, StateUsage } from "../analysis/model.js";
-import { nearestNestedFunction, nodeWithin, visit } from "../core/ast.js";
+import { nearestNestedFunction, nodeWithin } from "../core/ast.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
+import { firstJsxOpeningAt } from "../analysis/return-call-sites.js";
 import { hasIndependentRenderCutWitness } from "./state-proofs/render-cut-witness.js";
 import { nearestRepeatedRenderCall } from "./state-proofs/jsx-subtrees.js";
 import { stateMayHoldCallable } from "./state-proofs/state-proofs.js";
@@ -66,7 +67,7 @@ function transportedCallbackOpening(
   ) {
     return null;
   }
-  const opening = uniqueJsxOpeningAtSite(state.owner, valueSite);
+  const opening = state.owner.body ? firstJsxOpeningAt(state.owner.body, valueSite) : null;
   if (!opening || nearestRepeatedRenderCall(opening, state.owner)) {
     return null;
   }
@@ -92,26 +93,6 @@ function transportsExactlyOnce(usage: StateUsage): boolean {
     usage.valueTransportSites.size === 1 &&
     usage.valueTargets.size === 1
   );
-}
-
-function uniqueJsxOpeningAtSite(
-  owner: RuntimeFunctionLike,
-  valueSite: number,
-): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  const { body } = owner;
-  if (!body) {
-    return null;
-  }
-  const openings: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
-  visit(body, (node) => {
-    if (
-      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      node.getStart() === valueSite
-    ) {
-      openings.push(node);
-    }
-  });
-  return openings.length === 1 ? openings[0]! : null;
 }
 
 function callbackWrappedElement(

@@ -16,6 +16,7 @@ import {
   jsxElementCount,
   jsxElementCountIn,
 } from "../state-proofs/jsx-subtrees.js";
+import { nodeWithin, visit } from "../../core/ast.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { hasAncestorUseValueSubscription } from "./move-down.js";
@@ -25,7 +26,6 @@ import { propIsPrimitiveValueConsumer } from "../child-contract/child-contract.j
 import { subscriptionCut } from "./subscription-cut.js";
 import { subscriptionFlow } from "./subscription-flow.js";
 import ts from "typescript";
-import { visit } from "../../core/ast.js";
 
 export function moveUseValueIntoChildFinding(
   declaration: ts.VariableDeclaration,
@@ -37,13 +37,17 @@ export function moveUseValueIntoChildFinding(
     bindingDeclarationCount(use.owner, use.localName) !== 1 ||
     hasUnprovenOwnerWork(use.owner, scan) ||
     hasAncestorUseValueSubscription(use.call, use.owner, scan) ||
-    hasOtherGetReadOfPath(use.owner, use.observable, scan.observableBindings)
+    hasOtherGetReadOfPath(use, scan.observableBindings)
   ) {
     return null;
   }
   const reference = soleValueReference(use);
   const transport = reference ? directJsxPropTransport(reference) : null;
-  if (!transport || !childAcceptsPrimitiveProp(transport, use.owner, scan)) {
+  if (
+    !transport ||
+    ownerOnlyReturnsChild(use) ||
+    !childAcceptsPrimitiveProp(transport, use.owner, scan)
+  ) {
     return null;
   }
   const cut = subscriptionCut(
@@ -77,6 +81,18 @@ function soleValueReference(use: UseValueDeclaration): ts.Identifier | null {
     reference = node;
   });
   return unsafe ? null : reference;
+}
+
+/** An owner that only subscribes and returns the child saves nothing but its own call. */
+function ownerOnlyReturnsChild({ declaration, owner }: UseValueDeclaration): boolean {
+  return (
+    owner.body !== undefined &&
+    ts.isBlock(owner.body) &&
+    owner.body.statements.every(
+      (statement) => statement === declaration.parent.parent || ts.isReturnStatement(statement),
+    ) &&
+    jsxElementCount(owner) === 1
+  );
 }
 
 function childAcceptsPrimitiveProp(
@@ -118,9 +134,9 @@ function moveIntoChildFinding(
   };
 }
 
+/** Whether the owner reads an overlapping path outside the subscription's own selector. */
 function hasOtherGetReadOfPath(
-  owner: RuntimeFunctionLike,
-  observable: ts.Expression,
+  { call, observable, owner }: UseValueDeclaration,
   observableBindings: ReadonlySet<string>,
 ): boolean {
   if (!owner.body) {
@@ -132,7 +148,7 @@ function hasOtherGetReadOfPath(
   }
   let overlap = false;
   visit(owner.body, (node) => {
-    if (overlap || !ts.isCallExpression(node)) {
+    if (overlap || !ts.isCallExpression(node) || nodeWithin(node, call)) {
       return;
     }
     const receiver = directGetReceiver(node);

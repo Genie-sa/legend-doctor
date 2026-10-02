@@ -20,6 +20,7 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateUsage } from "../../analysis/model.js";
 import { commonRenderGateSubtree } from "../deferred-reveal/render-gates.js";
 import { isSafeProjectionExpression } from "../deferred-reveal/safe-projections.js";
+import { jsxSubtreeForOpening } from "../../analysis/ast-helpers.js";
 import ts from "typescript";
 
 const MAX_TRANSPORT_SITES = 3;
@@ -87,7 +88,7 @@ function commonLeafCallSites(
   openings: readonly (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[],
   owner: RuntimeFunctionLike,
 ): AsyncLeafCallSites | null {
-  const boundaries = openings.map((opening) => jsxCallSite(opening));
+  const boundaries = openings.map((opening) => jsxSubtreeForOpening(opening));
   const returned = returnedExpressions(owner).filter((expression) =>
     boundaries.every((boundary) => nodeWithin(boundary, expression)),
   );
@@ -105,7 +106,7 @@ function asyncLeafCallSite(usage: StateUsage, owner: RuntimeFunctionLike): Async
   if (!opening || !isProvenLeafOpening(opening.opening, usage, owner)) {
     return null;
   }
-  const callSite = jsxCallSite(opening.opening);
+  const callSite = jsxSubtreeForOpening(opening.opening);
   const returned = returnedExpressions(owner);
   const directReturn = returned.find((expression) => nodeWithin(opening.opening, expression));
   return directReturn
@@ -125,7 +126,7 @@ function isProvenLeafOpening(
   if (nearestRepeatedRenderCall(opening, owner) || !nestedFunctionsAreJsxChildren(opening, owner)) {
     return false;
   }
-  const callSite = jsxCallSite(opening);
+  const callSite = jsxSubtreeForOpening(opening);
   return !usage.directRenderNodes.some(
     (node) =>
       !nodeWithin(node, callSite) ||
@@ -209,10 +210,6 @@ function asyncLeafOpening(usage: StateUsage, owner: RuntimeFunctionLike): AsyncL
     opening: ts.isJsxElement(common) ? common.openingElement : common,
     requiresUnconditionalAwait: gates.some((gate) => gate === common),
   };
-}
-
-function jsxCallSite(opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement): ts.Node {
-  return ts.isJsxOpeningElement(opening) ? opening.parent : opening;
 }
 
 function isSafeLeafProjectionReference(node: ts.Node, owner: RuntimeFunctionLike): boolean {

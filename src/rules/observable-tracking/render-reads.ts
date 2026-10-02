@@ -34,18 +34,22 @@ interface RenderRead {
  * render without any tracking context. Nothing subscribes, so the value is read once per render
  * and the owner never re-renders when it changes. Reads handed to Legend reactive inputs, which
  * track on their own, `useValue` arguments, reads handed to hooks as snapshots, `key` attributes,
- * reads that only guard observable writes, observer components, and paths already covered by a
- * `useValue` in the same owner or in a source-resolved custom hook it calls are left alone.
+ * reads that only guard observable writes, and paths already covered by a `useValue` in the same
+ * owner or in a source-resolved custom hook it calls are left alone. Inside `observer` the read
+ * already tracks, so only a render-body initializer is reported, as a style rename.
  */
 export function renderReadFinding(
   call: ts.CallExpression,
   scan: TrackingScan,
 ): LegendPracticeFinding | null {
-  const read = untrackedRenderRead(call, scan);
-  return read ? renderReadPractice(read, scan) : null;
+  const read = renderRead(call, scan);
+  if (!read) {
+    return null;
+  }
+  return read.owner.tracked ? observerReadRename(read, scan) : renderReadPractice(read, scan);
 }
 
-function untrackedRenderRead(call: ts.CallExpression, scan: TrackingScan): RenderRead | null {
+function renderRead(call: ts.CallExpression, scan: TrackingScan): RenderRead | null {
   const receiver = directGetReceiver(call);
   const observable = receiver && provenObservablePath(receiver, scan.observableBindings);
   const path = observable && staticPropertyPath(observable);
@@ -61,7 +65,6 @@ function untrackedRenderRead(call: ts.CallExpression, scan: TrackingScan): Rende
   const owner = renderOwnerOf(call, scan.imports);
   if (
     !owner ||
-    owner.tracked ||
     inBabelWrappedChild(call, owner.owner, scan) ||
     hasCoveringSubscription(owner.owner, path, scan) ||
     scan.childContracts?.customHookSubscribes(owner.owner, observable)
@@ -154,9 +157,6 @@ function renderReadInstruction(
 
 function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPracticeFinding {
   const { call, observable, owner } = read;
-  const { line, character } = scan.sourceFile.getLineAndCharacterOfPosition(
-    call.getStart(scan.sourceFile),
-  );
   const path = observable.getText(scan.sourceFile);
   const subject =
     owner.kind === "component" ? `\`${owner.name}\`` : `components calling \`${owner.name}\``;
@@ -176,10 +176,47 @@ function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPractic
           : `the call executes in a synchronous iteration callback of ${owner.kind} \`${owner.name}\`'s render`,
         `no useValue, use$, or useSelector call in \`${owner.name}\` or a source-resolved custom hook it calls subscribes to \`${path}\` or a parent path, and the component is not wrapped in observer`,
       ],
-      location: { column: character + 1, file: scan.fileName, line: line + 1 },
+      location: findingLocation(call, scan),
       message: `${instruction}; ${consequence}.`,
       practice: "reactivity",
     },
     initializer && renderInitializerEdits(call, initializer, scan),
   );
+}
+
+/** Inside `observer`, `useValue(x$)` runs `x$.get()` without a hook, so a render-body initializer renames exactly. */
+function observerReadRename(read: RenderRead, scan: TrackingScan): LegendPracticeFinding | null {
+  const initializer = directRenderInitializer(read);
+  if (!initializer || earlyExitBefore(initializer)) {
+    return null;
+  }
+  const { call, observable, owner } = read;
+  const path = observable.getText(scan.sourceFile);
+  const subscription = `${subscriptionHookCallee(scan.sourceFile)}(${path})`;
+  return withEdits(
+    {
+      action: "use-value-for-render-read",
+      confidence: "certain",
+      disposition: "style",
+      evidence: [
+        `${path}.get() reads a proven Legend observable path in the render body of \`${owner.name}\``,
+        `observer wraps \`${owner.name}\`, so the read already tracks and ${subscription} performs the same get() there`,
+        "Legend State deprecates render get() inside observer in favor of useValue",
+      ],
+      location: findingLocation(call, scan),
+      message: `Replace \`${path}.get()\` with \`${subscription}\`; observer already tracks the read, so this follows Legend State's useValue guidance with no runtime effect.`,
+      practice: "reactivity",
+    },
+    renderInitializerEdits(call, initializer, scan),
+  );
+}
+
+function findingLocation(
+  call: ts.CallExpression,
+  scan: TrackingScan,
+): LegendPracticeFinding["location"] {
+  const { line, character } = scan.sourceFile.getLineAndCharacterOfPosition(
+    call.getStart(scan.sourceFile),
+  );
+  return { column: character + 1, file: scan.fileName, line: line + 1 };
 }

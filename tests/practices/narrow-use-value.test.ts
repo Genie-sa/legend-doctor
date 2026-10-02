@@ -1,3 +1,4 @@
+import { applyFindingEdits, practiceFindings } from "./edit-assertions.js";
 import type { LegendPracticeFinding } from "../../src/core/types.js";
 import { analyzeLegendPractices } from "../../src/practices/analyze-legend-practices.js";
 import assert from "node:assert/strict";
@@ -320,6 +321,32 @@ test("narrows the legacy useSelector and use$ aliases like useValue", () => {
       ),
       message,
     );
+  }
+});
+
+test("narrows a selector subscription the same way before and after its input rewrite", () => {
+  for (const [importLine, call] of [
+    [`import { useValue } from "@legendapp/state/react";`, "useValue"],
+    [`import { useSelector } from "@legendapp/state/react";`, "useSelector"],
+  ] as const) {
+    const source = `import { observable } from "@legendapp/state";
+${importLine}
+const profile$ = observable({ name: "Ada", email: "ada@example.com" });
+export function write() { profile$.email.set("grace@example.com"); }
+export function Profile() {
+  const profile = ${call}(() => profile$.get());
+  return <h1>{profile.name}</h1>;
+}
+`;
+    const findings = analyzeLegendPractices({ fileName: "fixture.tsx", sourceText: source });
+    const rewritten = applyFindingEdits(source, findings);
+    assert.notEqual(rewritten, source, call);
+    const narrowed = [source, rewritten].map((text) =>
+      practiceFindings(text, "narrow-use-value-subscription").map(
+        ({ disposition, location }) => `${disposition}:${location.line}`,
+      ),
+    );
+    assert.deepEqual(narrowed, [["change:6"], ["change:6"]], call);
   }
 });
 

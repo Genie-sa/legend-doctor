@@ -1,4 +1,5 @@
 import type { SourceContextCoverage } from "./source-components/source-context.js";
+import { compareText } from "./analysis-project.js";
 
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public coverage protocol version.
 const COVERAGE_SCHEMA_VERSION = 2 as const;
@@ -59,13 +60,6 @@ const COVERAGE_STATUSES: ReadonlySet<AnalysisCoverageStatus> = new Set([
 ]);
 
 type AnalysisCoverageFunctionTarget = Extract<AnalysisCoverageTarget, { kind: "function" }>;
-
-function compareText(left: string, right: string): number {
-  if (left < right) {
-    return -1;
-  }
-  return left > right ? 1 : 0;
-}
 
 function compareFunctionSpans(
   left: AnalysisCoverageFunctionTarget,

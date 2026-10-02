@@ -140,6 +140,15 @@ export const zenborgPracticeCases = [
     target: "zenborg",
   },
   {
+    action: "move-use-value-into-child",
+    disposition: "change",
+    file: "components/LayoutClient.tsx",
+    line: 56,
+    rationale:
+      "Only CommandPalette's `open` prop reads the palette flag, and no other LayoutClient subscription tracks it, so each Cmd+K open and close rerenders the top bar, TodayButton, ModeSelector, HamburgerMenuButton, UpdateNotification and SettingsModal today; subscribing inside the existing CommandPalette child keeps its render and lifetime.",
+    target: "zenborg",
+  },
+  {
     action: "toggle-observable",
     disposition: "style",
     file: "commands/view-commands.ts",

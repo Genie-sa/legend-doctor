@@ -5,15 +5,17 @@ import { isImportedReactCall } from "./binding-resolution.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
+interface RefIdentityScope {
+  readonly owner: RuntimeFunctionLike;
+  readonly imports: HookImports;
+  readonly resolving: ReadonlySet<ts.VariableDeclaration>;
+}
+
 function conditionalRefIdentityMayChange(
   value: ts.ConditionalExpression,
-  owner: RuntimeFunctionLike,
-  imports: HookImports,
+  scope: RefIdentityScope,
 ): boolean {
-  return (
-    refIdentityMayChange(value.whenTrue, owner, imports) ||
-    refIdentityMayChange(value.whenFalse, owner, imports)
-  );
+  return identityMayChange(value.whenTrue, scope) || identityMayChange(value.whenFalse, scope);
 }
 
 export function refIdentityMayChange(
@@ -21,33 +23,40 @@ export function refIdentityMayChange(
   owner: RuntimeFunctionLike,
   imports: HookImports,
 ): boolean {
-  const value = unwrapTransparentExpression(expression);
-  if (ts.isArrowFunction(value) || ts.isFunctionExpression(value) || ts.isCallExpression(value)) {
-    return !ts.isCallExpression(value) || !isStableReactRefFactory(value, imports);
-  }
-  if (ts.isConditionalExpression(value)) {
-    return conditionalRefIdentityMayChange(value, owner, imports);
-  }
-  return ts.isIdentifier(value) && aliasedRefIdentityMayChange(value, owner, imports);
+  return identityMayChange(expression, { imports, owner, resolving: new Set() });
 }
 
-function aliasedRefIdentityMayChange(
-  value: ts.Identifier,
-  owner: RuntimeFunctionLike,
-  imports: HookImports,
-): boolean {
-  if (localFunctionBinding(owner, value.text)) {
+function identityMayChange(expression: ts.Expression, scope: RefIdentityScope): boolean {
+  const value = unwrapTransparentExpression(expression);
+  if (ts.isArrowFunction(value) || ts.isFunctionExpression(value) || ts.isCallExpression(value)) {
+    return !ts.isCallExpression(value) || !isStableReactRefFactory(value, scope.imports);
+  }
+  if (ts.isConditionalExpression(value)) {
+    return conditionalRefIdentityMayChange(value, scope);
+  }
+  return ts.isIdentifier(value) && aliasedRefIdentityMayChange(value, scope);
+}
+
+/** An alias whose conditional leads back to itself has no proven identity, so it may change. */
+function aliasedRefIdentityMayChange(value: ts.Identifier, scope: RefIdentityScope): boolean {
+  if (localFunctionBinding(scope.owner, value.text)) {
     return true;
   }
-  const declaration = uniqueVariableDeclaration(owner, value.text);
+  const declaration = uniqueVariableDeclaration(scope.owner, value.text);
   if (!declaration?.initializer) {
     return false;
   }
   const initializer = unwrapTransparentExpression(declaration.initializer);
   if (ts.isConditionalExpression(initializer)) {
-    return conditionalRefIdentityMayChange(initializer, owner, imports);
+    return (
+      scope.resolving.has(declaration) ||
+      conditionalRefIdentityMayChange(initializer, {
+        ...scope,
+        resolving: new Set(scope.resolving).add(declaration),
+      })
+    );
   }
-  return ts.isCallExpression(initializer) && !isStableReactRefFactory(initializer, imports);
+  return ts.isCallExpression(initializer) && !isStableReactRefFactory(initializer, scope.imports);
 }
 
 function isStableReactRefFactory(call: ts.CallExpression, imports: HookImports): boolean {

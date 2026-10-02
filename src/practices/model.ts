@@ -3,6 +3,7 @@ import type { FileCapabilities } from "../project/capabilities.js";
 import type { HookImports } from "../core/imports.js";
 import type { ObservableContextReader } from "../project/source-components/observable-contexts.js";
 import type { ObservableInPlaceWrites } from "../project/source-components/observable-in-place-writes.js";
+import type { ReadersIgnoreIdentity } from "../rules/in-place-memo-keys/identity-readers.js";
 import type { SubscriptionInventory } from "../core/subscriptions.js";
 import type ts from "typescript";
 
@@ -37,6 +38,8 @@ export interface LegendPracticesRequest {
   observableContextReaders: ReadonlyMap<string, ObservableContextReader>;
   /** In-place writes anywhere in the project, keyed by the local name of the written observable. */
   observableInPlaceWrites: ObservableInPlaceWrites;
+  /** Proves across every module that can reach an observable; single-file analysis reads the file alone. */
+  observableReadersIgnoreIdentity?: ReadersIgnoreIdentity | undefined;
   sourceFile: ts.SourceFile;
   /**
    * Whether reading this context, or calling this context-reader hook, can never render the

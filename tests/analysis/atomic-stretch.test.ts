@@ -66,16 +66,32 @@ test("an await on one path between the co-writes keeps the atomic question", () 
   );
 });
 
-test("co-writes inside a transition keep the atomic question", () => {
-  assert.deepEqual(
-    questions(
-      alerts(
-        `const fail = (message: string, _retry: boolean) => { startTransition(() => { setError(message); setHint(message + "!"); }); };`,
-      ),
+test("co-writes inside a transition stay unproven and ask nothing a commit-sensitive state cannot honour", () => {
+  const findings = states(
+    alerts(
+      `const fail = (message: string, _retry: boolean) => { startTransition(() => { setError(message); setHint(message + "!"); }); };`,
     ),
+  );
+  assert.deepEqual(
+    findings.map((finding) => [finding.abstentionReason, finding.assumption]),
     [
-      "atomic-transition-unproven+render-cut-unproven",
-      "atomic-transition-unproven+render-cut-unproven",
+      ["atomic-transition-unproven", undefined],
+      ["atomic-transition-unproven", undefined],
+    ],
+  );
+  assert.ok(findings.every((finding) => !PROVEN.test(finding.evidence.at(-1) ?? "")));
+});
+
+test("an every-commit effect leaves no question whose yes it would override", () => {
+  const source = alerts(
+    `const fail = async (message: string, retry: boolean) => { setError(message); if (retry) await report(message); setHint(message + "!"); };
+      useEffect(() => { document.title = String(Date.now()); });`,
+  ).replace("{ startTransition, useState }", "{ startTransition, useEffect, useState }");
+  assert.deepEqual(
+    states(source).map((finding) => [finding.abstentionReason, finding.assumption]),
+    [
+      ["atomic-transition-unproven", undefined],
+      ["atomic-transition-unproven", undefined],
     ],
   );
 });

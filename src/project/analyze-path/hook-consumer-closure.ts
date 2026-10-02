@@ -3,6 +3,7 @@ import { closureIndex, isPublishedManifest } from "./hook-closure-index.js";
 import type { AnalysisContext } from "./analysis-context.js";
 import type { AnalysisFile } from "../analysis-project.js";
 import type { OutsideRootSources } from "./hook-closure-outside.js";
+import type { ReadersIgnoreIdentity } from "../../rules/in-place-memo-keys/identity-readers.js";
 import type { ResolvedSymbol } from "../source-components/model.js";
 import { isNonProductionHarness } from "../../core/ast.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
@@ -10,6 +11,7 @@ import { isWithin } from "../workspace/packages.js";
 import { outsideRootSources } from "./hook-closure-outside.js";
 import path from "node:path";
 import { pathIdentityKey } from "../../core/path-identity.js";
+import { readersIgnoreIdentity } from "../../rules/in-place-memo-keys/identity-readers.js";
 import ts from "typescript";
 
 export interface ClosedBinding {
@@ -56,6 +58,27 @@ export function closedComponentBindings(
   return closedSymbolBindings(context, declaration, (file, localName) =>
     context.sourceIndex.componentDeclarationFor(file, localName),
   );
+}
+
+/**
+ * Checks the readers in every production module that can bind an observable this file names; an
+ * observable that is not a module-level closed world has unknown readers.
+ */
+export function closedObservableReaders(
+  context: AnalysisContext,
+  file: string,
+): ReadersIgnoreIdentity {
+  const resolve: SymbolResolver = (importer, localName) =>
+    context.sourceIndex.observableDeclarationFor(importer, localName);
+  return (localName, container) => {
+    const declaration = resolve(file, localName);
+    const closure = declaration && closedSymbolBindings(context, declaration, resolve);
+    return (
+      closure?.consumers.every((binding) =>
+        readersIgnoreIdentity(binding.file.sourceFile, binding.localName, container),
+      ) ?? false
+    );
+  };
 }
 
 function closedSymbolBindings(

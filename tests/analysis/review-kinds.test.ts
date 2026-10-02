@@ -77,7 +77,7 @@ test("React bailout state is a no-benefit review, not a confirmable render optim
 test("effect review guidance follows its state questions without suggesting an independent edit", () => {
   const source = SOURCE.replace("import { useState }", "import { useState, useEffect }").replace(
     "return <main>",
-    "useEffect(() => { external(query); }, [query]); return <main>",
+    "useEffect(() => { if (query.length > 9) setQuery(query.slice(0, 9)); }, [query]); return <main>",
   );
   const findings = analyzeSourceWith(source, "screen.tsx", {});
   const effect = requireValue(findings.find((finding) => finding.hook === "useEffect"));

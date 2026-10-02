@@ -240,7 +240,10 @@ function importsUseTranslationAs(sourceFile: ts.SourceFile, hookName: string): b
   );
 }
 
-function containsFunctionLike(node: ts.Node, allowed: ReadonlySet<ts.Node> = new Set()): boolean {
+export function containsFunctionLike(
+  node: ts.Node,
+  allowed: ReadonlySet<ts.Node> = new Set(),
+): boolean {
   let found = false;
   visit(node, (candidate) => {
     if (ts.isFunctionLike(candidate) && !allowed.has(candidate)) {

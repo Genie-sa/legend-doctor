@@ -27,6 +27,7 @@ import {
 } from "./latest-callback-ref.js";
 import { findAncestorUntil, nearestNestedFunction, nodeWithin, visit } from "../../core/ast.js";
 import { isPlainFunction } from "../state-proofs/event-roots.js";
+import { localFunctionName } from "../../analysis/ast-helpers.js";
 import ts from "typescript";
 
 const MAX_CALLBACK_DEPTH = 8;
@@ -144,7 +145,7 @@ function callbackExecutesDeferred(
   if (callbackIsDeferredHookArgument(callback, trace)) {
     return true;
   }
-  const name = localCallbackName(callback);
+  const name = localFunctionName(callback);
   if (!name || !trace.source.owner.body) {
     return false;
   }
@@ -332,15 +333,4 @@ function destructuredBinding(
     }
   }
   return null;
-}
-
-function localCallbackName(
-  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-): string | null {
-  if (ts.isFunctionDeclaration(callback)) {
-    return callback.name?.text ?? null;
-  }
-  return ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
-    ? callback.parent.name.text
-    : null;
 }

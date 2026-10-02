@@ -1,4 +1,4 @@
-import type { JsxSubtree, ObservableReadScan, UseValueDeclaration } from "./model.js";
+import type { ObservableReadScan, UseValueDeclaration } from "./model.js";
 import {
   bindingDeclarationCount,
   isDeclarationName,
@@ -11,6 +11,7 @@ import {
   isUseValueCall,
   isValueReferenceTo,
   provenObservablePath,
+  subscribedObservablePath,
 } from "./observable-paths.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import {
@@ -26,6 +27,7 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SubscriptionFlow } from "./subscription-flow.js";
 import { directUseValueInput } from "./use-value-inputs.js";
 import { isInsideOwnerReturn } from "./conditional-jsx-slots.js";
+import { jsxSubtreeLabel } from "../../analysis/ast-helpers.js";
 import { moveDownTargets } from "./subscription-leaf-targets.js";
 import { subscriptionCut } from "./subscription-cut.js";
 import { subscriptionFlow } from "./subscription-flow.js";
@@ -127,14 +129,6 @@ function isRenderProjection(reference: ts.Identifier, owner: RuntimeFunctionLike
   return boundary !== null && isSafeJsxProjectionReference(reference, boundary);
 }
 
-function jsxLeafLabel(leaf: JsxSubtree, sourceFile: ts.SourceFile): string {
-  if (ts.isJsxFragment(leaf)) {
-    return "fragment";
-  }
-  const tagName = ts.isJsxElement(leaf) ? leaf.openingElement.tagName : leaf.tagName;
-  return `<${tagName.getText(sourceFile)}>`;
-}
-
 function moveDownFinding(
   use: UseValueDeclaration,
   target: MoveDownTarget,
@@ -145,9 +139,7 @@ function moveDownFinding(
   );
   const leafLine =
     scan.sourceFile.getLineAndCharacterOfPosition(target.node.getStart(scan.sourceFile)).line + 1;
-  const leafLabel = target.leaf
-    ? jsxLeafLabel(target.leaf, scan.sourceFile)
-    : "complete conditional JSX slot";
+  const leafLabel = target.leaf ? jsxSubtreeLabel(target.leaf) : "complete conditional JSX slot";
   const reads = target.references.length;
   const readEvidence = `${reads} render read${reads === 1 ? "" : "s"} of ${use.localName} occur${reads === 1 ? "s" : ""} only inside the ${target.leaf ? `stable ${leafLabel} leaf` : leafLabel} at line ${leafLine}`;
   const lifetimeEvidence = target.leaf
@@ -173,7 +165,7 @@ function multipleLeavesFinding(
   const first = moveDownFinding(use, targets[0]!, scan);
   const locations = targets.map((target) => {
     const line = scan.sourceFile.getLineAndCharacterOfPosition(target.node.getStart()).line + 1;
-    return `${target.leaf ? jsxLeafLabel(target.leaf, scan.sourceFile) : "complete conditional JSX slot"} at line ${line}`;
+    return `${target.leaf ? jsxSubtreeLabel(target.leaf) : "complete conditional JSX slot"} at line ${line}`;
   });
   const elements = targets.reduce((total, target) => total + target.leafElements, 0);
   const subscription = `${use.call.expression.getText(scan.sourceFile)}(${use.observable.getText(scan.sourceFile)})`;
@@ -193,7 +185,7 @@ export function hasAncestorUseValueSubscription(
   owner: RuntimeFunctionLike,
   scan: ObservableReadScan,
 ): boolean {
-  const currentObservable = provenObservablePath(
+  const currentObservable = subscribedObservablePath(
     currentCall.arguments[0]!,
     scan.observableBindings,
   );

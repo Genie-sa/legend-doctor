@@ -12,8 +12,11 @@ export interface OutsideRootSources {
 
 const IGNORED_DIRECTORIES = [
   "**/.git",
+  "**/.github",
   "**/.next",
   "**/.turbo",
+  "**/.wrangler",
+  "**/.yarn",
   "**/build",
   "**/coverage",
   "**/dist",

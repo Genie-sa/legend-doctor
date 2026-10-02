@@ -52,6 +52,11 @@ Pinned public repositories, each at a fixed commit with focused source roots whe
 - `equanimitech/zenborg`
 - `skastr0/junto` (renderer)
 - `skastr0/fractals` (expert replay only: no target is scanned at its pin)
+- `bluesky-social/social-app` (expert replay only)
+- `fontsource/fontsource` (expert replay only)
+- `danieltafjord/food-app-expo` (expert replay only)
+- `DHBWLoerrach/CampusRallyeApp` (expert replay only)
+- `bbplayer-app/BBPlayer` (expert replay only)
 
 Repository source is never copied into this project. Each corpus entry pins a commit and a source location, and the
 runner scans local checkouts. A label enters the corpus only after manual review of the source it points at.
@@ -84,7 +89,12 @@ node dist/evals/run.js --complete \
   --repo gptme=/path/to/gptme \
   --repo zenborg=/path/to/zenborg \
   --repo junto=/path/to/junto \
-  --repo fractals=/path/to/fractals
+  --repo fractals=/path/to/fractals \
+  --repo social-app=/path/to/social-app \
+  --repo fontsource=/path/to/fontsource \
+  --repo food-app-expo=/path/to/food-app-expo \
+  --repo campus-rallye=/path/to/CampusRallyeApp \
+  --repo bbplayer=/path/to/BBPlayer
 ```
 
 `--complete` requires every repository in the loaded corpus, including an optional private slice. Missing paths fail
@@ -130,16 +140,22 @@ corpus job remains a real gate; unit-suite success does not override it.
 parent. Every hook-level edit in a replayed commit is labeled, including the ones a static analyzer cannot or should not
 recommend:
 
-| Repository                | Commits | Scope                                                                                                                                | Enforced | Non-enforced | Excluded |
-| ------------------------- | ------: | ------------------------------------------------------------------------------------------------------------------------------------ | -------: | -----------: | -------: |
-| `LegendApp/legend-apps`   |      49 | Jay Meistrich's July and September 2026 performance sweeps in Music, Slides, Markdown, Code, Chat History, Diff, and shared packages |       46 |          114 |      133 |
-| `LegendApp/legend-music`  |      11 | Jay Meistrich's subscription, observer, and timer commits                                                                            |       16 |           25 |       30 |
-| `LegendApp/legend-photos` |       4 | Jay Meistrich's selection, image, plugin, and filmstrip commits                                                                      |        1 |            0 |        5 |
-| `nonbili/NouTube`         |       1 | The maintainer's feed and library modal commit                                                                                       |        3 |            1 |        8 |
-| `nonbili/Nori`            |       1 | The maintainer's bookmark drawer commit                                                                                              |        0 |            0 |        1 |
-| `skastr0/junto`           |      10 | The maintainer's renderer subscription, selector, and observer commits                                                               |       16 |           20 |       17 |
-| `equanimitech/zenborg`    |       1 | The maintainer's drag-performance commit that drops an unread subscription                                                           |        1 |            0 |        1 |
-| `skastr0/fractals`        |       2 | The maintainer's session-list virtualization and render-churn commits                                                                |        1 |            2 |       16 |
+| Repository                     | Commits | Scope                                                                                                                                | Enforced | Non-enforced | Excluded |
+| ------------------------------ | ------: | ------------------------------------------------------------------------------------------------------------------------------------ | -------: | -----------: | -------: |
+| `LegendApp/legend-apps`        |      49 | Jay Meistrich's July and September 2026 performance sweeps in Music, Slides, Markdown, Code, Chat History, Diff, and shared packages |       46 |          114 |      133 |
+| `LegendApp/legend-music`       |      11 | Jay Meistrich's subscription, observer, and timer commits                                                                            |       16 |           25 |       30 |
+| `LegendApp/legend-photos`      |       4 | Jay Meistrich's selection, image, plugin, and filmstrip commits                                                                      |        1 |            0 |        5 |
+| `nonbili/NouTube`              |       1 | The maintainer's feed and library modal commit                                                                                       |        3 |            1 |        8 |
+| `nonbili/Nori`                 |       1 | The maintainer's bookmark drawer commit                                                                                              |        0 |            0 |        1 |
+| `skastr0/junto`                |      10 | The maintainer's renderer subscription, selector, and observer commits                                                               |       16 |           20 |       17 |
+| `equanimitech/zenborg`         |       1 | The maintainer's drag-performance commit that drops an unread subscription                                                           |        1 |            0 |        1 |
+| `skastr0/fractals`             |       2 | The maintainer's session-list virtualization and render-churn commits                                                                |        1 |            2 |       16 |
+| `fontsource/fontsource`        |       1 | The maintainer's Legend State v3 migration, which narrows one keyed read and moves one progress read into its only child             |        2 |            2 |       35 |
+| `excalidraw/excalidraw`        |       1 | The maintainers' library rendering commit that moves selection state below the menu                                                  |        1 |            0 |        1 |
+| `bluesky-social/social-app`    |       3 | Dan Abramov's and Samuel Newman's derived-state, effect, and dialog-input commits                                                    |        0 |            5 |        3 |
+| `danieltafjord/food-app-expo`  |       2 | The maintainer's draft-state and hot-path commits                                                                                    |        0 |            3 |       18 |
+| `DHBWLoerrach/CampusRallyeApp` |       3 | The maintainer's derived-state and camera-state commits                                                                              |        0 |            4 |        1 |
+| `bbplayer-app/BBPlayer`        |       4 | The maintainer's playback progress, lyric, and cleanup commits                                                                       |        0 |            5 |       18 |
 
 A deletion that stops subscribing to a lazily synced store, such as a `synced()` persisted store, is non-enforced: the
 subscription is what activates the load, so a later `peek()` can read the default instead of the persisted value.
@@ -148,7 +164,9 @@ For every supplied repository, the runner extracts the parent tree from the chec
 into a temporary directory, scans its source root, and prints `Expert replay recall: x/y`: enforced cases where a
 proven `change` finding at the labeled line carries the expert's action or a listed equivalent. Recall on September 28,
 2026 is 23/63; on October 1, with 21 enforced labels from new expert commits, it is 22/84, and 26/84 once
-primitive projections accept effect dependency entries their comparison guards. Each miss names what the
+primitive projections accept effect dependency entries their comparison guards. On October 2, three enforced labels from
+maintainer commits in six more repositories make it 26/87; the analyzer reports nothing at fontsource's two `observer`
+render reads and keeps excalidraw's forwarded selection state. Each miss names what the
 analyzer reported there, including abstention reasons, subscription-inventory blockers, and the gate at which the
 targeted rule abstained (`ruleGates`). Non-enforced cases are reported separately
 and list any proven change the analyzer makes there, since that contradicts the audit; neither misses nor non-enforced
@@ -183,7 +201,8 @@ in `evals/performance-budgets.ts`:
   counter, so wall time with that margin stands in for one.
 
 Baselines come from CI run 36409722431 on ubuntu-latest (4 CPUs, 16 GB) with the analyzer at 51f2d32, and for gptme,
-zenborg, and junto from CI run 36444683516 at c478731, and for fractals from CI run 36894444846 at 1b0e659:
+zenborg, and junto from CI run 36444683516 at c478731, for fractals from CI run 36894444846 at 1b0e659, and for
+social-app, fontsource, food-app-expo, campus-rallye, and bbplayer from CI run 36936168646 at 16d263d:
 
 | Repository                | Baseline | Limit |
 | ------------------------- | -------: | ----: |
@@ -191,15 +210,20 @@ zenborg, and junto from CI run 36444683516 at c478731, and for fractals from CI 
 | `formbricks`              |    15.0s |   60s |
 | `junto`                   |    13.6s |   60s |
 | `legend-apps`             |     9.2s |   60s |
+| `social-app`              |     8.2s |   60s |
 | `outline`                 |     6.1s |   60s |
 | `noutube`                 |     4.5s |   60s |
 | `excalidraw`              |     4.2s |   60s |
+| `bbplayer`                |     4.1s |   60s |
 | `gptme`                   |     3.9s |   60s |
 | `zenborg`                 |     3.7s |   60s |
 | `hoalu`                   |     3.4s |   60s |
 | `open-webui-react-native` |     3.1s |   60s |
+| `fontsource`              |     2.7s |   60s |
 | `legend-music`            |     2.4s |   60s |
+| `food-app-expo`           |     2.4s |   60s |
 | `nori`                    |     2.2s |   60s |
+| `campus-rallye`           |     2.1s |   60s |
 | `fractals`                |     2.0s |   60s |
 | `legend-photos`           |     1.2s |   60s |
 

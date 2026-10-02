@@ -28,7 +28,7 @@ export function writeChangesRead(write: RelativeWrite, read: MemoRead): boolean 
   );
 }
 
-function isPathPrefix(prefix: readonly string[], path: readonly string[]): boolean {
+export function isPathPrefix(prefix: readonly string[], path: readonly string[]): boolean {
   return (
     prefix.length <= path.length &&
     prefix.every(

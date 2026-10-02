@@ -6,6 +6,7 @@ import {
 } from "../../core/analysis-ast.js";
 import type { EffectClassificationContext } from "./model.js";
 import type { HostTagImports } from "../../core/imports.js";
+import { expressionContainsJsx } from "../deferred-reveal/jsx-subtrees.js";
 import { findAncestor } from "../../core/ast.js";
 import { isHostTag } from "../../core/imports.js";
 import { soleDirectSetterCall } from "./callback-shape.js";
@@ -135,19 +136,10 @@ function hasOnlyLiveTextConsumers(usage: StateUsage, imports: HostTagImports): b
       return (
         expression !== null &&
         !ts.isJsxAttribute(expression.parent) &&
-        !containsElement(expression) &&
+        !expressionContainsJsx(expression) &&
         !hasCapturingParent(expression, imports)
       );
     })
-  );
-}
-
-function containsElement(node: ts.Node): boolean {
-  return (
-    ts.isJsxElement(node) ||
-    ts.isJsxSelfClosingElement(node) ||
-    ts.isJsxFragment(node) ||
-    Boolean(node.forEachChild(containsElement))
   );
 }
 

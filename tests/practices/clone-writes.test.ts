@@ -58,7 +58,6 @@ test("appends one inert value directly to a proven observable array", () => {
         files$.set(previous => [...previous, next]);
       };
       appendFile(file);
-      return files$;
     }
   `,
     fileName: "fixture.ts",
@@ -206,7 +205,7 @@ test("appends directly to an imported observable array whose declaring module st
   );
 });
 
-test("reads the array origin through a synced initial value", () => {
+test("keeps clone writes to a synced root, whose seed is not plain data", () => {
   const findings = analyzeLegendPractices({
     sourceText: `
     import { observable } from "@legendapp/state";
@@ -221,12 +220,8 @@ test("reads the array origin through a synced initial value", () => {
     fileName: "fixture.ts",
   });
   assert.deepEqual(
-    findings
-      .filter((finding) => finding.action === "narrow-observable-write")
-      .map(
-        (finding) => finding.message?.match(/`(?<replacement>[^`]+)`/u)?.groups?.["replacement"],
-      ),
-    ["pages$.push(page)"],
+    findings.filter((finding) => finding.action === "narrow-observable-write"),
+    [],
   );
 });
 
@@ -249,4 +244,109 @@ test("does not trust an array member that a later spread or computed key may ove
     findings.filter((finding) => finding.action === "narrow-observable-write"),
     [],
   );
+});
+
+const IDENTITY_STORE = `
+  import { observable } from "@legendapp/state";
+  import { use$, useValue } from "@legendapp/state/react";
+  import React, { memo, useCallback, useEffect, useMemo } from "react";
+  const rows$ = observable<Record<string, number>>({});
+  const store$ = observable({ rows: {} as Record<string, number>, title: "" });
+  const Totals = memo(function Totals({ rows }: { rows: Record<string, number> }) {
+    return <>{Object.keys(rows).length}</>;
+  });
+  const MemoTotals = React.memo(Totals);
+  export function bump(id: string) {
+    rows$.set({ ...rows$.peek(), [id]: 1 });
+    store$.rows.set({ ...store$.rows.peek(), [id]: 1 });
+  }
+`;
+
+test("keeps clone writes whose replaced container identity reaches a memo, an effect, a memoized child, or an escape", () => {
+  const consumers = [
+    [
+      `const rows = useValue(() => rows$.get()); return useMemo(() => Object.keys(rows), [rows]).length;`,
+      "rows$[id].set(1)",
+    ],
+    [
+      `const rows = useValue(rows$); const read = useCallback(() => rows.a, [rows]); return read();`,
+      "rows$[id].set(1)",
+    ],
+    [`const rows = use$(rows$); return <Totals rows={rows} />;`, "rows$[id].set(1)"],
+    [
+      `const rows = rows$.get(); useEffect(() => console.log(rows.a), [rows]); return null;`,
+      "rows$[id].set(1)",
+    ],
+    [`return <Totals rows={rows$.peek()} />;`, "rows$[id].set(1)"],
+    [
+      `const store = useValue(store$); return useMemo(() => store.rows.a, [store]);`,
+      "store$.rows[id].set(1)",
+    ],
+    [
+      `const rows = useValue(store$.rows); return <MemoTotals rows={rows} />;`,
+      "store$.rows[id].set(1)",
+    ],
+    [`const store = store$.get(); return <Totals rows={store.rows} />;`, "store$.rows[id].set(1)"],
+    [`return <Rows rows$={store$.rows} />;`, "store$.rows[id].set(1)"],
+  ] as const;
+  for (const [consumer, removed] of consumers) {
+    const replacements = analyzeLegendPractices({
+      sourceText: `${IDENTITY_STORE} export function View() { ${consumer} }`,
+      fileName: "identity.tsx",
+    }).map(
+      (finding) => finding.message?.match(/`(?<replacement>[^`]+)`/u)?.groups?.["replacement"],
+    );
+    assert.ok(!replacements.includes(removed), consumer);
+  }
+  const escapedOrLinked = [
+    `
+    import { useObservable } from "@legendapp/state/react";
+    export function useFiles(file: string) {
+      const files$ = useObservable<string[]>([]);
+      files$.set(previous => [...previous, file]);
+      return files$;
+    }
+  `,
+    `
+    import { observable } from "@legendapp/state";
+    const source$ = observable({ rows: {} as Record<string, number> });
+    const store$ = observable({ rows: () => source$.rows });
+    export function bump(id: string) {
+      store$.rows.set({ ...store$.rows.peek(), [id]: 1 });
+    }
+  `,
+  ];
+  for (const sourceText of escapedOrLinked) {
+    assert.deepEqual(
+      analyzeLegendPractices({ sourceText, fileName: "fixture.ts" }).filter(
+        (finding) => finding.action === "narrow-observable-write",
+      ),
+      [],
+      sourceText,
+    );
+  }
+});
+
+test("narrows clone writes whose readers ignore the replaced container identity", () => {
+  const consumers = [
+    `const count = useValue(() => rows$.get().a); return useMemo(() => count * 2, [count]);`,
+    `const title = useValue(store$.title); return <Totals rows={{ title }} />;`,
+    `const row = useValue(() => store$.rows[id].get()); return useMemo(() => row + 1, [row]);`,
+    `return rows$.get()[id] ?? store$.rows.peek()[id];`,
+  ];
+  for (const consumer of consumers) {
+    const findings = analyzeLegendPractices({
+      sourceText: `${IDENTITY_STORE} export function View({ id }: { id: string }) { ${consumer} }`,
+      fileName: "identity.tsx",
+    });
+    assert.deepEqual(
+      findings
+        .filter((finding) => finding.action === "narrow-observable-write")
+        .map(
+          (finding) => finding.message?.match(/`(?<replacement>[^`]+)`/u)?.groups?.["replacement"],
+        ),
+      ["rows$[id].set(1)", "store$.rows[id].set(1)"],
+      consumer,
+    );
+  }
 });

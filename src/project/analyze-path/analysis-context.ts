@@ -7,8 +7,11 @@ import path from "node:path";
 
 const IGNORED_DIRECTORIES = new Set([
   ".git",
+  ".github",
   ".next",
   ".turbo",
+  ".wrangler",
+  ".yarn",
   "build",
   "coverage",
   "dist",

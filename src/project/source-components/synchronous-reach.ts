@@ -3,6 +3,7 @@ import {
   executionUnit,
   functionEntryKey,
 } from "../../core/execution-units.js";
+import { calleeName, visit } from "../../core/ast.js";
 import { staticPropertyPath, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import type { ExecutionUnit } from "../../core/execution-units.js";
 import type { FunctionReferences } from "./function-references.js";
@@ -11,7 +12,6 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { functionReferences } from "./function-references.js";
 import { lexicalBinding } from "../../core/lexical-bindings.js";
 import ts from "typescript";
-import { visit } from "../../core/ast.js";
 
 /** Globals that always run a handed callback later, as its own stretch. */
 const DEFERRING_FUNCTIONS: ReadonlySet<string> = new Set([
@@ -304,7 +304,7 @@ function receiverRoot(expression: ts.Expression): ts.Node | null {
  * Callbacks of synchronous iteration methods already share the caller's unit.
  */
 function handedFunctions(context: CallContext): CallReach {
-  const inlined = SYNCHRONOUS_CALLBACK_METHODS.has(hookName(context.call.expression));
+  const inlined = SYNCHRONOUS_CALLBACK_METHODS.has(calleeName(context.call.expression) ?? "");
   const handed = context.call.arguments.map((argument) => handedValue(context, argument));
   return {
     entries: handed.flatMap((value) =>
@@ -412,17 +412,10 @@ function isReactStateSetter(declaration: ts.Node, name: string): boolean {
   const [, setter] = declaration.name.elements;
   return (
     ts.isCallExpression(initializer) &&
-    REACT_STATE_HOOKS.has(hookName(initializer.expression)) &&
+    REACT_STATE_HOOKS.has(calleeName(initializer.expression) ?? "") &&
     setter !== undefined &&
     ts.isBindingElement(setter) &&
     ts.isIdentifier(setter.name) &&
     setter.name.text === name
   );
-}
-
-function hookName(callee: ts.Expression): string {
-  if (ts.isIdentifier(callee)) {
-    return callee.text;
-  }
-  return ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
 }

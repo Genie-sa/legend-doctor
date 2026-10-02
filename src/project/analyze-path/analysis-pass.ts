@@ -30,6 +30,7 @@ import { SCHEMA_VERSION } from "../../core/types.js";
 import { StateFlowIndex } from "../state-flow/state-flow.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
 import { buildSubscriptionAnalysis } from "../../report/subscription-plans.js";
+import { closedObservableReaders } from "./hook-consumer-closure.js";
 import { collectHookImports } from "../../core/imports.js";
 import { createChildContractResolver } from "./child-contracts.js";
 import { disabledPracticeRules } from "../../practices/practice-rules.js";
@@ -274,6 +275,7 @@ function legendPracticeFindings(
       sourceIndex.observableInPlaceWritesFor(entry.file),
       pass.analysisRoot,
     ),
+    observableReadersIgnoreIdentity: closedObservableReaders(pass.context, entry.file),
     stableContextRead: (localName) => sourceIndex.contextReadIsStableFor(entry.file, localName),
     childContracts,
   });

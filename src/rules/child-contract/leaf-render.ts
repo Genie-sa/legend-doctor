@@ -15,6 +15,7 @@ import type { ChildComponentSource } from "./model.js";
 import type { HostTagImports } from "../../core/imports.js";
 import { MAX_TRACKED_NAMES } from "./model.js";
 import { isHostTag } from "../../core/imports.js";
+import { jsxOwnerOpening } from "./jsx-owner.js";
 import ts from "typescript";
 
 type LeafRenderVerdict = "ignored" | "render-read" | "unsafe";
@@ -67,7 +68,7 @@ function attributeVerdict(
   attribute: ts.JsxAttribute,
   { forwarded, hostTags }: LeafRenderProof,
 ): LeafRenderVerdict {
-  const opening = jsxOpeningOf(attribute);
+  const opening = jsxOwnerOpening(attribute);
   if (!opening) {
     return "unsafe";
   }
@@ -90,7 +91,7 @@ export function spreadVerdict(
   propName: string,
   { forwarded, hostTags }: LeafRenderProof,
 ): LeafRenderVerdict {
-  const opening = jsxOpeningOf(spread);
+  const opening = jsxOwnerOpening(spread);
   if (!opening) {
     return "unsafe";
   }
@@ -98,14 +99,6 @@ export function spreadVerdict(
     return "render-read";
   }
   return forwarded?.(opening, propName) ? "render-read" : "unsafe";
-}
-
-function jsxOpeningOf(
-  attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
-): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
-  const container: ts.Node = attribute.parent;
-  const element = ts.isJsxAttributes(container) ? container.parent : container;
-  return ts.isJsxOpeningElement(element) || ts.isJsxSelfClosingElement(element) ? element : null;
 }
 
 function isCustomJsxTag(

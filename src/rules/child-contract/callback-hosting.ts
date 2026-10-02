@@ -98,17 +98,7 @@ export function callbackRunsInProvenDeferredHook(
 export function callbackIsStoredInProperty(
   callback: ts.ArrowFunction | ts.FunctionExpression,
 ): boolean {
-  let expression: ts.Expression = callback;
-  while (
-    (ts.isParenthesizedExpression(expression.parent) ||
-      ts.isAsExpression(expression.parent) ||
-      ts.isTypeAssertionExpression(expression.parent) ||
-      ts.isSatisfiesExpression(expression.parent) ||
-      ts.isNonNullExpression(expression.parent)) &&
-    expression.parent.expression === expression
-  ) {
-    expression = expression.parent;
-  }
+  let expression = outermostTransparentParent(callback);
   if (
     ts.isConditionalExpression(expression.parent) &&
     (expression.parent.whenTrue === expression || expression.parent.whenFalse === expression)
