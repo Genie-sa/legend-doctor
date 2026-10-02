@@ -178,6 +178,13 @@ test("a companion the owner never renders leaves the write's render to the state
   assert.equal(verdict(notes(EDIT, "<p>Notes</p>"), "editingId"), "use-ref");
 });
 
+test("a companion the owner only passes to a child still renders the owner", () => {
+  assert.equal(verdict(notes(EDIT, "<Editor value={form} />"), "editingId"), "keep-state");
+  const edit = "setEditingId(item.id); setOpen(true);";
+  const rendered = "<Drawer open={open} />";
+  assert.equal(verdict(notes(edit, rendered), "editingId"), "review-state/no-proven-optimization");
+});
+
 test("a companion value that may already be held leaves a ref no proven render to save", () => {
   const edit = "setEditingId(item.id); setOpen(true);";
   assert.equal(verdict(notes(edit), "editingId"), "review-state/no-proven-optimization");
