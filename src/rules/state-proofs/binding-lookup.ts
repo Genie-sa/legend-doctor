@@ -70,24 +70,43 @@ export function expressionDependsOnBinding(
   binding: ts.BindingName,
   boundary: ts.Node,
 ): boolean {
+  return dependsOnBinding(expression, boundary, { binding, walked: new Set() });
+}
+
+interface BindingSearch {
+  readonly binding: ts.BindingName;
+  readonly walked: Set<ts.VariableDeclaration>;
+}
+
+/**
+ * Each declaration's initializer is walked at most once. A declaration met again was already
+ * walked, or is still being walked further up because its own initializer names it, so skipping
+ * it cannot lose a dependency.
+ */
+function dependsOnBinding(
+  expression: ts.Expression,
+  boundary: ts.Node,
+  search: BindingSearch,
+): boolean {
   let found = false;
   visit(expression, (node) => {
-    if (!ts.isIdentifier(node)) {
+    if (found || !ts.isIdentifier(node)) {
       return;
     }
-    if (bindingContainsName(binding, node.text)) {
-      found = true;
-      return;
-    }
-    const declaration = uniqueVariableDeclaration(boundary, node.text);
-    if (
-      declaration?.initializer &&
-      expressionDependsOnBinding(declaration.initializer, binding, declaration)
-    ) {
-      found = true;
-    }
+    found =
+      bindingContainsName(search.binding, node.text) ||
+      aliasDependsOnBinding(node.text, boundary, search);
   });
   return found;
+}
+
+function aliasDependsOnBinding(name: string, boundary: ts.Node, search: BindingSearch): boolean {
+  const declaration = uniqueVariableDeclaration(boundary, name);
+  if (!declaration?.initializer || search.walked.has(declaration)) {
+    return false;
+  }
+  search.walked.add(declaration);
+  return dependsOnBinding(declaration.initializer, declaration, search);
 }
 
 export function uniqueVariableDeclaration(
