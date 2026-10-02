@@ -1,16 +1,15 @@
+import { EVENT_HANDLER_PROP, isJsxEventHandlerReference } from "../state-proofs/event-roots.js";
 import { findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { bindingDeclarationCount } from "../../core/analysis-ast.js";
 import { isImportedHookCall } from "../../core/imports.js";
-import { isJsxEventHandlerReference } from "../state-proofs/event-roots.js";
 import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
 import { ownerLevelReferences } from "../../core/scope-references.js";
 import ts from "typescript";
 
 const DEFERRING_GLOBAL =
   /^(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback|queueMicrotask)$/u;
-const EVENT_HANDLER_PROP = /^on[A-Z]/u;
 const HOOK_NAME = /^use[A-Z]/u;
 
 interface RenderExclusion {

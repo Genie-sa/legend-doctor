@@ -22,6 +22,12 @@ export function declaredBindingName(node: ts.Node): string | null {
   return null;
 }
 
+export function localFunctionName(
+  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+): string | null {
+  return declaredBindingName(ts.isFunctionDeclaration(callback) ? callback : callback.parent);
+}
+
 export function soleReturnedExpression(body: ts.ConciseBody): ts.Expression | null {
   if (!ts.isBlock(body)) {
     return body;

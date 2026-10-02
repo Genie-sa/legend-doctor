@@ -167,10 +167,7 @@ export function isDeclarationName(node: ts.Identifier): boolean {
   );
 }
 
-export function isDirectJsxAttributeExpression(
-  attribute: ts.JsxAttribute,
-  node: ts.Identifier,
-): boolean {
+export function isDirectJsxAttributeExpression(attribute: ts.JsxAttribute, node: ts.Node): boolean {
   const { initializer } = attribute;
   return (
     initializer !== undefined &&

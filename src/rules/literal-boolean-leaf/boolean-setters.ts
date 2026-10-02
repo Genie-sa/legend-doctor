@@ -1,15 +1,15 @@
 import {
   bindingDeclarationCount,
-  isDeclarationName,
   isDirectJsxAttributeExpression,
-  isNonValueIdentifier,
   isPureExpression,
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
-import { findAncestorUntil, nearestNestedFunction, visit } from "../../core/ast.js";
+import { findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { everyValueReferenceSatisfies } from "../../analysis/callbacks/deferred-events.js";
 import { jsxAttributeIsIntrinsicEvent } from "../async-leaf-status/event-rooted-commands.js";
+import { localFunctionName } from "../../analysis/ast-helpers.js";
 import { mutationRegionOnlyCallsStateSetters } from "../effect-drafts/draft-mutations.js";
 import ts from "typescript";
 
@@ -64,7 +64,7 @@ function callbackIsIntrinsicEventRooted(
   if (isInlineIntrinsicEventHandler(callback, owner)) {
     return true;
   }
-  const name = callbackBindingName(callback);
+  const name = localFunctionName(callback);
   if (!name || bindingDeclarationCount(owner, name) !== 1) {
     return false;
   }
@@ -76,52 +76,22 @@ function isInlineIntrinsicEventHandler(
   owner: RuntimeFunctionLike,
 ): boolean {
   const attribute = findAncestorUntil(callback, ts.isJsxAttribute, owner);
-  const initializer = attribute?.initializer;
   return (
     attribute !== null &&
-    initializer !== undefined &&
-    ts.isJsxExpression(initializer) &&
-    initializer.expression !== undefined &&
-    unwrapTransparentExpression(initializer.expression) === callback &&
+    isDirectJsxAttributeExpression(attribute, callback) &&
     jsxAttributeIsIntrinsicEvent(attribute)
   );
 }
 
-function callbackBindingName(
-  callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
-): string | undefined {
-  if (ts.isFunctionDeclaration(callback)) {
-    return callback.name?.text;
-  }
-  return ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
-    ? callback.parent.name.text
-    : undefined;
-}
-
 function referencesAreIntrinsicEventAttributes(owner: RuntimeFunctionLike, name: string): boolean {
-  let referenced = false;
-  let safe = true;
-  visit(owner.body, (node) => {
-    if (!safe || !isValueReferenceNamed(node, name)) {
-      return;
-    }
-    referenced = true;
+  return everyValueReferenceSatisfies(owner, name, (node) => {
     const attribute = findAncestorUntil(node, ts.isJsxAttribute, owner);
-    safe =
+    return (
       attribute !== null &&
       isDirectJsxAttributeExpression(attribute, node) &&
-      jsxAttributeIsIntrinsicEvent(attribute);
+      jsxAttributeIsIntrinsicEvent(attribute)
+    );
   });
-  return referenced && safe;
-}
-
-function isValueReferenceNamed(node: ts.Node, name: string): node is ts.Identifier {
-  return (
-    ts.isIdentifier(node) &&
-    node.text === name &&
-    !isDeclarationName(node) &&
-    !isNonValueIdentifier(node)
-  );
 }
 
 function isBooleanExpression(expression: ts.Expression): boolean {

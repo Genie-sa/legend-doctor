@@ -1,3 +1,4 @@
+import { outermostTransparentParent } from "../../core/analysis-ast.js";
 import ts from "typescript";
 
 export function isSynchronousRenderCallback(node: ts.FunctionLikeDeclaration): boolean {
@@ -29,17 +30,7 @@ export function isSynchronousRenderCallback(node: ts.FunctionLikeDeclaration): b
 
 /** The function is the callee of its own call, seen through transparent wrapper expressions. */
 function isImmediatelyInvoked(node: ts.ArrowFunction | ts.FunctionExpression): boolean {
-  let expression: ts.Expression = node;
-  while (
-    (ts.isParenthesizedExpression(expression.parent) ||
-      ts.isAsExpression(expression.parent) ||
-      ts.isTypeAssertionExpression(expression.parent) ||
-      ts.isSatisfiesExpression(expression.parent) ||
-      ts.isNonNullExpression(expression.parent)) &&
-    expression.parent.expression === expression
-  ) {
-    expression = expression.parent;
-  }
+  const expression = outermostTransparentParent(node);
   return ts.isCallExpression(expression.parent) && expression.parent.expression === expression;
 }
 

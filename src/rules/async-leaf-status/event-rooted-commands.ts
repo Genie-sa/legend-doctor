@@ -4,7 +4,6 @@ import {
   isDeclarationName,
   isDirectJsxAttributeExpression,
   isNonValueIdentifier,
-  unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import { findAncestorUntil, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
@@ -12,6 +11,7 @@ import { EMPTY_SEEN } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { isCommandRegion } from "./pending-command.js";
 import { isHookDependencyReference } from "../state-proofs/callback-sites.js";
+import { localFunctionName } from "../../analysis/ast-helpers.js";
 import ts from "typescript";
 
 interface EventRootContext {
@@ -55,7 +55,7 @@ function asyncCallbackIsEventRooted(
   if (context.eventCallbacks.has(callback) || isInlineDeferredEventHandler(callback, context)) {
     return true;
   }
-  const name = commandRegionName(callback);
+  const name = localFunctionName(callback);
   if (!name || seen.has(name) || bindingDeclarationCount(context.owner, name) !== 1) {
     return false;
   }
@@ -68,21 +68,10 @@ function asyncCallbackIsEventRooted(
 function isInlineDeferredEventHandler(callback: CommandRegion, context: EventRootContext): boolean {
   const attribute = findAncestorUntil(callback, ts.isJsxAttribute, context.owner);
   return (
-    attribute?.initializer !== undefined &&
-    ts.isJsxExpression(attribute.initializer) &&
-    attribute.initializer.expression !== undefined &&
-    unwrapTransparentExpression(attribute.initializer.expression) === callback &&
+    attribute !== null &&
+    isDirectJsxAttributeExpression(attribute, callback) &&
     jsxAttributeIsDeferredEvent(attribute, context.childContracts)
   );
-}
-
-function commandRegionName(callback: CommandRegion): string | undefined {
-  if (ts.isFunctionDeclaration(callback)) {
-    return callback.name?.text;
-  }
-  return ts.isVariableDeclaration(callback.parent) && ts.isIdentifier(callback.parent.name)
-    ? callback.parent.name.text
-    : undefined;
 }
 
 function referencesAreEventRooted(
