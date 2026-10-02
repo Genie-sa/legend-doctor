@@ -86,7 +86,6 @@ function companionRenderProof(
     ({ state: other }) =>
       other !== state &&
       !usageByState.get(other)?.shadowed &&
-      (usageByState.get(other)?.localRenderReads ?? 0) > 0 &&
       ["keep-state", "review-state"].includes(classifyAlone(other).action),
   );
   const fresh = rendering.filter(
