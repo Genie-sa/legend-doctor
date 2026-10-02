@@ -51,6 +51,35 @@ test("a state that selects the owner's early return keeps React state", () => {
   assert.match(found.message, /selects the owner's early return/u);
 });
 
+test("a state that selects the tree the owner returns keeps React state", () => {
+  const source = (returned: string): HookFinding =>
+    requireValue(
+      analyzeSource(
+        `
+          import { useState } from "react";
+          export function KeyForm({ create }: { create: () => Promise<string> }) {
+            const [secret, setSecret] = useState<string | null>(null);
+            ${returned}
+          }
+        `,
+        "src/key-form.tsx",
+      ).find((finding) => finding.name === "secret"),
+    );
+  const form = `<form>${CHROME}<button onClick={async () => setSecret(await create())}>Create</button></form>`;
+  for (const returned of [
+    `return secret ? <pre>{secret}</pre> : ${form};`,
+    `return (secret === null ? (${form}) : (<pre>{secret}</pre>));`,
+  ]) {
+    const found = source(returned);
+    assert.equal(found.action, "keep-state", returned);
+    assert.match(found.message, /selects which tree the owner returns/u);
+  }
+  const nested = source(
+    `return <main>${CHROME}{secret ? <pre>{secret}</pre> : null}<button onClick={async () => setSecret(await create())}>Create</button></main>;`,
+  );
+  assert.doesNotMatch(nested.message, /selects which tree the owner returns/u);
+});
+
 test("a state feeding owner-level hooks whose result the owner renders keeps React state", () => {
   const owners = {
     dataHook: query(`const { data } = useSearch(query);`, `<Results data={data} />`),

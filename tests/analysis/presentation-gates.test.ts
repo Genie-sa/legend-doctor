@@ -158,7 +158,7 @@ test("does not isolate a presentation gate that owns the whole return", () => {
           : <Loading onReady={() => setReady(true)} />;
       }
     `),
-    ["review-state"],
+    ["keep-state"],
   );
 });
 
