@@ -335,25 +335,22 @@ function rendersWithParent(
     (attribute) =>
       ts.isJsxAttribute(attribute) &&
       attribute.initializer !== undefined &&
-      isFreshAttributeValue(attribute.initializer, parent),
+      isFreshJsxValue(attribute.initializer, parent),
   );
   return (
     freshAttribute ||
     (ts.isJsxOpeningElement(opening) &&
-      opening.parent.children.some((child) => isFreshChild(child, parent)))
+      opening.parent.children.some((child) => isFreshJsxValue(child, parent)))
   );
 }
 
-function isFreshAttributeValue(value: ts.JsxAttributeValue, parent: RenderFunction): boolean {
+function isFreshJsxValue(
+  value: ts.JsxAttributeValue | ts.JsxChild,
+  parent: RenderFunction,
+): boolean {
   return ts.isJsxExpression(value)
     ? value.expression !== undefined && isFreshValue(value.expression, parent)
     : FRESH_VALUE_KINDS.has(value.kind);
-}
-
-function isFreshChild(child: ts.JsxChild, parent: RenderFunction): boolean {
-  return ts.isJsxExpression(child)
-    ? child.expression !== undefined && isFreshValue(child.expression, parent)
-    : FRESH_VALUE_KINDS.has(child.kind);
 }
 
 /** A value created anew by every render of `parent`: a literal, or a render-local binding to one. */

@@ -22,7 +22,7 @@ export function jsxOwnerTarget(attribute: ts.JsxAttribute | ts.JsxSpreadAttribut
   return opening ? jsxTagName(opening.tagName) : null;
 }
 
-function jsxOwnerOpening(
+export function jsxOwnerOpening(
   attribute: ts.JsxAttribute | ts.JsxSpreadAttribute,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {
   const attributes = attribute.parent;

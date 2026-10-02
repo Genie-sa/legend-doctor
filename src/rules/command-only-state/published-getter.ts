@@ -4,6 +4,7 @@ import { localCallableByName, localStateReadCallableNames } from "./local-callab
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
 import { isJsxNode } from "../state-proofs/callback-sites.js";
+import { jsxTargetName } from "../../analysis/ast-helpers.js";
 import ts from "typescript";
 
 export function statePublishesReadOnlyGetter(state: StateCandidate): boolean {
@@ -80,16 +81,4 @@ function isContextValueAttribute(attribute: ts.JsxAttribute | null): boolean {
     attribute?.name.getText() === "value" &&
     jsxTargetName(attribute)?.endsWith(".Provider") === true
   );
-}
-
-function jsxTargetName(attribute: ts.JsxAttribute): string | null {
-  const opening = attribute.parent;
-  if (!ts.isJsxAttributes(opening)) {
-    return null;
-  }
-  const element = opening.parent;
-  if (!ts.isJsxOpeningElement(element) && !ts.isJsxSelfClosingElement(element)) {
-    return null;
-  }
-  return element.tagName.getText();
 }

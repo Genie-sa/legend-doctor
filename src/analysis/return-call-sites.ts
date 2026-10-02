@@ -101,7 +101,7 @@ function directlyReturnedCallSite(
   return null;
 }
 
-function firstJsxOpeningAt(
+export function firstJsxOpeningAt(
   body: ts.Node,
   position: number,
 ): ts.JsxOpeningElement | ts.JsxSelfClosingElement | null {

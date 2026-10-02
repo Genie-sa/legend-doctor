@@ -1,5 +1,6 @@
 import { callRootIdentifier, isAssignmentOperator } from "../../core/analysis-ast.js";
 import { nodeWithin, visit } from "../../core/ast.js";
+import { expressionContainsJsx } from "./jsx-subtrees.js";
 import ts from "typescript";
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
@@ -112,19 +113,5 @@ function isSafeProjectionCall(
  * repeated rows it renders keep their own mount-identity proofs.
  */
 function isRenderCallbackCall(call: ts.CallExpression): boolean {
-  return call.arguments.some((argument) => containsJsx(argument));
-}
-
-function containsJsx(node: ts.Node): boolean {
-  let found = false;
-  visit(node, (candidate) => {
-    if (
-      ts.isJsxElement(candidate) ||
-      ts.isJsxSelfClosingElement(candidate) ||
-      ts.isJsxFragment(candidate)
-    ) {
-      found = true;
-    }
-  });
-  return found;
+  return call.arguments.some((argument) => expressionContainsJsx(argument));
 }
