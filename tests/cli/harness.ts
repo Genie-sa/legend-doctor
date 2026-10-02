@@ -56,8 +56,10 @@ export async function runExpectingFailure(args: readonly string[]): Promise<CliF
 }
 
 export interface FailurePayload {
+  file?: string;
   message: string;
   next?: string[];
+  phase?: string;
   reason: string;
   schemaVersion: number;
   status: "error";

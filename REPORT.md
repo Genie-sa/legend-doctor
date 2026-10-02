@@ -179,6 +179,15 @@ and lists ids no finding produced.
 Failures are also valid JSON. They include `status: "error"`, a stable `reason`, a useful `message`, and
 sometimes a `next` command.
 
+A `scan_failed` raised while one source file was being processed also names that `file`, relative to `root`, and
+the `phase` it was in. The message leads with both.
+
+| Failure `phase` | Work that threw                                                         |
+| --------------- | ----------------------------------------------------------------------- |
+| `parse`         | Parsing the file's source text                                          |
+| `index`         | Recording the file's declarations, imports, and exports for other files |
+| `analyze`       | Producing the file's findings                                           |
+
 ## Machine-applicable edits
 
 A practice finding carries `edits` when syntax alone determines its instruction. The field is additive in schema 4

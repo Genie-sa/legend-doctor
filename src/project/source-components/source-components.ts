@@ -41,6 +41,7 @@ import type { ReachResolver } from "./synchronous-reach.js";
 import type { SourceContextCoverage } from "./source-context.js";
 import type { SourceResolution } from "./module-resolution.js";
 import { callbackPackageVersion } from "./callback-package-version.js";
+import { inScanPhase } from "../scan-failure.js";
 import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js";
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
@@ -156,7 +157,10 @@ function createSourceIndexState(
       continue;
     }
     const normalized = normalizeFile(file.identityPath);
-    records.set(normalized, moduleRecord(file.sourceFile));
+    records.set(
+      normalized,
+      inScanPhase("index", file.originalPath, () => moduleRecord(file.sourceFile)),
+    );
     sourceFiles.set(normalized, file.sourceFile);
   }
   return {

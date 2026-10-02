@@ -2,6 +2,7 @@ import { SOURCE_FILE_OPTIONS, scriptKindForFile } from "../core/ast.js";
 import { canonicalPath, pathIdentityKey } from "../core/path-identity.js";
 
 import type { AnalysisDiagnostic } from "../core/parser-diagnostics.js";
+import { inScanPhase } from "./scan-failure.js";
 import { parserDiagnosticsOf } from "../core/parser-diagnostics.js";
 import path from "node:path";
 import ts from "typescript";
@@ -36,7 +37,7 @@ export class AnalysisProject {
   public constructor(sources: ReadonlyMap<string, string>) {
     const filesByIdentity = new Map<string, AnalysisFile>();
     for (const [fileName, sourceText] of sources) {
-      const file = createAnalysisFile(fileName, sourceText);
+      const file = inScanPhase("parse", fileName, () => createAnalysisFile(fileName, sourceText));
       const key = pathIdentityKey(file.identityPath);
       const existing = filesByIdentity.get(key);
       if (existing) {

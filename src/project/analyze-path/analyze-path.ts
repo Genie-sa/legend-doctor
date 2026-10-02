@@ -17,6 +17,7 @@ import type { AnalysisReport } from "../../core/types.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import { DEFAULT_MATERIALITY } from "../../analysis/constants.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
+import { ScanFileError } from "../scan-failure.js";
 import type { SubscriptionMeasurement } from "../../core/subscriptions.js";
 import { attachSubscriptionMeasurements } from "../subscription-measurements.js";
 import path from "node:path";
@@ -72,6 +73,19 @@ async function analyzePathInternal(
 
 async function analyzePathInternal(
   targetPath: string,
+  options: AnalyzePathOptions,
+  includeDetails: boolean,
+): Promise<AnalysisReport | DetailedAnalysisResult> {
+  const target = await resolveAnalysisTarget(targetPath);
+  try {
+    return await analyzeTarget(target, options, includeDetails);
+  } catch (error) {
+    throw error instanceof ScanFileError ? error.relativeTo(target.analysisRoot) : error;
+  }
+}
+
+async function analyzeTarget(
+  target: AnalysisTarget,
   {
     confirmations = null,
     fileFilter,
@@ -81,7 +95,6 @@ async function analyzePathInternal(
   }: AnalyzePathOptions,
   includeDetails: boolean,
 ): Promise<AnalysisReport | DetailedAnalysisResult> {
-  const target = await resolveAnalysisTarget(targetPath);
   const context = sharedContext ?? (await createTargetContext(target));
   const entries = analysisFileEntries(fileFilter ? target.files.filter(fileFilter) : target.files, {
     analysisRoot: target.analysisRoot,

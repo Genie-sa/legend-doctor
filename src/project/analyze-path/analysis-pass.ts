@@ -35,6 +35,7 @@ import { collectHookImports } from "../../core/imports.js";
 import { createChildContractResolver } from "./child-contracts.js";
 import { disabledPracticeRules } from "../../practices/practice-rules.js";
 import { filesWhere } from "../capabilities.js";
+import { inScanPhase } from "../scan-failure.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
 import { mayCallUseValue } from "../../rules/observable-reads/observable-paths.js";
 import path from "node:path";
@@ -140,7 +141,7 @@ export async function runAnalysisPass(
     rootCompiles,
   };
   for (const entry of entries) {
-    analyzeFileEntry(entry, pass);
+    inScanPhase("analyze", entry.file, () => analyzeFileEntry(entry, pass));
   }
   return pass;
 }

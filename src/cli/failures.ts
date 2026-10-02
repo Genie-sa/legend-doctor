@@ -1,4 +1,5 @@
 import type { SCHEMA_VERSION } from "../core/types.js";
+import type { ScanPhase } from "../project/scan-failure.js";
 
 export const FAILURE_REASONS = [
   "invalid_usage",
@@ -19,8 +20,11 @@ export const EXIT_GATE_FAILED = 3;
 export const HELP_COMMAND = "legend-doctor --help";
 
 export interface CliFailure {
+  /** The source file a `scan_failed` was raised in, relative to the scan root. */
+  file?: string;
   message: string;
   next?: readonly string[];
+  phase?: ScanPhase;
   reason: FailureReason;
   schemaVersion: typeof SCHEMA_VERSION;
   status: "error";

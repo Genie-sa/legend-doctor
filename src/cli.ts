@@ -15,6 +15,7 @@ import type { ConfirmationSet } from "./analysis/assumptions/confirmations.js";
 import type { DetailedAnalysisResult } from "./project/analyze-path/analyze-path.js";
 import { HELP } from "./cli/help.js";
 import { SCHEMA_VERSION } from "./core/types.js";
+import { ScanFileError } from "./project/scan-failure.js";
 import type { ScanScope } from "./project/git-scope.js";
 import { UsageError } from "./cli/usage-error.js";
 import { analyzerIdentity } from "./cli/analyzer-identity.js";
@@ -357,12 +358,17 @@ function toFailure(error: Error): CliFailure {
     }
     return failure;
   }
-  return {
+  const failure: CliFailure = {
     schemaVersion: SCHEMA_VERSION,
     status: "error",
     reason: "scan_failed",
     message: error.message,
   };
+  if (error instanceof ScanFileError) {
+    failure.file = error.file;
+    failure.phase = error.phase;
+  }
+  return failure;
 }
 
 /** Failures are reported on stdout as JSON like every other result, so callers parse one channel. */
