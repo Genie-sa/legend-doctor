@@ -987,13 +987,13 @@ export const formbricksHookCases = [
     target: "formbricks-filter-value",
   },
   {
-    action: "review-effect",
+    action: "reset-during-render",
     file: "filter-value-combobox.tsx",
     hook: "useEffect",
     line: 95,
     name: null,
     rationale:
-      "The effect resets the query draft when the combobox closes; preserve React dependency timing.",
+      "Closing the combobox clears the search draft to its empty initializer; comparing the local open state during render clears it in the closing render instead of after a stale commit.",
     target: "formbricks-filter-value",
   },
   {
@@ -1007,13 +1007,13 @@ export const formbricksHookCases = [
     target: "formbricks-recontact-options",
   },
   {
-    action: "review-effect",
+    action: "reset-during-render",
     file: "recontact-options-card.tsx",
     hook: "useEffect",
     line: 134,
     name: null,
     rationale:
-      "The effect synchronizes the controlled card with changing survey type inputs and should remain in React.",
+      "Switching the survey to a link survey closes the card to its false initializer; comparing the type prop during render keeps open in React without the stale commit.",
     target: "formbricks-recontact-options",
   },
   {

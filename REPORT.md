@@ -66,6 +66,7 @@ blocked a proven edit.
 | `binding-shape-unsupported`         | The hook result is bound in a shape the analyzer does not model                                    |
 | `callback-timing-unresolved`        | A deferred read may need a render snapshot, a command-entry snapshot, or the current value         |
 | `child-contract-unresolved`         | A receiving component or forwarding wrapper has unproven render reads, effects, captures, or props |
+| `dependency-identity-unproven`      | A reset could run during render, but a dependency may be a new reference on every render           |
 | `effect-callback-unresolved`        | The effect callback declaration or its captured inputs cannot be resolved                          |
 | `effect-causal-owner-unresolved`    | The event or external lifecycle that owns the effect is unknown, so its scheduling stays           |
 | `effect-write-ownership-unresolved` | The effect's writes cannot be proven to move without changing its schedule                         |

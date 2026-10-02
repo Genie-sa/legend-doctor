@@ -772,13 +772,13 @@ export const expensifyHookCases = [
     target: "expensify-dynamic-plan-type",
   },
   {
-    action: "review-effect",
+    action: "reset-during-render",
     file: "DynamicWorkspaceOverviewPlanTypePage.tsx",
     hook: "useEffect",
     line: 64,
     name: null,
     rationale:
-      "This effect seeds an editable plan selection from changing props; preserve its React synchronization timing.",
+      "The effect reseeds the editable plan from policy?.type, its initializer, so comparing that prop during render keeps the selection in React and drops the commit that shows the previous plan.",
     target: "expensify-dynamic-plan-type",
   },
   {

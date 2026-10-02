@@ -11,6 +11,8 @@ const NEXT_CHECK = {
     "Inspect deferred reads and registrations. Establish whether each read needs a render snapshot, a command-entry snapshot, or the current value.",
   "child-contract-unresolved":
     "Load and inspect the receiving component and every forwarding wrapper. Identify its render reads, effects, callback captures, and prop identity requirements.",
+  "dependency-identity-unproven":
+    "Check each named dependency's source. A primitive, a state value, or a memoized or cached reference keeps its identity between renders; a value rebuilt every render would make the render-phase comparison loop.",
   "effect-callback-unresolved":
     "Resolve the effect callback declaration and its captured inputs before analyzing its lifecycle.",
   "effect-causal-owner-unresolved":

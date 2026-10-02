@@ -82,9 +82,19 @@ export interface BrowserStoragePersistence {
   readonly states: readonly StateCandidate[];
 }
 
+/** An effect that only resets state for new inputs; it applies while every target stays React state. */
+export interface RenderPhaseResetEdit {
+  /** The `reset-during-render` instruction. */
+  readonly instruction: string;
+  readonly targets: readonly StateCandidate[];
+  /** Compared dependencies whose identity between renders an answer must confirm. */
+  readonly unprovenDependencies: readonly string[];
+}
+
 interface EffectClassification extends Classification {
   derivedState: StateCandidate | null;
   persistence?: BrowserStoragePersistence;
+  renderPhaseReset?: RenderPhaseResetEdit;
 }
 
 export type ClassifiedEffect =

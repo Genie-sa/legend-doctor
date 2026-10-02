@@ -342,13 +342,13 @@ export const outlineHookCases = [
   },
   {
     action: "review-effect",
-    abstentionReason: "effect-write-ownership-unresolved",
+    abstentionReason: "dependency-identity-unproven",
     file: "index.tsx",
     hook: "useEffect",
     line: 170,
     name: null,
     rationale:
-      "The effect resets the controlled tab from changing default-tab input and should remain in React.",
+      "The effect resets the tab to its defaultTab initializer and stays in React; defaultTab is a memoized local, so the render-phase comparison waits on its identity.",
     target: "outline-icon-picker",
   },
   {

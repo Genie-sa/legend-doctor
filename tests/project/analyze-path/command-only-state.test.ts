@@ -226,6 +226,5 @@ test("moves reset effects through source wrappers into Base UI event callbacks",
   const effects = report.findings.filter((finding) => finding.hook === "useEffect");
   assert.equal(requireValue(effects[0]).action, "move-to-event");
   assert.equal(requireValue(effects[1]).action, "move-to-event");
-  assert.equal(requireValue(effects[2]).action, "keep-effect");
-  assert.match(requireValue(effects[2]).message, /stays React state/u);
+  assert.equal(requireValue(effects[2]).action, "reset-during-render");
 });

@@ -130,7 +130,7 @@ test("does not call a resettable state value derived", () => {
         return <Pager page={page} onChange={setPage} />;
       }
     `),
-    ["review-state", "review-effect"],
+    ["review-state", "reset-during-render"],
   );
 });
 

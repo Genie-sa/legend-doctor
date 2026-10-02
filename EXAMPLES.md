@@ -607,6 +607,34 @@ const changeQuery = (next: string) => {
 
 Every query change must come through the proven event path.
 
+### Reset state when an input changes
+
+`reset-during-render` removes the stale commit an effect renders before it resets state for new props, params, or
+loaded data.
+
+```tsx
+// Before
+const [selected, setSelected] = useState(0);
+useEffect(() => setSelected(0), [query]);
+
+// After
+const [selected, setSelected] = useState(0);
+const [prevQuery, setPrevQuery] = useState(query);
+if (query !== prevQuery) {
+  setPrevQuery(query);
+  setSelected(0);
+}
+```
+
+The effect body must only set the owner's state from pure values, under at most one `if`, with no cleanup, and must
+not read the state it resets. Each value must be the state's own initializer, so the effect's mount write is a no-op
+and the first commit stays the same; an effect that replaces a placeholder after mount keeps its timing. The
+comparison settles only when each dependency keeps its identity while React reruns the owner. A state value, a module
+binding, a `length` or other primitive constant, or a component prop without a destructuring default proves that, since React reruns a component
+after a render-phase update with the same props. A custom hook's parameter or a value the owner computes, such as a
+hook result, leaves a review that asks about it. A function, object, or array the owner rebuilds every render keeps
+the effect.
+
 ### React to an observable without rendering
 
 Use `use-observe-effect` when a `useValue` result exists only to run an external side effect.

@@ -132,13 +132,13 @@ export const excalidrawHookCases = [
     target: "excalidraw",
   },
   {
-    action: "review-effect",
+    action: "reset-during-render",
     file: "components/ColorPicker/ColorInput.tsx",
     hook: "useEffect",
     line: 37,
     name: null,
     rationale:
-      "Mixed external cleanup, focus timing, prop synchronization, or first-render restoration requires lifecycle review.",
+      "The effect copies the color prop into innerValue, which starts as that prop, so the mount write is a no-op; comparing the prop during render applies the same copy without the stale commit.",
     target: "excalidraw",
   },
   {
@@ -223,13 +223,13 @@ export const excalidrawHookCases = [
     target: "excalidraw",
   },
   {
-    action: "review-effect",
+    action: "reset-during-render",
     file: "components/PublishLibrary.tsx",
     hook: "useEffect",
     line: 247,
     name: null,
     rationale:
-      "Keep the React synchronization phase; a future paired migration may replace only its React-state sink with an atomic observable draft assignment.",
+      "The effect re-clones the libraryItems prop into state initialized with the same clone, so comparing the prop during render applies the copy without the stale commit and keeps the state in React.",
     target: "excalidraw",
   },
   {
