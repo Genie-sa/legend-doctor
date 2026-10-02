@@ -8,6 +8,10 @@ import { isNonValueIdentifier, unwrapTransparentExpression } from "../../core/an
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceAnalysis } from "../proofs/contracts.js";
 import { groupSettableStatesByOwner } from "../companion-writes.js";
+import { isHookDependencyReference } from "../../rules/state-proofs/callback-sites.js";
+import { ownerLevelReferences } from "../../core/scope-references.js";
+import { providedContext } from "../../project/source-components/context-value-stability.js";
+import { reactNamespacesFor } from "../../rules/child-contract/callback-identity-hooks.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
 import ts from "typescript";
 
@@ -17,6 +21,8 @@ const LISTED_PATH_SEGMENTS = 2;
 
 const USE_MEMO_CALLEE = /(?:^|\.)useMemo$/u;
 
+const DEPENDENCY_HOOKS = new Set(["useCallback", "useEffect", "useLayoutEffect", "useMemo"]);
+
 type ProviderElement = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
 
 interface ContextProvider {
@@ -24,6 +30,7 @@ interface ContextProvider {
   readonly element: ProviderElement;
   /** Context field name to the owner-local binding that fills it. */
   readonly fields: ReadonlyMap<string, string>;
+  readonly literal: ts.ObjectLiteralExpression;
 }
 
 interface HeldState {
@@ -40,6 +47,8 @@ interface ConsumerSurvey {
 interface ProviderScope {
   readonly analysis: SourceAnalysis;
   readonly childContracts: ChildContractResolver;
+  /** Every context provider the owner renders. */
+  readonly providers: readonly ContextProvider[];
 }
 
 interface ClusterMessageScope {
@@ -64,8 +73,10 @@ export function findContextHeldStateClusters(
     return result;
   }
   for (const [owner, ownerStates] of groupSettableStatesByOwner(analysis.states)) {
-    for (const provider of providersIn(owner)) {
-      const cluster = providerCluster(provider, ownerStates, { analysis, childContracts });
+    const scope = { analysis, childContracts, providers: providersIn(owner, childContracts) };
+    for (const cluster of scope.providers.map((provider) =>
+      providerCluster(provider, ownerStates, scope),
+    )) {
       for (const member of cluster?.members ?? []) {
         result.set(member, cluster!);
       }
@@ -77,14 +88,14 @@ export function findContextHeldStateClusters(
 function providerCluster(
   provider: ContextProvider,
   ownerStates: readonly StateCandidate[],
-  { analysis, childContracts }: ProviderScope,
+  { analysis, childContracts, providers }: ProviderScope,
 ): StateCluster | null {
   const held = heldStates(provider, ownerStates);
   if (
     held.length === 0 ||
     childContracts.hasPlatformVariant() ||
     childContracts.contextProviderSites(provider.contextName) !== 1 ||
-    !held.every((entry) => stateStaysInsideValue(entry, provider))
+    !held.every((entry) => stateStaysInsideValue(entry, provider, providers))
   ) {
     return null;
   }
@@ -95,25 +106,23 @@ function providerCluster(
   return contextCluster(provider, held, { analysis, survey });
 }
 
-function providersIn(owner: RuntimeFunctionLike): ContextProvider[] {
+function providersIn(
+  owner: RuntimeFunctionLike,
+  childContracts: ChildContractResolver,
+): ContextProvider[] {
   const providers: ContextProvider[] = [];
   visit(owner.body, (node) => {
-    if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) {
-      return;
-    }
-    const tag = node.tagName;
     if (
-      !ts.isPropertyAccessExpression(tag) ||
-      tag.name.text !== "Provider" ||
-      !ts.isIdentifier(tag.expression) ||
+      (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) ||
       findAncestor(node, isRuntimeFunctionLike) !== owner
     ) {
       return;
     }
     const literal = providerValueLiteral(node, owner);
     const fields = literal ? objectFields(literal) : null;
-    if (fields) {
-      providers.push({ contextName: tag.expression.text, element: node, fields });
+    const context = fields ? providedContext(node.tagName) : null;
+    if (literal && fields && context && childContracts.contextProviderSites(context.text) > 0) {
+      providers.push({ contextName: context.text, element: node, fields, literal });
     }
   });
   return providers;
@@ -210,33 +219,46 @@ function heldStates(
 
 /**
  * The provider may only write the state and hand it to the value object; a read anywhere else in
- * the provider would need its own subscription and is left to the per-state proofs.
+ * the provider would need its own subscription and is left to the per-state proofs. A setter in a
+ * hook's dependency list is stable, as the observable's `set` that replaces it is.
  */
-function stateStaysInsideValue({ state }: HeldState, provider: ContextProvider): boolean {
-  let inside = true;
-  visit(state.owner.body, (node) => {
-    if (
-      !inside ||
-      !ts.isIdentifier(node) ||
-      isNonValueIdentifier(node) ||
-      nodeWithin(node, state.call.parent)
-    ) {
-      return;
-    }
-    if (node.text === state.valueName) {
-      inside = isValueObjectField(node, state.owner) || nodeWithin(node, provider.element);
-    } else if (node.text === state.setterName) {
-      inside = isDirectCall(node) || isValueObjectField(node, state.owner);
-    }
-  });
-  return inside;
+function stateStaysInsideValue(
+  { state }: HeldState,
+  provider: ContextProvider,
+  providers: readonly ContextProvider[],
+): boolean {
+  const namespaces = reactNamespacesFor(state.owner.getSourceFile());
+  return stateBindings(state).every((binding) =>
+    ownerLevelReferences(state.owner, binding).every(
+      (reference) =>
+        isValueObjectField(reference, state.owner, providers) ||
+        (binding.text === state.valueName
+          ? nodeWithin(reference, provider.element)
+          : isDirectCall(reference) ||
+            isHookDependencyReference(reference, DEPENDENCY_HOOKS, namespaces)),
+    ),
+  );
+}
+
+function stateBindings({ call }: StateCandidate): readonly ts.Identifier[] {
+  const { parent } = call;
+  if (!ts.isVariableDeclaration(parent) || !ts.isArrayBindingPattern(parent.name)) {
+    return [];
+  }
+  return parent.name.elements.flatMap((element) =>
+    ts.isBindingElement(element) && ts.isIdentifier(element.name) ? [element.name] : [],
+  );
 }
 
 function isDirectCall(node: ts.Identifier): boolean {
   return ts.isCallExpression(node.parent) && node.parent.expression === node;
 }
 
-function isValueObjectField(node: ts.Identifier, owner: RuntimeFunctionLike): boolean {
+function isValueObjectField(
+  node: ts.Identifier,
+  owner: RuntimeFunctionLike,
+  providers: readonly ContextProvider[],
+): boolean {
   const { parent } = node;
   const property =
     ts.isShorthandPropertyAssignment(parent) ||
@@ -244,27 +266,10 @@ function isValueObjectField(node: ts.Identifier, owner: RuntimeFunctionLike): bo
       ? parent
       : null;
   if (property && ts.isObjectLiteralExpression(property.parent)) {
-    return providerLiterals(owner).has(property.parent);
+    const literal = property.parent;
+    return providers.some((provider) => provider.literal === literal);
   }
   return isMemoDependency(node, owner);
-}
-
-const providerLiteralCache = new WeakMap<RuntimeFunctionLike, Set<ts.ObjectLiteralExpression>>();
-
-function providerLiterals(owner: RuntimeFunctionLike): ReadonlySet<ts.ObjectLiteralExpression> {
-  const cached = providerLiteralCache.get(owner);
-  if (cached) {
-    return cached;
-  }
-  const literals = new Set<ts.ObjectLiteralExpression>();
-  for (const provider of providersIn(owner)) {
-    const literal = providerValueLiteral(provider.element, owner);
-    if (literal) {
-      literals.add(literal);
-    }
-  }
-  providerLiteralCache.set(owner, literals);
-  return literals;
 }
 
 /** A `useMemo` dependency entry for the value object counts as part of the value object. */

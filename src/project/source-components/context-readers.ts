@@ -251,10 +251,11 @@ function contextReferencesAreKnown(
 function isKnownContextReference(node: ts.Identifier, record: ModuleRecord): boolean {
   const member = node.parent;
   if (
-    ts.isPropertyAccessExpression(member) &&
-    member.expression === node &&
-    member.name.text === "Provider" &&
-    jsxTagUses(member)
+    jsxTagUses(node) ||
+    (ts.isPropertyAccessExpression(member) &&
+      member.expression === node &&
+      member.name.text === "Provider" &&
+      jsxTagUses(member))
   ) {
     return true;
   }
@@ -272,7 +273,7 @@ function readerHookName(owner: ts.Node): string | null {
   return ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name) ? parent.name.text : null;
 }
 
-function jsxTagUses(expression: ts.PropertyAccessExpression): boolean {
+function jsxTagUses(expression: ts.Identifier | ts.PropertyAccessExpression): boolean {
   const { parent } = expression;
   return (
     (ts.isJsxOpeningElement(parent) ||

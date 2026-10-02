@@ -545,6 +545,12 @@ export const formbricksRepository = {
       root: "apps/web/modules/survey/editor/components/response-options-card.tsx",
       states: 9,
     },
+    {
+      effects: 1,
+      id: "formbricks-sidebar",
+      root: "apps/web/modules/ui/components/sidebar/index.tsx",
+      states: 2,
+    },
   ],
   url: "https://github.com/formbricks/formbricks.git",
 } as const satisfies CorpusRepository;
