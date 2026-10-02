@@ -145,7 +145,7 @@ test("flags reads of component-local, typed, and aliased observables", () => {
   );
 });
 
-test("does not flag reads inside observer components, whether wrapped inline, by name, or through memo", () => {
+test("does not flag JSX reads inside observer components, whether wrapped inline, by name, or through memo", () => {
   assert.deepEqual(
     renderReads(`
       import { memo } from "react";
@@ -163,6 +163,35 @@ test("does not flag reads inside observer components, whether wrapped inline, by
       }));
     `),
     [],
+  );
+});
+
+test("renames observer render-body initializers to useValue as style, where the hook runs on every render", () => {
+  const findings = renderReads(`
+    import { observer } from "@legendapp/state/react";
+    export const Name = observer(function Name() {
+      const name = state$.user.name.get();
+      return <div>{name}{state$.value.get()}</div>;
+    });
+    export const Gated = observer(({ ready }: { ready: boolean }) => {
+      if (!ready) {
+        return null;
+      }
+      const value = state$.value.get();
+      return <div>{value}</div>;
+    });
+  `);
+  assert.deepEqual(
+    findings.map((finding) => [
+      finding.location.line,
+      finding.disposition,
+      finding.edits?.map((edit) => edit.newText),
+    ]),
+    [[10, "style", ["useValue(state$.user.name)"]]],
+  );
+  assert.match(
+    requireValue(findings[0]).message,
+    /^Replace `state\$\.user\.name\.get\(\)` with `useValue\(state\$\.user\.name\)`; observer already tracks the read/u,
   );
 });
 

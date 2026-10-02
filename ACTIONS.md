@@ -41,11 +41,11 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend tracking
 
-| Action                                                                                         | Removes                                                     |
-| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                          | A render read that never subscribes                         |
-| [`snapshot-mutated-use-value`](EXAMPLES.md#select-a-copy-when-a-memo-keys-on-a-mutated-value)  | A useMemo result left stale by an in-place write            |
-| [`use-computed-for-parent-reads`](EXAMPLES.md#re-render-a-memo-child-that-reads-parent-values) | A `<Memo>` child frozen on its first render's parent values |
+| Action                                                                                         | Removes                                                      |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                          | A render read that never subscribes; inside `observer` style |
+| [`snapshot-mutated-use-value`](EXAMPLES.md#select-a-copy-when-a-memo-keys-on-a-mutated-value)  | A useMemo result left stale by an in-place write             |
+| [`use-computed-for-parent-reads`](EXAMPLES.md#re-render-a-memo-child-that-reads-parent-values) | A `<Memo>` child frozen on its first render's parent values  |
 
 ### Legend writes
 

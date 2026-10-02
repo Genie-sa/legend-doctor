@@ -530,11 +530,12 @@ function Counter() {
 The direct initializer form carries `edits`, including a `useValue` specifier beside an existing
 `@legendapp/state/react` import. It carries none after an early return, where the new hook would be conditional.
 A read inside a conditional, JSX, or iteration callback gets a hoisting instruction: add `const value =
-useValue(path$)` at the top of the owner and read the binding there. The rule stays silent for `observer` and
-`reactiveObserver` components, for paths a `useValue` in the same owner already covers (directly, through a selector,
-or through a `const` alias), for hook-argument snapshots such as `useState(x$.get())`, for reads handed to a Legend
-input that tracks on its own (`Show if`, `For each`, a `Memo` child, a `$` prop, or `when`), for `key` reads, and for
-`get(true)` or dynamically keyed paths.
+useValue(path$)` at the top of the owner and read the binding there. Inside `observer` and `reactiveObserver`
+components the read already tracks and `useValue(path$)` performs the same `get()`, so only the direct initializer
+form is reported, as `style` with the same edit. The rule stays silent for paths a `useValue` in the same owner
+already covers (directly, through a selector, or through a `const` alias), for hook-argument snapshots such as
+`useState(x$.get())`, for reads handed to a Legend input that tracks on its own (`Show if`, `For each`, a `Memo`
+child, a `$` prop, or `when`), for `key` reads, and for `get(true)` or dynamically keyed paths.
 
 ### Select a copy when a memo keys on a mutated value
 
