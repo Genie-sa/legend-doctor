@@ -10,7 +10,7 @@ import {
   isUseValueCall,
   provenObservablePath,
 } from "./observable-paths.js";
-import { isHostTag, isImportedHookCall } from "../../core/imports.js";
+import { isHostTag, isReactHookCall } from "../../core/imports.js";
 import { isInsideOwnerReturn, stableConditionalJsxSlot } from "./conditional-jsx-slots.js";
 import { nodeWithin, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
@@ -83,12 +83,7 @@ function trackedCalls(
         (isDirectSubscription(node, scan) ||
           pureFlowExpression(node, scope) ||
           (["useMemo", "useCallback"] as const).some((canonicalName) =>
-            isImportedHookCall({
-              call: node,
-              canonicalName,
-              localNames: scan.imports[canonicalName],
-              namespaceNames: scan.imports.reactNamespaces,
-            }),
+            isReactHookCall(node, canonicalName, scan.imports),
           ))
       ) {
         // Owner-work validation checks memo dependencies first. A cached value or

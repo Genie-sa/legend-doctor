@@ -8,7 +8,7 @@ import { findAncestorUntil, nodeWithin, visit } from "../../core/ast.js";
 import type { EffectOwnedCommandScope } from "./effect-owned-presentation.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { isUniqueConstBindingOf } from "./effect-owned-presentation.js";
 import { localCallbackBindingName } from "../callbacks/local-callbacks.js";
 import { nearestMutationFunction } from "../mutations.js";
@@ -149,13 +149,7 @@ function syncUseCallbackCommand(
   const memoCall = findAncestorUntil(
     setterCall,
     (node): node is ts.CallExpression =>
-      ts.isCallExpression(node) &&
-      isImportedHookCall({
-        call: node,
-        localNames: imports.useCallback,
-        namespaceNames: imports.reactNamespaces,
-        canonicalName: "useCallback",
-      }),
+      ts.isCallExpression(node) && isReactHookCall(node, "useCallback", imports),
     owner,
   );
   const factory = memoCall?.arguments[0];

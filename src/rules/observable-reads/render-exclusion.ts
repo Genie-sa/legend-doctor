@@ -3,8 +3,8 @@ import { findAncestorUntil, nearestNestedFunction } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { bindingDeclarationCount } from "../../core/analysis-ast.js";
-import { isImportedHookCall } from "../../core/imports.js";
 import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { ownerLevelReferences } from "../../core/scope-references.js";
 import ts from "typescript";
 
@@ -127,12 +127,7 @@ function ownerLevelCallbackBinding(
   const wrapper =
     ts.isCallExpression(callback.parent) &&
     callback.parent.arguments[0] === callback &&
-    isImportedHookCall({
-      call: callback.parent,
-      canonicalName: "useCallback",
-      localNames: imports.useCallback,
-      namespaceNames: imports.reactNamespaces,
-    })
+    isReactHookCall(callback.parent, "useCallback", imports)
       ? callback.parent
       : callback;
   const declaration = wrapper.parent;

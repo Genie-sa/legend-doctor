@@ -18,7 +18,7 @@ import type { ObservableReadScan } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { bindingContainsName } from "../../core/binding-references.js";
 import { hasStableSourceBinding } from "./independent-subscription-bindings.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { isUseObservableCall } from "../in-place-memo-keys/memo-dependencies.js";
 import { primitiveType } from "./primitive-paths.js";
 import ts from "typescript";
@@ -115,7 +115,7 @@ function stableHookResult(declaration: ts.VariableDeclaration, scope: StabilityS
   }
   return (
     identifiedUseValueDeclaration(declaration, scan) !== null ||
-    isReactHook(call, "useRef", scan) ||
+    isReactHookCall(call, "useRef", scan.imports) ||
     isUseObservableCall(call, scan.imports) ||
     stableCache(call, scope) ||
     isContextRead(call, scope)
@@ -144,7 +144,10 @@ function subscriptionMember(initializer: ts.Expression, scan: ObservableReadScan
 
 function stableCache(call: ts.CallExpression, scope: StabilityScope): boolean {
   const { scan } = scope;
-  if (!isReactHook(call, "useMemo", scan) && !isReactHook(call, "useCallback", scan)) {
+  if (
+    !isReactHookCall(call, "useMemo", scan.imports) &&
+    !isReactHookCall(call, "useCallback", scan.imports)
+  ) {
     return false;
   }
   const [callback, dependencies, ...rest] = call.arguments;
@@ -181,7 +184,7 @@ function stateTupleMember(
     !ts.isArrayBindingPattern(declaration.name) ||
     !call ||
     !ts.isCallExpression(call) ||
-    !isReactHook(call, "useState", scan)
+    !isReactHookCall(call, "useState", scan.imports)
   ) {
     return false;
   }
@@ -195,19 +198,6 @@ function stateTupleMember(
       ts.isIdentifier(element.name) &&
       element.name.text === name,
   );
-}
-
-function isReactHook(
-  call: ts.CallExpression,
-  canonicalName: "useCallback" | "useMemo" | "useRef" | "useState",
-  scan: ObservableReadScan,
-): boolean {
-  return isImportedHookCall({
-    call,
-    canonicalName,
-    localNames: scan.imports[canonicalName],
-    namespaceNames: scan.imports.reactNamespaces,
-  });
 }
 
 function constOwnerDeclaration(

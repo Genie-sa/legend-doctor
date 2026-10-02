@@ -9,7 +9,7 @@ import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { bindingContainsName } from "../../core/binding-references.js";
 import { hasUnstableSubtreeLifetime } from "../state-proofs/jsx-subtrees.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { isUseValueCall } from "./observable-paths.js";
 import ts from "typescript";
 
@@ -196,12 +196,7 @@ function localBindingIsRenderOwned(
     !ts.isOmittedExpression(declaration.name.elements[0]) &&
     bindingContainsName(declaration.name.elements[0].name, name) &&
     ts.isCallExpression(initializer) &&
-    isImportedHookCall({
-      call: initializer,
-      localNames: ownership.imports.useState,
-      namespaceNames: ownership.imports.reactNamespaces,
-      canonicalName: "useState",
-    })
+    isReactHookCall(initializer, "useState", ownership.imports)
   ) {
     return true;
   }

@@ -2,7 +2,7 @@ import { bindingDeclarationCount, unwrapTransparentExpression } from "../../core
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { isStableDependency } from "../../rules/in-place-memo-keys/memo-dependencies.js";
 import ts from "typescript";
 import { uniqueVariableDeclaration } from "../../rules/state-proofs/binding-lookup.js";
@@ -102,8 +102,8 @@ function memoizedConstInitializer(name: string, scope: StabilityScope): ts.CallE
 function isMemoizedOverStableValues(call: ts.CallExpression, scope: StabilityScope): boolean {
   const [, dependencies, ...rest] = call.arguments;
   return (
-    (isReactHook(call, "useMemo", scope.imports) ||
-      isReactHook(call, "useCallback", scope.imports)) &&
+    (isReactHookCall(call, "useMemo", scope.imports) ||
+      isReactHookCall(call, "useCallback", scope.imports)) &&
     rest.length === 0 &&
     dependencies !== undefined &&
     ts.isArrayLiteralExpression(dependencies) &&
@@ -111,17 +111,4 @@ function isMemoizedOverStableValues(call: ts.CallExpression, scope: StabilitySco
       (dependency) => !ts.isSpreadElement(dependency) && isMountStableValue(dependency, scope),
     )
   );
-}
-
-function isReactHook(
-  call: ts.CallExpression,
-  canonicalName: "useCallback" | "useMemo",
-  imports: HookImports,
-): boolean {
-  return isImportedHookCall({
-    call,
-    canonicalName,
-    localNames: imports[canonicalName],
-    namespaceNames: imports.reactNamespaces,
-  });
 }

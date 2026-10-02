@@ -6,7 +6,7 @@ import {
 } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import ts from "typescript";
 
 /**
@@ -65,7 +65,7 @@ function declaresStableIdentity(
     return false;
   }
   if (ts.isIdentifier(declaration.name)) {
-    return isReactHook(call, "useRef", imports) || isUseObservableCall(call, imports);
+    return isReactHookCall(call, "useRef", imports) || isUseObservableCall(call, imports);
   }
   const setter = ts.isArrayBindingPattern(declaration.name) ? declaration.name.elements[1] : null;
   return (
@@ -74,21 +74,8 @@ function declaresStableIdentity(
     ts.isBindingElement(setter) &&
     ts.isIdentifier(setter.name) &&
     setter.name.text === name &&
-    isReactHook(call, "useState", imports)
+    isReactHookCall(call, "useState", imports)
   );
-}
-
-function isReactHook(
-  call: ts.CallExpression,
-  canonicalName: "useRef" | "useState",
-  imports: HookImports,
-): boolean {
-  return isImportedHookCall({
-    call,
-    canonicalName,
-    localNames: imports[canonicalName],
-    namespaceNames: imports.reactNamespaces,
-  });
 }
 
 export function isUseObservableCall(call: ts.CallExpression, imports: HookImports): boolean {

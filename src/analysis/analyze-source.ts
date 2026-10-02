@@ -8,7 +8,7 @@ import {
   visit,
 } from "../core/ast.js";
 import { calledSubscriptionHook, subscriptionHookCallee } from "../core/use-value-import.js";
-import { collectHookImports, isImportedHookCall } from "../core/imports.js";
+import { collectHookImports, isReactHookCall } from "../core/imports.js";
 import { collectLocalComponents, collectPureProjectionImports } from "./owner-scan.js";
 import {
   collectModuleScopeBindings,
@@ -141,24 +141,9 @@ function canCallFindingHook(imports: HookImports): boolean {
 function containsFindingHookCall(node: ts.Node, imports: HookImports): boolean {
   if (
     ts.isCallExpression(node) &&
-    (isImportedHookCall({
-      call: node,
-      localNames: imports.useState,
-      namespaceNames: imports.reactNamespaces,
-      canonicalName: "useState",
-    }) ||
-      isImportedHookCall({
-        call: node,
-        localNames: imports.useEffect,
-        namespaceNames: imports.reactNamespaces,
-        canonicalName: "useEffect",
-      }) ||
-      isImportedHookCall({
-        call: node,
-        localNames: imports.useLayoutEffect,
-        namespaceNames: imports.reactNamespaces,
-        canonicalName: "useLayoutEffect",
-      }))
+    (isReactHookCall(node, "useState", imports) ||
+      isReactHookCall(node, "useEffect", imports) ||
+      isReactHookCall(node, "useLayoutEffect", imports))
   ) {
     return true;
   }
@@ -278,15 +263,7 @@ function collectStateCandidates(
   const states: StateCandidate[] = [];
   const unmatchedStateCalls: ts.CallExpression[] = [];
   visit(sourceFile, (node) => {
-    if (
-      !ts.isCallExpression(node) ||
-      !isImportedHookCall({
-        call: node,
-        localNames: imports.useState,
-        namespaceNames: imports.reactNamespaces,
-        canonicalName: "useState",
-      })
-    ) {
+    if (!ts.isCallExpression(node) || !isReactHookCall(node, "useState", imports)) {
       return;
     }
     const state = stateCandidate(node);

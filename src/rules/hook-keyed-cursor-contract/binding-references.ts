@@ -1,6 +1,6 @@
 import { bindingDeclarationCount, isDeclarationName } from "../../core/analysis-ast.js";
 import { calleeRootIdentifier, findAncestor, findAncestorUntil, visit } from "../../core/ast.js";
-import { collectHookImports, isImportedHookCall } from "../../core/imports.js";
+import { collectHookImports, isReactHookCall } from "../../core/imports.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { bindingReferences } from "../../core/binding-references.js";
 import ts from "typescript";
@@ -40,12 +40,7 @@ export function isImportedUseCallback(call: ts.CallExpression): boolean {
   return (
     root !== null &&
     !bindingIsShadowed(call, root.text) &&
-    isImportedHookCall({
-      call,
-      localNames: imports.useCallback,
-      namespaceNames: imports.reactNamespaces,
-      canonicalName: "useCallback",
-    })
+    isReactHookCall(call, "useCallback", imports)
   );
 }
 

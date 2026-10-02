@@ -4,7 +4,7 @@ import { visit, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import { writeChangesRead, writesBelow } from "./write-conflicts.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
 import { inPlaceMemoKeyFinding } from "./finding.js";
-import { isImportedHookCall } from "../../core/imports.js";
+import { isReactHookCall } from "../../core/imports.js";
 import { isStableDependency } from "./memo-dependencies.js";
 import { memoReads } from "./memo-reads.js";
 import { rawValueBinding } from "./raw-value-bindings.js";
@@ -76,12 +76,7 @@ function memoDependencies(
     call.arguments.length !== MEMO_ARGUMENT_COUNT ||
     !list ||
     !ts.isArrayLiteralExpression(list) ||
-    !isImportedHookCall({
-      call,
-      canonicalName: "useMemo",
-      localNames: scan.imports.useMemo,
-      namespaceNames: scan.imports.reactNamespaces,
-    })
+    !isReactHookCall(call, "useMemo", scan.imports)
   ) {
     return null;
   }

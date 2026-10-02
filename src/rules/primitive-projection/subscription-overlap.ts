@@ -5,8 +5,8 @@ import {
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import type { HookImports } from "../../core/imports.js";
 import type { RenderOwner } from "../observable-tracking/render-owners.js";
-import { isImportedHookCall } from "../../core/imports.js";
 import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
+import { isReactHookCall } from "../../core/imports.js";
 import ts from "typescript";
 
 const IMPERATIVE_HANDLE_DEPENDENCY_INDEX = 2;
@@ -110,11 +110,6 @@ function effectDependencyIndex(call: ts.CallExpression, imports: HookImports): n
   if (isReactEffectCall(call, imports)) {
     return 1;
   }
-  const handle = isImportedHookCall({
-    call,
-    canonicalName: "useImperativeHandle",
-    localNames: imports.useImperativeHandle,
-    namespaceNames: imports.reactNamespaces,
-  });
+  const handle = isReactHookCall(call, "useImperativeHandle", imports);
   return handle ? IMPERATIVE_HANDLE_DEPENDENCY_INDEX : null;
 }
