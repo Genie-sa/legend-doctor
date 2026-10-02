@@ -25,12 +25,14 @@ import {
   reviewStateWritingEffect,
   unresolvedCallbackEffect,
 } from "./effect-verdicts.js";
+import { findRenderPhaseReset, renderPhaseResetEdit } from "./render-phase-resets.js";
 import {
   isCommittedPropRefSnapshot,
   isExactCommittedPreviousValueGuard,
   isExactLatestValueRefMirror,
 } from "./committed-ref-mirrors.js";
 import type { EffectStateDependency } from "./state-independent-effects.js";
+import type { RenderPhaseReset } from "./render-phase-resets.js";
 import { analyzeEffectStateDependencies } from "./state-independent-effects.js";
 import { callbackIsCommittedRefIntegration } from "./committed-ref-integration.js";
 import { callbackReadsSynchronously } from "./synchronous-dependency-reads.js";
@@ -59,10 +61,14 @@ export interface EffectClassificationRequest extends EffectClassificationContext
  */
 export function classifyEffect(request: EffectClassificationRequest): ClassifiedEffect {
   const classification = effectClassification(request);
-  return isImportedReactCall(request.effect.call, request.imports, "useLayoutEffect") &&
-    !preservesLayoutTiming(classification)
-    ? keepLayoutEffect()
-    : classification;
+  if (
+    !isImportedReactCall(request.effect.call, request.imports, "useLayoutEffect") ||
+    preservesLayoutTiming(classification)
+  ) {
+    return classification;
+  }
+  const { renderPhaseReset } = classification;
+  return renderPhaseReset ? { ...keepLayoutEffect(), renderPhaseReset } : keepLayoutEffect();
 }
 
 function preservesLayoutTiming({ abstentionReason, action }: ClassifiedEffect): boolean {
@@ -145,7 +151,21 @@ function classifyInlineEffect(
   if (effect.dependencies?.elements.length === 0) {
     return emptyDependencyClassification(effect, callback, inline);
   }
-  return dependencyEffectClassification(effect, callback, inline);
+  return withRenderPhaseReset(
+    dependencyEffectClassification(effect, callback, inline),
+    findRenderPhaseReset(effect, callback, context),
+    callback,
+  );
+}
+
+function withRenderPhaseReset(
+  classification: ClassifiedEffect,
+  reset: RenderPhaseReset | null,
+  callback: ts.ArrowFunction | ts.FunctionExpression,
+): ClassifiedEffect {
+  return reset
+    ? { ...classification, renderPhaseReset: renderPhaseResetEdit(reset, callback) }
+    : classification;
 }
 
 function emptyDependencyClassification(

@@ -250,6 +250,7 @@ function resolveStateVerdict(
     assumption !== null &&
     assumption.members === undefined &&
     assumption.status !== "confirmed" &&
+    assumption.ifConfirmed !== "reset-during-render" &&
     schedulingOverride(assumption.ifConfirmed, scheduling) !== null;
   return {
     ...resolved,

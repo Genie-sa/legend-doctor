@@ -3,7 +3,7 @@ import { analyzeSource } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("keeps a same-owner reset effect behind an opaque controlled component", () => {
+test("resets during render behind an opaque controlled component", () => {
   assert.deepEqual(
     actions(`
       import { useEffect, useState } from "react";
@@ -17,11 +17,11 @@ test("keeps a same-owner reset effect behind an opaque controlled component", ()
         </main>;
       }
     `),
-    ["review-state", "keep-state", "review-effect"],
+    ["review-state", "keep-state", "reset-during-render"],
   );
 });
 
-test("does not move reset effects into opaque custom-component callbacks", () => {
+test("resets during render instead of moving resets into opaque custom-component callbacks", () => {
   for (const mutation of [
     `<Controller onRender={setCategory} />`,
     `<Controller onMount={() => setCategory("next")} />`,
@@ -40,7 +40,7 @@ test("does not move reset effects into opaque custom-component callbacks", () =>
           </main>;
         }
       `),
-      ["review-state", "keep-state", "review-effect"],
+      ["review-state", "keep-state", "reset-during-render"],
       mutation,
     );
   }
@@ -89,7 +89,7 @@ test("does not move reset effects whose initializer evaluation is not stable", (
   }
 });
 
-test("does not move a reset effect when a dependency mutation boundary is external", () => {
+test("resets during render when a dependency mutation boundary is external", () => {
   assert.deepEqual(
     actions(`
       import { useEffect, useState } from "react";
@@ -99,7 +99,7 @@ test("does not move a reset effect when a dependency mutation boundary is extern
         return <button onClick={() => setDetailIndex(value => value + 1)}>{detailIndex}</button>;
       }
     `),
-    ["keep-state", "keep-effect"],
+    ["keep-state", "reset-during-render"],
   );
 });
 
@@ -126,7 +126,7 @@ test("does not mistake an expression-bodied React setter for cleanup", () => {
         return <Pager page={page} onChange={setPage} />;
       }
     `),
-    ["review-state", "review-effect"],
+    ["review-state", "reset-during-render"],
   );
 });
 

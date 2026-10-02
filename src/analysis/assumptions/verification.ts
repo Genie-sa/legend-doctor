@@ -11,13 +11,9 @@ export function verificationFor(
   subject: string,
   ownerFile: string,
 ): Verification {
-  const drive =
-    assumption.updateSites > 0
-      ? `drive every write site listed in the question's research (${assumption.updateSites} setter call sites) through the DOM: clicks, inputs, or the events those handlers listen to`
-      : "drive one full mount and, when the effect has a cleanup, one unmount";
+  const { drive, expect } = comparisonFor(assumption);
   return {
-    expect:
-      "renders of the owner per update drop from one per write to zero (or one, when the owner still reads the value); the leaf subscriber renders instead; the DOM after every step is identical between versions",
+    expect,
     harness: HARNESS,
     steps: [
       `import { mountDom, count } from "${HARNESS}" in a node:test file; mountDom gives a jsdom root, render, click, input, and signal helpers, and count tallies renders by name`,
@@ -26,5 +22,30 @@ export function verificationFor(
       "compare: identical DOM snapshots for every step, and the render tallies described in expect",
       `record the measured counts in the confirmation's note for ${assumption.id}; a failed comparison means the answer was wrong: change it to "no" and revert the edit`,
     ],
+  };
+}
+
+interface Comparison {
+  readonly drive: string;
+  readonly expect: string;
+}
+
+const RESET_COMPARISON: Comparison = {
+  drive: "mount once, then rerender with each dependency the question names changed in turn",
+  expect:
+    "each dependency change commits the owner once instead of twice, no step commits the stale value, and the DOM after every step is identical between versions",
+};
+
+function comparisonFor(assumption: StateAssumption): Comparison {
+  if (assumption.ifConfirmed === "reset-during-render") {
+    return RESET_COMPARISON;
+  }
+  return {
+    drive:
+      assumption.updateSites > 0
+        ? `drive every write site listed in the question's research (${assumption.updateSites} setter call sites) through the DOM: clicks, inputs, or the events those handlers listen to`
+        : "drive one full mount and, when the effect has a cleanup, one unmount",
+    expect:
+      "renders of the owner per update drop from one per write to zero (or one, when the owner still reads the value); the leaf subscriber renders instead; the DOM after every step is identical between versions",
   };
 }

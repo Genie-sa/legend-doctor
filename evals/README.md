@@ -131,7 +131,9 @@ restoration review moved to `keep-effect`: Legend's `useMount` runs the same `us
 development unmount. The [latest-versions audit](audit-2026-10-01-latest-versions.md) supersedes the concurrent-root,
 lockfile, and legacy-root findings above: on the supported React 19 and latest Legend State v3 baseline, it retires 25
 transaction labels, marks six whose non-React observers span the writes as known misses, and labels every legacy
-hook rename as style. Its same-file tracker gate enforces one of those six and removes the transaction reviews. A red
+hook rename as style. Its same-file tracker gate enforces one of those six and removes the transaction reviews. The
+[render-phase reset audit](audit-2026-10-02-render-phase-resets.md) records the React facts behind `reset-during-render`
+and the nine labels it moved. A red
 corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay

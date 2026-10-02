@@ -45,7 +45,7 @@ export function primitiveMemoName(
     : null;
 }
 
-function isPrimitive(expression: ts.Expression, sourceFile: ts.SourceFile): boolean {
+export function isPrimitive(expression: ts.Expression, sourceFile: ts.SourceFile): boolean {
   const value = unwrapTransparentExpression(expression);
   if (ts.isBinaryExpression(value)) {
     const operands = [value.left, value.right];
@@ -66,7 +66,7 @@ function isPrimitive(expression: ts.Expression, sourceFile: ts.SourceFile): bool
         PRIMITIVE_KEYWORDS.has(ts.tokenToString(value.kind) ?? "");
 }
 
-function isPureCall(call: ts.CallExpression, sourceFile: ts.SourceFile): boolean {
+export function isPureCall(call: ts.CallExpression, sourceFile: ts.SourceFile): boolean {
   const callee = unwrapTransparentExpression(call.expression);
   return (
     isGlobalCall(call, PURE_CALLS, sourceFile) ||

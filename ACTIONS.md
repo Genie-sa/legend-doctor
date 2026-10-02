@@ -20,6 +20,7 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 | Action                                                                               | Removes                                                     |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
 | [`move-to-event`](EXAMPLES.md#move-event-owned-work-to-the-event)                    | A second transition caused by an event-following effect     |
+| [`reset-during-render`](EXAMPLES.md#reset-state-when-an-input-changes)               | A stale commit before an effect resets state for new inputs |
 | [`use-observe-effect`](EXAMPLES.md#react-to-an-observable-without-rendering)         | A component render used only to run an external reaction    |
 | [`use-mount`](EXAMPLES.md#keep-empty-dependency-lifecycle-effects)                   | Nothing; never emitted, the effect stays `keep-effect`      |
 | [`use-unmount`](EXAMPLES.md#keep-empty-dependency-lifecycle-effects)                 | Nothing; never emitted, the effect stays `keep-effect`      |

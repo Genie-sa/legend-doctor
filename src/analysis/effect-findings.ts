@@ -11,8 +11,13 @@ import {
   persistMigratedStateEffect,
 } from "../rules/effects/effect-verdicts.js";
 import { EMPTY_STATE_CANDIDATES } from "./constants.js";
+import type { EffectAssumptionResult } from "./assumptions/effect-assumptions.js";
 import type { HookFinding } from "../core/types.js";
 import type { StateAnalysisResult } from "./proofs/contracts.js";
+import { effectAssumption } from "./assumptions/effect-assumptions.js";
+import { identityClaim } from "../rules/effects/render-phase-resets.js";
+import path from "node:path";
+import { verificationFor } from "./assumptions/verification.js";
 
 const PAIRED_DRAFT_EFFECT_CLASSIFICATION: ClassifiedEffect = {
   action: "review-effect",
@@ -25,28 +30,20 @@ const PAIRED_DRAFT_EFFECT_CLASSIFICATION: ClassifiedEffect = {
 
 export function effectFindingFor(
   effect: EffectCandidate,
-  { analysis, clusters, effectProofs, ownership }: StateAnalysisResult,
+  result: StateAnalysisResult,
   stateFindings: ReadonlyMap<StateCandidate, HookFinding>,
 ): HookFinding | null {
-  const base =
-    !analysis.nonProductionHarness && clusters.effectDrafts.effects.has(effect)
-      ? PAIRED_DRAFT_EFFECT_CLASSIFICATION
-      : effectProofs.effectClassifications.get(effect);
-  if (!base) {
+  const resolved = resolveEffectClassification(effect, result, stateFindings);
+  if (!resolved) {
     return null;
   }
-  const classification = stateFollowingEffectClassification(base, stateFindings) ?? base;
-  const scope = effect.owner ? ownership.effectStateScopes.get(effect.owner) : undefined;
+  const { assumed, classification } = resolved;
   const finding = findingFor(effect.call, classification, {
-    evidence: effectEvidence(
-      effect,
-      analysis.sourceFile,
-      scope?.bySetter ?? EMPTY_STATE_CANDIDATES,
-    ),
-    fileName: analysis.fileName,
+    evidence: effectFindingEvidence(effect, result, assumed),
+    fileName: result.analysis.fileName,
     hook: "useEffect",
     name: null,
-    sourceFile: analysis.sourceFile,
+    sourceFile: result.analysis.sourceFile,
   });
   const waitsOn =
     classification.action === "review-effect"
@@ -55,7 +52,104 @@ export function effectFindingFor(
   if (waitsOn.length > 0) {
     finding.waitsOn = waitsOn;
   }
+  attachAssumption(finding, assumed, result.analysis.fileName);
   return finding;
+}
+
+function effectFindingEvidence(
+  effect: EffectCandidate,
+  { analysis, ownership }: StateAnalysisResult,
+  assumed: EffectAssumptionResult | null,
+): string[] {
+  const scope = effect.owner ? ownership.effectStateScopes.get(effect.owner) : undefined;
+  return [
+    ...effectEvidence(effect, analysis.sourceFile, scope?.bySetter ?? EMPTY_STATE_CANDIDATES),
+    ...(assumed?.confirmed
+      ? [`assumption confirmed by ${assumed.assumption.id}: ${assumed.assumption.question}`]
+      : []),
+  ];
+}
+
+interface ResolvedEffect {
+  readonly assumed: EffectAssumptionResult | null;
+  readonly classification: ClassifiedEffect;
+}
+
+function resolveEffectClassification(
+  effect: EffectCandidate,
+  { analysis, clusters, effectProofs }: StateAnalysisResult,
+  stateFindings: ReadonlyMap<StateCandidate, HookFinding>,
+): ResolvedEffect | null {
+  const base =
+    !analysis.nonProductionHarness && clusters.effectDrafts.effects.has(effect)
+      ? PAIRED_DRAFT_EFFECT_CLASSIFICATION
+      : effectProofs.effectClassifications.get(effect);
+  if (!base) {
+    return null;
+  }
+  const followed =
+    renderPhaseResetClassification(base, stateFindings) ??
+    stateFollowingEffectClassification(base, stateFindings) ??
+    base;
+  const assumed = effectAssumption(followed, {
+    confirmations: analysis.confirmations,
+    effect,
+    reportFile: path.normalize(analysis.fileName),
+    sourceFile: analysis.sourceFile,
+  });
+  return { assumed, classification: assumed?.confirmed ?? followed };
+}
+
+function attachAssumption(
+  finding: HookFinding,
+  assumed: EffectAssumptionResult | null,
+  fileName: string,
+): void {
+  if (!assumed) {
+    return;
+  }
+  finding.assumption = assumed.assumption;
+  if (assumed.confirmed) {
+    finding.verification = verificationFor(assumed.assumption, "effect's owner", fileName);
+  }
+}
+
+const REACT_STATE_VERDICTS: ReadonlySet<HookFinding["action"]> = new Set([
+  "keep-state",
+  "review-state",
+]);
+
+/**
+ * A reset runs during render only while every state it writes stays React state; a migrating
+ * state rewrites the effect's writes instead. Unproven dependency identities leave one question.
+ */
+function renderPhaseResetClassification(
+  { renderPhaseReset: reset }: ClassifiedEffect,
+  stateFindings: ReadonlyMap<StateCandidate, HookFinding>,
+): ClassifiedEffect | null {
+  if (
+    !reset ||
+    !reset.targets.every((state) =>
+      REACT_STATE_VERDICTS.has(stateFindings.get(state)?.action ?? "use-observable"),
+    )
+  ) {
+    return null;
+  }
+  return reset.unprovenDependencies.length === 0
+    ? {
+        action: "reset-during-render",
+        confidence: "probable",
+        derivedState: null,
+        message: reset.instruction,
+      }
+    : {
+        action: "review-effect",
+        abstentionReason: "dependency-identity-unproven",
+        confidence: "probable",
+        derivedState: null,
+        message: `Review this reset effect; it can run during render once ${identityClaim(reset.unprovenDependencies)} between renders, which no local fact proves.`,
+        renderPhaseReset: reset,
+      };
 }
 
 /**
