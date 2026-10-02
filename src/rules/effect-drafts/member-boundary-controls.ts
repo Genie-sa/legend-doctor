@@ -41,6 +41,24 @@ export function stateControlsHookOrRepeatedBoundary(state: StateCandidate): bool
   );
 }
 
+/**
+ * A hook argument evaluated in render (an option, or a memo, callback, or worklet closure) reads the
+ * state where `readsAfterRender` does not hold, or reads a render derivation of it.
+ */
+export function stateFeedsHook(
+  state: StateCandidate,
+  readsAfterRender: (reference: ts.Identifier) => boolean,
+): boolean {
+  return (
+    valueReferences(state, state.valueName).some(
+      (reference) => !readsAfterRender(reference) && referenceFeedsHook(reference, state.owner),
+    ) ||
+    renderDerivations(state).some((name) =>
+      valueReferences(state, name).some((reference) => referenceFeedsHook(reference, state.owner)),
+    )
+  );
+}
+
 /** Render-time `const` derivations of the state, transitively; a hook reading one would go stale. */
 function renderDerivations(state: StateCandidate): readonly string[] {
   const names = [state.valueName];
