@@ -43,7 +43,11 @@ export function moveUseValueIntoChildFinding(
   }
   const reference = soleValueReference(use);
   const transport = reference ? directJsxPropTransport(reference) : null;
-  if (!transport || !childAcceptsPrimitiveProp(transport, use.owner, scan)) {
+  if (
+    !transport ||
+    ownerOnlyReturnsChild(use) ||
+    !childAcceptsPrimitiveProp(transport, use.owner, scan)
+  ) {
     return null;
   }
   const cut = subscriptionCut(
@@ -77,6 +81,18 @@ function soleValueReference(use: UseValueDeclaration): ts.Identifier | null {
     reference = node;
   });
   return unsafe ? null : reference;
+}
+
+/** An owner that only subscribes and returns the child saves nothing but its own call. */
+function ownerOnlyReturnsChild({ declaration, owner }: UseValueDeclaration): boolean {
+  return (
+    owner.body !== undefined &&
+    ts.isBlock(owner.body) &&
+    owner.body.statements.every(
+      (statement) => statement === declaration.parent.parent || ts.isReturnStatement(statement),
+    ) &&
+    jsxElementCount(owner) === 1
+  );
 }
 
 function childAcceptsPrimitiveProp(
