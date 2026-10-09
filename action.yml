@@ -231,5 +231,9 @@ runs:
       env:
         REASON: ${{ steps.render.outputs.gate-reason }}
       run: |
-        echo "::error::$REASON"
+        # The reason names pull-request paths; encode it so a newline cannot start a workflow command.
+        reason="${REASON//%/%25}"
+        reason="${reason//$'\r'/%0D}"
+        reason="${reason//$'\n'/%0A}"
+        echo "::error::$reason"
         exit 3
