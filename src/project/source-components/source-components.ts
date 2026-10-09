@@ -38,15 +38,16 @@ import type { AnalysisFile } from "../analysis-project.js";
 import type { ObservableContextReader } from "./observable-contexts.js";
 import type { ObservableInPlaceWrites } from "./observable-in-place-writes.js";
 import type { ReachResolver } from "./synchronous-reach.js";
+import type { SkippedFile } from "../../core/types.js";
 import type { SourceContextCoverage } from "./source-context.js";
 import type { SourceResolution } from "./module-resolution.js";
 import { callbackPackageVersion } from "./callback-package-version.js";
-import { inScanPhase } from "../scan-failure.js";
 import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js";
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
 import { observableContextReadersFor } from "./observable-contexts.js";
 import { observablePathsFor } from "./observable-containers.js";
+import { runScanPhase } from "../scan-failure.js";
 import { sourceContextFor } from "./source-context.js";
 import type ts from "typescript";
 
@@ -94,6 +95,8 @@ export interface SourceIndex {
   observablePathsFor: (file: string) => ReadonlySet<string>;
   observablesFor: (file: string) => ReadonlySet<string>;
   pureProjectionsFor: (file: string) => ReadonlySet<string>;
+  /** Files whose declarations could not be recorded; no other file's proof reads them. */
+  skippedFiles: readonly SkippedFile[];
 }
 
 export function buildSourceIndex(root: string, sources: ReadonlyMap<string, string>): SourceIndex {
@@ -106,7 +109,8 @@ export function buildSourceIndexFromFiles(
   files: readonly AnalysisFile[],
   resolution?: SourceResolution,
 ): SourceIndex {
-  const state = createSourceIndexState(root, files, resolution);
+  const skippedFiles: SkippedFile[] = [];
+  const state = createSourceIndexState(root, indexModuleRecords(files, skippedFiles), resolution);
   return {
     moduleFileFor: (file, specifier) => resolveModule(state, file, specifier),
     reachResolver: observableReachResolver(state),
@@ -141,28 +145,17 @@ export function buildSourceIndexFromFiles(
     observablePathsFor: (file) => observablePathsFor(state, file),
     observablesFor: (file) => new Set(resolvedFor(state, file, "observable").keys()),
     pureProjectionsFor: (file) => new Set(resolvedFor(state, file, "pure-projection").keys()),
+    skippedFiles,
   };
 }
 
+type IndexedModules = Pick<SourceIndexState, "records" | "sourceFiles">;
+
 function createSourceIndexState(
   root: string,
-  files: readonly AnalysisFile[],
+  { records, sourceFiles }: IndexedModules,
   resolution?: SourceResolution,
 ): SourceIndexState {
-  const records = new Map<string, ModuleRecord>();
-  const sourceFiles = new Map<string, ts.SourceFile>();
-  for (const file of files) {
-    // Parser recovery is useful for diagnostics, but cannot establish a dependency's contract.
-    if (file.parserDiagnostics.some((diagnostic) => diagnostic.category === "error")) {
-      continue;
-    }
-    const normalized = normalizeFile(file.identityPath);
-    records.set(
-      normalized,
-      inScanPhase("index", file.originalPath, () => moduleRecord(file.sourceFile)),
-    );
-    sourceFiles.set(normalized, file.sourceFile);
-  }
   return {
     ...crossModuleBindings(records),
     availableSymbolKinds: availableSymbolKinds(records),
@@ -180,6 +173,30 @@ function createSourceIndexState(
     stableContextValues: new Map(),
     stableObservableContainers: new Map(),
   };
+}
+
+function indexModuleRecords(
+  files: readonly AnalysisFile[],
+  skippedFiles: SkippedFile[],
+): IndexedModules {
+  const records = new Map<string, ModuleRecord>();
+  const sourceFiles = new Map<string, ts.SourceFile>();
+  for (const file of files.filter((candidate) => parsedWithoutErrors(candidate))) {
+    const indexed = runScanPhase("index", file.originalPath, () => moduleRecord(file.sourceFile));
+    if (indexed.ok) {
+      const normalized = normalizeFile(file.identityPath);
+      records.set(normalized, indexed.value);
+      sourceFiles.set(normalized, file.sourceFile);
+    } else {
+      skippedFiles.push(indexed.skipped);
+    }
+  }
+  return { records, sourceFiles };
+}
+
+/** Parser recovery is useful for diagnostics, but cannot establish a dependency's contract. */
+function parsedWithoutErrors(file: AnalysisFile): boolean {
+  return !file.parserDiagnostics.some((diagnostic) => diagnostic.category === "error");
 }
 
 function crossModuleBindings(records: ReadonlyMap<string, ModuleRecord>): CrossModuleBindings {

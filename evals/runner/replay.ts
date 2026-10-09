@@ -31,8 +31,12 @@ async function driftIn(sourceRoot: string, commit: ReplayCommit): Promise<string
 async function replayTree(treeRoot: string, commit: ReplayCommit): Promise<CommitReplay> {
   const sourceRoot = path.join(treeRoot, commit.root);
   const report = await analyzePath(sourceRoot);
+  const skipped = (report.skippedFiles ?? []).map(
+    (file) =>
+      `${commit.repository}@${commit.commit.slice(0, 7)}: skipped ${file.file} (${file.phase}): ${file.message}`,
+  );
   return {
-    drift: await driftIn(sourceRoot, commit),
+    drift: [...skipped, ...(await driftIn(sourceRoot, commit))],
     outcomes: commit.cases.map((replayCase) => scoreReplayCase(report, commit, replayCase)),
   };
 }

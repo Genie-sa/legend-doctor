@@ -31,7 +31,7 @@ async function main() {
   const head = await readReport(env.HEAD_REPORT);
   const blocking = blockingDispositions(env.BLOCKING ?? "none");
   if (head.status !== "ok") {
-    await emit(renderError(head), [], scanFailedGate(head));
+    await emit(renderError(head), [], scanFailedGate(head, blocking));
     return;
   }
   const base = env.BASE_REPORT ? await readReport(env.BASE_REPORT) : null;
@@ -40,7 +40,7 @@ async function main() {
   await emit(
     renderSummary(head, shown, blocking),
     comments,
-    evaluateGate(shown.introduced, blocking),
+    evaluateGate(shown.introduced, blocking, head.skippedFiles ?? []),
   );
   await reportCounts(shown);
 }
@@ -141,28 +141,37 @@ function identity(finding) {
   return [finding.location.file, finding.action, finding.hook ?? "", subject].join("::");
 }
 
-function scanFailedGate(report) {
+/** An advisory check reports a failed scan without failing the job; a blocking one fails closed. */
+function scanFailedGate(report, blocking) {
   return {
-    failed: true,
+    failed: blocking.length > 0,
     reason: report.message,
     state: "error",
     description: `Scan failed: ${report.reason}`,
   };
 }
 
-function evaluateGate(findings, blocking) {
+function evaluateGate(findings, blocking, skippedFiles) {
   const blockers = findings.filter((finding) => blocking.includes(finding.disposition));
   const description =
     describeCounts(countByDisposition(findings)) || "No render or effect cost to cut";
-  if (blockers.length === 0) {
-    return { failed: false, state: "success", description };
+  if (blockers.length > 0) {
+    return {
+      failed: true,
+      state: "failure",
+      description,
+      reason: `${blockers.length} finding(s) with disposition ${blocking.join(", ")} remain in the scanned scope.`,
+    };
   }
-  return {
-    failed: true,
-    state: "failure",
-    description,
-    reason: `${blockers.length} finding(s) with disposition ${blocking.join(", ")} remain in the scanned scope.`,
-  };
+  if (blocking.length > 0 && skippedFiles.length > 0) {
+    return {
+      failed: true,
+      state: "error",
+      description: `${skippedFiles.length} file(s) could not be scanned`,
+      reason: `A skipped file can hide a blocking finding: ${skippedFiles.map((skipped) => skipped.file).join(", ")}.`,
+    };
+  }
+  return { failed: false, state: "success", description };
 }
 
 function countByDisposition(findings) {
@@ -201,8 +210,23 @@ function renderSummary(report, shown, blocking) {
   for (const section of SECTIONS) {
     appendSection(lines, section, findingsFor(shown.introduced, section));
   }
+  appendSkippedFiles(lines, report.skippedFiles ?? []);
   appendFooter(lines, { blocking, report, shown });
   return lines.join("\n");
+}
+
+function appendSkippedFiles(lines, skippedFiles) {
+  if (skippedFiles.length === 0) {
+    return;
+  }
+  lines.push(
+    "",
+    `**${skippedFiles.length} file(s) could not be scanned** and report no findings:`,
+    "",
+    ...skippedFiles.map(
+      (skipped) => `- \`${skipped.file}\` (${skipped.phase}): ${escapeCell(skipped.message)}`,
+    ),
+  );
 }
 
 function findingsFor(findings, section) {

@@ -1,5 +1,6 @@
 import { AnalysisProject, isSupportedAnalysisFile } from "../analysis-project.js";
 import { readFile, readdir } from "node:fs/promises";
+import type { SkippedFile } from "../../core/types.js";
 import type { SourceIndex } from "../source-components/source-components.js";
 import { buildSourceIndexFromFiles } from "../source-components/source-components.js";
 import { loadWorkspaceSources } from "../workspace/source-closure.js";
@@ -25,6 +26,11 @@ export interface AnalysisContext {
   project: AnalysisProject;
   sourceIndex: SourceIndex;
   root: string;
+}
+
+/** Files the context could not parse or index; analysis must not ask the context for them. */
+export function contextSkippedFiles(context: AnalysisContext): readonly SkippedFile[] {
+  return [...context.project.skippedFiles, ...context.sourceIndex.skippedFiles];
 }
 
 export async function createAnalysisContext(rootPath: string): Promise<AnalysisContext> {

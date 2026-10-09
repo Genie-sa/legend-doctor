@@ -2,9 +2,11 @@ import { SOURCE_FILE_OPTIONS, scriptKindForFile } from "../core/ast.js";
 import { canonicalPath, pathIdentityKey } from "../core/path-identity.js";
 
 import type { AnalysisDiagnostic } from "../core/parser-diagnostics.js";
-import { inScanPhase } from "./scan-failure.js";
+import type { ScanPhaseOutcome } from "./scan-failure.js";
+import type { SkippedFile } from "../core/types.js";
 import { parserDiagnosticsOf } from "../core/parser-diagnostics.js";
 import path from "node:path";
+import { runScanPhase } from "./scan-failure.js";
 import ts from "typescript";
 
 const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([
@@ -31,25 +33,26 @@ export interface AnalysisFile {
 
 export class AnalysisProject {
   public readonly files: readonly AnalysisFile[];
+  /** Sources the parser raised on; they are absent from `files`. */
+  public readonly skippedFiles: readonly SkippedFile[];
 
   readonly #filesByIdentity: ReadonlyMap<string, AnalysisFile>;
 
   public constructor(sources: ReadonlyMap<string, string>) {
     const filesByIdentity = new Map<string, AnalysisFile>();
+    const skippedFiles: SkippedFile[] = [];
     for (const [fileName, sourceText] of sources) {
-      const file = inScanPhase("parse", fileName, () => createAnalysisFile(fileName, sourceText));
-      const key = pathIdentityKey(file.identityPath);
-      const existing = filesByIdentity.get(key);
-      if (existing) {
-        throw new Error(
-          `duplicate analysis file identity: ${existing.originalPath} and ${file.originalPath}`,
-        );
+      const parsed = parseSource(fileName, sourceText);
+      if (parsed.ok) {
+        addFileIdentity(filesByIdentity, parsed.value);
+      } else {
+        skippedFiles.push(parsed.skipped);
       }
-      filesByIdentity.set(key, file);
     }
     this.files = [...filesByIdentity.values()].toSorted((left, right) =>
       compareText(left.identityPath, right.identityPath),
     );
+    this.skippedFiles = skippedFiles;
     this.#filesByIdentity = filesByIdentity;
   }
 
@@ -58,10 +61,25 @@ export class AnalysisProject {
   }
 }
 
-export function createAnalysisFile(fileName: string, sourceText: string): AnalysisFile {
+function parseSource(fileName: string, sourceText: string): ScanPhaseOutcome<AnalysisFile> {
   if (!isSupportedAnalysisFile(fileName)) {
     throw new Error(`unsupported analysis file extension: ${fileName}`);
   }
+  return runScanPhase("parse", fileName, () => parseAnalysisFile(fileName, sourceText));
+}
+
+function addFileIdentity(filesByIdentity: Map<string, AnalysisFile>, file: AnalysisFile): void {
+  const key = pathIdentityKey(file.identityPath);
+  const existing = filesByIdentity.get(key);
+  if (existing) {
+    throw new Error(
+      `duplicate analysis file identity: ${existing.originalPath} and ${file.originalPath}`,
+    );
+  }
+  filesByIdentity.set(key, file);
+}
+
+function parseAnalysisFile(fileName: string, sourceText: string): AnalysisFile {
   const identityPath = canonicalPath(fileName);
   const scriptKind = scriptKindForFile(identityPath);
   const sourceFile = ts.createSourceFile(

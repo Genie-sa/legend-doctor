@@ -6,6 +6,7 @@ import {
 } from "./analysis-pass.js";
 import {
   collectSourceFiles,
+  contextSkippedFiles,
   createAnalysisContext,
   createAnalysisContextFromFiles,
 } from "./analysis-context.js";
@@ -17,7 +18,6 @@ import type { AnalysisReport } from "../../core/types.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import { DEFAULT_MATERIALITY } from "../../analysis/constants.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
-import { ScanFileError } from "../scan-failure.js";
 import type { SubscriptionMeasurement } from "../../core/subscriptions.js";
 import { attachSubscriptionMeasurements } from "../subscription-measurements.js";
 import path from "node:path";
@@ -76,12 +76,7 @@ async function analyzePathInternal(
   options: AnalyzePathOptions,
   includeDetails: boolean,
 ): Promise<AnalysisReport | DetailedAnalysisResult> {
-  const target = await resolveAnalysisTarget(targetPath);
-  try {
-    return await analyzeTarget(target, options, includeDetails);
-  } catch (error) {
-    throw error instanceof ScanFileError ? error.relativeTo(target.analysisRoot) : error;
-  }
+  return analyzeTarget(await resolveAnalysisTarget(targetPath), options, includeDetails);
 }
 
 async function analyzeTarget(
@@ -96,7 +91,7 @@ async function analyzeTarget(
   includeDetails: boolean,
 ): Promise<AnalysisReport | DetailedAnalysisResult> {
   const context = sharedContext ?? (await createTargetContext(target));
-  const entries = analysisFileEntries(fileFilter ? target.files.filter(fileFilter) : target.files, {
+  const entries = analysisFileEntries(analyzableFiles(target.files, context, fileFilter), {
     analysisRoot: target.analysisRoot,
     context,
     includeDetails,
@@ -126,6 +121,15 @@ async function analyzeTarget(
     },
     report,
   };
+}
+
+function analyzableFiles(
+  files: readonly string[],
+  context: AnalysisContext,
+  fileFilter: ((absolutePath: string) => boolean) | undefined,
+): readonly string[] {
+  const skipped = new Set(contextSkippedFiles(context).map((skippedFile) => skippedFile.file));
+  return files.filter((file) => !skipped.has(file) && (fileFilter?.(file) ?? true));
 }
 
 function sourceCoverageReport(

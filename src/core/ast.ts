@@ -147,14 +147,9 @@ export function scriptKindForFile(fileName: string): ts.ScriptKind {
 }
 
 export function visit(node: ts.Node | undefined, visitor: (node: ts.Node) => void): void {
-  if (!node) {
-    return;
+  if (node) {
+    walkPreorder(node, visitor, () => true);
   }
-  function walk(current: ts.Node): void {
-    visitor(current);
-    current.forEachChild(walk);
-  }
-  walk(node);
 }
 
 export function visitSkippingNestedFunctions(
@@ -162,30 +157,47 @@ export function visitSkippingNestedFunctions(
   allowedFunction: ts.FunctionLikeDeclaration,
   visitor: (node: ts.Node) => void,
 ): void {
-  function walk(current: ts.Node): void {
-    visitor(current);
-    current.forEachChild(walkChild);
-  }
-  function walkChild(child: ts.Node): void {
-    if (!isRuntimeFunctionLike(child) || child === allowedFunction) {
-      walk(child);
-    }
-  }
-  walk(node);
+  walkPreorder(
+    node,
+    visitor,
+    (child) => !isRuntimeFunctionLike(child) || child === allowedFunction,
+  );
 }
 
 export function visitSkippingNestedRuntimeFunctions(
   node: ts.Node,
   visitor: (node: ts.Node) => void,
 ): void {
-  function walk(current: ts.Node): void {
-    visitor(current);
-    current.forEachChild(walkChild);
-  }
-  function walkChild(child: ts.Node): void {
-    if (!isRuntimeFunctionLike(child)) {
-      walk(child);
+  walkPreorder(node, visitor, (child) => !isRuntimeFunctionLike(child));
+}
+
+/**
+ * Visits in source order with an explicit stack, so generated chains such as thousand-term
+ * string concatenations cannot overflow the call stack.
+ */
+function walkPreorder(
+  root: ts.Node,
+  visitor: (node: ts.Node) => void,
+  admit: (child: ts.Node) => boolean,
+): void {
+  const pending: ts.Node[] = [root];
+  const pushAdmitted = (child: ts.Node): void => {
+    if (admit(child)) {
+      pending.push(child);
     }
+  };
+  for (let current = pending.pop(); current; current = pending.pop()) {
+    visitor(current);
+    const firstChild = pending.length;
+    current.forEachChild(pushAdmitted);
+    reverseTail(pending, firstChild);
   }
-  walk(node);
+}
+
+function reverseTail(nodes: ts.Node[], from: number): void {
+  for (let left = from, right = nodes.length - 1; left < right; left += 1, right -= 1) {
+    const swapped = nodes[left];
+    nodes[left] = nodes[right]!;
+    nodes[right] = swapped!;
+  }
 }

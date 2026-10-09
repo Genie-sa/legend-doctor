@@ -1,11 +1,11 @@
 import type { AnalysisCoverageLedger, AnalysisCoverageTarget } from "../analysis-coverage.js";
-import type { AnalysisDiagnostic, AnalysisFile } from "../analysis-project.js";
 import type {
   AnalysisReport,
   DisabledRule,
   HookFinding,
   LegendPracticeFinding,
   ReportScope,
+  SkippedFile,
 } from "../../core/types.js";
 import { LEGEND_BABEL, REACT_COMPILER, ToolchainResolver } from "../react-compiler-package.js";
 import {
@@ -19,7 +19,10 @@ import {
   functionCoverageEntries,
   unsupportedFileCoverage,
 } from "./coverage-stages.js";
+import { emptyAccumulator, mergeAccumulator } from "./file-results.js";
+import type { AnalysisAccumulator } from "./file-results.js";
 import type { AnalysisContext } from "./analysis-context.js";
+import type { AnalysisFile } from "../analysis-project.js";
 import type { ChildContractResolver } from "../../rules/child-contract/model.js";
 import type { ConfirmationSet } from "../../analysis/assumptions/confirmations.js";
 import type { FileCapabilities } from "../capabilities.js";
@@ -28,20 +31,20 @@ import type { HookImports } from "../../core/imports.js";
 import type { MaterialityPolicy } from "../../analysis/constants.js";
 import { SCHEMA_VERSION } from "../../core/types.js";
 import { StateFlowIndex } from "../state-flow/state-flow.js";
-import type { SubscriptionInventory } from "../../core/subscriptions.js";
 import { buildSubscriptionAnalysis } from "../../report/subscription-plans.js";
 import { closedObservableReaders } from "./hook-consumer-closure.js";
 import { collectHookImports } from "../../core/imports.js";
+import { contextSkippedFiles } from "./analysis-context.js";
 import { createChildContractResolver } from "./child-contracts.js";
 import { disabledPracticeRules } from "../../practices/practice-rules.js";
 import { filesWhere } from "../capabilities.js";
-import { inScanPhase } from "../scan-failure.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
 import { mayCallUseValue } from "../../rules/observable-reads/observable-paths.js";
 import path from "node:path";
 import { rankedQuestions } from "../../analysis/assumptions/ranked-questions.js";
 import { relativeInPlaceWrites } from "../source-components/observable-in-place-writes.js";
 import { reportConfirmations } from "../../analysis/assumptions/report-confirmations.js";
+import { runScanPhase } from "../scan-failure.js";
 
 interface AnalysisFileEntry {
   analysisFile: AnalysisFile | null;
@@ -69,19 +72,12 @@ interface AnalysisPassOptions {
   materiality: MaterialityPolicy;
 }
 
-interface AnalysisAccumulator {
-  subscriptions: SubscriptionInventory[];
-  diagnostics: AnalysisDiagnostic[];
-  disabledRules: Map<string, DisabledRule>;
-  findings: HookFinding[];
-  practices: LegendPracticeFinding[];
-}
-
 interface AnalysisPass extends AnalysisPassOptions {
   accumulator: AnalysisAccumulator;
   compiledFiles: ReadonlySet<string>;
   legendBabelFiles: ReadonlySet<string>;
   rootCompiles: boolean;
+  skippedFiles: SkippedFile[];
 }
 
 export function analysisFileEntries(
@@ -129,21 +125,28 @@ export async function runAnalysisPass(
   ]);
   const pass: AnalysisPass = {
     ...options,
-    accumulator: {
-      diagnostics: [],
-      disabledRules: new Map(),
-      findings: [],
-      practices: [],
-      subscriptions: [],
-    },
+    accumulator: emptyAccumulator(),
     compiledFiles,
     legendBabelFiles,
     rootCompiles,
+    skippedFiles: [...contextSkippedFiles(options.context)],
   };
   for (const entry of entries) {
-    inScanPhase("analyze", entry.file, () => analyzeFileEntry(entry, pass));
+    analyzeIsolated(entry, pass);
   }
   return pass;
+}
+
+function analyzeIsolated(entry: AnalysisFileEntry, pass: AnalysisPass): void {
+  const accumulator = emptyAccumulator();
+  const analyzed = runScanPhase("analyze", entry.file, () => {
+    analyzeFileEntry(entry, { ...pass, accumulator });
+  });
+  if (analyzed.ok) {
+    mergeAccumulator(pass.accumulator, accumulator);
+  } else {
+    pass.skippedFiles.push(analyzed.skipped);
+  }
 }
 
 function legendPracticeFiles(
@@ -367,6 +370,11 @@ function withOptionalSections(
   const questions = rankedQuestions(findings);
   if (questions.length > 0) {
     report.questions = questions;
+  }
+  if (pass.skippedFiles.length > 0) {
+    report.skippedFiles = pass.skippedFiles
+      .map((skipped) => ({ ...skipped, file: path.relative(pass.analysisRoot, skipped.file) }))
+      .toSorted((left, right) => left.file.localeCompare(right.file));
   }
   return report;
 }
