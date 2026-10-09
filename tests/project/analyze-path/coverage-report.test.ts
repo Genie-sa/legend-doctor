@@ -104,7 +104,10 @@ test("reports complete, uncertain, and unrequested bounded state-flow coverage",
     requireValue(detailed.coverage.entries[0]).stages.lowering.reason.code,
     "bounded-flow-uncertain",
   );
-  assert.deepEqual(detailed.report.findings, analyzeSource(source, "screen.tsx"));
+  assert.deepEqual(
+    detailed.report.findings.map(({ id: _id, ...finding }) => finding),
+    analyzeSource(source, "screen.tsx"),
+  );
 });
 
 test("excludes ambient declarations, overload signatures, and abstract methods from runtime coverage", async (testContext) => {

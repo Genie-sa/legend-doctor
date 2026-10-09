@@ -24,12 +24,13 @@ function evaluation(disposition: LegendPracticeFinding["disposition"]): Evaluati
         confidence: "certain",
         disposition,
         evidence: [],
+        id: "row.tsx::Row::reactivity::pass-observable-to-use-value",
         location: { column: 1, file: "row.tsx", line: 7 },
         message: "Equivalent direct input",
         practice: "reactivity",
       },
     ],
-    schemaVersion: 7,
+    schemaVersion: 8,
   };
   return {
     failures: [],

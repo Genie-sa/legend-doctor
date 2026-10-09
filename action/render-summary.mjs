@@ -121,25 +121,17 @@ function compareWithBase(head, base, changedFiles) {
     return { introduced: headFindings, fixed: [], compared: false };
   }
   const inScope = (finding) => changedFiles === null || changedFiles.includes(repoPath(finding));
-  const headKeys = new Set(headFindings.map((finding) => identity(finding)));
+  const headKeys = new Set(headFindings.map((finding) => finding.id));
   const baseKeys = new Set(
     findingsOf(base)
       .filter((finding) => inScope(finding))
-      .map((finding) => identity(finding)),
+      .map((finding) => finding.id),
   );
   return {
-    introduced: headFindings.filter((finding) => !baseKeys.has(identity(finding))),
-    fixed: findingsOf(base).filter(
-      (finding) => inScope(finding) && !headKeys.has(identity(finding)),
-    ),
+    introduced: headFindings.filter((finding) => !baseKeys.has(finding.id)),
+    fixed: findingsOf(base).filter((finding) => inScope(finding) && !headKeys.has(finding.id)),
     compared: true,
   };
-}
-
-/** Stable across line shifts, so a finding that only moved is not reported as introduced. */
-function identity(finding) {
-  const subject = finding.name ?? finding.practice ?? finding.message;
-  return [finding.location.file, finding.action, finding.hook ?? "", subject].join("::");
 }
 
 /** An advisory check reports a failed scan without failing the job; a blocking one fails closed. */
@@ -334,7 +326,8 @@ async function readPostedMarkers() {
 }
 
 function reviewComment(finding) {
-  const marker = `${REVIEW_MARKER}${identity(finding)} -->`;
+  // Ids carry pull-request paths; encoding keeps them from closing the HTML comment.
+  const marker = `${REVIEW_MARKER}${encodeURIComponent(finding.id)} -->`;
   const heading = `**Legend Doctor** \`${finding.action}\` (${finding.disposition})`;
   return {
     path: repoPath(finding),

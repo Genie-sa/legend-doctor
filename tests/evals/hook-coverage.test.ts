@@ -3,6 +3,7 @@ import type { GoldHookCase } from "../../evals/corpus/contracts.js";
 import type { HookFinding } from "../../src/core/types.js";
 import assert from "node:assert/strict";
 import { hookCoverage } from "../../evals/runner/hook-coverage.js";
+import { identified } from "./identified.js";
 import { scoreHookCases } from "../../evals/runner/scoring.js";
 import test from "node:test";
 
@@ -32,14 +33,14 @@ function evaluation(findings: HookFinding[]): Evaluation {
           root: "/repo/feature",
           report: {
             files: 1,
-            findings,
+            findings: identified(findings),
             hooks: { states: findings.length, effects: 0, total: findings.length },
             practices: [],
             capabilities: {
               disabledRules: [],
               reactCompiler: false,
             },
-            schemaVersion: 7,
+            schemaVersion: 8,
           },
         },
       ],

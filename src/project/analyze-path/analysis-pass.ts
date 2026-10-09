@@ -3,8 +3,9 @@ import type {
   AnalysisReport,
   DisabledRule,
   HookFinding,
-  LegendPracticeFinding,
   ReportScope,
+  ReportedHookFinding,
+  ReportedPracticeFinding,
   SkippedFile,
 } from "../../core/types.js";
 import { LEGEND_BABEL, REACT_COMPILER, ToolchainResolver } from "../react-compiler-package.js";
@@ -20,6 +21,7 @@ import {
   unsupportedFileCoverage,
 } from "./coverage-stages.js";
 import { emptyAccumulator, mergeAccumulator } from "./file-results.js";
+import { identifyHookFindings, identifyPracticeFindings } from "../../report/finding-ids.js";
 import type { AnalysisAccumulator } from "./file-results.js";
 import type { AnalysisContext } from "./analysis-context.js";
 import type { AnalysisFile } from "../analysis-project.js";
@@ -213,8 +215,8 @@ function hookFindings(
   entry: SupportedAnalysisFileEntry,
   pass: AnalysisPass,
   { childContracts, hookImports, stateFlow }: HookFindingScope,
-): readonly HookFinding[] {
-  return analyzeSourceFile({
+): readonly ReportedHookFinding[] {
+  const findings = analyzeSourceFile({
     file: entry.analysisFile,
     reportFileName: entry.reportFileName,
     sourceComponents: pass.context.sourceIndex.componentsFor(entry.file),
@@ -227,6 +229,7 @@ function hookFindings(
     confirmations: pass.confirmations,
     analysisRoot: pass.analysisRoot,
   });
+  return identifyHookFindings(findings, entry.analysisFile.sourceFile);
 }
 
 function fileCapabilities(entry: SupportedAnalysisFileEntry, pass: AnalysisPass): FileCapabilities {
@@ -240,7 +243,7 @@ function legendPracticeFindings(
   entry: SupportedAnalysisFileEntry,
   pass: AnalysisPass,
   childContracts: ChildContractResolver | null,
-): readonly LegendPracticeFinding[] {
+): readonly ReportedPracticeFinding[] {
   const capabilities = fileCapabilities(entry, pass);
   const { sourceIndex } = pass.context;
   const importedObservables = new Set([
@@ -259,7 +262,7 @@ function legendPracticeFindings(
     // An ineligible file contributes only its subscription inventory, which needs a useValue call.
     return [];
   }
-  return analyzeLegendPracticesFile({
+  const practices = analyzeLegendPracticesFile({
     subscriptionInventory: pass.accumulator.subscriptions,
     capabilities,
     file: entry.analysisFile,
@@ -283,6 +286,7 @@ function legendPracticeFindings(
     stableContextRead: (localName) => sourceIndex.contextReadIsStableFor(entry.file, localName),
     childContracts,
   });
+  return identifyPracticeFindings(practices, entry.analysisFile.sourceFile);
 }
 
 function recordDisabledRules(
