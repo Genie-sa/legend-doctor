@@ -1,6 +1,7 @@
 import type { Evaluation } from "../../evals/runner/model.js";
 import type { LegendPracticeFinding } from "../../src/core/types.js";
 import assert from "node:assert/strict";
+import { identified } from "./identified.js";
 import { practiceReviewLines } from "../../evals/runner/summary.js";
 import { scorePractices } from "../../evals/runner/scoring.js";
 import test from "node:test";
@@ -17,11 +18,11 @@ function evaluation(practices: LegendPracticeFinding[]): Evaluation {
           repository: "repo",
           root: "/repo/feature",
           report: {
-            schemaVersion: 7,
+            schemaVersion: 8,
             files: 1,
             hooks: { total: 0, states: 0, effects: 0 },
             findings: [],
-            practices,
+            practices: identified(practices),
             capabilities: {
               disabledRules: [],
               reactCompiler: false,

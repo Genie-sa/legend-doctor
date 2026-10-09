@@ -10,6 +10,7 @@ import { labelDrift, scoreReplayCase } from "../../evals/runner/replay-scoring.j
 import type { ReplayOutcome } from "../../evals/runner/replay-scoring.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { identified } from "./identified.js";
 import os from "node:os";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
@@ -80,10 +81,10 @@ function report(findings: HookFinding[], practices: LegendPracticeFinding[] = []
       reactCompiler: false,
     },
     files: 1,
-    findings,
+    findings: identified(findings),
     hooks: { effects: findings.length, states: 0, total: findings.length },
-    practices,
-    schemaVersion: 7,
+    practices: identified(practices),
+    schemaVersion: 8,
     subscriptionAnalysis: {
       coverage: { otherAction: 0, planned: 0, total: 1, unresolved: 1 },
       inventory: [

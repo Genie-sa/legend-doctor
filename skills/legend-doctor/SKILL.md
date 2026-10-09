@@ -76,7 +76,7 @@ Keep a deliberate React effect by preceding it with `// legend-doctor keep-react
 5. Run the application's formatter, typecheck, and relevant tests.
 6. Scan the same root again; applied changes can expose a smaller subscription boundary, so the second scan is part of
    the edit, not optional cleanup.
-7. Report each added, removed, or changed finding, including a zero delta.
+7. Report each added, removed, or changed finding, matched across the two scans by `id`, including a zero delta.
 8. Stop when checks pass and every remaining finding is a `keep` or a `candidate` whose missing proof you can name.
 
 Before applying an unfamiliar action, read its worked example in the tool's `EXAMPLES.md`.

@@ -40,7 +40,7 @@ test("--disposition candidate keeps only candidate findings and practices", asyn
   // SAFETY: the CLI exited successfully, so stdout is a serialized AnalysisReport.
   const report = JSON.parse(stdout) as AnalysisReport;
 
-  assert.equal(report.schemaVersion, 7);
+  assert.equal(report.schemaVersion, 8);
   assert.equal(report.findings.length, 0);
   assert.deepEqual(
     report.practices.map((practice) => [practice.action, practice.disposition]),

@@ -2,7 +2,7 @@
 
 Field-level detail for the JSON report. Read [README.md](README.md) first.
 
-Version-gate consumers with `schemaVersion`, currently `7`.
+Version-gate consumers with `schemaVersion`, currently `8`.
 
 Grouped state findings may also include additive `transitions` evidence. `writes` lists direct
 setter calls with state names, line/column positions, handler identities, and enclosing control
@@ -17,6 +17,9 @@ exception/suspension boundaries; it does not authorize moving those expressions 
 literal. Group reviews name unresolved pairs by exact source location. These are bounded source
 facts, not a complete migration plan or new permission to convert a review finding. Transported
 setters still depend on the existing child-contract proofs and are not listed as direct writes.
+
+Schema 8 adds an `id` to every finding and practice, and the `skippedFiles` list. A failed scan no longer carries
+`file` or `phase`: an exception inside one file skips that file instead of failing the scan.
 
 Schema 7 removes `capabilities.legendState` and `capabilities.concurrentRoot`, and the `legend-v2-tracking`,
 `sync-export-missing`, and `use-value-export-missing` gate reasons. The analyzer assumes React 19 or later, the React
@@ -45,8 +48,15 @@ Important fields:
 | `hidden`       | Filtered-out counts; `abstentions` by reason    |
 | `capabilities` | React Compiler status and disabled rules        |
 | `scope`        | Active scope flag and loaded context file count |
+| `skippedFiles` | Files an exception kept out of the scan         |
 
 Compare reports only when `analyzer.build` matches.
+
+Each finding and practice `id` is `file::owner::subject::action`. `owner` is the top-level declaration that holds the
+finding (`default` for an anonymous default export, `(module)` outside any declaration); `subject` is the state or
+effect name, else the hook, for a finding, and the observable, else the practice, for a practice. Findings that share
+all four parts are numbered in source order from the second one (`#2`, `#3`, ...). Edits elsewhere in the file leave
+an `id` unchanged, so match findings across scans by `id` rather than by line.
 
 `capabilities.disabledRules` lists each rule the project's toolchain switched off, with its `rule`, `reason`,
 `detail`, and the number of analyzed `files` that skipped it. A disabled rule reports nothing, so a missing

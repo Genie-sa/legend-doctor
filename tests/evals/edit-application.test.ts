@@ -3,6 +3,7 @@ import type { Evaluation } from "../../evals/runner/model.js";
 import type { LegendPracticeFinding } from "../../src/core/types.js";
 import assert from "node:assert/strict";
 import { editApplicationLines } from "../../evals/runner/edit-application.js";
+import { identified } from "./identified.js";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -46,8 +47,8 @@ function evaluation(root: string, practices: LegendPracticeFinding[]): Evaluatio
             files: 1,
             findings: [],
             hooks: { effects: 0, states: 0, total: 0 },
-            practices,
-            schemaVersion: 7,
+            practices: identified(practices),
+            schemaVersion: 8,
           },
         },
       ],

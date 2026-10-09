@@ -1,4 +1,8 @@
-import type { DisabledRule, HookFinding, LegendPracticeFinding } from "../../core/types.js";
+import type {
+  DisabledRule,
+  ReportedHookFinding,
+  ReportedPracticeFinding,
+} from "../../core/types.js";
 import type { AnalysisDiagnostic } from "../analysis-project.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
 
@@ -6,8 +10,8 @@ export interface AnalysisAccumulator {
   subscriptions: SubscriptionInventory[];
   diagnostics: AnalysisDiagnostic[];
   disabledRules: Map<string, DisabledRule>;
-  findings: HookFinding[];
-  practices: LegendPracticeFinding[];
+  findings: ReportedHookFinding[];
+  practices: ReportedPracticeFinding[];
 }
 
 export function emptyAccumulator(): AnalysisAccumulator {

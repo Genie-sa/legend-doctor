@@ -1,5 +1,6 @@
 import type { CorpusRepository, CorpusTarget } from "../corpus/contracts.js";
 import type { AnalysisContext } from "../../src/project/analyze-path/analysis-context.js";
+import type { AnalysisReport } from "../../src/core/types.js";
 import type { Evaluation } from "./model.js";
 import { analyzePath } from "../../src/project/analyze-path/analyze-path.js";
 import { createAnalysisContext } from "../../src/project/analyze-path/analysis-context.js";
@@ -59,16 +60,26 @@ async function inspectTarget(
     root,
   });
   run.hooks += report.hooks.total;
-  for (const skipped of report.skippedFiles ?? []) {
-    run.failures.push(
-      `${target.id}: skipped ${skipped.file} (${skipped.phase}): ${skipped.message}`,
-    );
+  run.failures.push(...reportFailures(target, report));
+}
+
+function reportFailures(target: CorpusTarget, report: AnalysisReport): string[] {
+  const failures = (report.skippedFiles ?? []).map(
+    (skipped) => `${target.id}: skipped ${skipped.file} (${skipped.phase}): ${skipped.message}`,
+  );
+  const ids = new Set<string>();
+  for (const { id } of [...report.findings, ...report.practices]) {
+    if (ids.has(id)) {
+      failures.push(`${target.id}: finding id ${id} is not unique`);
+    }
+    ids.add(id);
   }
   if (report.hooks.states !== target.states || report.hooks.effects !== target.effects) {
-    run.failures.push(
+    failures.push(
       `${target.id}: expected ${target.states} useState/${target.effects} useEffect, received ${report.hooks.states}/${report.hooks.effects}`,
     );
   }
+  return failures;
 }
 
 export async function inspectRepository(

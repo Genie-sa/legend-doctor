@@ -55,7 +55,9 @@ export function abstentionCounts(reviews: readonly HookFinding[]): HiddenCounts[
  * One entry per edit: keep findings drop, reviews that cannot be converted by any answer drop, and a
  * finding group is represented by its primary member.
  */
-export function agentFindings(findings: readonly HookFinding[]): HookFinding[] {
+export function agentFindings<Finding extends HookFinding>(
+  findings: readonly Finding[],
+): Finding[] {
   const seenGroups = new Set<string>();
   const unconvertible = unconvertibleReviews(findings);
   return findings.filter((finding) => {

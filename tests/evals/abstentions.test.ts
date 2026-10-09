@@ -8,6 +8,7 @@ import { abstentionSummaryLines, countAbstentions } from "../../evals/runner/abs
 import type { Evaluation } from "../../evals/runner/model.js";
 import type { GoldHookCase } from "../../evals/corpus/contracts.js";
 import assert from "node:assert/strict";
+import { identified } from "./identified.js";
 import { scoreHookCases } from "../../evals/runner/scoring.js";
 import { summaryLines } from "../../evals/runner/summary.js";
 import test from "node:test";
@@ -53,10 +54,10 @@ function report(findings: HookFinding[]): AnalysisReport {
       disabledRules: [],
       reactCompiler: false,
     },
-    findings,
+    findings: identified(findings),
     hooks: { effects, states, total: findings.length },
     practices: [],
-    schemaVersion: 7,
+    schemaVersion: 8,
   };
 }
 

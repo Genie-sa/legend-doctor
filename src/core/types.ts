@@ -4,7 +4,7 @@ import type { StateTransitionEvidence } from "./state-transitions.js";
 type Confidence = "certain" | "probable";
 
 // oxlint-disable-next-line eslint/no-magic-numbers -- Public JSON protocol version.
-const SCHEMA_VERSION = 7 as const;
+const SCHEMA_VERSION = 8 as const;
 
 const ABSTENTION_REASONS = [
   "async-command-origin-unresolved",
@@ -299,6 +299,15 @@ interface ReportConfirmations {
   unmatched: string[];
 }
 
+/** `id` is unique within a report and survives edits elsewhere in the file, so it matches a finding across scans. */
+interface FindingIdentity {
+  id: string;
+}
+
+type ReportedHookFinding = HookFinding & FindingIdentity;
+
+type ReportedPracticeFinding = LegendPracticeFinding & FindingIdentity;
+
 interface AnalysisReport {
   subscriptionAnalysis?: SubscriptionAnalysis;
   /** Present when a confirmations file was supplied. */
@@ -306,13 +315,13 @@ interface AnalysisReport {
   files: number;
   /** Open review questions, highest expected render saving first; present when any exist. */
   questions?: RankedQuestion[];
-  findings: HookFinding[];
+  findings: ReportedHookFinding[];
   hooks: {
     effects: number;
     states: number;
     total: number;
   };
-  practices: LegendPracticeFinding[];
+  practices: ReportedPracticeFinding[];
   capabilities: ReportCapabilities;
   schemaVersion: typeof SCHEMA_VERSION;
   /** Present when a file filter narrowed the analyzed files below the loaded context. */
@@ -382,6 +391,8 @@ export type {
   ReportCapabilities,
   ReportConfirmations,
   ReportScope,
+  ReportedHookFinding,
+  ReportedPracticeFinding,
   ResearchStep,
   ReviewGuidance,
   ScanPhase,
