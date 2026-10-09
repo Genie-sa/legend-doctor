@@ -17,8 +17,9 @@ export const noutubeHookCases = [
     hook: "useState",
     line: 903,
     name: "updatingYtDlp",
+    enforced: false,
     rationale:
-      "The pending flag feeds only the yt-dlp row's `loading` prop; subscribing at that call site keeps the other action rows out of both transitions of the awaited update.",
+      "The pending flag feeds only the yt-dlp row's `loading` prop; subscribing at that call site keeps the other action rows out of both transitions of the awaited update. Not enforced (2026-10-10): real win; parent pass-through unprovable statically. The row is an argument to the `nIf` helper, so no JSX parent proves the wrapper is rendered unchanged.",
     target: "noutube-settings-tabs",
   },
   {

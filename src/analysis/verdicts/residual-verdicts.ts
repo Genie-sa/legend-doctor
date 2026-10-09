@@ -6,7 +6,11 @@ import {
 } from "../return-call-sites.js";
 import { competingSubscriptionsNote, isCustomHookOwner } from "../ast-helpers.js";
 import { isStructuralLegendCandidate, legendCandidateMessage } from "../finding-format.js";
-import { passThroughLeaf, valueCallSitesPassThrough } from "./pass-through-leaf.js";
+import {
+  passThroughLeaf,
+  passThroughScope,
+  valueCallSitesPassThrough,
+} from "./pass-through-leaf.js";
 import {
   setterCallsAssignBooleanLiterals,
   stateHasNoEffectOrDeferredUse,
@@ -21,6 +25,7 @@ import { isCohesiveDelayedPendingState } from "../delayed-pending.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { setterOwnedByValueTransitionCallSite } from "../controlled-leaf-cuts.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
+import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
 type AbstentionReason = Extract<ClassifiedState, { action: "review-state" }>["abstentionReason"];
 
@@ -213,6 +218,7 @@ export function broadTransportVerdict(context: StateClassificationContext): Clas
     stateWritesAreUntracked(usage) &&
     !stateMayHoldCallable(state) &&
     !callSiteIsKeyed(ownerCallSite) &&
+    wrappedElementIsPassedThrough(ownerCallSite, passThroughScope(context)) &&
     setterCallsAssignBooleanLiterals(usage)
   ) {
     const leaf = leafTransport(context, childContracts);

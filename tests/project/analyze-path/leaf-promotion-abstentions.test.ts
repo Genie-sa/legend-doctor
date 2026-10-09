@@ -257,3 +257,100 @@ test("does not put nullable callable state into a leaf observable", async () => 
   const finding = report.findings.find((candidate) => candidate.name === "callback");
   assert.notEqual(requireValue(finding).action, "use-observable");
 });
+
+const PARENTS_THAT_READ_THEIR_CHILD = {
+  "a Slot parent": `
+    import { Slot } from "@radix-ui/react-slot";
+    export function Trigger({ children }: { children: React.ReactNode }) { return <Slot data-trigger>{children}</Slot>; }
+  `,
+  "a parent that clones its child": `
+    import { cloneElement, type ReactElement } from "react";
+    export function Trigger({ children }: { children: ReactElement }) { return cloneElement(children, { "data-trigger": true }); }
+  `,
+  "a parent that hands its child to a function through a const": `
+    export function Trigger({ children }: { children: React.ReactNode }) {
+      const content = children;
+      return <div>{decorate(content)}</div>;
+    }
+  `,
+  "a parent that holds its child in a reassignable binding": `
+    export function Trigger({ children, framed }: { children: React.ReactNode; framed: boolean }) {
+      let content = children;
+      if (framed) content = <section>{content}</section>;
+      return <div>{content}</div>;
+    }
+  `,
+};
+
+for (const [name, parentSource] of Object.entries(PARENTS_THAT_READ_THEIR_CHILD)) {
+  test(`does not wrap a verified leaf whose parent is ${name}`, async (testContext) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-leaf-parent-"));
+    testContext.after(() => rm(root, { force: true, recursive: true }));
+    await writeFile(
+      path.join(root, "StatusLeaf.tsx"),
+      'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{busy ? "Busy" : "Ready"}</span>; }',
+    );
+    await writeFile(path.join(root, "Trigger.tsx"), parentSource);
+    await writeFile(
+      path.join(root, "Screen.tsx"),
+      `
+        import { useState } from "react";
+        import { StatusLeaf } from "./StatusLeaf";
+        import { Trigger } from "./Trigger";
+        export function Screen() {
+          const [busy, setBusy] = useState(false);
+          ${"\n".repeat(150)}
+          return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+            <Actions /><Preview /><button onClick={() => setBusy(true)} />
+            <Trigger><StatusLeaf busy={busy} /></Trigger></main>;
+        }
+      `,
+    );
+
+    const report = await analyzePath(root);
+    const finding = report.findings.find((candidate) => candidate.name === "busy");
+    assert.notEqual(requireValue(finding).action, "use-observable", name);
+  });
+}
+
+const PARENTS_THAT_PASS_THEIR_CHILD_THROUGH = {
+  "renders its children unchanged":
+    "export function Trigger({ children }: { children: React.ReactNode }) { return <div data-trigger>{children}</div>; }",
+  "renders its children through a const": `
+    export function Trigger({ children, scroll }: { children: React.ReactNode; scroll: boolean }) {
+      const inner = scroll ? <section>{children}</section> : children;
+      return <div>{inner}</div>;
+    }
+  `,
+};
+
+for (const [name, parentSource] of Object.entries(PARENTS_THAT_PASS_THEIR_CHILD_THROUGH)) {
+  test(`wraps a verified leaf whose parent ${name}`, async (testContext) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-leaf-parent-"));
+    testContext.after(() => rm(root, { force: true, recursive: true }));
+    await writeFile(
+      path.join(root, "StatusLeaf.tsx"),
+      'export function StatusLeaf({ busy }: { busy: boolean }) { return <span>{busy ? "Busy" : "Ready"}</span>; }',
+    );
+    await writeFile(path.join(root, "Trigger.tsx"), parentSource);
+    await writeFile(
+      path.join(root, "Screen.tsx"),
+      `
+      import { useState } from "react";
+      import { StatusLeaf } from "./StatusLeaf";
+      import { Trigger } from "./Trigger";
+      export function Screen() {
+        const [busy, setBusy] = useState(false);
+        ${"\n".repeat(150)}
+        return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status />
+          <Actions /><Preview /><button onClick={() => setBusy(true)} />
+          <Trigger><StatusLeaf busy={busy} /></Trigger></main>;
+      }
+    `,
+    );
+
+    const report = await analyzePath(root);
+    const finding = report.findings.find((candidate) => candidate.name === "busy");
+    assert.equal(requireValue(finding).action, "use-observable");
+  });
+}

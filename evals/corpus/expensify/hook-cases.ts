@@ -1344,12 +1344,13 @@ export const expensifyHookCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "ShareBankAccount.tsx",
     hook: "useState",
     line: 57,
     name: "isAlertVisible",
     rationale:
-      "The alert flag is written with literals from validation and submit commands and transported once to FormAlertWithSubmitButton, whose forwarded `isAlertVisible` only gates alert JSX inside FormAlertWrapper; a stable leaf subscriber removes the page render.",
+      "The alert flag is written with literals from validation and submit commands and transported once to FormAlertWithSubmitButton, whose forwarded `isAlertVisible` only gates alert JSX inside FormAlertWrapper; a stable leaf subscriber removes the page render. Not enforced (2026-10-10): real win; parent pass-through unprovable statically. The button is passed as the list's `footerContent` prop, so no JSX parent proves the list renders the wrapper unchanged.",
     target: "expensify-share-bank-account",
   },
   {
