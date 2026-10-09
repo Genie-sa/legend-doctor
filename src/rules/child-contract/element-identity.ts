@@ -127,29 +127,65 @@ function forwardsChildren(
 }
 
 /**
- * The elements a component hands its `children` to, directly or through a props spread. Its own
- * output and reads of other props need no proof; any other use of `children` or the props abstains.
+ * The elements a component hands its `children` to, directly, through a props spread, or through a
+ * `const` whose every read is itself handed on. Its own output and reads of other props need no
+ * proof; any other use of `children`, the props, or such a `const` abstains.
  */
 function childrenReceivers(
   source: ChildComponentSource,
   mounted: boolean,
 ): ts.JsxOpeningLikeElement[] | null {
-  const carriers = childrenCarriers(source.owner.parameters[0]?.name);
-  const receivers: ts.JsxOpeningLikeElement[] = [];
-  let forwardsOnly = carriers !== null;
-  visit(source.body, (node) => {
-    if (forwardsOnly && ts.isIdentifier(node) && carriers?.has(node.text)) {
-      const receiver =
-        mounted && hasUnstableSubtreeLifetime(node, source.owner)
-          ? undefined
-          : childrenReceiver(node, source.owner);
-      forwardsOnly = receiver !== undefined;
-      if (receiver) {
-        receivers.push(receiver);
-      }
+  const parameterCarriers = childrenCarriers(source.owner.parameters[0]?.name);
+  const sinks: ChildrenSinks = { carriers: new Set(parameterCarriers), receivers: [] };
+  for (const carrier of sinks.carriers) {
+    const forwards = identifierReads(source.body, carrier).every((reference) =>
+      recordCarrierRead(reference, { mounted, owner: source.owner }, sinks),
+    );
+    if (!forwards) {
+      return null;
+    }
+  }
+  return parameterCarriers && sinks.receivers;
+}
+
+interface ChildrenSinks {
+  /** Bindings that hold `children`; a `const` that carries it on joins while its reads are checked. */
+  readonly carriers: Set<string>;
+  readonly receivers: ts.JsxOpeningLikeElement[];
+}
+
+/** Records where one read of a carrier hands `children`, or returns `false` when it cannot tell. */
+function recordCarrierRead(
+  reference: ts.Identifier,
+  { mounted, owner }: { readonly mounted: boolean; readonly owner: RuntimeFunctionLike },
+  { carriers, receivers }: ChildrenSinks,
+): boolean {
+  if (mounted && hasUnstableSubtreeLifetime(reference, owner)) {
+    return false;
+  }
+  const carriedBy = constCarrier(reference);
+  const receiver = carriedBy ? null : childrenReceiver(reference, owner);
+  if (carriedBy) {
+    carriers.add(carriedBy);
+  } else if (receiver) {
+    receivers.push(receiver);
+  }
+  return receiver !== undefined;
+}
+
+/** Every identifier named `name` under `body` except the names its variable declarations bind. */
+function identifierReads(body: ts.Node, name: string): ts.Identifier[] {
+  const reads: ts.Identifier[] = [];
+  visit(body, (node) => {
+    if (
+      ts.isIdentifier(node) &&
+      node.text === name &&
+      !(ts.isVariableDeclaration(node.parent) && node.parent.name === node)
+    ) {
+      reads.push(node);
     }
   });
-  return forwardsOnly ? receivers : null;
+  return reads;
 }
 
 /** The parameter bindings that hold `children`: the props object, a rest element, or `children`. */
@@ -186,6 +222,22 @@ function childrenReceiver(
   }
   const element = receivingElement(read, owner);
   return element ? element.openingElement : element;
+}
+
+/** The `const` whose initializer passes `reference` through, as `const inner = cond ? a : reference`. */
+function constCarrier(reference: ts.Identifier): string | undefined {
+  let current: ts.Node = reference;
+  while (passesElementThrough(current.parent, current)) {
+    current = current.parent;
+  }
+  const declaration = current.parent;
+  return ts.isVariableDeclaration(declaration) &&
+    declaration.initializer === current &&
+    ts.isIdentifier(declaration.name) &&
+    ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+    ? declaration.name.text
+    : undefined;
 }
 
 /** `!children` or `if (children)`: an element and its leaf wrapper are both truthy. */

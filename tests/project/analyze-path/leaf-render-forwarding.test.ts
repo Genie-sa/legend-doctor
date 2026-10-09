@@ -10,10 +10,11 @@ const OWNER_CHROME =
   "<Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />";
 
 /**
- * The children render under an unresolved `Panel`, which keeps the owner-side pass-through proof
- * out, so each case exercises the child contract alone.
+ * The children render under `parent`. An unresolved `Panel` keeps every wrap out, so abstaining cases
+ * exercise the child contract alone; a wrap needs a parent that passes it through, so converting
+ * cases use a host and assert the child-contract message.
  */
-function screen(children: readonly string[], imports: string): string {
+function screen(children: readonly string[], imports: string, parent = "Panel"): string {
   return `
     import { useState } from "react";
     ${imports}
@@ -22,7 +23,7 @@ function screen(children: readonly string[], imports: string): string {
       const run = async () => { setBusy(false); await work(); };
       ${"\n".repeat(150)}
       const content = (
-        <main>${OWNER_CHROME}<button onClick={run} /><Panel>${children.join("")}</Panel></main>
+        <main>${OWNER_CHROME}<button onClick={run} /><${parent}>${children.join("")}</${parent}></main>
       );
       return <Shell>{content}</Shell>;
     }
@@ -90,7 +91,11 @@ test("proves leaf rendering through forwardRef children, one-hop forwarding, and
         }
       `,
       [file]: source,
-      "Screen.tsx": screen([`<${name} busy={busy} />`], `import { ${name} } from "./${name}";`),
+      "Screen.tsx": screen(
+        [`<${name} busy={busy} />`],
+        `import { ${name} } from "./${name}";`,
+        "section",
+      ),
     });
     assert.equal(findings[0]?.action, "use-observable", name);
     assert.match(findings[0]?.message ?? "", /child contract is verified/u, name);
@@ -273,9 +278,14 @@ test("treats the child's own React Native primitives as host output", async () =
   for (const [name, source] of Object.entries(cases)) {
     const findings = await scan({
       [`${name}.tsx`]: source,
-      "Screen.tsx": screen([`<${name} busy={busy} />`], `import { ${name} } from "./${name}";`),
+      "Screen.tsx": screen(
+        [`<${name} busy={busy} />`],
+        `import { ${name} } from "./${name}";`,
+        "section",
+      ),
     });
     assert.equal(findings[0]?.action, "use-observable", name);
+    assert.match(findings[0]?.message ?? "", /child contract is verified/u, name);
   }
   const findings = await scan({
     "CustomViewLeaf.tsx": `
