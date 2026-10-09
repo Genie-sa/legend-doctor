@@ -180,10 +180,13 @@ and lists ids no finding produced.
 Failures are also valid JSON. They include `status: "error"`, a stable `reason`, a useful `message`, and
 sometimes a `next` command.
 
-A `scan_failed` raised while one source file was being processed also names that `file`, relative to `root`, and
-the `phase` it was in. The message leads with both.
+An exception inside one source file does not fail the scan. The report lists that file in `skippedFiles` with its
+`file` (relative to `root`), the `phase` that threw, and the exception `message`; the field is absent when every file
+was processed. A skipped file reports no findings. One skipped in `parse` or `index` is also hidden from every other
+file's proofs, so imports from it stay unresolved, exactly as if the file were missing. `scan_failed` is reserved for
+failures that are not confined to one file.
 
-| Failure `phase` | Work that threw                                                         |
+| Skipped `phase` | Work that threw                                                         |
 | --------------- | ----------------------------------------------------------------------- |
 | `parse`         | Parsing the file's source text                                          |
 | `index`         | Recording the file's declarations, imports, and exports for other files |

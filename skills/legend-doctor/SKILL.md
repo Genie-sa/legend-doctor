@@ -27,7 +27,8 @@ one entry per proven edit (`--disposition style` lists the equivalent forms it h
 with uncommitted work while every file under the root still loads for proofs, so the rescan after an edit costs a
 parse instead of a full analysis. `--since <ref>` does the same for everything touched since the merge base with
 `<ref>`; `--staged` reads the git index. Scope flags need a directory target inside a git work tree. `--help` documents the complete surface; exit 2 means invalid usage (the error names the
-fix), exit 1 means the scan failed, exit 0 means the report is complete whatever it contains.
+fix), exit 1 means the scan failed, exit 0 means the scan finished whatever it contains; a file it could not
+process is listed in `skippedFiles` and reports nothing.
 
 Stdout is always one JSON document. Branch on `status`: `"ok"` carries `root` (every `location.file` is
 relative to it) and `hidden` (findings and practices removed by filters, so an empty list is not a clean scan, plus

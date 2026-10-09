@@ -7,6 +7,7 @@ import {
   LEGEND_PRACTICE_ACTIONS,
   PRACTICE_DISPOSITIONS,
   REVIEW_KINDS,
+  SCAN_PHASES,
   STATE_ACTIONS,
 } from "../../src/core/types.js";
 import {
@@ -19,7 +20,6 @@ import {
 import { existsSync, readFileSync } from "node:fs";
 import { FAILURE_REASONS } from "../../src/cli/failures.js";
 import { HELP } from "../../src/cli/help.js";
-import { SCAN_PHASES } from "../../src/project/scan-failure.js";
 import { UNAVAILABLE_SOURCE_REASONS } from "../../src/project/source-components/source-context.js";
 import { analyzeSource } from "../../src/analysis/analyze-source.js";
 import assert from "node:assert/strict";
@@ -56,7 +56,7 @@ const TABLE_SETS: readonly DocumentedSet[] = [
     values: UNRENDERED_USE_VALUE_GATES,
   },
   { document: "REPORT.md", header: "Unavailable `reason`", values: UNAVAILABLE_SOURCE_REASONS },
-  { document: "REPORT.md", header: "Failure `phase`", values: SCAN_PHASES },
+  { document: "REPORT.md", header: "Skipped `phase`", values: SCAN_PHASES },
 ];
 
 function readDocument(document: string): string {

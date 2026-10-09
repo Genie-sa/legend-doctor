@@ -59,6 +59,11 @@ async function inspectTarget(
     root,
   });
   run.hooks += report.hooks.total;
+  for (const skipped of report.skippedFiles ?? []) {
+    run.failures.push(
+      `${target.id}: skipped ${skipped.file} (${skipped.phase}): ${skipped.message}`,
+    );
+  }
   if (report.hooks.states !== target.states || report.hooks.effects !== target.effects) {
     run.failures.push(
       `${target.id}: expected ${target.states} useState/${target.effects} useEffect, received ${report.hooks.states}/${report.hooks.effects}`,

@@ -27,6 +27,10 @@ const ABSTENTION_REASONS = [
 
 type AbstentionReason = (typeof ABSTENTION_REASONS)[number];
 
+const SCAN_PHASES = ["analyze", "index", "parse"] as const;
+
+type ScanPhase = (typeof SCAN_PHASES)[number];
+
 type AssumptionAnswer = "no" | "yes";
 
 type AssumptionStatus = "confirmed" | "open" | "rejected" | "stale";
@@ -313,6 +317,8 @@ interface AnalysisReport {
   schemaVersion: typeof SCHEMA_VERSION;
   /** Present when a file filter narrowed the analyzed files below the loaded context. */
   scope?: ReportScope;
+  /** Files whose analysis raised; present when any exist. */
+  skippedFiles?: SkippedFile[];
 }
 
 interface DisabledRule {
@@ -329,6 +335,17 @@ interface ReportCapabilities {
   reactCompiler: boolean;
 }
 
+/**
+ * A file the scan could not process. It contributes no findings; one that failed to parse or
+ * index is also hidden from every other file's proofs, so imports from it stay unresolved.
+ */
+interface SkippedFile {
+  /** Relative to the scan root. */
+  file: string;
+  message: string;
+  phase: ScanPhase;
+}
+
 interface ReportScope {
   /** Files loaded for cross-file proofs, including the ones the filter excluded from analysis. */
   contextFiles: number;
@@ -343,6 +360,7 @@ export {
   LEGEND_PRACTICE_ACTIONS,
   PRACTICE_DISPOSITIONS,
   REVIEW_KINDS,
+  SCAN_PHASES,
   SCHEMA_VERSION,
   STATE_ACTIONS,
 };
@@ -366,6 +384,8 @@ export type {
   ReportScope,
   ResearchStep,
   ReviewGuidance,
+  ScanPhase,
+  SkippedFile,
   SourceLocation,
   SourcePosition,
   StateAction,
