@@ -82,6 +82,16 @@ export const MEMO_HOOK_NAMES: ReadonlySet<string> = new Set(["useMemo"]);
 
 export const CALLBACK_HOOK_NAMES: ReadonlySet<string> = new Set(["useCallback"]);
 
+/** Hooks that compare each listed dependency by identity, so listing a stable setter reads nothing. */
+export const DEPENDENCY_LIST_HOOK_NAMES: ReadonlySet<string> = new Set([
+  "useCallback",
+  "useEffect",
+  "useImperativeHandle",
+  "useInsertionEffect",
+  "useLayoutEffect",
+  "useMemo",
+]);
+
 export const MUTATION_PROPERTY_NAMES: ReadonlySet<string> = new Set(["mutate", "mutateAsync"]);
 
 export const EMPTY_NODES: ReadonlySet<ts.Node> = new Set();

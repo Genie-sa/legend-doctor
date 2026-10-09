@@ -41,6 +41,55 @@ test("does not replace state that refreshes a context getter", () => {
   assert.notEqual(requireValue(finding).action, "use-ref");
 });
 
+test("does not replace state read by a multi-statement query that a published query calls", () => {
+  const finding = analyzeSource(
+    `
+    import { createContext, useCallback, useMemo, useState } from "react";
+    const TooltipContext = createContext(null);
+    export function TooltipProvider({ children }) {
+      const [active, setActive] = useState<Set<string>>(new Set());
+      const unregister = useCallback((name: string) => {
+        setActive(previous => { const next = new Set(previous); next.delete(name); return next; });
+      }, [setActive]);
+      const register = useCallback((name: string) => setActive(previous => new Set([...previous, name])), []);
+      const highest = useCallback(() => {
+        if (active.size === 0) { return null; }
+        const sorted = Array.from(active).sort();
+        return sorted.at(0) ?? null;
+      }, [active]);
+      const shouldRender = useCallback((name: string) => {
+        const visible = highest();
+        return name === visible;
+      }, [highest]);
+      const value = useMemo(() => ({ register, unregister, shouldRender }), [register, unregister, shouldRender]);
+      return <TooltipContext.Provider value={value}>{children}</TooltipContext.Provider>;
+    }
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
+  assert.notEqual(requireValue(finding).action, "use-ref");
+});
+
+test("keeps the ref recommendation when a published command reads the state", () => {
+  const finding = analyzeSource(
+    `
+    import { createContext, useCallback, useMemo, useState } from "react";
+    const DraftContext = createContext(null);
+    export function DraftProvider({ children }) {
+      const [draft, setDraft] = useState("");
+      const edit = useCallback((next: string) => setDraft(next), [setDraft]);
+      const submit = useCallback(async () => {
+        await save(draft);
+      }, [draft]);
+      const value = useMemo(() => ({ edit, submit }), [edit, submit]);
+      return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>;
+    }
+  `,
+    "fixture.tsx",
+  ).find((candidate) => candidate.hook === "useState");
+  assert.equal(requireValue(finding).action, "use-ref");
+});
+
 test("does not replace state snapshots exposed through a React imperative handle", () => {
   const finding = analyzeSource(
     `

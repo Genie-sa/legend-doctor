@@ -5,6 +5,7 @@ import type {
 import type { StateCandidate, StateCluster } from "../model.js";
 import { findAncestor, isRuntimeFunctionLike, nodeWithin, visit } from "../../core/ast.js";
 import { isNonValueIdentifier, unwrapTransparentExpression } from "../../core/analysis-ast.js";
+import { DEPENDENCY_LIST_HOOK_NAMES } from "../constants.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SourceAnalysis } from "../proofs/contracts.js";
 import { groupSettableStatesByOwner } from "../companion-writes.js";
@@ -20,8 +21,6 @@ const MAX_LISTED_CONSUMER_FILES = 4;
 const LISTED_PATH_SEGMENTS = 2;
 
 const USE_MEMO_CALLEE = /(?:^|\.)useMemo$/u;
-
-const DEPENDENCY_HOOKS = new Set(["useCallback", "useEffect", "useLayoutEffect", "useMemo"]);
 
 type ProviderElement = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
 
@@ -235,7 +234,7 @@ function stateStaysInsideValue(
         (binding.text === state.valueName
           ? nodeWithin(reference, provider.element)
           : isDirectCall(reference) ||
-            isHookDependencyReference(reference, DEPENDENCY_HOOKS, namespaces)),
+            isHookDependencyReference(reference, DEPENDENCY_LIST_HOOK_NAMES, namespaces)),
     ),
   );
 }

@@ -132,7 +132,7 @@ function jsxPropMayRenderCallable(name: string): boolean {
   );
 }
 
-function localCallableCallback(
+export function localCallableCallback(
   initializer: ts.Expression,
 ): ts.ArrowFunction | ts.FunctionExpression | null {
   if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {

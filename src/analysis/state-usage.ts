@@ -1,3 +1,4 @@
+import { CALLBACK_HOOK_NAMES, DEPENDENCY_LIST_HOOK_NAMES } from "./constants.js";
 import type { StateCandidate, StateUsage } from "./model.js";
 import { findAncestorUntil, identifiersNamed, nearestNestedFunction } from "../core/ast.js";
 import {
@@ -22,7 +23,6 @@ import {
   isJsxNode,
   isSynchronousRenderCallback,
 } from "../rules/state-proofs/callback-sites.js";
-import { CALLBACK_HOOK_NAMES } from "./constants.js";
 import type { HookImports } from "../core/imports.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
 import { collectCommandOnlyCallableReads } from "../rules/command-only-state/local-callable-reads.js";
@@ -194,7 +194,10 @@ function classifySetterReference(
   state: StateCandidate,
   context: StateReferenceContext,
 ): void {
-  if (node.parent === state.call.parent) {
+  if (
+    node.parent === state.call.parent ||
+    isHookDependencyReference(node, DEPENDENCY_LIST_HOOK_NAMES, context.imports.reactNamespaces)
+  ) {
     return;
   }
   context.usage.setterReferences += 1;
