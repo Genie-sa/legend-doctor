@@ -1,4 +1,5 @@
 import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 
@@ -224,7 +225,7 @@ function appendSkippedFiles(lines, skippedFiles) {
     `**${skippedFiles.length} file(s) could not be scanned** and report no findings:`,
     "",
     ...skippedFiles.map(
-      (skipped) => `- \`${skipped.file}\` (${skipped.phase}): ${escapeCell(skipped.message)}`,
+      (skipped) => `- ${codeSpan(skipped.file)} (${skipped.phase}): ${escapeCell(skipped.message)}`,
     ),
   );
 }
@@ -290,12 +291,17 @@ function appendSection(lines, section, findings) {
 
 function renderLocation(finding) {
   const file = repoPath(finding);
-  const label = `${file}:${finding.location.line}`;
+  const label = codeSpan(`${file}:${finding.location.line}`);
   if (!env.SERVER_URL || !env.REPOSITORY || !env.HEAD_SHA) {
-    return `\`${label}\``;
+    return label;
   }
   const href = `${env.SERVER_URL}/${env.REPOSITORY}/blob/${env.HEAD_SHA}/${file}`;
-  return `[\`${label}\`](${href}#L${finding.location.line})`;
+  return `[${label}](${href}#L${finding.location.line})`;
+}
+
+/** Scanned paths come from the pull request, so they must not close the code span or the line. */
+function codeSpan(text) {
+  return `\`${escapeCell(text).replaceAll("`", "'")}\``;
 }
 
 /** The finding's path as git reports it, so it matches the changed-file list and the diff. */
@@ -374,9 +380,16 @@ function addHunkLines(target, line) {
   }
 }
 
+/**
+ * Values can carry pull-request-controlled paths, so each is written in GitHub's delimited form with
+ * a delimiter derived from the value itself, which no value can contain: a newline inside one can
+ * never start a second output and reopen the gate.
+ */
 async function setOutput(name, value) {
   if (!env.GITHUB_OUTPUT) {
     return;
   }
-  await appendFile(env.GITHUB_OUTPUT, `${name}=${value}\n`);
+  const text = String(value);
+  const delimiter = `EOF_${createHash("sha256").update(text).digest("hex")}`;
+  await appendFile(env.GITHUB_OUTPUT, `${name}<<${delimiter}\n${text}\n${delimiter}\n`);
 }

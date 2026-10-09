@@ -68,17 +68,27 @@ async function renderSummary(
       OUT_DIR: directory,
     },
   });
-  const outputText = await readFile(outputFile, "utf8");
-  const outputs = new Map(
-    outputText
-      .split("\n")
-      .filter((line) => line.includes("="))
-      .map(
-        (line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)] as const,
-      ),
-  );
+  const outputs = parseOutputs(await readFile(outputFile, "utf8"));
   const comment = await readFile(path.join(directory, "legend-doctor-comment.md"), "utf8");
   return { comment, outputs };
+}
+
+/** Reads `$GITHUB_OUTPUT` the way the runner does: the last value written for a name wins. */
+function parseOutputs(text: string): ReadonlyMap<string, string> {
+  const outputs = new Map<string, string>();
+  const lines = text.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const heredoc = /^(?<name>[^=<]+)<<(?<delimiter>.+)$/u.exec(line)?.groups;
+    if (heredoc?.name && heredoc.delimiter) {
+      const end = lines.indexOf(heredoc.delimiter, index + 1);
+      outputs.set(heredoc.name, lines.slice(index + 1, end).join("\n"));
+      index = end;
+    } else if (line.includes("=")) {
+      outputs.set(line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1));
+    }
+  }
+  return outputs;
 }
 
 test("an advisory check reports a failed scan without failing the job", async (testContext) => {
@@ -103,4 +113,16 @@ test("skipped files are listed, and only a blocking check fails on them", async 
   assert.equal(advisory.outputs.get("gate-failed"), "false");
   assert.equal(blocking.outputs.get("gate-failed"), "true");
   assert.match(blocking.outputs.get("gate-reason") ?? "", /src\/generated\.ts/u);
+});
+
+test("a skipped path cannot inject an output that reopens a blocking gate", async (testContext) => {
+  const injected = {
+    ...SCAN_WITH_SKIPPED_FILE,
+    skippedFiles: [{ file: "src/x.ts\ngate-failed=false", message: "boom", phase: "parse" }],
+  };
+
+  const { comment, outputs } = await renderSummary(injected, "change", testContext);
+
+  assert.equal(outputs.get("gate-failed"), "true");
+  assert.match(comment, /`src\/x\.ts gate-failed=false` \(parse\)/u);
 });
