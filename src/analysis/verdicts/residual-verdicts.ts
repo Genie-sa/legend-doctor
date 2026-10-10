@@ -1,17 +1,14 @@
 import type { ChildContractResolver, LeafRenderValues } from "../../rules/child-contract/model.js";
 import type { ClassifiedState, StateUsage } from "../model.js";
-import {
-  callSiteIsKeyed,
-  directUniqueReturnCallSite,
-  stableOwnerLevelCallSite,
-} from "../return-call-sites.js";
 import { competingSubscriptionsNote, isCustomHookOwner } from "../ast-helpers.js";
+import { directUniqueReturnCallSite, stableOwnerLevelCallSite } from "../return-call-sites.js";
 import { isStructuralLegendCandidate, legendCandidateMessage } from "../finding-format.js";
 import {
   leafRenderValues,
   setterWritesFitLeafTransport,
   stateHasNoEffectOrDeferredUse,
   stateWritesAreUntracked,
+  unstableCallSitesAdmitLeaf,
 } from "./transport-verdicts.js";
 import {
   passThroughLeaf,
@@ -26,6 +23,7 @@ import { isCohesiveDelayedPendingState } from "../delayed-pending.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { setterOwnedByValueTransitionCallSite } from "../controlled-leaf-cuts.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
+import { transportCallSitesKeepMountIdentity } from "./transport-mount-identity.js";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
 type AbstentionReason = Extract<ClassifiedState, { action: "review-state" }>["abstentionReason"];
@@ -64,7 +62,7 @@ function renderAbstentionReason(context: StateClassificationContext): Abstention
   if (stateMayHoldCallable(state)) {
     return "state-type-unresolved";
   }
-  if (usage.unstableTransport || subtree?.unstable) {
+  if (!transportCallSitesKeepMountIdentity(state, usage) || subtree?.unstable) {
     return "mount-identity-unproven";
   }
   if (usage.transportedOccurrences > 0 || usage.jsxTargets.size > 0) {
@@ -219,7 +217,7 @@ export function broadTransportVerdict(context: StateClassificationContext): Clas
     !usage.repeatedTransport &&
     stateWritesAreUntracked(usage) &&
     !stateMayHoldCallable(state) &&
-    !callSiteIsKeyed(ownerCallSite) &&
+    unstableCallSitesAdmitLeaf(context) &&
     wrappedElementIsPassedThrough(ownerCallSite, passThroughScope(context)) &&
     setterWritesFitLeafTransport(context)
   ) {

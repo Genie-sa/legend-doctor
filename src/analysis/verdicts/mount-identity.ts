@@ -7,6 +7,7 @@ import {
 import { isDeclarationName, isNonValueIdentifier } from "../../core/analysis-ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { callbackBindingName } from "./site-write-roots.js";
+import { lexicalBinding } from "../../core/lexical-bindings.js";
 import ts from "typescript";
 
 type RenderedElement = ts.JsxElement | ts.JsxFragment | ts.JsxSelfClosingElement;
@@ -141,7 +142,23 @@ function slotCandidates(node: ts.Node): readonly RenderedElement[] | null {
   if (ts.isParenthesizedExpression(node) || ts.isJsxExpression(node)) {
     return node.expression ? slotCandidates(node.expression) : [];
   }
-  return operatorCandidates(node) ?? (rendersNoElement(node) ? [] : null);
+  return (
+    operatorCandidates(node) ?? constElementCandidates(node) ?? (rendersNoElement(node) ? [] : null)
+  );
+}
+
+/** A `const` holds the elements its initializer renders, so a slot that reads it places those. */
+function constElementCandidates(node: ts.Node): readonly RenderedElement[] | null {
+  const binding = ts.isIdentifier(node) ? lexicalBinding(node) : null;
+  const declaration = binding?.kind === "value" ? binding.declaration : null;
+  return declaration &&
+    ts.isVariableDeclaration(declaration) &&
+    ts.isVariableDeclarationList(declaration.parent) &&
+    (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+    declaration.initializer &&
+    !nodeWithin(node, declaration)
+    ? slotCandidates(declaration.initializer)
+    : null;
 }
 
 function operatorCandidates(node: ts.Node): readonly RenderedElement[] | null {

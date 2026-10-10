@@ -1325,22 +1325,24 @@ export const expensifyHookCases = [
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "ReportCardLostPage.tsx",
     hook: "useState",
     line: 72,
     name: "shouldShowAddressError",
     rationale:
-      "The address error flag is written with literals from submit commands and transported once to FormAlertWithSubmitButton, which forwards `isAlertVisible` to FormAlertWrapper where it only gates alert JSX; a leaf subscriber removes the page render.",
+      "The address error flag is written with literals from submit commands and transported once to FormAlertWithSubmitButton, which forwards `isAlertVisible` to FormAlertWrapper where it only gates alert JSX, so a leaf subscriber would remove the page render. Both `isReasonConfirmed` arms are fragments that render FormAlertWithSubmitButton in the same slot, so React keeps that fiber across the step change; a wrapper type of its own in each arm would remount it, and only one wrapper type shared by both arms keeps it.",
     target: "expensify-report-card-lost",
   },
   {
     action: "use-observable",
+    enforced: false,
     file: "ReportCardLostPage.tsx",
     hook: "useState",
     line: 73,
     name: "shouldShowReasonError",
     rationale:
-      "The reason error flag follows the same forwarded `isAlertVisible` contract through FormAlertWithSubmitButton into FormAlertWrapper's alert gate, so the broad page keeps the observable and the call site subscribes.",
+      "The reason error flag follows the same forwarded `isAlertVisible` contract through FormAlertWithSubmitButton into FormAlertWrapper's alert gate. Its call site shares a slot with the address step's FormAlertWithSubmitButton across the same-typed fragment arms, so a wrapper keeps that fiber only if both arms use one wrapper type.",
     target: "expensify-report-card-lost",
   },
   {

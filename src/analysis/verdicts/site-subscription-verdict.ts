@@ -17,7 +17,11 @@ import {
   stateMayHoldCallable,
 } from "../../rules/state-proofs/state-proofs.js";
 import { isCustomHookOwner, jsxTargetName } from "../ast-helpers.js";
-import { leafRenderValues, stateWritesAreUntracked } from "./transport-verdicts.js";
+import {
+  leafRenderValues,
+  stateWritesAreUntracked,
+  unstableCallSitesAdmitLeaf,
+} from "./transport-verdicts.js";
 import type { ComponentSourceResolver } from "../../rules/child-contract/model.js";
 import type { HostTagImports } from "../../core/imports.js";
 import { MAX_LEAF_SUBTREE_RATIO } from "../constants.js";
@@ -113,6 +117,7 @@ function siteSubscriptionPreconditionsHold(context: StateClassificationContext):
     context.hasSafeCommands &&
     !context.hasReactiveMutationPath &&
     stateQualifiesForSiteSubscriptions(state, usage, context) &&
+    unstableCallSitesAdmitLeaf(context) &&
     (usage.deferredReads === 0 ||
       hasOnlyEventCommandReads(
         state,
@@ -144,7 +149,6 @@ function stateQualifiesForSiteSubscriptions(
     usage.setterCalls >= 1 &&
     usage.setterReferences === usage.setterCalls &&
     !usage.repeatedTransport &&
-    !usage.unstableTransport &&
     !hasCompanionWrites &&
     stateWritesAreUntracked(usage) &&
     !stateMayHoldCallable(state)

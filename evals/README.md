@@ -139,7 +139,9 @@ hook rename as style. Its same-file tracker gate enforces one of those six and r
 and the nine labels it moved. The [reset identity audit](audit-2026-10-10-reset-identity.md) records the typed
 parameters, stable defaults, primitive memos, and guard-pinned mount writes that prove more resets, and the six labels
 it moved or added. The [React Compiler hook-name audit](audit-2026-10-10-react-compiler-hooks.md) records why
-`use$` calls, `observer` render reads, and raw `useValue` derivations change disposition in compiled functions. A red
+`use$` calls, `observer` render reads, and raw `useValue` derivations change disposition in compiled functions. The
+[conditional call-site audit](audit-2026-10-10-conditional-call-sites.md) records the guard, key, and slot-chain facts
+that let a leaf wrap a conditional or keyed call site, and the two labels it moved to non-enforced. A red
 corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay

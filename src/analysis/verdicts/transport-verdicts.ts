@@ -12,6 +12,10 @@ import {
 } from "../../rules/state-proofs/jsx-subtrees.js";
 import { passThroughScope, valueCallSitesPassThrough } from "./pass-through-leaf.js";
 import {
+  returnedCallSiteKeepsMountIdentity,
+  transportCallSitesKeepMountIdentity,
+} from "./transport-mount-identity.js";
+import {
   setterOwnedByValueCallSite,
   setterOwnedByValueTransitionCallSite,
 } from "../controlled-leaf-cuts.js";
@@ -143,6 +147,18 @@ export function leafRenderValues(context: StateClassificationContext): LeafRende
   return stateWritesStayPrimitive(context) ? "primitive" : "structural";
 }
 
+/**
+ * A conditional or keyed call site joins a leaf transport only when the wrapper keeps the child's
+ * mount identity and the value stays primitive, so the leaf passes every snapshot React passed.
+ */
+export function unstableCallSitesAdmitLeaf(context: StateClassificationContext): boolean {
+  const { state, usage } = context;
+  return (
+    !usage.unstableTransport ||
+    (stateValuesStayPrimitive(context) && transportCallSitesKeepMountIdentity(state, usage))
+  );
+}
+
 function ownerRenderCutIsMaterial(context: StateClassificationContext): boolean {
   const { materiality, state, usage } = context;
   const { hasCompactBooleanTransportCut, hasRepeatedOwnerRenderCut } = context.renderCut;
@@ -186,6 +202,7 @@ export function compactTransportCutVerdict(
     stateHasSingleTransportTarget(usage) &&
     branchCallSite !== null &&
     wrappedElementIsPassedThrough(branchCallSite.opening, passThroughScope(context)) &&
+    returnedCallSiteKeepsMountIdentity(branchCallSite, state, usage) &&
     companionWritesAllowTransportCut(context) &&
     hasSafeCommands &&
     stateValuesStayPrimitive(context) &&
@@ -229,6 +246,7 @@ export function descendantControlledCutVerdict(
       transportTargetIsKnownComponent(usage, { localComponents, sourceComponents })) &&
     branchCallSite !== null &&
     (directCallSite === null || usage.unstableTransport) &&
+    returnedCallSiteKeepsMountIdentity(branchCallSite, state, usage) &&
     !hasCompanionWrites &&
     hasSafeCommands &&
     stateValuesStayPrimitive(context) &&
@@ -271,6 +289,8 @@ export function visibilityTransportVerdict(
       materiality,
       sourceComponents,
     }) &&
+    branchCallSite !== null &&
+    returnedCallSiteKeepsMountIdentity(branchCallSite, state, usage) &&
     valueCallSitesPassThrough(context, { editableChildren: false })
   ) {
     const target = [...usage.valueTargets][0] ?? "the receiving child";
