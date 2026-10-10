@@ -37,16 +37,16 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 | [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                   | A parent render used only to pass one value                                             |
 | [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names) | Missing tracking or redundant hooks for eager reads; selector syntax is style           |
 | [`select-primitive-projection`](docs/plain-primitive-projection.md)                 | Renders for raw value changes that leave an equality comparison or truthiness unchanged |
-| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)     | Deprecated `useSelector` or `use$` usage                                                |
+| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)     | A `use$` call the React Compiler can memoize; elsewhere a deprecated name, as style     |
 | [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                  | An `observer` render dependency from a `useState` initializer; elsewhere style          |
 
 ### Legend tracking
 
-| Action                                                                                         | Removes                                                      |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                          | A render read that never subscribes; inside `observer` style |
-| [`snapshot-mutated-use-value`](EXAMPLES.md#select-a-copy-when-a-memo-keys-on-a-mutated-value)  | A useMemo result left stale by an in-place write             |
-| [`use-computed-for-parent-reads`](EXAMPLES.md#re-render-a-memo-child-that-reads-parent-values) | A `<Memo>` child frozen on its first render's parent values  |
+| Action                                                                                         | Removes                                                                                                                      |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| [`use-value-for-render-read`](EXAMPLES.md#subscribe-to-a-render-read)                          | A render read that never subscribes or that the React Compiler memoizes inside `observer`; otherwise inside `observer` style |
+| [`snapshot-mutated-use-value`](EXAMPLES.md#select-a-copy-when-a-memo-keys-on-a-mutated-value)  | A useMemo or React Compiler cache left stale by an in-place write                                                            |
+| [`use-computed-for-parent-reads`](EXAMPLES.md#re-render-a-memo-child-that-reads-parent-values) | A `<Memo>` child frozen on its first render's parent values                                                                  |
 
 ### Legend writes
 

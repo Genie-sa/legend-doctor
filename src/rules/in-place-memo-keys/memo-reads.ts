@@ -43,7 +43,12 @@ export function memoReads(callback: RuntimeFunctionLike, name: string): MemoRead
   if (bindingDeclarationCount(callback, name) > 0) {
     return null;
   }
-  return valueReferences(callback, name).flatMap((reference) => readsFrom(reference, []));
+  return valueReferences(callback, name).flatMap((reference) => referenceReads(reference));
+}
+
+/** Every member path the expression around one reference reads below the referenced value. */
+export function referenceReads(reference: ts.Identifier): MemoRead[] {
+  return readsFrom(reference, []);
 }
 
 export function valueReferences(scope: ts.Node, name: string): ts.Identifier[] {

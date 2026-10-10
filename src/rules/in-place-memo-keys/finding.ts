@@ -5,6 +5,14 @@ import { lineOf } from "../../core/ast.js";
 import { primitiveMemoName } from "./primitive-selection.js";
 
 const LISTED_WRITES = 3;
+const MEMO_KINDS = [
+  { kind: "useMemo", plural: "the useMemos at lines", singular: "the useMemo at line" },
+  {
+    kind: "compiler",
+    plural: "the calls the React Compiler memoizes at lines",
+    singular: "the call the React Compiler memoizes at line",
+  },
+] as const;
 
 export function inPlaceMemoKeyFinding(
   binding: RawValueBinding,
@@ -37,12 +45,18 @@ function provenMessage(
 ): string {
   const writes = distinctWrites(memos);
   const [memo] = memos;
-  const selected = memo && memos.length === 1 ? primitiveMemoName(binding, memo, scan) : null;
+  const selected =
+    memo && memos.length === 1 && memo.kind === "useMemo"
+      ? primitiveMemoName(binding, memo, scan)
+      : null;
   if (memo && selected) {
     const callee = binding.call.expression.getText(scan.sourceFile);
     return `Select the primitive instead of a snapshot: replace the useMemo at line ${lineOf(memo.call, scan.sourceFile)} with \`const ${selected} = ${callee}(() => …)\` computing the same expression from \`${binding.sourceText}.get()\` in place of \`${binding.name}\`, and delete \`const ${binding.name} = ${binding.call.getText(scan.sourceFile)}\`. The in-place write at ${describeWrites(writes)} keeps the reference, so the memo keeps a stale result; the selector reruns on every render, and an observable write rerenders the component only when \`${selected}\` changes.`;
   }
-  return `${snapshotInstruction(binding, writes, scan)}. The in-place write at ${describeWrites(writes)} keeps the reference, so ${memoList(memos, scan)} keyed on \`${binding.name}\` keeps a stale result while the component rerenders. If the derivation is cheap, compute it without useMemo instead.`;
+  const fallback = memos.every((stale) => stale.kind === "useMemo")
+    ? " If the derivation is cheap, compute it without useMemo instead."
+    : "";
+  return `${snapshotInstruction(binding, writes, scan)}. The in-place write at ${describeWrites(writes)} keeps the reference, so ${memoList(memos, scan)} keyed on \`${binding.name}\` ${memos.length === 1 ? "keeps a stale result" : "keep stale results"} while the component rerenders.${fallback}`;
 }
 
 function candidateMessage(
@@ -54,7 +68,7 @@ function candidateMessage(
   const others = [...new Set(memos.flatMap((memo) => memo.otherDependencies))];
   const names = others.map((name) => `\`${name}\``).join(", ");
   const [dependencies, pronoun] = others.length === 1 ? [names, "it"] : [`one of ${names}`, "them"];
-  return `The in-place write at ${describeWrites(writes)} keeps the reference of \`${binding.name}\`, so ${memoList(memos, scan)} recomputes only when ${dependencies} also changes. If a write can leave ${pronoun} unchanged, ${lowercaseFirst(snapshotInstruction(binding, writes, scan))}.`;
+  return `The in-place write at ${describeWrites(writes)} keeps the reference of \`${binding.name}\`, so ${memoList(memos, scan)} ${memos.length === 1 ? "recomputes" : "recompute"} only when ${dependencies} also changes. If a write can leave ${pronoun} unchanged, ${lowercaseFirst(snapshotInstruction(binding, writes, scan))}.`;
 }
 
 function snapshotInstruction(
@@ -86,14 +100,24 @@ function memoEvidence(memo: StaleMemo, binding: RawValueBinding, scan: InPlaceMe
     memo.otherDependencies.length === 0
       ? "every other dependency keeps its identity across renders"
       : `it also depends on ${memo.otherDependencies.join(", ")}`;
-  return `the useMemo at line ${line} reads what the write changes and compares \`${binding.name}\` by reference; ${others}`;
+  const memoized =
+    memo.kind === "useMemo"
+      ? `the useMemo at line ${line}`
+      : `the React Compiler memoizes the call at line ${line}, whose value reaches the rendered output; it`;
+  return `${memoized} reads what the write changes and compares \`${binding.name}\` by reference; ${others}`;
 }
 
 function memoList(memos: readonly StaleMemo[], scan: InPlaceMemoKeyScan): string {
-  const lines = memos.map((memo) => lineOf(memo.call, scan.sourceFile));
-  return lines.length === 1
-    ? `the useMemo at line ${lines[0]}`
-    : `the useMemos at lines ${lines.join(", ")}`;
+  const groups = MEMO_KINDS.flatMap(({ kind, plural, singular }) => {
+    const lines = memos
+      .filter((memo) => memo.kind === kind)
+      .map((memo) => lineOf(memo.call, scan.sourceFile));
+    if (lines.length === 0) {
+      return [];
+    }
+    return [lines.length === 1 ? `${singular} ${lines[0]}` : `${plural} ${lines.join(", ")}`];
+  });
+  return groups.join(" and ");
 }
 
 function distinctWrites(memos: readonly StaleMemo[]): RelativeWrite[] {

@@ -138,7 +138,8 @@ hook rename as style. Its same-file tracker gate enforces one of those six and r
 [render-phase reset audit](audit-2026-10-02-render-phase-resets.md) records the React facts behind `reset-during-render`
 and the nine labels it moved. The [reset identity audit](audit-2026-10-10-reset-identity.md) records the typed
 parameters, stable defaults, primitive memos, and guard-pinned mount writes that prove more resets, and the six labels
-it moved or added. A red
+it moved or added. The [React Compiler hook-name audit](audit-2026-10-10-react-compiler-hooks.md) records why
+`use$` calls, `observer` render reads, and raw `useValue` derivations change disposition in compiled functions. A red
 corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay

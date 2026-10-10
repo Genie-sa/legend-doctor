@@ -10,6 +10,8 @@ export interface InPlaceMemoKeyScan {
   readonly imports: HookImports;
   readonly inPlaceWrites: ReadonlyMap<string, readonly InPlaceObservableWrite[]>;
   readonly observableBindings: ReadonlySet<string>;
+  /** The project's React Compiler config covers this file. */
+  readonly reactCompiler: boolean;
   readonly sourceFile: ts.SourceFile;
 }
 
@@ -37,8 +39,12 @@ export interface RelativeWrite {
   readonly write: InPlaceObservableWrite;
 }
 
+/** An explicit `useMemo`, or a call the React Compiler memoizes on its own. */
+export type MemoKind = "compiler" | "useMemo";
+
 export interface StaleMemo {
   readonly call: ts.CallExpression;
+  readonly kind: MemoKind;
   readonly otherDependencies: readonly string[];
   readonly reads: readonly MemoRead[];
   readonly writes: readonly RelativeWrite[];

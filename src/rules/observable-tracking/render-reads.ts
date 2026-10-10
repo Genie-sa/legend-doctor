@@ -17,6 +17,8 @@ import type { RenderOwner } from "./render-owners.js";
 import type { TrackingScan } from "./model.js";
 import { guardsOnlyObservableWrites } from "./write-guards.js";
 import { hasCoveringSubscription } from "./subscription-coverage.js";
+import { isReactCompilerUnit } from "../../core/react-compiler-units.js";
+import { reachesRenderOutput } from "../../core/render-output.js";
 import { renderOwnerOf } from "./render-owners.js";
 import { subscriptionHookCallee } from "../../core/use-value-import.js";
 import ts from "typescript";
@@ -36,7 +38,8 @@ interface RenderRead {
  * track on their own, `useValue` arguments, reads handed to hooks as snapshots, `key` attributes,
  * reads that only guard observable writes, and paths already covered by a `useValue` in the same
  * owner or in a source-resolved custom hook it calls are left alone. Inside `observer` the read
- * already tracks, so only a render-body initializer is reported, as a style rename.
+ * already tracks, so only a render-body initializer is reported, as a style rename, unless the
+ * React Compiler compiles the owner and memoizes the read.
  */
 export function renderReadFinding(
   call: ts.CallExpression,
@@ -46,7 +49,25 @@ export function renderReadFinding(
   if (!read) {
     return null;
   }
-  return read.owner.tracked ? observerReadRename(read, scan) : renderReadPractice(read, scan);
+  if (!read.owner.tracked) {
+    return renderReadPractice(read, scan);
+  }
+  return compilerMemoizesRead(read, scan)
+    ? compiledObserverReadPractice(read, scan)
+    : observerReadRename(read, scan);
+}
+
+/**
+ * The React Compiler treats `get()` as an ordinary call and memoizes a value that reaches the
+ * rendered output, so observer's re-render can reuse the cached read.
+ */
+function compilerMemoizesRead(read: RenderRead, scan: TrackingScan): boolean {
+  return (
+    scan.reactCompiler &&
+    read.owner.hops === 0 &&
+    isReactCompilerUnit(read.owner.owner) &&
+    reachesRenderOutput(read.call, read.owner.owner)
+  );
 }
 
 function renderRead(call: ts.CallExpression, scan: TrackingScan): RenderRead | null {
@@ -178,6 +199,30 @@ function renderReadPractice(read: RenderRead, scan: TrackingScan): LegendPractic
       ],
       location: findingLocation(call, scan),
       message: `${instruction}; ${consequence}.`,
+      practice: "reactivity",
+    },
+    initializer && renderInitializerEdits(call, initializer, scan),
+  );
+}
+
+function compiledObserverReadPractice(read: RenderRead, scan: TrackingScan): LegendPracticeFinding {
+  const { call, observable, owner } = read;
+  const path = observable.getText(scan.sourceFile);
+  const initializer = directRenderInitializer(read);
+  const hook = subscriptionHookCallee(scan.sourceFile);
+  const instruction = renderReadInstruction(read, { hook, initializer, path }, scan.sourceFile);
+  return withEdits(
+    {
+      action: "use-value-for-render-read",
+      confidence: "certain",
+      disposition: "change",
+      evidence: [
+        `${path}.get() reads a proven Legend observable path in the render body of \`${owner.name}\``,
+        `the React Compiler compiles \`${owner.name}\` and gives hook semantics only to callees named /^use[A-Z0-9]/, so it memoizes this get() like any call whose value reaches the rendered output`,
+        `observer re-renders \`${owner.name}\` when \`${path}\` changes, but the compiled render can reuse the cached read; ${hook} is a hook the Compiler never memoizes`,
+      ],
+      location: findingLocation(call, scan),
+      message: `${instruction}; the React Compiler memoizes this get() inside observer, so \`${owner.name}\` can render a stale \`${path}\` after observer re-renders it.`,
       practice: "reactivity",
     },
     initializer && renderInitializerEdits(call, initializer, scan),
