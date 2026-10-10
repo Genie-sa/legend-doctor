@@ -15,9 +15,10 @@ import { lexicalBinding } from "../../core/lexical-bindings.js";
 import ts from "typescript";
 
 /**
- * A write inside a callback that a same-module helper or a source-resolved child component invokes
- * runs in that callee's transition when the callee starts one, and an observable `.set()` there
- * would commit urgently instead. Transitions the owner starts fall to the commit-sensitivity override.
+ * A write inside a callback that a same-module or source-resolved imported helper, or a
+ * source-resolved child component, invokes runs in that callee's transition when the callee starts
+ * one, and an observable `.set()` there would commit urgently instead. Transitions the owner starts
+ * fall to the commit-sensitivity override.
  */
 export function writesRunInCalleeTransition(context: StateClassificationContext): boolean {
   return context.usage.setterCallNodes.some((call) =>
@@ -87,7 +88,7 @@ function handoffStartsTransition(value: ts.Node, context: StateClassificationCon
   }
   const { parent } = position;
   if (ts.isCallExpression(parent) && parent.arguments.some((argument) => argument === position)) {
-    return calleeStartsTransition(parent.expression);
+    return calleeStartsTransition(parent.expression, context);
   }
   return (
     ts.isJsxExpression(parent) &&
@@ -109,14 +110,31 @@ function componentAttributeStartsTransition(
   return source !== null && bodyStartsTransition(source.body);
 }
 
-function calleeStartsTransition(callee: ts.LeftHandSideExpression): boolean {
+function calleeStartsTransition(
+  callee: ts.LeftHandSideExpression,
+  context: StateClassificationContext,
+): boolean {
   const target = unwrapTransparentExpression(callee);
-  const binding = ts.isIdentifier(target) ? lexicalBinding(target) : null;
-  return (
-    binding?.kind === "function" &&
-    binding.declaration.body !== undefined &&
-    bodyStartsTransition(binding.declaration.body)
-  );
+  const body = ts.isIdentifier(target) ? calleeDeclaration(target, context)?.body : undefined;
+  return body !== undefined && bodyStartsTransition(body);
+}
+
+/** Only the callee's own body is read; a name the source index cannot resolve proves nothing. */
+function calleeDeclaration(
+  callee: ts.Identifier,
+  { childContracts }: StateClassificationContext,
+): RuntimeFunctionLike | null {
+  const binding = lexicalBinding(callee);
+  if (binding?.kind === "function") {
+    return binding.declaration;
+  }
+  if (binding?.kind !== "import") {
+    return null;
+  }
+  const imported = childContracts
+    ?.reachResolver?.()
+    .importedCallee(callee.getSourceFile(), binding);
+  return imported?.kind === "function" ? imported.declaration : null;
 }
 
 function bodyStartsTransition(body: ts.Node): boolean {

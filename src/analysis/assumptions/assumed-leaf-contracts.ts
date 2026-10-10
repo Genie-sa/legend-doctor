@@ -6,7 +6,9 @@ import type {
   HookReturnMembers,
   ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
+import type { ReachResolver } from "../../project/source-components/synchronous-reach.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
+import { localReachResolver } from "../../project/source-components/reach-resolvers.js";
 import type ts from "typescript";
 
 /**
@@ -20,6 +22,10 @@ export class AssumedLeafContracts implements ChildContractResolver {
   public constructor(base: ChildContractResolver, assumedLeaves: ReadonlySet<string>) {
     this.#assumedLeaves = assumedLeaves;
     this.#base = base;
+  }
+
+  public reachResolver(): ReachResolver {
+    return this.#base.reachResolver?.() ?? localReachResolver;
   }
 
   public componentPropIsLeafRenderConsumer(componentName: string, propName: string): boolean {

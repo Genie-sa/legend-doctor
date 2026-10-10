@@ -304,6 +304,62 @@ test("abstains when the wrapped child calls the write inside its own transition"
   assert.notEqual(transitioned.action, "use-observable");
 });
 
+const IN_TRANSITION_SOURCE = `
+  import { startTransition } from "react";
+  export function inTransition(update: () => void) { startTransition(update); }
+  export default function inDefaultTransition(update: () => void) { startTransition(update); }
+`;
+
+test("abstains when an imported helper starts the transition around the write", async () => {
+  const helpers = {
+    named: { imports: `import { inTransition } from "./transition";`, call: "inTransition" },
+    defaultExport: {
+      imports: `import inDefaultTransition from "./transition";`,
+      call: "inDefaultTransition",
+    },
+    reexported: { imports: `import { inTransition } from "./helpers";`, call: "inTransition" },
+  } satisfies Record<string, { call: string; imports: string }>;
+  const files = {
+    "details.tsx": DETAILS_SOURCE,
+    "helpers.ts": `export { inTransition } from "./transition";`,
+    "transition.ts": IN_TRANSITION_SOURCE,
+  };
+  const site = `<div><Details open={open} /></div>`;
+  for (const [name, { call, imports }] of Object.entries(helpers)) {
+    const finding = await openVerdict({
+      ...files,
+      "screen.tsx": screen({
+        imports: `${imports}\nimport { Details } from "./details";`,
+        open: `${call}(() => setOpen(true))`,
+        site,
+      }),
+    });
+    assert.notEqual(finding.action, "use-observable", name);
+  }
+});
+
+test("still wraps a write handed to an imported helper that starts no transition", async () => {
+  const helpers = {
+    plainHelper: {
+      files: { "run.ts": `export function run(update: () => void) { update(); }` },
+      imports: `import { run } from "./run";`,
+    },
+    unresolvedPackage: { files: {}, imports: `import { run } from "@acme/run";` },
+  } satisfies Record<string, { files: Record<string, string>; imports: string }>;
+  for (const [name, { files, imports }] of Object.entries(helpers)) {
+    const finding = await openVerdict({
+      ...files,
+      "details.tsx": DETAILS_SOURCE,
+      "screen.tsx": screen({
+        imports: `${imports}\nimport { Details } from "./details";`,
+        open: "run(() => setOpen(true))",
+        site: `<div><Details open={open} /></div>`,
+      }),
+    });
+    assert.equal(finding.action, "use-observable", name);
+  }
+});
+
 test("abstains when the owner is too small for the cut to matter", async () => {
   const finding = await openVerdict({
     "screen.tsx": screen({
