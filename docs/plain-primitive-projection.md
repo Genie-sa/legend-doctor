@@ -94,6 +94,62 @@ render read is allowed, since dropped renders fall on both sides of the test.
 `tests/runtime/truthiness-projection.test.ts` shows one object replacing another renders the raw owner and not the
 projected one, with identical markup at every step.
 
+## Conditions
+
+When neither proof above holds, the same action selects every boolean condition the owner derives from the value:
+
+```tsx
+const status = useValue(status$);
+const isBusy = status === "loading" || status === "saving";
+const items = useValue(items$);
+return (
+  <List busy={isBusy} hidden={items.length === 0} mine={items.some((item) => item.id === id)} />
+);
+```
+
+becomes
+
+```tsx
+const isBusy = useValue(() => {
+  const status = status$.get();
+  return status === "loading" || status === "saving";
+});
+const isItemsEmpty = useValue(() => items$.get().length === 0);
+const itemsSome = useValue(() => items$.get().some((item) => item.id === id));
+return <List busy={isBusy} hidden={isItemsEmpty} mine={itemsSome} />;
+```
+
+A condition is built from the value through declared data members (`user.role`, `user?.role`), `length` on an
+array or string, `size` on a `Map` or `Set`, and the read-only predicates `includes`, `some`, and `every` on arrays,
+`includes`, `startsWith`, and `endsWith` on strings, and `has` on maps and sets. It ends in a comparison, a predicate
+call, or a truthiness test, and `&&` or `||` joins it with sibling conditions that also read the value. Members
+resolve only through property signatures of a same-file interface, type literal, or alias, so no getter or method of
+the program runs; a `some` or `every` callback is a synchronous arrow whose expression body reads its own parameters,
+their members, literals, and render-stable operands through comparisons and logical operators. A relational
+comparison needs a primitive on the value's side, so no `valueOf` runs. A member read on a value whose type admits
+`null` or `undefined` uses `?.` or sits on the right of an `&&` whose left side tests that receiver, so the selector
+throws only where the render would.
+
+Every read of the value must sit in such a condition. A truthiness-only condition is accepted under a test, or where
+JSX renders it only when falsy and its domain holds no `0`, `NaN`, `""`, or `0n`. Every other operand passes condition
+3 above. Each distinct condition becomes one boolean selector, never a tuple or object, whose result would be fresh
+on every run. A sole condition that initializes an owner `const` takes that binding, as above; otherwise the binding
+is named from the condition (`hasItems`, `isItemsEmpty`, `isStatusIdle`, `userRoleDiffers`, `countExceeds`,
+`selectedIncludes`, or `userCondition` for a joined one), and the finding is withheld when a name repeats or is
+already used in the file. One read inlines `path$.get()`; several bind it once in a block selector so the condition's
+source is kept verbatim. Conditions 1 and 5 apply unchanged, and no ref, `peek()`, or untracked `get()` render read
+is allowed.
+
+Some change of the value must leave every boolean unchanged. An object domain holds distinct values with equal
+members, and an unbounded primitive domain outnumbers any finite set of outcomes. A finite domain is evaluated: when
+every condition compares the value with literals, its values must fall into fewer joint outcomes than there are
+values, so `"off" | "one" | "all"` tested against each literal abstains while two literal tests over four statuses
+proceed. A condition that reads more than literals needs more values than its conditions have outcome combinations.
+
+When another practice rewrites the same subscription (`narrow-use-value-subscription`, `split-use-value-leaves`,
+`peek-unrendered-use-value`, `move-use-value-down`, or `move-use-value-into-child`), the projection is withheld; it
+can follow on the rewritten binding at the next scan.
+
 ## Runtime evidence
 
 `tests/runtime/plain-primitive-projection.test.ts` mounts 500 keyed rows under React 19.2.8 and Legend State
@@ -107,6 +163,11 @@ StrictMode). Prop updates stay live through the inline selector and keep mount i
   projected, which is why the rule requires a mount-stable provider value;
 - a `!== null` projection renders no row when one dragged object replaces another;
 - a render write under `if (isSelected)` still tracks the selected row.
+
+`tests/runtime/condition-projection.test.ts` shows a second task and a `loading` to `saving` change render the raw
+owner and not the projected one, with identical markup at every step. Legend's selector hook stores the selector each
+render passes and re-runs that latest closure on every tracked change, re-rendering only when the result is not
+`===` the previous one, so `useValue(() => count$.get() > limit)` compares against the latest `limit`.
 
 ## Corpus
 

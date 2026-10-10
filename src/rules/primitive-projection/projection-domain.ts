@@ -1,7 +1,7 @@
-import { declarationDomainValues, typeDomainValues } from "./value-domains.js";
+import type { DomainValues, ValueSource } from "./value-domains.js";
+import { declarationSource, sourceDomainValues, typeSource } from "./value-domains.js";
 import { findAncestor, isRuntimeFunctionLike, visit } from "../../core/ast.js";
 import { staticPropertyPath, unwrapTransparentExpression } from "../../core/analysis-ast.js";
-import type { DomainValues } from "./value-domains.js";
 import type { HookImports } from "../../core/imports.js";
 import type { ObservableContextReader } from "../../project/source-components/observable-contexts.js";
 import { declaredObservablePropType } from "../../practices/observable-prop-types.js";
@@ -30,28 +30,33 @@ type DeclarationName = ts.Identifier & {
 const MAX_ALIAS_DEPTH = 4;
 
 /**
- * The value domain of an observable path, from its sole declaration: an imported or local
+ * The value source of an observable path, from its sole declaration: an imported or local
  * `observable(...)`/`useObservable(...)`, an `Observable<T>` annotation, a typed prop, or a member
  * of a context value whose declared type names it `Observable<T>`.
  */
+export function observableValueSource(path: ts.Expression, facts: DomainFacts): ValueSource | null {
+  return pathSource(staticPropertyPath(path), facts, 0);
+}
+
 export function observableDomainValues(
   path: ts.Expression,
   facts: DomainFacts,
 ): DomainValues | null {
-  return pathDomain(staticPropertyPath(path), facts, 0);
+  const source = observableValueSource(path, facts);
+  return source ? sourceDomainValues(source) : null;
 }
 
-function pathDomain(
+function pathSource(
   path: readonly string[] | null,
   facts: DomainFacts,
   depth: number,
-): DomainValues | null {
+): ValueSource | null {
   const [root, ...members] = path ?? [];
   const name =
     root !== undefined && depth <= MAX_ALIAS_DEPTH && hasSoleSourceBinding(facts.sourceFile, root)
       ? soleDeclarationName(facts.sourceFile, root)
       : null;
-  return name ? declarationDomain(name, members, { depth, facts }) : null;
+  return name ? declarationNameSource(name, members, { depth, facts }) : null;
 }
 
 interface AliasScope {
@@ -59,48 +64,48 @@ interface AliasScope {
   readonly facts: DomainFacts;
 }
 
-function declarationDomain(
+function declarationNameSource(
   name: DeclarationName,
   members: readonly string[],
   scope: AliasScope,
-): DomainValues | null {
+): ValueSource | null {
   const { parent } = name;
   const { facts } = scope;
   if (ts.isImportClause(parent) || ts.isImportSpecifier(parent)) {
     const declaration = facts.importedDeclarations.get(name.text);
-    return declaration ? declarationDomainValues(declaration, members) : null;
+    return declaration ? declarationSource(declaration, members) : null;
   }
   if (ts.isBindingElement(parent)) {
-    return declaredDomain(bindingElementType(parent, facts), members);
+    return declaredSource(bindingElementType(parent, facts), members);
   }
   return ts.isParameter(parent)
-    ? declaredDomain(annotatedType(parent.type, facts.imports.observableTypes), members)
-    : variableDomain(parent, members, scope);
+    ? declaredSource(annotatedType(parent.type, facts.imports.observableTypes), members)
+    : variableSource(parent, members, scope);
 }
 
-function variableDomain(
+function variableSource(
   declaration: ts.VariableDeclaration,
   members: readonly string[],
   { depth, facts }: AliasScope,
-): DomainValues | null {
+): ValueSource | null {
   if (declaration.type) {
-    return declaredDomain(annotatedType(declaration.type, facts.imports.observableTypes), members);
+    return declaredSource(annotatedType(declaration.type, facts.imports.observableTypes), members);
   }
   const initializer =
     declaration.initializer && isConstDeclaration(declaration)
       ? unwrapTransparentExpression(declaration.initializer)
       : null;
   if (!initializer || ts.isCallExpression(initializer)) {
-    return initializer ? declarationDomainValues(declaration, members) : null;
+    return initializer ? declarationSource(declaration, members) : null;
   }
   const propType = ts.isPropertyAccessExpression(initializer)
     ? typedPropType(initializer.expression, initializer.name.text, facts)
     : null;
   if (propType) {
-    return declaredDomain(propType, members);
+    return declaredSource(propType, members);
   }
   const alias = staticPropertyPath(initializer);
-  return alias ? pathDomain([...alias, ...members], facts, depth + 1) : null;
+  return alias ? pathSource([...alias, ...members], facts, depth + 1) : null;
 }
 
 function bindingElementType(element: ts.BindingElement, facts: DomainFacts): ts.TypeNode | null {
@@ -213,8 +218,8 @@ function observableArgument(
   return type.typeArguments[0] ?? null;
 }
 
-function declaredDomain(type: ts.TypeNode | null, members: readonly string[]): DomainValues | null {
-  return type ? typeDomainValues(type, members) : null;
+function declaredSource(type: ts.TypeNode | null, members: readonly string[]): ValueSource | null {
+  return type ? typeSource(type, members) : null;
 }
 
 function soleDeclarationName(sourceFile: ts.SourceFile, name: string): DeclarationName | null {

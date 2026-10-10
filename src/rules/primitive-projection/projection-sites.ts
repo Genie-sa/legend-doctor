@@ -4,6 +4,7 @@ import type { HookImports } from "../../core/imports.js";
 import type { RenderFunction } from "../observable-tracking/render-owners.js";
 import { callbackHasCleanup } from "../effects/effects.js";
 import { isReactEffectCall } from "../react-commit-sensitivity/effect-lifecycle.js";
+import { lexicalBinding } from "../../core/lexical-bindings.js";
 import { ownerLevelReferences } from "../../core/scope-references.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
@@ -23,7 +24,7 @@ export interface ProjectionSites {
   readonly dependencies: readonly ts.Identifier[];
 }
 
-const EQUALITY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+export const EQUALITY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
   ts.SyntaxKind.EqualsEqualsEqualsToken,
   ts.SyntaxKind.EqualsEqualsToken,
   ts.SyntaxKind.ExclamationEqualsEqualsToken,
@@ -146,6 +147,14 @@ function comparisonSite(reference: ts.Identifier): ProjectionSite | null {
 
 function isEqualityOperator(kind: ts.SyntaxKind): kind is ts.EqualityOperator {
   return EQUALITY_OPERATORS.has(kind);
+}
+
+export function isNullishLiteral(operand: ts.Expression): boolean {
+  const node = ts.isParenthesizedExpression(operand) ? operand.expression : operand;
+  return (
+    node.kind === ts.SyntaxKind.NullKeyword ||
+    (ts.isIdentifier(node) && node.text === "undefined" && lexicalBinding(node) === null)
+  );
 }
 
 /**

@@ -33,6 +33,7 @@ import { resolveObservableBindings } from "./observable-bindings.js";
 import { resolveSubscriptionInventory } from "../rules/observable-reads/subscription-inventory.js";
 import ts from "typescript";
 import { withSoleBindingFacts } from "./sole-binding-facts.js";
+import { withoutSupersededProjections } from "../rules/primitive-projection/primitive-projection.js";
 
 export interface LegendPracticesSourceRequest {
   readonly capabilities?: FileCapabilities;
@@ -169,11 +170,11 @@ function runPracticeRules(
 ): LegendPracticeFinding[] {
   const { subscriptionInventory } = input.request;
   const unresolved: SubscriptionInventory[] = [];
-  const findings = rules
-    .flatMap((rule) =>
+  const findings = withoutSupersededProjections(
+    rules.flatMap((rule) =>
       rule.run({ ...input, inventory: subscriptionInventory ? unresolved : undefined }),
-    )
-    .toSorted(compareFindingLocation);
+    ),
+  ).toSorted(compareFindingLocation);
   subscriptionInventory?.push(
     ...unresolved.map((entry) => resolveSubscriptionInventory(entry, findings)),
   );

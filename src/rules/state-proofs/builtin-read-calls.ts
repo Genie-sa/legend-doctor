@@ -155,10 +155,27 @@ export interface BuiltinCallbackProof {
  */
 export function isBuiltinReadCall(call: ts.CallExpression, proof: BuiltinCallbackProof): boolean {
   const read = builtinRead(call, MAX_RECEIVER_HOPS);
-  if (!read) {
-    return false;
-  }
-  const { callback } = read.method;
+  return read !== null && invokesPureCallback(call, read.method, proof);
+}
+
+/** A read-only built-in method of a receiver whose kind the caller proved by other means. */
+export function isReceiverReadCall(
+  call: ts.CallExpression,
+  receiver: Receiver,
+  proof: BuiltinCallbackProof,
+): boolean {
+  const callee = unwrapTransparentExpression(call.expression);
+  const method = ts.isPropertyAccessExpression(callee)
+    ? RECEIVER_READ_METHODS[receiver.kind].get(callee.name.text)
+    : undefined;
+  return method !== undefined && invokesPureCallback(call, method, proof);
+}
+
+function invokesPureCallback(
+  call: ts.CallExpression,
+  { callback }: ReadMethod,
+  proof: BuiltinCallbackProof,
+): boolean {
   const argument = callback === undefined ? undefined : call.arguments[callback.argument];
   return argument === undefined || isPureCallbackArgument(argument, proof);
 }

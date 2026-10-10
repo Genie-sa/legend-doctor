@@ -18,9 +18,9 @@ export interface TruthinessSite {
 }
 
 /** How the value of an expression escapes: rendered as a JSX child, or used as a value elsewhere. */
-type PositionUse = TruthinessUse | "render" | "value";
+export type PositionUse = TruthinessUse | "render" | "value";
 
-const LOGICAL_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+export const LOGICAL_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
   ts.SyntaxKind.AmpersandAmpersandToken,
   ts.SyntaxKind.BarBarToken,
 ]);
@@ -45,7 +45,7 @@ export function truthinessSites(
   return first ? [first, ...rest] : null;
 }
 
-function positionUse(expression: ts.Expression): PositionUse {
+export function positionUse(expression: ts.Expression): PositionUse {
   const outer = outermostTransparentParent(expression);
   const { parent } = outer;
   if (isTestPosition(parent, outer)) {
@@ -112,6 +112,6 @@ function coercion(reference: ts.Identifier): ts.Expression | null {
   return outerNegation && isNegation(outerNegation) ? outerNegation : null;
 }
 
-function isNegation(node: ts.Node): node is ts.PrefixUnaryExpression {
+export function isNegation(node: ts.Node): node is ts.PrefixUnaryExpression {
   return ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken;
 }

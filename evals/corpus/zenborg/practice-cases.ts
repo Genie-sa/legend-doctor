@@ -62,6 +62,15 @@ const directObservableLines = [
 
 export const zenborgPracticeCases = [
   {
+    action: "select-primitive-projection",
+    disposition: "change",
+    file: "components/banded-heatmap/BandedHeatmapCycleBlock.tsx",
+    line: 41,
+    rationale:
+      "Each cycle block reads the highlight only as `clampHighlight?.cycleId === band.cycleId`. `flashCycleClamp` (infrastructure/state/ui-store.ts:142) sets `{ cycleId }` and clears it 300 ms later, so every block in the heatmap renders twice per clamp today; the selector renders only the clamped block.",
+    target: "zenborg",
+  },
+  {
     action: "snapshot-mutated-use-value",
     disposition: "change",
     file: "app/harvest/page.tsx",

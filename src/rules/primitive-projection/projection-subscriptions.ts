@@ -1,5 +1,6 @@
 import { hasEveryRenderEffect, ownerTracksRelatedPath } from "./subscription-overlap.js";
 import { isUseValueCall, provenObservablePath } from "../observable-reads/observable-paths.js";
+import { replaceNode, replaceRange } from "../../core/text-edits.js";
 import type { ChildContractResolver } from "../child-contract/model.js";
 import type { DomainFacts } from "./projection-domain.js";
 import type { OwnerHookScan } from "./owner-hooks.js";
@@ -8,7 +9,6 @@ import type { TextEdit } from "../../core/types.js";
 import { callsUnprovenHook } from "./owner-hooks.js";
 import { isSynchronous } from "../observable-reads/untracked-render-reads.js";
 import { renderOwnerOf } from "../observable-tracking/render-owners.js";
-import { replaceNode } from "../../core/text-edits.js";
 import { staticPropertyPath } from "../../core/analysis-ast.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
@@ -120,18 +120,51 @@ export function mergedProjection(
 }
 
 /**
- * Renames the raw binding and swaps the subscribed path for the inline selector, leaving the
- * callee alone so a legacy hook rename by `replace-legacy-use-value` composes with these edits.
+ * Renames the raw binding to the first selector's and swaps the subscribed path for its inline
+ * selector, leaving the callee alone so a legacy hook rename by `replace-legacy-use-value`
+ * composes with these edits. Each further selector is declared after the raw statement with the
+ * same callee.
  */
 export function selectorEdits(
   raw: RawSubscription,
-  { name, selected }: SelectorBinding,
+  [{ name, selected }, ...following]: readonly [SelectorBinding, ...SelectorBinding[]],
   scan: ProjectionScan,
 ): readonly TextEdit[] {
+  const argument = raw.call.arguments[0]!;
+  const rename = replaceNode(scan, raw.declaration.name, name);
+  if (following.length === 0) {
+    return [rename, replaceNode(scan, argument, `() => ${selected}`)];
+  }
+  const { sourceFile } = scan;
+  const statementEnd = raw.statement.getEnd();
+  const tail = sourceFile.text.slice(argument.getEnd(), statementEnd);
   return [
-    replaceNode(scan, raw.declaration.name, name),
-    replaceNode(scan, raw.call.arguments[0]!, `() => ${selected}`),
+    rename,
+    replaceRange(
+      scan,
+      { end: statementEnd, pos: argument.getStart(sourceFile) },
+      `() => ${selected}${tail}${followingDeclarations(raw, following, scan)}`,
+    ),
   ];
+}
+
+function followingDeclarations(
+  raw: RawSubscription,
+  bindings: readonly SelectorBinding[],
+  { sourceFile }: ProjectionScan,
+): string {
+  const terminator = raw.statement.getText(sourceFile).endsWith(";") ? ";" : "";
+  const statementStart = raw.statement.getStart(sourceFile);
+  const { line } = sourceFile.getLineAndCharacterOfPosition(statementStart);
+  const lineStart = sourceFile.getPositionOfLineAndCharacter(line, 0);
+  const indent = /^\s*/u.exec(sourceFile.text.slice(lineStart, statementStart))?.[0] ?? "";
+  const callee = raw.call.expression.getText(sourceFile);
+  return bindings
+    .map(
+      (binding) =>
+        `\n${indent}const ${binding.name} = ${callee}(() => ${binding.selected})${terminator}`,
+    )
+    .join("");
 }
 
 /** Whether any identifier in the file already spells `name`. */

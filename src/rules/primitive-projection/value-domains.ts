@@ -41,20 +41,28 @@ const KEYWORD_VALUES = new Map<ts.SyntaxKind, DomainValues>([
 /** Global generic containers whose instances are always objects. */
 const BUILTIN_OBJECT_TYPES = new Set(["Array", "Map", "ReadonlyArray", "Record", "Set"]);
 
-/** The domain at `path` under a declared value type, resolving same-file interfaces and aliases. */
-export function typeDomainValues(type: ts.TypeNode, path: readonly string[]): DomainValues | null {
+/**
+ * Where the values at a path are written down: a declared type, or the seed expression whose
+ * widened type TypeScript infers.
+ */
+export type ValueSource =
+  | { readonly kind: "seed"; readonly seed: ts.Expression }
+  | { readonly kind: "type"; readonly type: ts.TypeNode };
+
+/** The source at `path` under a declared value type, resolving same-file interfaces and aliases. */
+export function typeSource(type: ts.TypeNode, path: readonly string[]): ValueSource | null {
   const leaf = memberType(type, path, 0);
-  return leaf ? typeValues(leaf, 0) : null;
+  return leaf ? { kind: "type", type: leaf } : null;
 }
 
 /**
- * The domain at `path` inside an `observable(...)` or `useObservable(...)` declaration: its type
+ * The source at `path` inside an `observable(...)` or `useObservable(...)` declaration: its type
  * argument when present, otherwise the seed TypeScript widens (`"a"` to string, `0` to number).
  */
-export function declarationDomainValues(
+export function declarationSource(
   declaration: ts.VariableDeclaration,
   path: readonly string[],
-): DomainValues | null {
+): ValueSource | null {
   const call = declaration.initializer
     ? unwrapTransparentExpression(declaration.initializer)
     : null;
@@ -63,25 +71,99 @@ export function declarationDomainValues(
   }
   const [typeArgument] = call.typeArguments ?? [];
   if (typeArgument) {
-    return typeDomainValues(typeArgument, path);
+    return typeSource(typeArgument, path);
   }
   const [seed] = call.arguments;
-  return seed ? seedDomainValues(seed, path) : null;
+  return seed ? seedSource(seed, path) : null;
 }
 
-function seedDomainValues(seed: ts.Expression, path: readonly string[]): DomainValues | null {
+export function seedSource(seed: ts.Expression, path: readonly string[]): ValueSource | null {
   if (ts.isParenthesizedExpression(seed)) {
-    return seedDomainValues(seed.expression, path);
+    return seedSource(seed.expression, path);
   }
   if (ts.isAsExpression(seed) || ts.isTypeAssertionExpression(seed)) {
-    return isConstAssertion(seed.type) ? null : typeDomainValues(seed.type, path);
+    return isConstAssertion(seed.type) ? null : typeSource(seed.type, path);
   }
   const [head, ...rest] = path;
   if (head === undefined) {
-    return seedLeafValues(seed);
+    return { kind: "seed", seed };
   }
   const member = seedMember(seed, head);
-  return member ? seedDomainValues(member, rest) : null;
+  return member ? seedSource(member, rest) : null;
+}
+
+export function sourceDomainValues(source: ValueSource): DomainValues | null {
+  return source.kind === "type" ? typeValues(source.type, 0) : seedLeafValues(source.seed);
+}
+
+/**
+ * The source of the declared data property `name`, read past `null` and `undefined` members of
+ * the receiver's union. Only property signatures resolve, so a read never runs program code.
+ */
+export function memberSource(source: ValueSource, name: string): ValueSource | null {
+  if (source.kind === "seed") {
+    return seedSource(source.seed, [name]);
+  }
+  const present = presentType(source.type, 0);
+  return present ? typeSource(present, [name]) : null;
+}
+
+/** Whether a value may be `null` or `undefined`, assuming so for unresolved types. */
+export function admitsNullish(source: ValueSource): boolean {
+  return source.kind === "type" && typeAdmitsNullish(source.type, 0);
+}
+
+function presentType(type: ts.TypeNode, depth: number): ts.TypeNode | null {
+  if (depth > MAX_TYPE_DEPTH) {
+    return null;
+  }
+  if (ts.isParenthesizedTypeNode(type)) {
+    return presentType(type.type, depth + 1);
+  }
+  if (ts.isUnionTypeNode(type)) {
+    const [sole, ...others] = type.types.filter((member) => !isNullishType(member));
+    return sole && others.length === 0 ? presentType(sole, depth + 1) : null;
+  }
+  const declaration = declaredType(type);
+  return declaration && ts.isTypeAliasDeclaration(declaration)
+    ? presentType(declaration.type, depth + 1)
+    : type;
+}
+
+function typeAdmitsNullish(type: ts.TypeNode, depth: number): boolean {
+  if (depth > MAX_TYPE_DEPTH) {
+    return true;
+  }
+  if (ts.isParenthesizedTypeNode(type)) {
+    return typeAdmitsNullish(type.type, depth + 1);
+  }
+  if (ts.isUnionTypeNode(type)) {
+    return type.types.some((member) => typeAdmitsNullish(member, depth + 1));
+  }
+  if (ts.isTypeReferenceNode(type)) {
+    return referenceAdmitsNullish(type, depth);
+  }
+  const values = typeValues(type, depth);
+  return (
+    values === null ||
+    (values.primitives !== null &&
+      (values.primitives.has("null") || values.primitives.has("undefined")))
+  );
+}
+
+/** A local alias admits nullish when its type does; an unresolved name may, unless a global container. */
+function referenceAdmitsNullish(type: ts.TypeReferenceNode, depth: number): boolean {
+  const declaration = declaredType(type);
+  return declaration
+    ? ts.isTypeAliasDeclaration(declaration) && typeAdmitsNullish(declaration.type, depth + 1)
+    : !BUILTIN_OBJECT_TYPES.has(type.typeName.getText()) || importsName(type);
+}
+
+function isNullishType(type: ts.TypeNode): boolean {
+  return (
+    type.kind === ts.SyntaxKind.UndefinedKeyword ||
+    (ts.isLiteralTypeNode(type) && type.literal.kind === ts.SyntaxKind.NullKeyword)
+  );
 }
 
 /** The sole plain `key: value` initializer of an object literal without spreads. */
