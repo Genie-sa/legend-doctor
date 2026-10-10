@@ -12,7 +12,14 @@ The snippets assume these imports when needed:
 
 ```tsx
 import { batch, type Observable } from "@legendapp/state";
-import { Computed, useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
+import {
+  Computed,
+  Show,
+  Switch,
+  useObservable,
+  useObserveEffect,
+  useValue,
+} from "@legendapp/state/react";
 import { $React } from "@legendapp/state/react-web";
 ```
 
@@ -491,7 +498,7 @@ microtask, so it saves them together either way.
 
 ### Preserve a conditional child's mount behavior
 
-Keep the observable at the owner. Put the condition in a stable leaf.
+Keep the observable at the owner. Let `Show` hold the condition.
 
 ```tsx
 function Page() {
@@ -500,17 +507,26 @@ function Page() {
     <>
       <Canvas />
       <button onClick={() => open$.set(true)}>Open</button>
-      <PanelGate open$={open$} />
+      <Show if={open$}>{() => <Panel />}</Show>
     </>
   );
 }
-
-function PanelGate({ open$ }: { open$: Observable<boolean> }) {
-  return useValue(open$) ? <Panel /> : null;
-}
 ```
 
-`PanelGate` stays mounted. `Panel` keeps its original conditional mount.
+`Show` stays mounted as the only subscriber and calls its child function only while the condition holds, so
+`Panel` keeps its original conditional mount. It re-renders with the owner, so values the child captures stay
+current. `cond ? <A /> : <B />` becomes `<Show if={cond$} else={() => <B />}>{() => <A />}</Show>`, and a chain
+of `tab === "posts" ? ... : tab === "media" ? ... : ...` becomes `<Switch value={tab$}>` with one arm per value
+and a `default` arm. Both return the selected element from one position, so a branch keeps its state across
+toggles exactly when it did before. A finding uses this form only when it renders the same thing:
+
+- A `&&` condition must be boolean. A falsy `0` or `""` would render under `&&` but not under `Show`.
+- A value narrowed by the condition is not read in a branch, because `get()` would lose the narrowing.
+- The slot reads no other observable with `get()` and calls no hook, since `Show` tracks its child function.
+- A ternary sits directly in a host element or fragment, which never inspects its children.
+- `Switch` needs every value the state can hold to be a string literal outside `Object.prototype`.
+
+Otherwise the finding asks for an always-mounted wrapper component that evaluates the slot as written.
 
 ### Subscribe once per keyed row
 
