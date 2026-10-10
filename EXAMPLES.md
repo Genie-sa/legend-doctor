@@ -14,6 +14,7 @@ The snippets assume these imports when needed:
 import { batch, type Observable } from "@legendapp/state";
 import {
   Computed,
+  For,
   Show,
   Switch,
   useObservable,
@@ -543,6 +544,39 @@ rows.map((row) => <RowState key={row.id} id={row.id} selectedId$={selectedId$} /
 
 Index keys and state-controlled row mounts need review.
 
+### Render an observable list with For
+
+`render-list-with-for` changes a component whose only read of an observable array is a keyed map.
+
+```tsx
+// Before: a change to one todo renders Todos and every row
+const todos = useValue(todos$);
+return (
+  <ul>
+    {todos.map((todo) => (
+      <TodoRow key={todo.id} todo={todo} />
+    ))}
+  </ul>
+);
+
+// After: a change to one todo renders its row
+return (
+  <ul>
+    <For each={todos$}>
+      {(todo$) => {
+        const todo = todo$.get();
+        return <TodoRow todo={todo} />;
+      }}
+    </For>
+  </ul>
+);
+```
+
+`For` subscribes to the array shallowly and renders each row in its own observer, keyed by the item's `id`.
+Rows do not re-render with the component, so a row that captures a prop, state, or other render value would keep
+its first value; those maps, index keys, keys other than `item.id`, rows that read other observables, and maps
+inside a component that inspects its children stay unchanged.
+
 ## Keep command state out of renders
 
 ### Replace render-free state with a ref
@@ -577,6 +611,16 @@ const save = () => persist(settings$.theme.peek()); // After
 ```
 
 Render reads and reactive callbacks keep tracking reads. The finding's `edits` rename `get` to `peek`.
+
+A row `key` read with `get()` inside an `observer` render or a `Computed`, `Memo`, `Show`, or `For` child function
+is a `candidate`. The tracked read subscribes the parent to every row's key; `For` derives keys without tracking
+them. The two differ only when code rewrites a key in place, which remounts the row under `get()` and keeps it
+under `peek()`, so confirm no such write exists.
+
+```tsx
+<For each={todos$}>{(todo$) => <TodoRow key={todo$.id.get()} todo$={todo$} />}</For> // Before
+<For each={todos$}>{(todo$) => <TodoRow key={todo$.id.peek()} todo$={todo$} />}</For> // After
+```
 
 ## Track every render read
 

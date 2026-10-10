@@ -138,6 +138,7 @@ const LEGEND_PRACTICE_ACTIONS = [
   "narrow-use-value-subscription",
   "pass-observable-to-use-value",
   "peek-unrendered-use-value",
+  "render-list-with-for",
   "replace-legacy-use-value",
   "reuse-observable-reference",
   "select-stable-selector-result",

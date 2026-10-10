@@ -239,7 +239,9 @@ a type assertion, when a render read follows an early return or sits in JSX, a b
 when only a new import declaration would bring the hook into scope, when a render read would reuse a legacy
 binding that the file's legacy migration removes, when a destructure is annotated or its call has type arguments,
 when a legacy binding is referenced other than by a reported call, and when a `Memo` import swap would touch the
-specifier another rule adds `useValue` beside. Hoisting instructions, `move-*`, `split-*`, and batching stay prose;
+specifier another rule adds `useValue` beside. Hoisting instructions, `move-*`, `split-*`, `render-list-with-for`, and
+batching stay prose; so do the `Show`, `Switch`, and `For` elements an instruction writes, which elide a branch or row
+longer than one short line as `<Tag … />`;
 a render initializer below an early return or `throw` is told to move above it. Every instruction for a new
 subscription, including `useState` and `useEffect` findings and instructions for other files such as the consumers of
 a context, names the file's `useValue` binding or `useValue`. A description of an existing subscription, such as the

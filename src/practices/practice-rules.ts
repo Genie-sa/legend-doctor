@@ -10,6 +10,7 @@ import { findInPlaceMemoKeyPractices } from "../rules/in-place-memo-keys/in-plac
 import { findLegacyUseValuePractices } from "../rules/legacy-use-value.js";
 import { findMemoParentCapturePractices } from "../rules/memo-parent-captures/memo-parent-captures.js";
 import { findObservableCloneWritePractices } from "../rules/observable-clone-writes/observable-clone-writes.js";
+import { findObservableListPractices } from "../rules/observable-lists/observable-lists.js";
 import { findObservableOwnershipPractices } from "../rules/observable-ownership/observable-ownership.js";
 import { findObservableReadPractices } from "../rules/observable-reads/observable-reads.js";
 import { findObservableTogglePractices } from "../rules/observable-toggle.js";
@@ -24,6 +25,7 @@ export type PracticeRuleId =
   | "legacy-use-value"
   | "memo-parent-captures"
   | "observable-clone-writes"
+  | "observable-lists"
   | "observable-ownership"
   | "observable-reads"
   | "observable-toggle"
@@ -190,6 +192,17 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
     needsObservableBindings: false,
     run: ({ imports, observableBindings, request }) =>
       findMemoParentCapturePractices({
+        fileName: request.fileName,
+        imports,
+        observableBindings,
+        sourceFile: request.sourceFile,
+      }),
+  },
+  {
+    id: "observable-lists",
+    needsObservableBindings: true,
+    run: ({ imports, observableBindings, request }) =>
+      findObservableListPractices({
         fileName: request.fileName,
         imports,
         observableBindings,
