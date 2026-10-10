@@ -341,14 +341,13 @@ export const outlineHookCases = [
     target: "outline-icon-picker",
   },
   {
-    action: "review-effect",
-    abstentionReason: "dependency-identity-unproven",
+    action: "reset-during-render",
     file: "index.tsx",
     hook: "useEffect",
     line: 170,
     name: null,
     rationale:
-      "The effect resets the tab to its defaultTab initializer and stays in React; defaultTab is a memoized local, so the render-phase comparison waits on its identity.",
+      "The effect resets the tab to its defaultTab initializer and stays in React; defaultTab is a memo that returns one of two module string constants, so it compares equal while the render-phase comparison settles.",
     target: "outline-icon-picker",
   },
   {

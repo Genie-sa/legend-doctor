@@ -136,7 +136,9 @@ lockfile, and legacy-root findings above: on the supported React 19 and latest L
 transaction labels, marks six whose non-React observers span the writes as known misses, and labels every legacy
 hook rename as style. Its same-file tracker gate enforces one of those six and removes the transaction reviews. The
 [render-phase reset audit](audit-2026-10-02-render-phase-resets.md) records the React facts behind `reset-during-render`
-and the nine labels it moved. A red
+and the nine labels it moved. The [reset identity audit](audit-2026-10-10-reset-identity.md) records the typed
+parameters, stable defaults, primitive memos, and guard-pinned mount writes that prove more resets, and the six labels
+it moved or added. A red
 corpus job remains a real gate; unit-suite success does not override it.
 
 ### Expert replay

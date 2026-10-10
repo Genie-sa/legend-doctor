@@ -1047,14 +1047,24 @@ export const formbricksHookCases = [
     target: "formbricks-when-to-send",
   },
   {
-    action: "review-effect",
+    action: "reset-during-render",
     file: "when-to-send-card.tsx",
     hook: "useEffect",
     line: 150,
     name: null,
     rationale:
-      "The effect synchronizes card disclosure with changing survey inputs and should retain React timing.",
+      'Switching the survey to a link survey closes the card; open starts as `localSurvey.type === "app"`, which is already false for a link survey, so the mount write is a no-op and comparing the type prop during render closes the card without the stale commit.',
     target: "formbricks-when-to-send",
+  },
+  {
+    action: "reset-during-render",
+    file: "language-view.tsx",
+    hook: "useEffect",
+    line: 127,
+    name: null,
+    rationale:
+      "Removing the last language deactivates multi-language mode; isMultiLanguageActivated starts as `localSurvey.languages.length > 0`, already false when no language exists, so the mount write is a no-op and comparing the languages prop during render deactivates it without the stale commit.",
+    target: "formbricks-language-view",
   },
   {
     action: "use-observable",

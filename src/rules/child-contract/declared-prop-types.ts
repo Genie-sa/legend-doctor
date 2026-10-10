@@ -1,7 +1,7 @@
 import type { ChildComponentSource } from "./model.js";
 import ts from "typescript";
 
-function unwrapParenthesizedType(type: ts.TypeNode): ts.TypeNode {
+export function unwrapParenthesizedType(type: ts.TypeNode): ts.TypeNode {
   let current = type;
   while (ts.isParenthesizedTypeNode(current)) {
     current = current.type;
@@ -22,7 +22,7 @@ export function soleTypeDeclaration(
   return declarations.length === 1 && declaration ? declaration : null;
 }
 
-function declaredTypeMembers(
+export function declaredTypeMembers(
   declaration: ts.InterfaceDeclaration | ts.TypeAliasDeclaration,
 ): ts.NodeArray<ts.TypeElement> | null {
   if (ts.isInterfaceDeclaration(declaration)) {

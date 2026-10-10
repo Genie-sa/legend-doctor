@@ -3,12 +3,13 @@ import type {
   RenderPhaseResetEdit,
   StateCandidate,
 } from "../../analysis/model.js";
-import { isPrimitive, isPureCall } from "../in-place-memo-keys/primitive-selection.js";
+import { guardPinsInitialValue, printedExpression } from "./guarded-mount-writes.js";
 import { isPureExpression, unwrapTransparentExpression } from "../../core/analysis-ast.js";
 import { nodeWithin, visit } from "../../core/ast.js";
 import type { EffectClassificationContext } from "./model.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import { isCustomHookOwner } from "../../analysis/ast-helpers.js";
+import { hasStableIdentity } from "./dependency-identity.js";
+import { isPureCall } from "../in-place-memo-keys/primitive-selection.js";
 import { lexicalBinding } from "../../core/lexical-bindings.js";
 import ts from "typescript";
 
@@ -60,7 +61,7 @@ export function findRenderPhaseReset(
     compared,
     targets: body.writes,
     unprovenDependencies: compared
-      .filter((dependency) => !hasStableIdentity(dependency, owner, context.stateByValue))
+      .filter((dependency) => !hasStableIdentity(dependency, owner, context))
       .map((dependency) => dependency.getText()),
   };
 }
@@ -85,48 +86,51 @@ interface ResetBody {
   readonly writes: readonly ResetWrite[];
 }
 
+/** Where a reset write runs: its owner, the analysis context, and the guard admitting it, if any. */
+interface WriteScope {
+  readonly context: EffectClassificationContext;
+  readonly guard: ts.Expression | null;
+  readonly owner: RuntimeFunctionLike;
+}
+
 function resetBody(
   callback: ts.ArrowFunction | ts.FunctionExpression,
   owner: RuntimeFunctionLike,
   context: EffectClassificationContext,
 ): ResetBody | null {
+  const scope: WriteScope = { context, guard: null, owner };
   if (!ts.isBlock(callback.body)) {
-    const write = resetWrite(callback.body, owner, context);
+    const write = resetWrite(callback.body, scope);
     return write ? { reads: [write.call.arguments[0]!], writes: [write] } : null;
   }
   const { statements } = callback.body;
   const [guard] = statements;
   if (statements.length === 1 && guard && ts.isIfStatement(guard)) {
-    return guardedResetBody(guard, owner, context);
+    return guardedResetBody(guard, scope);
   }
-  const writes = statementWrites(statements, owner, context);
+  const writes = statementWrites(statements, scope);
   return writes ? { reads: valuesOf(writes), writes } : null;
 }
 
-function guardedResetBody(
-  guard: ts.IfStatement,
-  owner: RuntimeFunctionLike,
-  context: EffectClassificationContext,
-): ResetBody | null {
+function guardedResetBody(guard: ts.IfStatement, scope: WriteScope): ResetBody | null {
   if (guard.elseStatement || !isPureExpression(guard.expression, isPureValueCall)) {
     return null;
   }
   const inner = ts.isBlock(guard.thenStatement)
     ? guard.thenStatement.statements
     : [guard.thenStatement];
-  const writes = statementWrites(inner, owner, context);
+  const writes = statementWrites(inner, { ...scope, guard: guard.expression });
   return writes ? { reads: [guard.expression, ...valuesOf(writes)], writes } : null;
 }
 
 function statementWrites(
   statements: readonly ts.Statement[],
-  owner: RuntimeFunctionLike,
-  context: EffectClassificationContext,
+  scope: WriteScope,
 ): ResetWrite[] | null {
   const writes: ResetWrite[] = [];
   for (const statement of statements) {
     const write = ts.isExpressionStatement(statement)
-      ? resetWrite(statement.expression, owner, context)
+      ? resetWrite(statement.expression, scope)
       : null;
     if (!write || writes.some(({ state }) => state === write.state)) {
       return null;
@@ -138,8 +142,7 @@ function statementWrites(
 
 function resetWrite(
   expression: ts.Expression,
-  owner: RuntimeFunctionLike,
-  context: EffectClassificationContext,
+  { context, guard, owner }: WriteScope,
 ): ResetWrite | null {
   const call = unwrapTransparentExpression(expression);
   if (
@@ -154,16 +157,21 @@ function resetWrite(
   return state &&
     state.owner === owner &&
     isPureExpression(value!, isPureValueCall) &&
-    writesInitialValue(value!, state)
+    keepsMountValue(value!, state, guard)
     ? { call, state }
     : null;
 }
 
 /**
  * The effect also runs on mount, so the rewrite keeps the first commit only when that write is a
- * no-op: the value is the state's own initializer, which a deliberate placeholder render never is.
+ * no-op: the value is the state's own initializer, which a deliberate placeholder render never is,
+ * or the guard admits the write only where the initializer already evaluates to the same value.
  */
-function writesInitialValue(value: ts.Expression, state: StateCandidate): boolean {
+function keepsMountValue(
+  value: ts.Expression,
+  state: StateCandidate,
+  guard: ts.Expression | null,
+): boolean {
   const [initializer] = state.call.arguments;
   if (!initializer) {
     return false;
@@ -173,14 +181,10 @@ function writesInitialValue(value: ts.Expression, state: StateCandidate): boolea
     ts.isArrowFunction(initial) && initial.parameters.length === 0 && !ts.isBlock(initial.body)
       ? unwrapTransparentExpression(initial.body)
       : initial;
-  return printed(lazy) === printed(unwrapTransparentExpression(value));
-}
-
-const PRINTER = ts.createPrinter({ removeComments: true });
-
-/** Source tokens without their layout, so an equal literal at another indentation compares equal. */
-function printed(node: ts.Expression): string {
-  return PRINTER.printNode(ts.EmitHint.Expression, node, node.getSourceFile());
+  return (
+    printedExpression(lazy) === printedExpression(unwrapTransparentExpression(value)) ||
+    (guard !== null && guardPinsInitialValue(guard, value, lazy))
+  );
 }
 
 function isPureValueCall(call: ts.CallExpression): boolean {
@@ -234,79 +238,6 @@ function isRebuiltEachRender(dependency: ts.Expression, owner: RuntimeFunctionLi
       ts.isObjectLiteralExpression(value) ||
       ts.isArrayLiteralExpression(value) ||
       ts.isNewExpression(value))
-  );
-}
-
-/**
- * React keeps a state value's identity until its setter runs, a binding outside the owner does
- * not change between its renders, a length or other primitive compares by value, and React re-runs
- * a component after a render-phase update with the same props, so comparing them settles.
- */
-function hasStableIdentity(
-  dependency: ts.Expression,
-  owner: RuntimeFunctionLike,
-  stateByValue: ReadonlyMap<string, StateCandidate>,
-): boolean {
-  const node = unwrapTransparentExpression(dependency);
-  const root = pathRoot(node);
-  const binding = root && lexicalBinding(root);
-  if (
-    (ts.isPropertyAccessExpression(node) && node.name.text === "length") ||
-    binding?.kind === "import"
-  ) {
-    return true;
-  }
-  if (!root || !binding || binding.kind === "ambient") {
-    return false;
-  }
-  const state = stateByValue.get(root.text);
-  return (
-    !nodeWithin(binding.declaration, owner) ||
-    (state?.owner === owner && nodeWithin(binding.declaration, state.call.parent)) ||
-    isPrimitiveConstant(binding.declaration) ||
-    isComponentProp(root.text, binding.declaration, owner)
-  );
-}
-
-/** A primitive compares by value, so recomputing it on every render still settles. */
-function isPrimitiveConstant(declaration: ts.Node): boolean {
-  return (
-    ts.isVariableDeclaration(declaration) &&
-    ts.isIdentifier(declaration.name) &&
-    (ts.getCombinedNodeFlags(declaration) & ts.NodeFlags.Const) !== 0 &&
-    declaration.initializer !== undefined &&
-    isPrimitive(declaration.initializer, declaration.getSourceFile())
-  );
-}
-
-function pathRoot(node: ts.Expression): ts.Identifier | null {
-  const inner = unwrapTransparentExpression(node);
-  if (ts.isIdentifier(inner)) {
-    return inner;
-  }
-  return ts.isPropertyAccessExpression(inner) ? pathRoot(inner.expression) : null;
-}
-
-/** A destructuring default builds a new value on every render the prop is missing. */
-function isComponentProp(name: string, declaration: ts.Node, owner: RuntimeFunctionLike): boolean {
-  return (
-    ts.isParameter(declaration) &&
-    declaration.parent === owner &&
-    !declaration.initializer &&
-    !isCustomHookOwner(owner) &&
-    bindsWithoutDefault(declaration.name, name)
-  );
-}
-
-function bindsWithoutDefault(pattern: ts.BindingName, name: string): boolean {
-  if (ts.isIdentifier(pattern)) {
-    return pattern.text === name;
-  }
-  return pattern.elements.some(
-    (element) =>
-      ts.isBindingElement(element) &&
-      !element.initializer &&
-      bindsWithoutDefault(element.name, name),
   );
 }
 

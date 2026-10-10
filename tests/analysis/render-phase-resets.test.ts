@@ -128,6 +128,79 @@ test("a guarded reset keeps its guard inside the comparison", () => {
   assert.match(finding.message, /setPrevTab\(tab\); if \(tab === "all"\)/u);
 });
 
+for (const [label, initializer, body, dependency] of [
+  [
+    "a literal the initializer maps to the written value",
+    'useState(query === "app" ? "open" : "")',
+    'if (query === "link") { setDraft(""); }',
+    "query",
+  ],
+  [
+    "a count the initializer compares to the same value",
+    'useState(rows.length > 0 ? "rows" : "")',
+    'if (rows.length === 0) setDraft("");',
+    "rows.length",
+  ],
+  [
+    "each literal it writes through, which the initializer also selects",
+    'useState(query === "b" ? "b" : "a")',
+    'if (query === "a" || query === "b") setDraft(query);',
+    "query",
+  ],
+] as const) {
+  test(`a guarded reset that pins ${label} keeps the first commit and is a change`, () => {
+    const finding = resetEffect(
+      `useEffect(() => { ${body} }, [${dependency}]);`,
+      null,
+      initializer,
+    );
+    assert.equal(finding.action, "reset-during-render");
+  });
+}
+
+for (const [label, initializer, body, dependency] of [
+  [
+    "a range the guard does not pin",
+    'useState("")',
+    'if (rows.length > 0) setDraft("rows");',
+    "rows.length",
+  ],
+  [
+    "a literal under which the initializer differs",
+    'useState(query === "app" ? "open" : "")',
+    'if (query === "app") setDraft("");',
+    "query",
+  ],
+  [
+    "two subjects",
+    'useState(query === "app" ? "open" : "")',
+    'if (query === "link" || tab === "all") setDraft("");',
+    "query, tab",
+  ],
+  [
+    "a zero it stores, which may be -0",
+    "useState(rows.length === 0 ? 0 : 1)",
+    "if (rows.length === 0) setDraft(rows.length);",
+    "rows.length",
+  ],
+  [
+    "a value the initializer reads through another name",
+    'useState(filterKey === "a" ? "a" : "")',
+    'if (query === "a") setDraft("a");',
+    "query",
+  ],
+] as const) {
+  test(`a guarded reset over ${label} is not a render-phase reset`, () => {
+    const finding = resetEffect(
+      `useEffect(() => { ${body} }, [${dependency}]);`,
+      null,
+      initializer,
+    );
+    assert.notEqual(finding.action, "reset-during-render");
+    assert.notEqual(finding.abstentionReason, "dependency-identity-unproven");
+  });
+}
+
 test("a layout-effect reset still resets during render", () => {
   const finding = resetEffect("useLayoutEffect(() => { setPage(FIRST_PAGE); }, [tab]);");
   assert.equal(finding.action, "reset-during-render");
