@@ -95,8 +95,11 @@ function publicationIsDeferred(
     return true;
   }
   return (
-    childContracts?.componentCallbackPropIsDeferred(publication.component, publication.prop) ===
-    true
+    childContracts?.componentCallbackPropIsDeferredAtInvocation(
+      publication.component,
+      publication.prop,
+      publication.invocation,
+    ) === true
   );
 }
 
@@ -238,6 +241,10 @@ export function jsxEventAttributeIsDeferred(
   return (
     !isCustomJsxTarget(target) ||
     childContracts?.frameworkEventComponent(target) === true ||
-    childContracts?.componentCallbackPropIsDeferred(target, prop) === true
+    childContracts?.componentCallbackPropIsDeferredAtInvocation(
+      target,
+      prop,
+      attribute.parent.parent,
+    ) === true
   );
 }

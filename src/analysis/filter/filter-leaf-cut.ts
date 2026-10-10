@@ -95,9 +95,10 @@ function deferredSetterTransport(
   const setterTransport = directSetterTransport(state);
   if (
     !setterTransport ||
-    !childContracts.componentCallbackPropIsDeferred(
+    !childContracts.componentCallbackPropIsDeferredAtInvocation(
       setterTransport.target,
       setterTransport.attribute.name.getText(),
+      setterTransport.attribute.parent.parent,
     )
   ) {
     return null;

@@ -35,7 +35,11 @@ export function forwardedSetterProp(
     return null;
   }
   const propName = attribute.name.getText();
-  return childContracts.componentCallbackPropIsDeferred(target, propName)
+  return childContracts.componentCallbackPropIsDeferredAtInvocation(
+    target,
+    propName,
+    attribute.parent.parent,
+  )
     ? { propName, target }
     : null;
 }

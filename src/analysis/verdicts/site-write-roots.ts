@@ -106,7 +106,11 @@ function isProvenEventAttribute(attribute: ts.JsxAttribute, scope: WriteRootScop
     return isEventName;
   }
   return scope.childContracts.resolveComponent(tag)
-    ? scope.childContracts.componentCallbackPropIsDeferred(tag, propName)
+    ? scope.childContracts.componentCallbackPropIsDeferredAtInvocation(
+        tag,
+        propName,
+        attribute.parent.parent,
+      )
     : isEventName;
 }
 

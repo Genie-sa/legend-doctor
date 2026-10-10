@@ -85,10 +85,6 @@ export class AssumedLeafContracts implements ChildContractResolver {
     return this.#base.componentPropCallbackIsDeferred(componentName, propName, callbackProperty);
   }
 
-  public componentCallbackPropIsDeferred(componentName: string, propName: string): boolean {
-    return this.#base.componentCallbackPropIsDeferred(componentName, propName);
-  }
-
   public componentCallbackPropIsDeferredAtInvocation(
     componentName: string,
     propName: string,

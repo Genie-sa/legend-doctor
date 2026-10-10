@@ -182,6 +182,7 @@ function memoizedObjectLiteral(
 export interface ComponentPublication {
   component: string;
   intrinsic: boolean;
+  invocation: ts.JsxOpeningLikeElement;
   prop: string;
 }
 
@@ -215,6 +216,7 @@ function eventHandlerPublication(
   return {
     component,
     intrinsic: !isCustomJsxTarget(component),
+    invocation: attribute.parent.parent,
     prop: attribute.name.getText(),
   };
 }

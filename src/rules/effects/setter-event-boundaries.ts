@@ -109,6 +109,6 @@ function jsxAttributeHasProvenEventContract(
   return (
     /^[a-z]/u.test(target) ||
     childContracts?.frameworkEventComponent(target) === true ||
-    childContracts?.componentCallbackPropIsDeferred(target, propName) === true
+    childContracts?.componentCallbackPropIsDeferredAtInvocation(target, propName, opening) === true
   );
 }

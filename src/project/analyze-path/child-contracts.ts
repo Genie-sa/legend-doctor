@@ -132,18 +132,14 @@ class ChildContracts implements ChildContractResolver {
     );
   }
 
-  public componentCallbackPropIsDeferred(componentName: string, propName: string): boolean {
-    return cached(this.componentCallbackContracts, `${componentName}\0${propName}\0`, () => {
-      const source = this.resolveComponentSource(this.importerFile, componentName);
-      return source !== null && propCallbackIsDeferred(source, propName, this.callbackSources);
-    });
-  }
-
   public componentCallbackPropIsDeferredAtInvocation(
     componentName: string,
     propName: string,
     invocation: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
   ): boolean {
+    if (this.componentCallbackPropIsDeferred(componentName, propName)) {
+      return true;
+    }
     return cached(
       this.componentInvocationCallbackContracts,
       `${componentName}\0${propName}\0${invocation.pos}`,
@@ -323,6 +319,13 @@ class ChildContracts implements ChildContractResolver {
 
   public resolveComponentIn(file: string, name: string): ChildComponentSource | null {
     return this.resolveComponentSource(file, name);
+  }
+
+  private componentCallbackPropIsDeferred(componentName: string, propName: string): boolean {
+    return cached(this.componentCallbackContracts, `${componentName}\0${propName}\0`, () => {
+      const source = this.resolveComponentSource(this.importerFile, componentName);
+      return source !== null && propCallbackIsDeferred(source, propName, this.callbackSources);
+    });
   }
 
   private hookDefersCallback(file: string, name: string, argumentIndex: number): boolean {

@@ -94,7 +94,7 @@ export interface ChildContractResolver {
     propName: string,
     callbackProperty: string,
   ) => boolean;
-  componentCallbackPropIsDeferred: (componentName: string, propName: string) => boolean;
+  /** Asked at one call site, whose own props (such as an absent `asChild`) can pin the child's branch. */
   componentCallbackPropIsDeferredAtInvocation: (
     componentName: string,
     propName: string,

@@ -1637,4 +1637,14 @@ export const formbricksHookCases = [
       "Each auto-save writes a new Date at line 359 and rerenders the whole menu bar with its back, publish, and save buttons; the only read is `lastSaved` on the AutoSaveIndicator at line 618. The state holds a Date, though, and Legend diffs object writes structurally, so a Computed block could keep passing the previous Date where React passed the new one; no static proof shows the indicator ignores identity.",
     target: "formbricks-survey-menu-bar",
   },
+  {
+    action: "use-observable",
+    file: "upload-contacts-button.tsx",
+    hook: "useState",
+    line: 48,
+    name: "duplicateContactsAction",
+    rationale:
+      'Every render read of the literal-union choice sits in the duplicates `<div>` at line 545, so picking a tab rerenders the 43-element upload dialog for one block. The other writes run in `resetState`, reached only from `Button` clicks; neither call site passes `asChild`, so the wrapper\'s `asChild ? Slot : "button"` selects the host button and the click runs after render.',
+    target: "formbricks-upload-contacts",
+  },
 ] as const satisfies readonly GoldHookCase[];

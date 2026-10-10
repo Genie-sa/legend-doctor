@@ -260,6 +260,16 @@ export const gptmeHookCases = [
     action: "use-observable",
     file: "components/TaskCreationDialog.tsx",
     hook: "useState",
+    line: 43,
+    name: "useExistingWorkspace",
+    rationale:
+      "The workspace-mode toggle and the selector it switches both sit in the `<CardContent>` at line 153, so flipping the Switch rerenders the 74-element dialog for one block. The form reset at line 73 runs in `handleSubmit`, wired to the Create Task `Button` at line 271 without `asChild`, so the wrapper's `asChild ? Slot : 'button'` selects the host button and the write runs after render.",
+    target: "gptme-webui",
+  },
+  {
+    action: "use-observable",
+    file: "components/TaskCreationDialog.tsx",
+    hook: "useState",
     line: 44,
     name: "isLoading",
     rationale:
