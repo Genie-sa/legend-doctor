@@ -639,7 +639,7 @@ useEffect(() => setSelected(0), [query]);
 // After
 const [selected, setSelected] = useState(0);
 const [prevQuery, setPrevQuery] = useState(query);
-if (query !== prevQuery) {
+if (!Object.is(query, prevQuery)) {
   setPrevQuery(query);
   setSelected(0);
 }

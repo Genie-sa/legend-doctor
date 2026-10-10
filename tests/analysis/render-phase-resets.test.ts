@@ -40,9 +40,32 @@ test("a reset keyed by local state, a module binding, and a length is a change",
   assert.match(finding.message, /useState\(\[tab, rows\.length\]\)/u);
   assert.match(
     finding.message,
-    /if \(tab !== prevDeps\[0\] \|\| rows\.length !== prevDeps\[1\]\)/u,
+    /if \(!Object\.is\(tab, prevDeps\[0\]\) \|\| !Object\.is\(rows\.length, prevDeps\[1\]\)\)/u,
   );
   assert.doesNotMatch(finding.message, /initialize/u);
+});
+
+test("a reset keyed by a numeric prop compares with Object.is, so a NaN prop settles", () => {
+  const finding = requireValue(
+    analyzeSourceWith(
+      `
+        import { useEffect, useState } from "react";
+        export function Pager({ limit }: { limit: number }) {
+          const [page, setPage] = useState(1);
+          useEffect(() => setPage(1), [limit]);
+          return <button onClick={() => setPage(page + 1)}>{page}</button>;
+        }
+      `,
+      "fixture.tsx",
+      { confirmations: null },
+    ).find((result) => result.hook === "useEffect"),
+  );
+  assert.equal(finding.action, "reset-during-render");
+  assert.match(
+    finding.message,
+    /if \(!Object\.is\(limit, prevLimit\)\) \{ setPrevLimit\(limit\);/u,
+  );
+  assert.doesNotMatch(finding.message, /!==/u);
 });
 
 test("a reset keyed by component props is a change, since a render-phase rerun keeps them", () => {
