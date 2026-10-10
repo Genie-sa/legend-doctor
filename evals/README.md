@@ -54,12 +54,16 @@ Pinned public repositories, each at a fixed commit with focused source roots whe
 - `skastr0/fractals` (expert replay only: no target is scanned at its pin)
 - `bluesky-social/social-app` (expert replay only)
 - `fontsource/fontsource` (expert replay only)
-- `danieltafjord/food-app-expo` (expert replay only)
 - `DHBWLoerrach/CampusRallyeApp` (expert replay only)
 - `bbplayer-app/BBPlayer` (expert replay only)
 
 Repository source is never copied into this project. Each corpus entry pins a commit and a source location, and the
 runner scans local checkouts. A label enters the corpus only after manual review of the source it points at.
+
+A repository whose pinned commit can no longer be fetched leaves the corpus, since CI cannot check out its source and
+the policy above forbids copying it in. `danieltafjord/food-app-expo` was deleted upstream in October 2026; its two
+replayed commits carried 0 enforced, 3 non-enforced, and 18 excluded labels, which remain in git history should the
+repository return.
 
 ### Private slice
 
@@ -92,7 +96,6 @@ node dist/evals/run.js --complete \
   --repo fractals=/path/to/fractals \
   --repo social-app=/path/to/social-app \
   --repo fontsource=/path/to/fontsource \
-  --repo food-app-expo=/path/to/food-app-expo \
   --repo campus-rallye=/path/to/CampusRallyeApp \
   --repo bbplayer=/path/to/BBPlayer
 ```
@@ -155,7 +158,6 @@ recommend:
 | `fontsource/fontsource`        |       1 | The maintainer's Legend State v3 migration, which narrows one keyed read and moves one progress read into its only child             |        2 |            2 |       35 |
 | `excalidraw/excalidraw`        |       1 | The maintainers' library rendering commit that moves selection state below the menu                                                  |        1 |            0 |        1 |
 | `bluesky-social/social-app`    |       3 | Dan Abramov's and Samuel Newman's derived-state, effect, and dialog-input commits                                                    |        0 |            5 |        3 |
-| `danieltafjord/food-app-expo`  |       2 | The maintainer's draft-state and hot-path commits                                                                                    |        0 |            3 |       18 |
 | `DHBWLoerrach/CampusRallyeApp` |       3 | The maintainer's derived-state and camera-state commits                                                                              |        0 |            4 |        1 |
 | `bbplayer-app/BBPlayer`        |       4 | The maintainer's playback progress, lyric, and cleanup commits                                                                       |        0 |            5 |       18 |
 
@@ -204,7 +206,7 @@ in `evals/performance-budgets.ts`:
 
 Baselines come from CI run 36409722431 on ubuntu-latest (4 CPUs, 16 GB) with the analyzer at 51f2d32, and for gptme,
 zenborg, and junto from CI run 36444683516 at c478731, for fractals from CI run 36894444846 at 1b0e659, and for
-social-app, fontsource, food-app-expo, campus-rallye, and bbplayer from CI run 36936168646 at 16d263d:
+social-app, fontsource, campus-rallye, and bbplayer from CI run 36936168646 at 16d263d:
 
 | Repository                | Baseline | Limit |
 | ------------------------- | -------: | ----: |
@@ -223,7 +225,6 @@ social-app, fontsource, food-app-expo, campus-rallye, and bbplayer from CI run 3
 | `open-webui-react-native` |     3.1s |   60s |
 | `fontsource`              |     2.7s |   60s |
 | `legend-music`            |     2.4s |   60s |
-| `food-app-expo`           |     2.4s |   60s |
 | `nori`                    |     2.2s |   60s |
 | `campus-rallye`           |     2.1s |   60s |
 | `fractals`                |     2.0s |   60s |
