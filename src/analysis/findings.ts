@@ -13,6 +13,7 @@ import {
   stateClusterFor,
 } from "./finding-clusters.js";
 import {
+  calleeTransitionOverride,
   commitSensitiveStateClassification,
   stateIsCommitSensitive,
 } from "./commit-sensitive-state.js";
@@ -156,7 +157,8 @@ function schedulingOverride(
     action !== "keep-state" &&
     stateIsCommitSensitive(state, usage, analysis)
       ? commitSensitiveStateClassification(state)
-      : null)
+      : null) ??
+    (action === "use-observable" ? calleeTransitionOverride(state, usage, analysis) : null)
   );
 }
 

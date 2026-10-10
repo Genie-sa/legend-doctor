@@ -18,14 +18,16 @@ const CALL_SITE_OWNED = /wrap the branch-local `Details` call site/u;
 interface ScreenFixture {
   readonly declaration: string;
   readonly file?: string;
+  readonly helpers?: string;
   readonly site?: string;
 }
 
 /** The call site is returned directly, so a returned-call-site cut is the verdict that applies. */
-function screen({ declaration, site = COMMAND_SITE }: ScreenFixture): string {
+function screen({ declaration, helpers = "", site = COMMAND_SITE }: ScreenFixture): string {
   return `
     import { useState } from "react";
     import { Details } from "./Details";
+    ${helpers}
     export function Screen({ enabled, next }) {
       const [value, setValue] = ${declaration};
       return (
@@ -70,6 +72,25 @@ for (const [name, fixture] of Object.entries(PROVABLY_PRIMITIVE_STATES)) {
     assert.match(finding.message, CALL_SITE_LEAF);
   });
 }
+
+test("keeps a returned call site's write that a helper runs inside a transition in React", async () => {
+  const helpers = `
+    import { startTransition } from "react";
+    function inTransition(update: () => void) { startTransition(update); }
+    function run(update: () => void) { update(); }
+  `;
+  const handedTo = (helper: string): ScreenFixture => ({
+    declaration: `useState("")`,
+    helpers,
+    site: COMMAND_SITE.replace("setValue(next)", `${helper}(() => setValue(next))`),
+  });
+  const urgent = await valueVerdict(handedTo("run"));
+  assert.equal(urgent.action, "use-observable");
+  assert.match(urgent.message, CALL_SITE_LEAF);
+  const transitioned = await valueVerdict(handedTo("inTransition"));
+  assert.equal(transitioned.action, "review-state");
+  assert.equal(transitioned.abstentionReason, "react-commit-sensitive");
+});
 
 test("keeps call-site-owned primitive state above a controlled leaf", async () => {
   const finding = await valueVerdict({ declaration: "useState(false)", site: CONTROLLED_SITE });

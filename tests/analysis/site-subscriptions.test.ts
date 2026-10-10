@@ -34,6 +34,31 @@ test("subscribes at every independent JSX site of a broad owner's state", () => 
   assert.match(finding?.message ?? "", /Snapshot command reads with `\.peek\(\)`/u);
 });
 
+test("keeps a site-subscribed write that a helper runs inside a transition in React", () => {
+  const dashboard = (write: string): string => `
+    import { startTransition, useState } from "react";
+    function inTransition(update: () => void) { startTransition(update); }
+    function run(update: () => void) { update(); }
+    export function Dashboard({ total }: { total: number }) {
+      const [count, setCount] = useState(0);
+      return (
+        <section className="dashboard">
+          ${CHROME}
+          <p>{count} of {total}</p>
+          <div className={count > 0 ? "active" : "idle"} />
+          <button onClick={() => ${write}}>Add</button>
+        </section>
+      );
+    }
+  `;
+  const [urgent] = states(dashboard("run(() => setCount(1))"));
+  assert.equal(urgent?.action, "use-observable");
+  assert.match(urgent?.message ?? "", /render sites/u);
+  const [transitioned] = states(dashboard("inTransition(() => setCount(1))"));
+  assert.equal(transitioned?.action, "review-state");
+  assert.equal(transitioned?.abstentionReason, "react-commit-sensitive");
+});
+
 test("abstains when a read feeds a derived value, a render callback, or an unverified child", () => {
   const source = (body: string, extra = ""): string => `
     import { useState } from "react";
