@@ -31,6 +31,7 @@ import ts from "typescript";
 export function isKeyedLeafScalarState(
   state: StateCandidate,
   usage: StateUsage | undefined,
+  pureCalls: ReadonlySet<string>,
 ): boolean {
   return (
     usage !== undefined &&
@@ -53,22 +54,24 @@ export function isKeyedLeafScalarState(
     (usage.deferredReads === 0 || hasOnlyEventCommandReads(state)) &&
     !usage.shadowed &&
     !usage.escaped &&
-    usage.directRenderNodes.every((node) => isRepeatedScalarKeyProjection(node, state))
+    usage.directRenderNodes.every((node) => isRepeatedScalarKeyProjection(node, state, pureCalls))
   );
 }
 
 export function isKeyedScalarWithSecondaryLeaf(
   state: StateCandidate,
   usage: StateUsage | undefined,
+  pureCalls: ReadonlySet<string>,
 ): boolean {
   if (!usage || !usageAllowsKeyedScalarSelection(state, usage)) {
     return false;
   }
+  const scope = { pureCalls, state };
   const producer = repeatedScalarSelectionProducer(state, usage);
-  const secondaryNodes = producer && secondaryRenderNodes(usage.directRenderNodes, state, producer);
+  const secondaryNodes = producer && secondaryRenderNodes(usage.directRenderNodes, scope, producer);
   const secondaryReferences = secondaryNodes && secondaryLeafReferences(state, secondaryNodes);
   const renderReferences =
-    secondaryReferences && secondaryRenderReferences(secondaryReferences, state);
+    secondaryReferences && secondaryRenderReferences(secondaryReferences, scope);
   return (
     producer !== null &&
     renderReferences !== null &&
@@ -100,14 +103,20 @@ function usageAllowsKeyedScalarSelection(state: StateCandidate, usage: StateUsag
   );
 }
 
+/** A keyed scalar state, and the calls its render projections may make. */
+interface KeyedScalarScope {
+  readonly pureCalls: ReadonlySet<string>;
+  readonly state: StateCandidate;
+}
+
 function secondaryRenderNodes(
   directRenderNodes: readonly ts.Node[],
-  state: StateCandidate,
+  { pureCalls, state }: KeyedScalarScope,
   producer: ts.CallExpression,
 ): ts.Node[] | null {
   const secondaryNodes: ts.Node[] = [];
   for (const node of directRenderNodes) {
-    if (!isRepeatedScalarKeyProjection(node, state)) {
+    if (!isRepeatedScalarKeyProjection(node, state, pureCalls)) {
       secondaryNodes.push(node);
     } else if (nearestRepeatedRenderCall(node, state.owner) !== producer) {
       return null;
@@ -131,11 +140,11 @@ function secondaryLeafReferences(
 
 function secondaryRenderReferences(
   references: readonly ts.Identifier[],
-  state: StateCandidate,
+  scope: KeyedScalarScope,
 ): ts.Identifier[] | null {
   const renderReferences: ts.Identifier[] = [];
   for (const reference of references) {
-    const kind = classifySecondaryReference(reference, state);
+    const kind = classifySecondaryReference(reference, scope);
     if (kind === "unsafe") {
       return null;
     }
@@ -150,8 +159,9 @@ type SecondaryReferenceKind = "deferred" | "render" | "unsafe";
 
 function classifySecondaryReference(
   reference: ts.Identifier,
-  state: StateCandidate,
+  scope: KeyedScalarScope,
 ): SecondaryReferenceKind {
+  const { state } = scope;
   const callback = nearestNestedFunction(reference, state.owner);
   if (callback) {
     return plainCallbackIsEventRooted(callback, state.owner, reference.text)
@@ -159,19 +169,22 @@ function classifySecondaryReference(
       : "unsafe";
   }
   if (findAncestorUntil(reference, isJsxNode, state.owner)) {
-    return isSafeSecondaryRenderReference(reference, state) ? "render" : "unsafe";
+    return isSafeSecondaryRenderReference(reference, scope) ? "render" : "unsafe";
   }
   return isDeferredHookDependency(reference, state) ? "deferred" : "unsafe";
 }
 
-function isSafeSecondaryRenderReference(reference: ts.Identifier, state: StateCandidate): boolean {
+function isSafeSecondaryRenderReference(
+  reference: ts.Identifier,
+  { pureCalls, state }: KeyedScalarScope,
+): boolean {
   return (
     !nearestRepeatedRenderCall(reference, state.owner) &&
     !(
       isRenderGateReference(reference, state.owner) &&
       !findAncestorUntil(reference, ts.isJsxAttribute, state.owner)
     ) &&
-    isSafeJsxProjectionReference(reference, state.owner, new Set(["cn"]))
+    isSafeJsxProjectionReference(reference, state.owner, pureCalls)
   );
 }
 

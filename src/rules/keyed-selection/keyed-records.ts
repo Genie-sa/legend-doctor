@@ -13,10 +13,15 @@ import { writtenRecordEntry } from "./written-record-entries.js";
 
 const RECORD_TYPE_ARGUMENT_COUNT = 2;
 
+export interface KeyedRecordScope {
+  readonly childContracts: ChildContractResolver | null;
+  readonly pureCalls: ReadonlySet<string>;
+}
+
 export function isKeyedLeafRecordState(
   state: StateCandidate,
   usage: StateUsage | undefined,
-  childContracts: ChildContractResolver | null,
+  { childContracts, pureCalls }: KeyedRecordScope,
 ): boolean {
   if (
     !usage ||
@@ -38,7 +43,7 @@ export function isKeyedLeafRecordState(
     return false;
   }
 
-  const rendered = renderedRecordEntry(state, usage.directRenderNodes);
+  const rendered = renderedRecordEntry(state, usage.directRenderNodes, pureCalls);
   if (!rendered) {
     return false;
   }

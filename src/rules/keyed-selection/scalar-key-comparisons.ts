@@ -88,7 +88,11 @@ function identifierReadCount(node: ts.Node, name: string): number {
   return reads;
 }
 
-export function isRepeatedScalarKeyProjection(node: ts.Node, state: StateCandidate): boolean {
+export function isRepeatedScalarKeyProjection(
+  node: ts.Node,
+  state: StateCandidate,
+  pureCalls: ReadonlySet<string>,
+): boolean {
   if (!ts.isIdentifier(node)) {
     return false;
   }
@@ -108,18 +112,19 @@ export function isRepeatedScalarKeyProjection(node: ts.Node, state: StateCandida
   return declaration?.initializer &&
     ts.isIdentifier(declaration.name) &&
     nodeWithin(node, declaration.initializer)
-    ? aliasedKeyProjectionIsSafe({ callback, declaration, owner: state.owner, repeated })
-    : isSafeKeyProjectionReference(node, callback);
+    ? aliasedKeyProjectionIsSafe({ callback, declaration, owner: state.owner, pureCalls, repeated })
+    : isSafeKeyProjectionReference(node, callback, pureCalls);
 }
 
 function isSafeKeyProjectionReference(
   reference: ts.Identifier,
   callback: ts.ArrowFunction | ts.FunctionExpression,
+  pureCalls: ReadonlySet<string>,
 ): boolean {
   return (
     !isMembershipMountGate(reference, callback) &&
     findAncestorUntil(reference, isJsxNode, callback) !== null &&
-    isSafeJsxProjectionReference(reference, callback, new Set(["cn"]))
+    isSafeJsxProjectionReference(reference, callback, pureCalls)
   );
 }
 
@@ -127,11 +132,12 @@ interface AliasedKeyProjection {
   callback: ts.ArrowFunction | ts.FunctionExpression;
   declaration: ts.VariableDeclaration;
   owner: RuntimeFunctionLike;
+  pureCalls: ReadonlySet<string>;
   repeated: ts.CallExpression;
 }
 
 function aliasedKeyProjectionIsSafe(projection: AliasedKeyProjection): boolean {
-  const { callback, declaration, owner, repeated } = projection;
+  const { callback, declaration, owner, pureCalls, repeated } = projection;
   if (
     !ts.isIdentifier(declaration.name) ||
     !ts.isVariableDeclarationList(declaration.parent) ||
@@ -146,7 +152,7 @@ function aliasedKeyProjectionIsSafe(projection: AliasedKeyProjection): boolean {
     references.every(
       (reference) =>
         nearestRepeatedRenderCall(reference, owner) === repeated &&
-        isSafeKeyProjectionReference(reference, callback),
+        isSafeKeyProjectionReference(reference, callback, pureCalls),
     )
   );
 }

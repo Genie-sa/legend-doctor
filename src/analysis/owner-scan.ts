@@ -45,43 +45,6 @@ function isImportedReactLazyCall(node: ts.Expression, imports: HookImports): boo
   );
 }
 
-export function collectPureProjectionImports(sourceFile: ts.SourceFile): ReadonlySet<string> {
-  const names = new Set<string>();
-  for (const statement of sourceFile.statements) {
-    const clause = clsxImportClause(statement);
-    if (clause) {
-      addClsxBindingNames(clause, names);
-    }
-  }
-  return names;
-}
-
-function clsxImportClause(statement: ts.Statement): ts.ImportClause | null {
-  if (
-    !ts.isImportDeclaration(statement) ||
-    !ts.isStringLiteral(statement.moduleSpecifier) ||
-    statement.moduleSpecifier.text !== "clsx" ||
-    statement.importClause?.isTypeOnly
-  ) {
-    return null;
-  }
-  return statement.importClause ?? null;
-}
-
-function addClsxBindingNames(clause: ts.ImportClause, names: Set<string>): void {
-  if (clause.name) {
-    names.add(clause.name.text);
-  }
-  if (!clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) {
-    return;
-  }
-  for (const specifier of clause.namedBindings.elements) {
-    if (!specifier.isTypeOnly && (specifier.propertyName?.text ?? specifier.name.text) === "clsx") {
-      names.add(specifier.name.text);
-    }
-  }
-}
-
 export function ownerDeclaresBinding(owner: RuntimeFunctionLike, name: string): boolean {
   let declared = false;
   visit(owner, (node) => {

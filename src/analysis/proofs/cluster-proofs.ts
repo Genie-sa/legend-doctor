@@ -25,25 +25,12 @@ export function collectClusterProofs(
     subscriptionHook,
     usageByState,
   } = analysis;
-  const {
-    companionWrites,
-    effectStateScopes,
-    safeCommandStates,
-    statesWithCompanionWrites,
-    subtreeByState,
-  } = proofs;
+  const { companionWrites, effectStateScopes, subtreeByState } = proofs;
   const siblingRenderCuts = collectSiblingRenderCuts(analysis, proofs);
   return {
     contextClusters: findContextHeldStateClusters(analysis),
     effectDrafts: collectEffectDrafts(analysis, effectStateScopes, siblingRenderCuts),
-    keyedSelections: analyzeKeyedSelections({
-      states,
-      usageByState,
-      safeCommandStates,
-      statesWithCompanionWrites,
-      imports,
-      childContracts,
-    }),
+    keyedSelections: collectKeyedSelections(analysis, proofs),
     listenerRefClusters: findListenerRefStateClusters({ states, usageByState, effects, imports }),
     observableClusters: findObservableStateClusters(states, {
       childContracts,
@@ -57,6 +44,23 @@ export function collectClusterProofs(
     siblingRenderCuts,
     subtreeClusters: findStateSubtreeClusters(subtreeByState, companionWrites, subscriptionHook),
   };
+}
+
+function collectKeyedSelections(
+  analysis: SourceAnalysis,
+  proofs: CommandProofs & OwnershipProofs,
+): ClusterProofs["keyedSelections"] {
+  const { childContracts, imports, pureProjectionImports, states, usageByState } = analysis;
+  const { safeCommandStates, statesWithCompanionWrites } = proofs;
+  return analyzeKeyedSelections({
+    childContracts,
+    imports,
+    pureProjectionImports,
+    safeCommandStates,
+    states,
+    statesWithCompanionWrites,
+    usageByState,
+  });
 }
 
 function collectEffectDrafts(
@@ -81,14 +85,17 @@ function collectSiblingRenderCuts(
   analysis: SourceAnalysis,
   proofs: CommandProofs & OwnershipProofs,
 ): ReadonlyMap<StateCandidate, SiblingRenderCut> {
-  const { lifecycleRegions, states, usageByState } = analysis;
+  const { lifecycleRegions, pureProjectionImports, states, usageByState } = analysis;
   const { safeCommandStates, statesWithCompanionWrites } = proofs;
   const siblingRenderCuts = new Map<StateCandidate, SiblingRenderCut>();
   for (const state of states) {
     const usage = usageByState.get(state);
     const cut =
       usage && safeCommandStates.has(state) && !statesWithCompanionWrites.has(state)
-        ? siblingProducerConsumerCut(state, usage, lifecycleRegions)
+        ? siblingProducerConsumerCut(state, usage, {
+            effectNodes: lifecycleRegions,
+            pureProjectionImports,
+          })
         : null;
     if (cut) {
       siblingRenderCuts.set(state, cut);

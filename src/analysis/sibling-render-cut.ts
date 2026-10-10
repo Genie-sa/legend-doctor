@@ -1,7 +1,6 @@
 import {
   MAX_LEAF_SUBTREE_RATIO,
   PAIRED_TRANSPORT_OCCURRENCES,
-  SAFE_PROJECTION_CALLS,
   SMALL_OWNER_JSX_ELEMENTS,
 } from "./constants.js";
 import type { SiblingRenderCut, StateCandidate, StateUsage } from "./model.js";
@@ -119,15 +118,20 @@ function stateAllowsSiblingRenderCut(state: StateCandidate, usage: StateUsage): 
   );
 }
 
+export interface SiblingCutScope {
+  readonly effectNodes: ReadonlySet<ts.Node>;
+  readonly pureProjectionImports: ReadonlySet<string>;
+}
+
 export function siblingProducerConsumerCut(
   state: StateCandidate,
   usage: StateUsage,
-  effectNodes: ReadonlySet<ts.Node>,
+  { effectNodes, pureProjectionImports }: SiblingCutScope,
 ): SiblingRenderCut | null {
   if (!stateAllowsSiblingRenderCut(state, usage)) {
     return null;
   }
-  const consumer = siblingProjectionConsumer(state, usage);
+  const consumer = siblingProjectionConsumer(state, usage, pureProjectionImports);
   if (!consumer) {
     return null;
   }
@@ -148,6 +152,7 @@ export function siblingProducerConsumerCut(
 function siblingProjectionConsumer(
   state: StateCandidate,
   usage: StateUsage,
+  pureProjectionImports: ReadonlySet<string>,
 ): JsxSubtreeNode | null {
   if (usage.localRenderReads === 0) {
     const opening = directUniqueReturnCallSite(usage, state.owner)?.opening;
@@ -156,7 +161,10 @@ function siblingProjectionConsumer(
   const references = oneHopRenderProjectionReferences(state.owner, usage.directRenderNodes);
   if (
     !references ||
-    references.some((reference) => !isSafeSiblingProjectionReference(reference, state.owner))
+    references.some(
+      (reference) =>
+        !isSafeSiblingProjectionReference(reference, state.owner, pureProjectionImports),
+    )
   ) {
     return null;
   }
@@ -185,6 +193,7 @@ function sharedProjectionSubtree(
 function isSafeSiblingProjectionReference(
   reference: ts.Identifier,
   owner: RuntimeFunctionLike,
+  pureProjectionImports: ReadonlySet<string>,
 ): boolean {
   if (
     isRenderGateReference(reference, owner) &&
@@ -196,7 +205,7 @@ function isSafeSiblingProjectionReference(
     return false;
   }
   return (
-    isSafeJsxProjectionReference(reference, owner, SAFE_PROJECTION_CALLS) ||
+    isSafeJsxProjectionReference(reference, owner, pureProjectionImports) ||
     isSnapshotFallbackReference(reference, owner)
   );
 }

@@ -14,8 +14,13 @@ test("isolates one event-owned scalar in a reactive host prop", async (testConte
     `
       import { useEffect, useState } from "react";
       import { View } from "react-native";
+      import { StyleSheet } from "react-native-unistyles";
 
       const baseStyle = { flex: 1 };
+      const styles = StyleSheet.create((theme) => ({
+        container: (focused: boolean) => ({ borderColor: focused ? theme.colors.focus : theme.colors.idle }),
+      }));
+
       const project = (value: number) => ({ opacity: value });
 
       export function SafeScreen() {

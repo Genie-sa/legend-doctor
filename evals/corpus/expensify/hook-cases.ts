@@ -30,12 +30,13 @@ export const expensifyHookCases = [
   })),
   {
     action: "use-observable",
+    enforced: false,
     file: "ImportSpreadsheet.tsx",
     hook: "useState",
     line: 57,
     name: "fileTopPosition",
     rationale:
-      "The layout event can update an owner-lifetime observable while one stable positioned-view leaf inside the existing screen render callback subscribes to the only rendered projection.",
+      "The layout event can update an owner-lifetime observable while one stable positioned-view leaf inside the existing screen render callback subscribes to the only rendered projection. Not enforced (2026-10-10): real win; the projection calls `styles.fileUploadImageWrapper`, where `styles` comes from `useThemeStyles()`, a context read the projection proof does not resolve to the pure style factory in src/styles/index.ts.",
     target: "expensify-import-spreadsheet",
   },
   {
