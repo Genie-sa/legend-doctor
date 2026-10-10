@@ -5,6 +5,7 @@ import type { LegendPracticesRequest } from "./model.js";
 import type { ObservableFieldFacts } from "../rules/observable-reads/field-writes.js";
 import type { SubscriptionInventory } from "../core/subscriptions.js";
 import { collectTransactionFindings } from "./transaction-runs.js";
+import { findFreshSelectorResults } from "../rules/fresh-selector-results.js";
 import { findInPlaceMemoKeyPractices } from "../rules/in-place-memo-keys/in-place-memo-keys.js";
 import { findLegacyUseValuePractices } from "../rules/legacy-use-value.js";
 import { findMemoParentCapturePractices } from "../rules/memo-parent-captures/memo-parent-captures.js";
@@ -18,6 +19,7 @@ import { readersIgnoreIdentity } from "../rules/in-place-memo-keys/identity-read
 
 export type PracticeRuleId =
   | "plain-primitive-projection"
+  | "fresh-selector-results"
   | "in-place-memo-keys"
   | "legacy-use-value"
   | "memo-parent-captures"
@@ -77,6 +79,19 @@ export const PRACTICE_RULES: readonly PracticeRule[] = [
         observableBindings,
         sourceFile: request.sourceFile,
         stableContextRead: request.stableContextRead,
+      }),
+  },
+  {
+    id: "fresh-selector-results",
+    needsObservableBindings: true,
+    run: ({ imports, observableBindings, request }) =>
+      findFreshSelectorResults({
+        contextReaders: request.observableContextReaders,
+        fileName: request.fileName,
+        importedDeclarations: request.importedObservableDeclarations ?? new Map(),
+        imports,
+        observableBindings,
+        sourceFile: request.sourceFile,
       }),
   },
   {

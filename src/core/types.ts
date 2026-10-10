@@ -140,6 +140,7 @@ const LEGEND_PRACTICE_ACTIONS = [
   "peek-unrendered-use-value",
   "replace-legacy-use-value",
   "reuse-observable-reference",
+  "select-stable-selector-result",
   "snapshot-mutated-use-value",
   "split-use-value-leaves",
   "toggle-observable",

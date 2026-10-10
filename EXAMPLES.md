@@ -381,6 +381,35 @@ Keep the memo when an input is also read elsewhere in the component, since that 
 or when the result is an object or array, since `useValue` compares by reference and a new result always renders.
 `snapshot-mutated-use-value` recommends this rewrite when an in-place write leaves such a memo stale.
 
+### Select fields instead of a new object
+
+`select-stable-selector-result` asks about a selector that builds a new object or array on every run.
+
+```tsx
+// Before: every viewport$.width change renders, even while `wide` stays false
+const layout = useValue(() => ({
+  label: viewport$.label.get(),
+  wide: viewport$.width.get() > 800,
+}));
+
+// After: a width change renders only when `wide` flips
+const label = useValue(viewport$.label);
+const wide = useValue(() => viewport$.width.get() > 800);
+```
+
+`useValue` reruns its selector on each change to an observable the selector read and renders when the result `!==`
+the result of the last render; Legend State offers no shallow or custom equality option. A new literal never equals
+the last one, so the component renders on every tracked change. That costs a render only when a change can leave the
+contents equal: a field built from raw reads (`{ width: viewport$.width.get() }`) changes on every write anyway, and
+the rule stays silent.
+
+Every finding is a `candidate`, since only the app knows whether such changes happen. It is reported for a literal
+result when a tracked path reaches it only through comparisons, negations, conditions, or `typeof`, and that path's
+declared domain, when known, holds objects or three or more values; and for `filter`, `map`, `flatMap`, `Object.keys`,
+`Object.values`, or `Object.entries` of a tracked read, where you can select the primitives the render needs or render
+the items with `<For each={items$}>`. A selector that returns a fresh value on only some paths, passes options, reads
+no proven observable, or shares its path with another subscription in the owner stays silent.
+
 ### Update one host prop
 
 A reactive host prop can update without rendering a heavy owner.

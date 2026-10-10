@@ -29,7 +29,7 @@ export interface SelectorWalk {
   blocker: SelectorBlocker | null;
 }
 
-const COMPARISON_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+export const COMPARISON_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
   ts.SyntaxKind.EqualsEqualsEqualsToken,
   ts.SyntaxKind.ExclamationEqualsEqualsToken,
   ts.SyntaxKind.EqualsEqualsToken,
