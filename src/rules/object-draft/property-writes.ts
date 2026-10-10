@@ -93,7 +93,11 @@ function deferredSetterOnlyOpening(
   }
   return childContracts &&
     (childContracts.frameworkEventComponent(component) ||
-      childContracts.componentCallbackPropIsDeferred(component, attribute.name.getText()))
+      childContracts.componentCallbackPropIsDeferredAtInvocation(
+        component,
+        attribute.name.getText(),
+        opening,
+      ))
     ? opening
     : null;
 }

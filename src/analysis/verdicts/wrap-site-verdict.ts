@@ -103,7 +103,11 @@ function deferredSetterTransports(
     return (
       tag !== null &&
       !isHostTag(tag, context.hostTags) &&
-      childContracts?.componentCallbackPropIsDeferred(tag, attribute.name.getText()) === true
+      childContracts?.componentCallbackPropIsDeferredAtInvocation(
+        tag,
+        attribute.name.getText(),
+        attribute.parent.parent,
+      ) === true
     );
   });
   return deferred && usage.setterReferences === usage.setterCalls + transports.length

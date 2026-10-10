@@ -202,6 +202,10 @@ function jsxEventCallIsDeferred(
   return (
     childContracts !== null &&
     (childContracts.frameworkEventComponent(component) ||
-      childContracts.componentCallbackPropIsDeferred(component, attribute.name.getText()))
+      childContracts.componentCallbackPropIsDeferredAtInvocation(
+        component,
+        attribute.name.getText(),
+        opening,
+      ))
   );
 }

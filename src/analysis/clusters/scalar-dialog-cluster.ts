@@ -141,7 +141,11 @@ function scalarDialogCallSiteIsDeferred(
     closeTransport !== null &&
     closeTransport.target === target &&
     closeTransport.attribute.parent.parent === payloadCallSite &&
-    childContracts.componentCallbackPropIsDeferred(target, closeTransport.attribute.name.getText())
+    childContracts.componentCallbackPropIsDeferredAtInvocation(
+      target,
+      closeTransport.attribute.name.getText(),
+      payloadCallSite,
+    )
   );
 }
 
