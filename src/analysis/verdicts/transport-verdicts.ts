@@ -1,7 +1,9 @@
 import type { ClassifiedState, ComponentScope, StateUsage } from "../model.js";
 import {
+  expressionMayBeCallable,
   hasDirectPrimitiveInitializer,
   stateMayHoldCallable,
+  stateTypeIsPrimitive,
 } from "../../rules/state-proofs/state-proofs.js";
 import { isCustomHookOwner, renderCutSuffix } from "../ast-helpers.js";
 import {
@@ -17,6 +19,8 @@ import { BROAD_OWNER_JSX_ELEMENTS } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { isLiteralBooleanLeafState } from "../../rules/literal-boolean-leaf/literal-boolean-leaf.js";
 import { isLiteralBooleanSetter } from "../../rules/literal-boolean-leaf/boolean-setters.js";
+import { nearestNestedFunction } from "../../core/ast.js";
+import ts from "typescript";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
 function stateIsTransportOnly(usage: StateUsage): boolean {
@@ -73,6 +77,46 @@ export function controlledStateReadsAreEventOnly(usage: StateUsage): boolean {
 
 export function setterCallsAssignBooleanLiterals(usage: StateUsage): boolean {
   return usage.setterCallNodes.every((call) => isLiteralBooleanSetter(call));
+}
+
+/**
+ * A boolean literal write needs no further proof. A value write needs a state type that admits no
+ * object or function, plus the owner-side gates of `passThroughLeaf`: a material owner and no
+ * companion writes. An effect may write it only from a nested callback, such as a listener it
+ * registers; a write in the effect body can mirror a reactive input that should be derived instead.
+ */
+export function setterWritesFitLeafTransport(context: StateClassificationContext): boolean {
+  const { hasCompanionWrites, materiality, state, usage } = context;
+  return (
+    setterCallsAssignBooleanLiterals(usage) ||
+    (!hasCompanionWrites &&
+      !isCustomHookOwner(state.owner) &&
+      jsxElementCount(state.owner) >= materiality.broadOwnerJsx &&
+      stateTypeIsPrimitive(state) &&
+      usage.setterCallNodes.every(setterCallAssignsOneValue) &&
+      effectWritesRunInNestedCallbacks(context))
+  );
+}
+
+function effectWritesRunInNestedCallbacks({
+  effectRegions,
+  state,
+  usage,
+}: StateClassificationContext): boolean {
+  return usage.effectWriteNodes.every((write) => {
+    const callback = nearestNestedFunction(write, state.owner);
+    return callback !== null && !effectRegions.has(callback);
+  });
+}
+
+function setterCallAssignsOneValue(call: ts.CallExpression): boolean {
+  const [value] = call.arguments;
+  return (
+    call.arguments.length === 1 &&
+    value !== undefined &&
+    !ts.isSpreadElement(value) &&
+    !expressionMayBeCallable(value)
+  );
 }
 
 function ownerRenderCutIsMaterial(context: StateClassificationContext): boolean {

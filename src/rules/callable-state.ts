@@ -275,7 +275,7 @@ function callbackMayReturnCallable(callback: ts.ArrowFunction | ts.FunctionExpre
   return callable;
 }
 
-function expressionMayBeCallable(
+export function expressionMayBeCallable(
   expression: ts.Expression,
   seen: ReadonlySet<string> = new Set(),
 ): boolean {
