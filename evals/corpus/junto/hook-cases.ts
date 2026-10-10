@@ -429,36 +429,33 @@ export const juntoHookCases = [
     target: "junto-renderer",
   },
   {
-    action: "review-state",
-    enforced: false,
+    action: "keep-state",
     file: "components/InspectorFields.tsx",
     hook: "useState",
     line: 298,
     name: "draft",
     rationale:
-      "Known false positive (leaf is the owner): the analyzer emits use-observable, but PageUrlControl renders only a label, a span and the controlled input at line 312, so the render the cut removes is three host elements.",
+      "Outside the controlled input at line 312 that reads it, PageUrlControl renders only two divs, a label and a span, so a leaf cut removes no material render work.",
     target: "junto-renderer",
   },
   {
-    action: "review-state",
-    enforced: false,
+    action: "keep-state",
     file: "components/gallery/ActivityMarkGallery.tsx",
     hook: "useState",
     line: 372,
     name: "visible",
     rationale:
-      "Known false positive (leaf is the owner): the analyzer emits use-observable, but the fleet grid is already memoized at line 383, so the Stress owner render outside the readout <span> at line 408 is a section, a header row and the Eyebrow.",
+      "The fleet grid is memoized at line 383, so outside the readout <span> at line 408 the Stress owner renders a section, a header row and the hook-free Eyebrow, and a leaf cut removes no material render work.",
     target: "junto-renderer",
   },
   {
-    action: "review-state",
-    enforced: false,
+    action: "keep-state",
     file: "components/gallery/ActivityMarkGallery.tsx",
     hook: "useState",
     line: 373,
     name: "frame",
     rationale:
-      "Known false positive (leaf is the owner): the analyzer emits use-observable, but the interval writes it with `visible` into the same readout <span> at line 408 while the memoized grid at line 383 already skips the tick.",
+      "The interval writes it with `visible` into the same readout <span> at line 408, and the memoized grid at line 383 already skips the tick, so a leaf cut removes no material render work.",
     target: "junto-renderer",
   },
   {

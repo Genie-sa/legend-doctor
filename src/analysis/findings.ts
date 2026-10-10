@@ -18,6 +18,10 @@ import {
   stateIsCommitSensitive,
 } from "./commit-sensitive-state.js";
 import { findingFor, stateEvidence } from "./finding-format.js";
+import {
+  stateHasTrivialRenderRemainder,
+  trivialRenderRemainderClassification,
+} from "./trivial-remainder-state.js";
 import { EMPTY_RUNTIME_FUNCTIONS } from "./constants.js";
 import type { FindingsScope } from "./finding-clusters.js";
 import type { HookFinding } from "../core/types.js";
@@ -227,7 +231,7 @@ function splitClusterClassification(
 }
 
 interface StateVerdictResolution extends ResolvedStateClassification {
-  /** React scheduling the state depends on overrides what the verdicts or a confirmation produced. */
+  /** React scheduling or a trivial render remainder overrides what the verdicts or a confirmation produced. */
   readonly overridden: boolean;
 }
 
@@ -246,7 +250,10 @@ function resolveStateVerdict(
   const scheduling: SchedulingScope = { analysis: result.analysis, state, usage };
   const override =
     schedulingOverride(classification.action, scheduling) ??
-    (classification.action === "review-state" ? noSmallerBoundaryVerdict(inputs) : null);
+    (classification.action === "review-state" ? noSmallerBoundaryVerdict(inputs) : null) ??
+    (stateHasTrivialRenderRemainder(classification, inputs, result)
+      ? trivialRenderRemainderClassification(inputs.state)
+      : null);
   // A question is asked only when its "yes" survives the same overrides; group outcomes already do.
   const overturnedQuestion =
     assumption !== null &&
