@@ -73,6 +73,7 @@ test("only the React Compiler flag gates a practice rule", () => {
       "observable-tracking",
       "in-place-memo-keys",
       "memo-parent-captures",
+      "observable-lists",
       "observable-ownership",
     ],
   );

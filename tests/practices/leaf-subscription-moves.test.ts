@@ -130,7 +130,7 @@ test("moves a subscription behind a complete conditional JSX slot without changi
   });
   const finding = positive.find((candidate) => candidate.location.line === 5);
   assert.equal(requireValue(finding).action, "move-use-value-down");
-  assert.match(requireValue(finding).message ?? "", /always-mounted wrapper/u);
+  assert.match(requireValue(finding).message ?? "", /`<Show if=\{\(\) => view === "category"\}>/u);
   assert.match(requireValue(finding).message ?? "", /complete conditional JSX slot/u);
   assert.match(
     requireValue(finding).evidence.join(" ") ?? "",

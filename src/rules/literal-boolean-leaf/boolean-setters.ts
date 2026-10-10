@@ -94,7 +94,7 @@ function referencesAreIntrinsicEventAttributes(owner: RuntimeFunctionLike, name:
   });
 }
 
-function isBooleanExpression(expression: ts.Expression): boolean {
+export function isBooleanExpression(expression: ts.Expression): boolean {
   const value = unwrapTransparentExpression(expression);
   return (
     (ts.isPrefixUnaryExpression(value) && value.operator === ts.SyntaxKind.ExclamationToken) ||

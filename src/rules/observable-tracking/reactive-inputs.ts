@@ -107,7 +107,10 @@ function isReactiveChildHost(tag: ts.JsxOpeningElement, imports: HookImports): b
   return component !== null && CHILD_COMPONENTS.has(component);
 }
 
-function legendReactComponentOf(tag: JsxTag, imports: HookImports): LegendReactComponent | null {
+export function legendReactComponentOf(
+  tag: JsxTag,
+  imports: HookImports,
+): LegendReactComponent | null {
   const { tagName } = tag;
   if (ts.isIdentifier(tagName)) {
     return imports.legendReactComponents.get(tagName.text) ?? null;

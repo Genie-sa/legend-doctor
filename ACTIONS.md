@@ -28,18 +28,19 @@ A `change` finding carries a proven edit; a `style` finding offers an equivalent
 
 ### Legend reads
 
-| Action                                                                               | Removes                                                                                 |
-| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)           | Updates from unread sibling fields or map keys                                          |
-| [`peek-unrendered-use-value`](EXAMPLES.md#drop-a-subscription-no-render-reads)       | Renders for a value that only initializers or event commands read                       |
-| [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                       | One broad subscription across unrelated leaves                                          |
-| [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                          | An observable update rendering a broad parent                                           |
-| [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                    | A parent render used only to pass one value                                             |
-| [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)  | Missing tracking or redundant hooks for eager reads; selector syntax is style           |
-| [`select-primitive-projection`](docs/plain-primitive-projection.md)                  | Renders for raw value changes that leave an equality comparison or truthiness unchanged |
-| [`select-stable-selector-result`](EXAMPLES.md#select-fields-instead-of-a-new-object) | Renders from a new selector result whose contents a tracked change left equal           |
-| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)      | A `use$` call the React Compiler can memoize; elsewhere a deprecated name, as style     |
-| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                   | An `observer` render dependency from a `useState` initializer; elsewhere style          |
+| Action                                                                               | Removes                                                                                                  |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| [`narrow-use-value-subscription`](EXAMPLES.md#narrow-a-field-subscription)           | Updates from unread sibling fields or map keys                                                           |
+| [`peek-unrendered-use-value`](EXAMPLES.md#drop-a-subscription-no-render-reads)       | Renders for a value that only initializers or event commands read                                        |
+| [`split-use-value-leaves`](EXAMPLES.md#split-unrelated-leaves)                       | One broad subscription across unrelated leaves                                                           |
+| [`move-use-value-down`](EXAMPLES.md#split-unrelated-leaves)                          | An observable update rendering a broad parent                                                            |
+| [`move-use-value-into-child`](EXAMPLES.md#split-unrelated-leaves)                    | A parent render used only to pass one value                                                              |
+| [`render-list-with-for`](EXAMPLES.md#render-an-observable-list-with-for)             | Owner and sibling-row renders for a change to one item of a mapped observable array                      |
+| [`pass-observable-to-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)  | Missing tracking or redundant hooks for eager reads; selector syntax is style                            |
+| [`select-primitive-projection`](docs/plain-primitive-projection.md)                  | Renders for raw value changes that leave an equality comparison or truthiness unchanged                  |
+| [`select-stable-selector-result`](EXAMPLES.md#select-fields-instead-of-a-new-object) | Renders from a new selector result whose contents a tracked change left equal                            |
+| [`replace-legacy-use-value`](EXAMPLES.md#remove-selector-work-and-legacy-names)      | A `use$` call the React Compiler can memoize; elsewhere a deprecated name, as style                      |
+| [`use-peek-for-snapshot`](EXAMPLES.md#use-a-non-tracking-snapshot)                   | An `observer` render dependency from a `useState` initializer; a tracked row key review; elsewhere style |
 
 ### Legend tracking
 

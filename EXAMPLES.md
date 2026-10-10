@@ -12,7 +12,15 @@ The snippets assume these imports when needed:
 
 ```tsx
 import { batch, type Observable } from "@legendapp/state";
-import { Computed, useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
+import {
+  Computed,
+  For,
+  Show,
+  Switch,
+  useObservable,
+  useObserveEffect,
+  useValue,
+} from "@legendapp/state/react";
 import { $React } from "@legendapp/state/react-web";
 ```
 
@@ -491,7 +499,7 @@ microtask, so it saves them together either way.
 
 ### Preserve a conditional child's mount behavior
 
-Keep the observable at the owner. Put the condition in a stable leaf.
+Keep the observable at the owner. Let `Show` hold the condition.
 
 ```tsx
 function Page() {
@@ -500,17 +508,26 @@ function Page() {
     <>
       <Canvas />
       <button onClick={() => open$.set(true)}>Open</button>
-      <PanelGate open$={open$} />
+      <Show if={open$}>{() => <Panel />}</Show>
     </>
   );
 }
-
-function PanelGate({ open$ }: { open$: Observable<boolean> }) {
-  return useValue(open$) ? <Panel /> : null;
-}
 ```
 
-`PanelGate` stays mounted. `Panel` keeps its original conditional mount.
+`Show` stays mounted as the only subscriber and calls its child function only while the condition holds, so
+`Panel` keeps its original conditional mount. It re-renders with the owner, so values the child captures stay
+current. `cond ? <A /> : <B />` becomes `<Show if={cond$} else={() => <B />}>{() => <A />}</Show>`, and a chain
+of `tab === "posts" ? ... : tab === "media" ? ... : ...` becomes `<Switch value={tab$}>` with one arm per value
+and a `default` arm. Both return the selected element from one position, so a branch keeps its state across
+toggles exactly when it did before. A finding uses this form only when it renders the same thing:
+
+- A `&&` condition must be boolean. A falsy `0` or `""` would render under `&&` but not under `Show`.
+- A value narrowed by the condition is not read in a branch, because `get()` would lose the narrowing.
+- The slot reads no other observable with `get()` and calls no hook, since `Show` tracks its child function.
+- A ternary sits directly in a host element or fragment, which never inspects its children.
+- `Switch` needs every value the state can hold to be a string literal outside `Object.prototype`.
+
+Otherwise the finding asks for an always-mounted wrapper component that evaluates the slot as written.
 
 ### Subscribe once per keyed row
 
@@ -526,6 +543,39 @@ rows.map((row) => <RowState key={row.id} id={row.id} selectedId$={selectedId$} /
 ```
 
 Index keys and state-controlled row mounts need review.
+
+### Render an observable list with For
+
+`render-list-with-for` changes a component whose only read of an observable array is a keyed map.
+
+```tsx
+// Before: a change to one todo renders Todos and every row
+const todos = useValue(todos$);
+return (
+  <ul>
+    {todos.map((todo) => (
+      <TodoRow key={todo.id} todo={todo} />
+    ))}
+  </ul>
+);
+
+// After: a change to one todo renders its row
+return (
+  <ul>
+    <For each={todos$}>
+      {(todo$) => {
+        const todo = todo$.get();
+        return <TodoRow todo={todo} />;
+      }}
+    </For>
+  </ul>
+);
+```
+
+`For` subscribes to the array shallowly and renders each row in its own observer, keyed by the item's `id`.
+Rows do not re-render with the component, so a row that captures a prop, state, or other render value would keep
+its first value; those maps, index keys, keys other than `item.id`, rows that read other observables, and maps
+inside a component that inspects its children stay unchanged.
 
 ## Keep command state out of renders
 
@@ -561,6 +611,16 @@ const save = () => persist(settings$.theme.peek()); // After
 ```
 
 Render reads and reactive callbacks keep tracking reads. The finding's `edits` rename `get` to `peek`.
+
+A row `key` read with `get()` inside an `observer` render or a `Computed`, `Memo`, `Show`, or `For` child function
+is a `candidate`. The tracked read subscribes the parent to every row's key; `For` derives keys without tracking
+them. The two differ only when code rewrites a key in place, which remounts the row under `get()` and keeps it
+under `peek()`, so confirm no such write exists.
+
+```tsx
+<For each={todos$}>{(todo$) => <TodoRow key={todo$.id.get()} todo$={todo$} />}</For> // Before
+<For each={todos$}>{(todo$) => <TodoRow key={todo$.id.peek()} todo$={todo$} />}</For> // After
+```
 
 ## Track every render read
 

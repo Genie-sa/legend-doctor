@@ -3,6 +3,7 @@ import { DEFAULT_PRESENTATION_LEAF_COUNT, WIDE_OWNER_LINE_SPAN } from "../consta
 import { isCustomHookOwner, ownerLineSpan } from "../ast-helpers.js";
 import { isStructuralLegendCandidate, legendCandidateMessage } from "../finding-format.js";
 import type { StateClassificationContext } from "./classification-context.js";
+import { controlFlowGateMessage } from "./control-flow-gate.js";
 import { hasNoEffectReads } from "../state-usage.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { passThroughScope } from "./pass-through-leaf.js";
@@ -259,7 +260,9 @@ export function gatedSubtreeVerdict(context: StateClassificationContext): Classi
     return {
       action: "use-observable",
       confidence: "probable",
-      message: `Replace \`${state.valueName}\` with a component-lifetime observable and replace the full state-controlled render expression at the ${gateSubtree.label} boundary on line ${gateSubtree.line} with one always-mounted leaf subscriber; evaluate the complete gate and its selected content inside that wrapper so an initially hidden child can still open.`,
+      message:
+        controlFlowGateMessage(context, gateSubtree) ??
+        `Replace \`${state.valueName}\` with a component-lifetime observable and replace the full state-controlled render expression at the ${gateSubtree.label} boundary on line ${gateSubtree.line} with one always-mounted leaf subscriber; evaluate the complete gate and its selected content inside that wrapper so an initially hidden child can still open.`,
     };
   }
   if (projectionSubtree && !hasCompanionWrites) {

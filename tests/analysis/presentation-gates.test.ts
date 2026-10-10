@@ -86,7 +86,10 @@ test("isolates a small logical JSX gate without moving its owner lifetime", () =
     "fixture.tsx",
   );
   assert.equal(requireValue(finding).action, "use-observable");
-  assert.match(requireValue(finding).message ?? "", /always-mounted leaf subscriber/u);
+  assert.match(
+    requireValue(finding).message ?? "",
+    /`<Show if=\{visible\$\}>\{\(\) => <Hint onDismiss=\{hide\}>Draw here<\/Hint>\}<\/Show>`/u,
+  );
 });
 
 test("isolates a leaf reached through one immutable render projection", () => {

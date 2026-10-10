@@ -25,6 +25,7 @@ import type { LegendPracticeFinding } from "../../core/types.js";
 import type { MoveDownTarget } from "./subscription-leaf-targets.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { SubscriptionFlow } from "./subscription-flow.js";
+import { controlFlowMoveDownFinding } from "./control-flow-move-down.js";
 import { directUseValueInput } from "./use-value-inputs.js";
 import { isInsideOwnerReturn } from "./conditional-jsx-slots.js";
 import { jsxSubtreeLabel } from "../../analysis/ast-helpers.js";
@@ -81,7 +82,7 @@ function annotateFlowFinding(
   const { use } = flow;
   const finding =
     targets.length === 1
-      ? moveDownFinding(use, targets[0]!, scan)
+      ? singleTargetFinding(flow, targets[0]!, scan)
       : multipleLeavesFinding(use, targets, scan);
   finding.subscription = subscriptionCut(flow, targets, scan);
   if (flow.derivations.length > 0) {
@@ -94,6 +95,19 @@ function annotateFlowFinding(
     };
   }
   return finding;
+}
+
+function singleTargetFinding(
+  flow: SubscriptionFlow,
+  target: MoveDownTarget,
+  scan: ObservableReadScan,
+): LegendPracticeFinding {
+  const finding = moveDownFinding(flow.use, target, scan);
+  return (
+    (flow.derivations.length === 0 &&
+      controlFlowMoveDownFinding(flow.use, target, { finding, scan })) ||
+    finding
+  );
 }
 
 function projectedValueReferences(use: UseValueDeclaration): readonly ts.Identifier[] | null {
