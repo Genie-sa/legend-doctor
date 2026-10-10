@@ -1,5 +1,12 @@
 # legend-doctor
 
+## 0.6.1
+
+### Patch Changes
+
+- 726999b: Model which functions the React Compiler compiles, from its default rules: hook-shaped names, `memo`/`forwardRef` callbacks, `"use memo"` and `"use no memo"` directives, and ESLint suppressions. In compiled functions, report `use$` as `change`, because the Compiler only treats `use[A-Z0-9]` names as hooks. Report observable `.get()` reads in an `observer` render that reach the output as `change`, and flag method chains on a raw `useValue` result that the Compiler memoizes by reference.
+- adbefdd: Add the `select-stable-selector-result` candidate for `useValue` selectors that build a new object or array on every run, from `filter`/`map`/`flatMap`, `Object.keys`/`values`/`entries`, or a literal of comparisons. A tracked change that leaves the contents equal still re-renders the component, because Legend compares selector results by reference.
+
 ## 0.6.0
 
 ### Minor Changes
