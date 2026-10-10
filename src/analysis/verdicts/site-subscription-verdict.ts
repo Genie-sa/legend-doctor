@@ -56,6 +56,9 @@ interface SiteScope {
   readonly state: StateCandidate;
 }
 
+/** What a wrapped site needs to tell a read-only call from one with effects. */
+export type PureSiteScope = Pick<SiteScope, "pureProjectionImports" | "state">;
+
 export interface SubscriptionSites {
   readonly derivedBindings: readonly string[];
   readonly sites: readonly SubscriptionSite[];
@@ -91,21 +94,22 @@ export function siteSubscriptionVerdict(
   };
 }
 
-function writesOutsideEffects(
-  usage: StateUsage,
-  effectRegions: StateClassificationContext["effectRegions"],
-): ts.CallExpression[] {
-  return usage.setterCallNodes.filter(
-    (call) => ![...effectRegions].some((region) => nodeWithin(call, region)),
-  );
+/** Every write outside a detached effect runs from a proven event root. */
+export function writesOutsideEffectsAreEventRooted(context: StateClassificationContext): boolean {
+  const { effectRegions, hasDetachedEffectWrites, usage } = context;
+  const eventWrites = hasDetachedEffectWrites
+    ? {
+        ...usage,
+        setterCallNodes: usage.setterCallNodes.filter(
+          (call) => ![...effectRegions].some((region) => nodeWithin(call, region)),
+        ),
+      }
+    : usage;
+  return writesAreEventRooted(eventWrites, context);
 }
 
 function siteSubscriptionPreconditionsHold(context: StateClassificationContext): boolean {
-  const { childContracts, eventTransitionCallbacks, hasDetachedEffectWrites, state, usage } =
-    context;
-  const eventWrites = hasDetachedEffectWrites
-    ? { ...usage, setterCallNodes: writesOutsideEffects(usage, context.effectRegions) }
-    : usage;
+  const { eventTransitionCallbacks, state, usage } = context;
   return (
     context.hasSafeCommands &&
     !context.hasReactiveMutationPath &&
@@ -116,12 +120,7 @@ function siteSubscriptionPreconditionsHold(context: StateClassificationContext):
         new Set(usage.directRenderNodes),
         eventTransitionCallbacks,
       )) &&
-    writesAreEventRooted(eventWrites, {
-      childContracts,
-      eventTransitionCallbacks,
-      hostTags: context.hostTags,
-      state,
-    }) &&
+    writesOutsideEffectsAreEventRooted(context) &&
     !hasHiddenCompanionWrites(state, usage)
   );
 }
@@ -285,7 +284,7 @@ function attributeSite(attribute: ts.JsxAttribute, scope: SiteScope): Subscripti
  * not effects. Handlers nested inside rendered JSX are skipped: they run on events, not during
  * evaluation.
  */
-function rendersWithoutSideEffects(site: ts.Node, scope: SiteScope): boolean {
+export function rendersWithoutSideEffects(site: ts.Node, scope: PureSiteScope): boolean {
   let pure = true;
   visitSkippingNestedRuntimeFunctions(site, (node) => {
     if (ts.isCallExpression(node)) {
@@ -310,7 +309,7 @@ function rendersWithoutSideEffects(site: ts.Node, scope: SiteScope): boolean {
   return pure;
 }
 
-function isPureSiteCall(call: ts.CallExpression, scope: SiteScope): boolean {
+function isPureSiteCall(call: ts.CallExpression, scope: PureSiteScope): boolean {
   const callee = call.expression;
   return (
     isImportedTranslationCall(call, scope.state.owner) ||
@@ -322,7 +321,7 @@ function isPureSiteCall(call: ts.CallExpression, scope: SiteScope): boolean {
   );
 }
 
-function isPureProjectionImport(callee: ts.Identifier, scope: SiteScope): boolean {
+function isPureProjectionImport(callee: ts.Identifier, scope: PureSiteScope): boolean {
   return (
     scope.pureProjectionImports.has(callee.text) &&
     bindingDeclarationCount(scope.state.owner, callee.text) === 0

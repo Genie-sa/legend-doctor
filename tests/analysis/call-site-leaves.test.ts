@@ -114,7 +114,7 @@ test("does not mistake unresolved boundaries for proof of leaf ownership", () =>
       // The dirty+visible pair is one atomic workflow: the grouped observable-model
       // Instruction migrates both members together instead of splitting the transaction.
       assert.equal(requireValue(atomic).action, "use-observable");
-      assert.match(requireValue(atomic).message ?? "", /one owner-lifetime observable model/u);
+      assert.match(requireValue(atomic).message ?? "", /one component-lifetime observable object/u);
     }
   }
 });

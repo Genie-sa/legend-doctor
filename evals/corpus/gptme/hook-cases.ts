@@ -389,4 +389,25 @@ export const gptmeHookCases = [
       "Every 2 s poll writes `screenshotSrc` and `lastUpdated` at lines 123-126 after an await, rerendering the whole panel (toolbar buttons and the status bar's backend list) while only the `<img>` at line 309 and the timestamp span at line 257 change. The cut must move the co-written cluster (`screenshotSrc`, `lastUpdated`, `error`, `isLoading`) into one observable so the post-await writes stay one commit.",
     target: "gptme-webui",
   },
+  {
+    action: "use-observable",
+    file: "components/InlineToolConfirmation.tsx",
+    hook: "useState",
+    line: 49,
+    name: "customCount",
+    rationale:
+      "Each keystroke in the custom-count field rerenders the whole confirmation card; the only render read is the controlled <Input> at line 386, whose onChange is the only write, and the Go button reads the count once on click. Wrapping that <Input> in Computed keeps its mount under the `showCustomInput` gate unchanged.",
+    target: "gptme-webui",
+  },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "components/workspace/WorkspaceExplorer.tsx",
+    hook: "useState",
+    line: 22,
+    name: "selectedFile",
+    rationale:
+      "Clicking a file writes only `selectedFile` at line 78 and rerenders the explorer, including the root tabs and the file list; the only render read is the preview ternary at line 148. The state holds a FileType object, though: after `loadFiles` refetches the list, picking a structurally equal row would let Legend skip the notification and keep passing FilePreview the previous object, and no static proof shows FilePreview ignores identity.",
+    target: "gptme-webui",
+  },
 ] as const satisfies readonly GoldHookCase[];

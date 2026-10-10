@@ -1616,4 +1616,15 @@ export const formbricksHookCases = [
       "Keep the resize listener in React; it subscribes to `window` on mount and removes the same handler in its cleanup.",
     target: "formbricks-share-view",
   },
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "survey-menu-bar.tsx",
+    hook: "useState",
+    line: 75,
+    name: "lastAutoSaved",
+    rationale:
+      "Each auto-save writes a new Date at line 359 and rerenders the whole menu bar with its back, publish, and save buttons; the only read is `lastSaved` on the AutoSaveIndicator at line 618. The state holds a Date, though, and Legend diffs object writes structurally, so a Computed block could keep passing the previous Date where React passed the new one; no static proof shows the indicator ignores identity.",
+    target: "formbricks-survey-menu-bar",
+  },
 ] as const satisfies readonly GoldHookCase[];

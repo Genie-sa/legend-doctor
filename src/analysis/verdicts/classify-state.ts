@@ -57,6 +57,7 @@ import { ownerHasMutableRenderRead } from "../../rules/state-proofs/render-purpo
 import { renderedByClonedPropElement } from "../../rules/child-contract/element-identity.js";
 import { siteSubscriptionVerdict } from "./site-subscription-verdict.js";
 import { splitCommitVerdict } from "./split-commit-verdict.js";
+import { wrapSiteVerdict } from "./wrap-site-verdict.js";
 
 const STATE_VERDICTS: readonly StateVerdict[] = [
   intrinsicStateVerdict,
@@ -91,6 +92,7 @@ const STATE_VERDICTS: readonly StateVerdict[] = [
   multiSurfaceVerdict,
   wideOwnerTransportVerdict,
   siteSubscriptionVerdict,
+  wrapSiteVerdict,
   delayedPendingVerdict,
   renderReadVerdict,
   singleTargetTransportVerdict,

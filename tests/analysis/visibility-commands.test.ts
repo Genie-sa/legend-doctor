@@ -219,7 +219,7 @@ test("does not treat arbitrary direct setter props as independent child commands
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
         <button onClick={show}>Open</button>
         <Registry value={open} register={setOpen} />
-        <output>{String(dirty)}</output>
+        <output>{describe(dirty)}</output>
       </main>;
     }
   `,

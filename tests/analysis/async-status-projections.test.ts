@@ -121,7 +121,11 @@ test("keeps a pure conditional status label inside the direct async leaf", () =>
   ).filter((candidate) => candidate.name === "copying");
   assert.equal(requireValue(findings[0]).action, "use-observable");
   assert.match(requireValue(findings[0]).message ?? "", /async pending flag/u);
-  assert.notEqual(requireValue(findings[1]).action, "use-observable");
+  assert.doesNotMatch(requireValue(findings[1]).message, /async pending flag/u);
+  assert.match(
+    requireValue(findings[1]).message,
+    /wrap the child expression at line \d+ in `Computed`/u,
+  );
   assert.notEqual(requireValue(findings[2]).action, "use-observable");
 });
 
@@ -181,7 +185,14 @@ test("does not fold unsafe or external async status projections into a leaf", ()
   `,
     "fixture.tsx",
   );
-  for (const finding of findings.filter((candidate) => candidate.name === "saving")) {
-    assert.notEqual(finding.action, "use-observable");
-  }
+  const [unsafeCondition, siblingRead, selfGate] = findings.filter(
+    (candidate) => candidate.name === "saving",
+  );
+  assert.notEqual(requireValue(unsafeCondition).action, "use-observable");
+  assert.notEqual(requireValue(siblingRead).action, "use-observable");
+  assert.doesNotMatch(requireValue(selfGate).message, /async pending flag/u);
+  assert.match(
+    requireValue(selfGate).message,
+    /wrap the child expression at line \d+ in `Computed`/u,
+  );
 });

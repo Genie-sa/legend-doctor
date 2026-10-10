@@ -40,7 +40,7 @@ test("does not isolate async status when another owner update starts the command
         } finally { setSaving(false); }
       }
       return <main><Header /><Toolbar /><Summary /><Fields /><Preview /><Help /><Status /><History /><Aside /><Footer /><Actions />
-        <form onSubmit={save}><LoadingButton loading={saving} /></form><output>{String(dirty)}</output>
+        <form onSubmit={save}><LoadingButton loading={saving} /></form><output>{describe(dirty)}</output>
       </main>;
     }
   `,

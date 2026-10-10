@@ -596,4 +596,64 @@ export const juntoHookCases = [
     rationale: rationale as string,
     target: "junto-renderer",
   })),
+  {
+    action: "use-observable",
+    file: "components/fleet/FleetHostForm.tsx",
+    hook: "useState",
+    line: 61,
+    name: "busy",
+    rationale:
+      "The submit command sets `busy` with `error` before and after the await at lines 88-107, rerendering both enroll inputs and the capability buttons; only the submit <Button> at line 169 reads it. Both states convert together, so each stretch stays one commit.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/fleet/FleetHostForm.tsx",
+    hook: "useState",
+    line: 62,
+    name: "error",
+    rationale:
+      "Validation and submit failures rerender the whole enroll form; only the conditional alert at line 160 reads `error`. It converts together with `busy`, which shares its submit stretches.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/terminal/TerminalSurface.tsx",
+    hook: "useState",
+    line: 707,
+    name: "releasePending",
+    rationale:
+      "The unassign command sets `releasePending` with `releaseError` around its await at lines 1910-1922, rerendering the whole TerminalSurface component; only the Unassign <Button> at line 2095 reads it, and the guard at line 1909 is a command read. Both states convert together.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/terminal/TerminalSurface.tsx",
+    hook: "useState",
+    line: 708,
+    name: "releaseError",
+    rationale:
+      "A failed unassign rerenders the whole TerminalSurface; only the error span at line 2090 reads `releaseError`. It converts together with `releasePending`, which shares every write stretch.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/work/WorkLedger.tsx",
+    hook: "useState",
+    line: 834,
+    name: "pendingId",
+    rationale:
+      "Every artifact mutation sets `pendingId` with `error` around its await at lines 879-888, rerendering the artifact rail and search; only the keyed ArtifactSideDetail at line 1090 reads it through `pending`. Both states convert together.",
+    target: "junto-renderer",
+  },
+  {
+    action: "use-observable",
+    file: "components/work/WorkLedger.tsx",
+    hook: "useState",
+    line: 835,
+    name: "error",
+    rationale:
+      "Mutation failures and provenance messages rerender the artifact rail; only the dismissible alert at line 994 reads `error`, and its dismiss button is its only other write. It converts together with `pendingId`.",
+    target: "junto-renderer",
+  },
 ] as const satisfies readonly GoldHookCase[];

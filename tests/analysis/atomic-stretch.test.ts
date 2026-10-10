@@ -19,8 +19,8 @@ function alerts(fail: string): string {
       ${fail}
       return <main>${CHROME}
         <button onClick={() => fail("boom", true)} />
-        {error ? <p role="alert">{error.toUpperCase()}</p> : null}
-        {hint ? <p>{hint.toUpperCase()}</p> : null}
+        {error ? <p role="alert">{shout(error)}</p> : null}
+        {hint ? <p>{shout(hint)}</p> : null}
       </main>;
     }
   `;
