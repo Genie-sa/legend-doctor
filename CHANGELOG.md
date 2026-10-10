@@ -1,5 +1,12 @@
 # legend-doctor
 
+## 0.6.4
+
+### Patch Changes
+
+- 67ef894: Review props that a memoized child re-renders for. A `stabilize-memo-prop` candidate fires when an owner passes a `memo`, Legend `observer`, or MobX `observer` child, alone or composed with `forwardRef`, an inline function, object, array, or element, and the owner also renders for state or a `useValue` subscription the element never reads. The child is resolved through imports, re-exports, star exports, and default exports, and a `memo` with its own comparator is skipped. Project hooks are followed to the values they return. The finding names the props to wrap in `useCallback` or `useMemo` or to move to module scope, and lists every input whose identity stays unproven. It is always a candidate, because a child that reads a global its owner mutates before forcing a render needs those renders. Components the React Compiler compiles are skipped.
+- e29e562: Keep state as React state when a `use-observable` or `move-state-down` cut would skip only a trivial owner render. Outside the leaf that reads or carries the value, fewer elements than a compact owner must remain, none repeated, each a host element or a resolved child that calls only built-in reads and renders unrepeated host elements, and the owner must call nothing but read-only projections and core React hooks. Work in event handlers, commit callbacks, deferred schedulers, and `useMemo` factories does not count, since it does not re-run on the update. Repeated leaves, custom-hook owners, keyed leaves, and context clusters keep their cut, and a cluster converts only when every member's remainder is trivial.
+
 ## 0.6.3
 
 ### Patch Changes
