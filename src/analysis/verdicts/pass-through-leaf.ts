@@ -1,10 +1,10 @@
 import type { PassThroughScope } from "../../rules/child-contract/element-identity.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { bindingDeclarationCount } from "../../core/analysis-ast.js";
-import { callSiteIsKeyed } from "../return-call-sites.js";
 import { isCustomHookOwner } from "../ast-helpers.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { nearestNestedFunction } from "../../core/ast.js";
+import { transportCallSitesKeepMountIdentity } from "./transport-mount-identity.js";
 import ts from "typescript";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
@@ -55,8 +55,8 @@ export interface PassThroughLeaf {
  * Proves from the owner alone that a leaf subscriber around every `target` call site removes a
  * material owner render while the child receives the same props, so the child is never read. The
  * owner reads the value only as one plain attribute, writes it only from closures without companion
- * writes, and renders each call site at owner level under a stable outer tag, without a key, inside
- * a parent that passes the wrapper through.
+ * writes, and renders each call site at owner level under a stable outer tag, with a mount identity
+ * the wrapper keeps, inside a parent that passes the wrapper through.
  */
 export function passThroughLeaf(
   context: StateClassificationContext,
@@ -75,7 +75,7 @@ export function passThroughLeaf(
     otherProps.length > 0 ||
     callSites.length !== usage.valueTransportSites.size ||
     context.hasCompanionWrites ||
-    usage.unstableTransport ||
+    !transportCallSitesKeepMountIdentity(state, usage) ||
     isCustomHookOwner(state.owner) ||
     jsxElementCount(state.owner) < context.materiality.broadOwnerJsx ||
     usage.setterCallNodes.some((call) => nearestNestedFunction(call, state.owner) === null)
@@ -86,7 +86,6 @@ export function passThroughLeaf(
   const stable = callSites.every(
     (callSite) =>
       nearestNestedFunction(callSite, state.owner) === null &&
-      !callSiteIsKeyed(callSite) &&
       bindingDeclarationCount(state.owner, callSite.tagName.getText().split(".")[0] ?? "") === 0 &&
       wrappedElementIsPassedThrough(callSite, scope),
   );

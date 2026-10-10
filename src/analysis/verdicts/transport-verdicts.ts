@@ -21,6 +21,7 @@ import type { StateClassificationContext } from "./classification-context.js";
 import { isLiteralBooleanLeafState } from "../../rules/literal-boolean-leaf/literal-boolean-leaf.js";
 import { isLiteralBooleanSetter } from "../../rules/literal-boolean-leaf/boolean-setters.js";
 import { nearestNestedFunction } from "../../core/ast.js";
+import { transportCallSitesKeepMountIdentity } from "./transport-mount-identity.js";
 import ts from "typescript";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
@@ -141,6 +142,18 @@ function stateWritesStayPrimitive({ state, usage }: StateClassificationContext):
 /** A leaf receives the mount value either way, so only what later writes store decides identity. */
 export function leafRenderValues(context: StateClassificationContext): LeafRenderValues {
   return stateWritesStayPrimitive(context) ? "primitive" : "structural";
+}
+
+/**
+ * A conditional or keyed call site joins a leaf transport only when the wrapper keeps the child's
+ * mount identity and the value stays primitive, so the leaf passes every snapshot React passed.
+ */
+export function unstableCallSitesAdmitLeaf(context: StateClassificationContext): boolean {
+  const { state, usage } = context;
+  return (
+    !usage.unstableTransport ||
+    (stateValuesStayPrimitive(context) && transportCallSitesKeepMountIdentity(state, usage))
+  );
 }
 
 function ownerRenderCutIsMaterial(context: StateClassificationContext): boolean {
