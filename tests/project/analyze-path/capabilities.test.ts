@@ -64,6 +64,7 @@ test("only the React Compiler flag gates a practice rule", () => {
     enabledPracticeRules({ legendBabel: false, reactCompiler: false }).map((rule) => rule.id),
     [
       "plain-primitive-projection",
+      "fresh-selector-results",
       "legacy-use-value",
       "observable-transactions",
       "observable-reads",
