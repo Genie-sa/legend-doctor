@@ -3,12 +3,13 @@ import type { GoldHookCase } from "../contracts.js";
 export const legendAppsHookCases = [
   {
     action: "use-observable",
+    enforced: false,
     file: "MarkdownE2EEditorSmoke.tsx",
     hook: "useState",
     line: 117,
     name: "selectionAnchor",
     rationale:
-      "The anchor is written only by the selection callback and read only as MarkdownDocument's toolbar prop, so a leaf subscriber around that stable call site keeps the smoke owner and its status and command rows out of every selection change.",
+      "The anchor is written only by the selection callback and read only as MarkdownDocument's toolbar prop, so a leaf subscriber around that stable call site would keep the smoke owner and its status and command rows out of every selection change. The anchor is an object, though: Legend skips notifying for a structurally equal replacement, so the leaf can keep passing the previous reference, and MarkdownDocument runs an effect keyed on that prop's identity. The effect republishes an equal anchor here, but no static proof shows that.",
     target: "legend-apps-markdown",
   },
   {

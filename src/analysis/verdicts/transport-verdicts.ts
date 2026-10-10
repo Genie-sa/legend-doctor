@@ -119,6 +119,20 @@ function setterCallAssignsOneValue(call: ts.CallExpression): boolean {
   );
 }
 
+/**
+ * Legend diffs an object or array write structurally and skips notifying for an equal replacement,
+ * so a leaf would keep passing the previous reference where React passed the new one. The prop
+ * snapshot stays identical only when the state type admits no object, or when every write is a
+ * direct boolean literal call.
+ */
+function stateValuesStayPrimitive({ state, usage }: StateClassificationContext): boolean {
+  return (
+    hasDirectPrimitiveInitializer(state) &&
+    (stateTypeIsPrimitive(state) ||
+      (usage.setterReferences === usage.setterCalls && setterCallsAssignBooleanLiterals(usage)))
+  );
+}
+
 function ownerRenderCutIsMaterial(context: StateClassificationContext): boolean {
   const { materiality, state, usage } = context;
   const { hasCompactBooleanTransportCut, hasRepeatedOwnerRenderCut } = context.renderCut;
@@ -164,7 +178,7 @@ export function compactTransportCutVerdict(
     wrappedElementIsPassedThrough(branchCallSite.opening, passThroughScope(context)) &&
     companionWritesAllowTransportCut(context) &&
     hasSafeCommands &&
-    hasDirectPrimitiveInitializer(state) &&
+    stateValuesStayPrimitive(context) &&
     !stateMayHoldCallable(state) &&
     !setterOwnedByValueCallSite(usage, state.owner) &&
     usage.setterReferences > 0 &&
@@ -207,7 +221,7 @@ export function descendantControlledCutVerdict(
     (directCallSite === null || usage.unstableTransport) &&
     !hasCompanionWrites &&
     hasSafeCommands &&
-    hasDirectPrimitiveInitializer(state) &&
+    stateValuesStayPrimitive(context) &&
     !stateMayHoldCallable(state) &&
     (descendantControlledCut || setterOwnedByValueTransitionCallSite(state, usage)) &&
     stateWritesAreUntracked(usage)

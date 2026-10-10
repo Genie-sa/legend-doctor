@@ -1108,7 +1108,6 @@ export const formbricksHookCases = [
       "isStatusDropdownOpen",
       "WorkflowFilterDropdown",
     ],
-    ["formbricks-survey-editor", "survey-editor.tsx", 101, "localStylingChanges", "StylingView"],
     ["formbricks-theme-styling", "theme-styling.tsx", 84, "formStylingOpen", "FormStylingSettings"],
     ["formbricks-theme-styling", "theme-styling.tsx", 85, "cardStylingOpen", "CardStylingSettings"],
     [
@@ -1128,6 +1127,17 @@ export const formbricksHookCases = [
     rationale: `One branch-local ${consumer} call site owns the complete value and setter surface; owner-lifetime observable ownership preserves state across alternate returns or conditional mounts while isolating child updates.`,
     target: target as string,
   })),
+  {
+    action: "use-observable",
+    enforced: false,
+    file: "survey-editor.tsx",
+    hook: "useState",
+    line: 101,
+    name: "localStylingChanges",
+    rationale:
+      "One branch-local StylingView call site owns the value and setter, and StylingView reads the stash only in its toggle handler, so an owner observable would keep the editor out of each stash. The state type is the TSurveyStyling object, though: Legend skips notifying for a structurally equal replacement, so the leaf can keep passing the previous reference, and no static proof shows the child ignores identity.",
+    target: "formbricks-survey-editor",
+  },
   ...[
     [
       "formbricks-taxonomy-container",

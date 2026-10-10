@@ -27,9 +27,9 @@ test("migrates a coupled parent opener and its payload as one group", () => {
     interface Item { id: string }
     function Dialog(_props: unknown) { return null; }
     export function Screen({ item }: { item: Item }) {
-      const [target, setTarget] = useState<Item | null>(null);
+      const [target, setTarget] = useState<string | null>(null);
       const [open, setOpen] = useState(false);
-      const show = () => { setTarget(item); setOpen(true); };
+      const show = () => { setTarget(item.id); setOpen(true); };
       return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
         <button onClick={show}>Open</button>
         <Dialog target={target} open={open} setOpen={setOpen} />
@@ -43,6 +43,30 @@ test("migrates a coupled parent opener and its payload as one group", () => {
     "use-observable",
   );
   assert.equal(
+    requireValue(findings.find((finding) => finding.name === "target")).action,
+    "use-observable",
+  );
+});
+
+test("keeps a coupled parent opener under review when its payload admits objects", () => {
+  const findings = analyzeSource(
+    `
+    import { useState } from "react";
+    interface Item { id: string }
+    function Dialog(_props: unknown) { return null; }
+    export function Screen({ item }: { item: Item }) {
+      const [target, setTarget] = useState<Item | null>(null);
+      const [open, setOpen] = useState(false);
+      const show = () => { setTarget(item); setOpen(true); };
+      return <main><Header /><Toolbar /><Summary /><Filters /><List /><Footer /><Aside /><Help /><Status /><Actions /><Preview />
+        <button onClick={show}>Open</button>
+        <Dialog target={target} open={open} setOpen={setOpen} />
+      </main>;
+    }
+  `,
+    "fixture.tsx",
+  );
+  assert.notEqual(
     requireValue(findings.find((finding) => finding.name === "target")).action,
     "use-observable",
   );
