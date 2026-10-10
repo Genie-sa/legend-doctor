@@ -241,7 +241,10 @@ function isRebuiltEachRender(dependency: ts.Expression, owner: RuntimeFunctionLi
   );
 }
 
-/** The complete edit: a previous-value state and the writes, guarded by a changed dependency, during render. */
+/**
+ * The complete edit: a previous-value state and the writes, guarded by a changed dependency, during
+ * render. The guard compares with `Object.is`, as React compares dependencies, so a `NaN` settles.
+ */
 export function renderPhaseResetInstruction(
   reset: RenderPhaseReset,
   callback: ts.ArrowFunction | ts.FunctionExpression,
@@ -251,12 +254,14 @@ export function renderPhaseResetInstruction(
   const previous =
     names.length === 1 && single !== undefined
       ? {
-          changed: `${single} !== ${previousName(single)}`,
+          changed: `!Object.is(${single}, ${previousName(single)})`,
           declaration: `const [${previousName(single)}, ${setterName(previousName(single))}] = useState(${single})`,
           update: `${setterName(previousName(single))}(${single})`,
         }
       : {
-          changed: names.map((name, index) => `${name} !== prevDeps[${index}]`).join(" || "),
+          changed: names
+            .map((name, index) => `!Object.is(${name}, prevDeps[${index}])`)
+            .join(" || "),
           declaration: `const [prevDeps, setPrevDeps] = useState([${names.join(", ")}])`,
           update: `setPrevDeps([${names.join(", ")}])`,
         };
