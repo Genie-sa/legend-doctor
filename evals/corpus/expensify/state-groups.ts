@@ -32,4 +32,12 @@ export const expensifyStateGroups = [
       "All three measurements drive one derived visibility decision and should produce one observable layout model.",
     target: "expensify-camera-file-upload",
   },
+  {
+    file: "WorkspaceTravelInvoicingSection.tsx",
+    line: 84,
+    members: ["isDisableConfirmModalVisible", "isOutstandingBalanceModalVisible"],
+    rationale:
+      "The two modal flags are possibly co-written on exclusive early-return branches; once both are observable no write can publish apart from React's original commit.",
+    target: "expensify-travel-invoicing",
+  },
 ] as const satisfies readonly GoldStateGroupCase[];

@@ -109,4 +109,19 @@ export const noutubeHookCases = [
       "The update-check pending flag feeds only the About page's update row `loading` prop and is written only by that row's handler, so a call-site subscriber would keep the settings header and page out of both transitions. The row sits inside `renderPage()`'s switch case and a ternary, which the analyzer does not yet prove mount-stable; extracting the scroll body instead cuts only eight of 51 elements.",
     target: "noutube-settings-tree",
   },
+  ...(
+    [
+      [114, "canGoBack"],
+      [115, "canGoForward"],
+    ] as const
+  ).map(([line, name]) => ({
+    action: "use-observable" as const,
+    file: "NouHeader.tsx",
+    hook: "useState" as const,
+    line,
+    name,
+    rationale:
+      "The navigation effect writes both flags after commit and each renders only in its own always-mounted MaterialButton, so every navigation re-renders the whole header for two buttons. A throw between the writes inside the try block can publish canGoBack alone, which the flow cannot resolve; once both primitives are observable that write still commits alone, exactly as React commits it.",
+    target: "noutube-header",
+  })),
 ] as const satisfies readonly GoldHookCase[];

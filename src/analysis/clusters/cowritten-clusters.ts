@@ -4,8 +4,10 @@ import { collectSetterMutations, groupSettableStatesByOwner } from "../companion
 import { DisjointSet } from "./disjoint-set.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateFlowIndex } from "../../project/state-flow/state-flow.js";
+import { cowrittenEdit } from "./cowritten-edit.js";
 import { isCustomHookOwner } from "../ast-helpers.js";
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
+import { stateTypeIsPrimitive } from "../../rules/state-proofs/state-proofs.js";
 import type ts from "typescript";
 
 export interface CowrittenClusterScope {
@@ -14,6 +16,7 @@ export interface CowrittenClusterScope {
   readonly hasCustomHookPresentationConsumer: (state: StateCandidate) => boolean;
   readonly sourceFile: ts.SourceFile;
   readonly stateFlow: StateFlowIndex;
+  readonly subscriptionHook: string;
 }
 
 type CoexecutionPair = readonly [SetterMutation, SetterMutation];
@@ -26,6 +29,7 @@ interface OwnerCoexecution {
 interface ClosedClusterQuery {
   readonly hookOwned: boolean;
   readonly members: readonly StateCandidate[];
+  readonly mutations: readonly SetterMutation[];
   readonly proven: readonly CoexecutionPair[];
   readonly scope: CowrittenClusterScope;
 }
@@ -34,7 +38,8 @@ interface CowrittenClusterQuery {
   readonly hookOwned: boolean;
   readonly memberMessages: ReadonlyMap<StateCandidate, string>;
   readonly members: readonly StateCandidate[];
-  readonly sourceFile: ts.SourceFile;
+  readonly mutations: readonly SetterMutation[];
+  readonly scope: CowrittenClusterScope;
 }
 
 /**
@@ -67,10 +72,8 @@ function ownerClusters(
   if (jsxElementCount(owner) < COMPACT_OWNER_JSX_ELEMENTS && !hookOwned) {
     return [];
   }
-  const coexecution = ownerCoexecution(collectSetterMutations(owner, ownerStates), scope.stateFlow);
-  if (coexecution.proven.length === 0) {
-    return [];
-  }
+  const mutations = collectSetterMutations(owner, ownerStates);
+  const coexecution = ownerCoexecution(mutations, scope.stateFlow);
   const union = new DisjointSet(ownerStates.length);
   for (const [left, right] of coexecution.possible) {
     union.join(ownerStates.indexOf(left.state), ownerStates.indexOf(right.state));
@@ -80,7 +83,13 @@ function ownerClusters(
     .filter((members) => members.length >= PAIRED_CLUSTER_SIZE)
     .flatMap(
       (members) =>
-        closedClusterFor({ hookOwned, members, proven: coexecution.proven, scope }) ?? [],
+        closedClusterFor({
+          hookOwned,
+          members,
+          mutations: mutations.filter((mutation) => members.includes(mutation.state)),
+          proven: coexecution.proven,
+          scope,
+        }) ?? [],
     );
 }
 
@@ -118,11 +127,12 @@ function pairProof(
 function closedClusterFor({
   hookOwned,
   members,
+  mutations,
   proven,
   scope,
 }: ClosedClusterQuery): StateCluster | null {
   if (
-    !members.every((member) => hasProvenCompanion(member, proven)) ||
+    !keepsCommitPoints(members, proven) ||
     (hookOwned && !members.every((member) => scope.hasCustomHookPresentationConsumer(member)))
   ) {
     return null;
@@ -135,7 +145,23 @@ function closedClusterFor({
     }
     memberMessages.set(member, alone.message);
   }
-  return cowrittenCluster({ hookOwned, memberMessages, members, sourceFile: scope.sourceFile });
+  return cowrittenCluster({ hookOwned, memberMessages, members, mutations, scope });
+}
+
+/**
+ * Once every member is observable, each synchronous stretch still publishes in one render and a
+ * stretch an await splits stays split, so the group keeps React's commit points even where the
+ * flow cannot resolve whether two writes coexecute. Without a proven companion for each member,
+ * only primitive members qualify: Legend skips notifying an equal object replacement.
+ */
+function keepsCommitPoints(
+  members: readonly StateCandidate[],
+  proven: readonly CoexecutionPair[],
+): boolean {
+  return (
+    members.every((member) => hasProvenCompanion(member, proven)) ||
+    members.every((member) => stateTypeIsPrimitive(member))
+  );
 }
 
 function hasProvenCompanion(state: StateCandidate, proven: readonly CoexecutionPair[]): boolean {
@@ -153,12 +179,21 @@ function cowrittenCluster({
   hookOwned,
   memberMessages,
   members,
-  sourceFile,
+  mutations,
+  scope,
 }: CowrittenClusterQuery): StateCluster {
+  const { sourceFile, stateFlow, subscriptionHook } = scope;
   const sorted = members.toSorted((left, right) => left.call.getStart() - right.call.getStart());
   const [primary] = sorted;
   const names = sorted.map((state) => state.valueName);
-  const intro = cowrittenGroupIntro(names, hookOwned);
+  const edit = cowrittenEdit({
+    members: sorted,
+    mutations,
+    sourceFile,
+    stateFlow,
+    subscriptionHook,
+  });
+  const intro = `${cowrittenGroupIntro(names, hookOwned)} ${edit}`;
   return {
     action: "use-observable",
     id: `state-cluster:cowritten:${primary!.owner.getStart(sourceFile)}:${names.join(",")}`,

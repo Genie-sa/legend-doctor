@@ -566,6 +566,12 @@ export const expensifyRepository = {
       root: "src/components/ButtonComposed/Button.tsx",
       states: 1,
     },
+    {
+      effects: 2,
+      id: "expensify-travel-invoicing",
+      root: "src/pages/workspace/travel/WorkspaceTravelInvoicingSection.tsx",
+      states: 3,
+    },
   ],
   url: "https://github.com/Expensify/App.git",
 } as const satisfies CorpusRepository;

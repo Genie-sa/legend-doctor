@@ -36,6 +36,7 @@ export function findingsScope(
       },
       sourceFile: analysis.sourceFile,
       stateFlow: analysis.stateFlow,
+      subscriptionHook: analysis.subscriptionHook,
     }),
   };
 }
