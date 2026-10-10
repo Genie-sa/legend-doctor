@@ -71,8 +71,9 @@ These carry no edit. A `keep` finding preserves code that is already correct; a 
 `--actionable` and `--disposition candidate` hide reviews with no yes/no question, and reviews that repeat a question
 another shown review carries, and count them under `hidden.abstentions`.
 
-| Action                                                                 | Means                                                                                       |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| [`keep-state`](EXAMPLES.md#keep-small-local-state-in-react)            | React state is already the smallest render boundary; an observable would only add machinery |
-| [`keep-effect`](EXAMPLES.md#keep-an-effect-while-changing-its-storage) | The effect's React timing, cleanup, or ownership must stay as written                       |
-| `review-state`, `review-effect`                                        | An unsafe guess; `abstentionReason` names the missing proof ([REPORT.md](REPORT.md))        |
+| Action                                                                          | Means                                                                                                           |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| [`keep-state`](EXAMPLES.md#keep-small-local-state-in-react)                     | React state is already the smallest render boundary; an observable would only add machinery                     |
+| [`keep-effect`](EXAMPLES.md#keep-an-effect-while-changing-its-storage)          | The effect's React timing, cleanup, or ownership must stay as written                                           |
+| `review-state`, `review-effect`                                                 | An unsafe guess; `abstentionReason` names the missing proof ([REPORT.md](REPORT.md))                            |
+| [`stabilize-memo-prop`](EXAMPLES.md#stabilize-a-prop-a-memoized-child-compares) | Always a `candidate`: a prop rebuilt on every render re-renders a memoized child for owner state it never reads |

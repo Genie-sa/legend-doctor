@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/excalidraw/excalidraw",
+  "commit": "abeeaeba217ab3b5193b78c8d8d63c373b518ced",
+  "scored": false,
+  "labels": [
+    {
+      "id": "MEMO-PROPS-APP-FOOTER",
+      "file": "excalidraw-app/App.tsx",
+      "line": 1061,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Known false positive of an earlier change tier; the rule now reports it as a candidate whose open question is the child's render. AppFooter is React.memo without a comparator and receives an inline onChange arrow, and ExcalidrawWrapper re-renders for forceRefresh (line 453). Those renders are not wasted. AppFooter renders DebugFooter only while isVisualDebuggerEnabled() reads window.visualDebug (components/DebugCanvas.tsx:436), and both forceRefresh writers toggle window.visualDebug first: the dev debug effect (lines 455-467) and the main menu toggle (components/AppMainMenu.tsx:65-72). The fresh onChange is what lets that render reach AppFooter, so wrapping it in useCallback would stop the debug footer from appearing or disappearing. The answer to the candidate's question is no; leave the code as is."
+    },
+    {
+      "id": "MEMO-PROPS-APP-MAIN-MENU",
+      "file": "excalidraw-app/App.tsx",
+      "line": 1030,
+      "action": "stabilize-memo-prop",
+      "enforced": false,
+      "rationale": "Manually audited at the pin; reported as a candidate. AppMainMenu is React.memo and receives an inline refresh arrow, so renders for errorMessage (378), forceRefresh (453) and latestShareableLink (767) re-render the menu. onCollabDialogOpen, isCollaborating and isCollabDisabled come from atom hooks whose identity the analyzer cannot prove, so the finding stays a candidate. The render cost is low: the main menu renders a trigger only while it is closed."
+    }
+  ]
+}

@@ -44,7 +44,7 @@ Important fields:
 | `root`         | Base directory for every finding path           |
 | `analyzer`     | Tool `version` and compiled `build`             |
 | `findings`     | React state and effect findings                 |
-| `practices`    | Legend State practice findings                  |
+| `practices`    | Legend State and render-identity practices      |
 | `hidden`       | Filtered-out counts; `abstentions` by reason    |
 | `capabilities` | React Compiler status and disabled rules        |
 | `scope`        | Active scope flag and loaded context file count |

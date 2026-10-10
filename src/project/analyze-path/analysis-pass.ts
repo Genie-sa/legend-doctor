@@ -42,6 +42,7 @@ import { disabledPracticeRules } from "../../practices/practice-rules.js";
 import { filesWhere } from "../capabilities.js";
 import { isSupportedAnalysisFile } from "../analysis-project.js";
 import { mayCallUseValue } from "../../rules/observable-reads/observable-paths.js";
+import { memoPropFindings } from "./memo-prop-scan.js";
 import path from "node:path";
 import { rankedQuestions } from "../../analysis/assumptions/ranked-questions.js";
 import { relativeInPlaceWrites } from "../source-components/observable-in-place-writes.js";
@@ -120,8 +121,11 @@ export async function runAnalysisPass(
   const reactCompiler = new ToolchainResolver(REACT_COMPILER);
   const legendBabel = new ToolchainResolver(LEGEND_BABEL);
   const practiceFiles = legendPracticeFiles(entries, options.includeDetails);
+  const supportedFiles = entries
+    .filter((entry) => isSupportedEntry(entry))
+    .map((entry) => entry.file);
   const [compiledFiles, legendBabelFiles, rootCompiles] = await Promise.all([
-    filesWhere(practiceFiles, (file) => reactCompiler.packageEnablesFile(file)),
+    filesWhere(supportedFiles, (file) => reactCompiler.packageEnablesFile(file)),
     filesWhere(practiceFiles, (file) => legendBabel.packageEnablesFile(file)),
     reactCompiler.enablesDirectory(options.context.root),
   ]);
@@ -199,9 +203,8 @@ function analyzeSupportedFileEntry(entry: SupportedAnalysisFileEntry, pass: Anal
       ...hookFindings(entry, pass, { childContracts, hookImports, stateFlow }),
     );
   }
-  if (analyzePractices) {
-    pass.accumulator.practices.push(...legendPracticeFindings(entry, pass, childContracts));
-  }
+  const practices = analyzePractices ? legendPracticeFindings(entry, pass, childContracts) : [];
+  pass.accumulator.practices.push(...practices, ...memoPropFindings(entry, pass));
   recordEntryCoverage(entry, pass, stateFlow);
 }
 

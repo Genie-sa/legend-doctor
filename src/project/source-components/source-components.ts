@@ -35,6 +35,7 @@ import {
 } from "./observable-in-place-writes.js";
 import { observablePlainSeedPathsFor, plainConstantsFor } from "./plain-constants.js";
 import type { AnalysisFile } from "../analysis-project.js";
+import type { MemoizedComponent } from "./memoized-components.js";
 import type { ObservableContextReader } from "./observable-contexts.js";
 import type { ObservableInPlaceWrites } from "./observable-in-place-writes.js";
 import type { ReachResolver } from "./synchronous-reach.js";
@@ -43,6 +44,7 @@ import type { SourceContextCoverage } from "./source-context.js";
 import type { SourceResolution } from "./module-resolution.js";
 import { callbackPackageVersion } from "./callback-package-version.js";
 import { isFrameworkEventModuleSpecifier } from "./framework-event-components.js";
+import { memoizedComponentFor } from "./memoized-components.js";
 import { moduleRecord } from "./module-record.js";
 import { observableArrayPathsFor } from "./observable-array-paths.js";
 import { observableContextReadersFor } from "./observable-contexts.js";
@@ -74,6 +76,8 @@ export interface SourceIndex {
   frameworkEventComponentFor: (file: string, name: string) => boolean;
   hookDeclarationFor: (file: string, name: string) => ResolvedSymbol | null;
   legendValueBridgesFor: (file: string) => ReadonlyMap<string, ReadonlySet<string>>;
+  /** The memoized component a JSX tag name in this file renders, locally or through imports. */
+  memoizedComponentFor: (file: string, name: string) => MemoizedComponent | null;
   observableArrayPathsFor: (file: string) => ReadonlySet<string>;
   /** Contexts, and hooks returning context values, whose declared value type can hold observables. */
   observableContextReadersFor: (file: string) => ReadonlyMap<string, ObservableContextReader>;
@@ -128,6 +132,7 @@ export function buildSourceIndexFromFiles(
     frameworkEventComponentFor: (file, name) => frameworkEventComponentFor(state, file, name),
     hookDeclarationFor: (file, name) => hookDeclarationFor(state, file, name),
     legendValueBridgesFor: (file) => legendValueBridgesFor(state, file),
+    memoizedComponentFor: (file, name) => memoizedComponentFor(state, normalizeFile(file), name),
     observableArrayPathsFor: (file) => observableArrayPathsFor(state, file),
     observableContextReadersFor: (file) => observableContextReadersFor(state, file),
     observableDeclarationFor: (file, name) => observableDeclarationFor(state, file, name),
