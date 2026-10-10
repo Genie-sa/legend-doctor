@@ -1,5 +1,21 @@
 # legend-doctor
 
+## 0.6.0
+
+### Minor Changes
+
+- 89a2ac2: Recommend more proven Legend State conversions. Wrap a toggle's single render slot in `Computed` when every read and setter hand-off sits in one slot of a large owner; convert unresolved co-written primitive groups as one `useObservable({...})` written with `assign`; prove a lone write on a branch that skips every co-written state; wrap leaves for value writes to provably primitive state; allow read-only built-in calls (`filter`, `map`, `Math.max`, `String`) inside wrapped sites; ask callback child contracts at the call site that wires them; and wrap conditional and keyed call sites whose mount identity is proven along the exact chain of child slots.
+
+  Add Legend practices that narrow `useValue(map$)` read only at one key to `useValue(map$[key])`, select a boolean when a value is only tested for truthiness, and peek observable reads used only as a compare-and-set guard or dead binding. Prove more `reset-during-render` effects from typed hook parameters, primitive and module-bound defaults, and pinned guards, and compare reset dependencies with `Object.is`.
+
+- 89a2ac2: Give every finding and practice a stable `id` (`file::owner::subject::action`, numbered when repeated) and bump the report to `schemaVersion` 8, so scans and the GitHub Action compare one finding at a time across edits elsewhere in a file. Skip a file that fails to parse or analyze instead of failing the whole scan, and list it under `skippedFiles` with its phase; name the file and phase in `scan_failed` reports. Write Action outputs in delimited form so a path cannot reopen a blocking gate.
+
+  Support only the latest React, React Native, and Legend State v3. Scans no longer resolve older renderer or Legend versions.
+
+### Patch Changes
+
+- 89a2ac2: Keep object and array state out of leaf and call-site cuts: Legend skips notifying a structurally equal object replacement, so a leaf could keep passing the previous reference, and leaves that receive object values may not compare them by identity. Hold every observable conversion back when a write runs inside a transition that a same-module, imported, or child-component callee starts. Keep returned and conditional call-site wraps from changing which fiber mounts when another arm or return renders the same type in the same slot. Prove class-name and style calls by their `clsx`/`tailwind-merge`/`cva`/`StyleSheet.create` bindings instead of by name, and block read-only projections on receivers proven to be user objects. Stop treating a setter listed in a hook dependency array as an escape.
+
 ## 0.5.0
 
 ### Minor Changes
