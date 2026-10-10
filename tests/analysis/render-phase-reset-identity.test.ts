@@ -143,6 +143,15 @@ function hookResetEffect({
 
 for (const [label, hookCase] of [
   ["a string parameter", { dependencies: "id", signature: "useDraft(id: string)" }],
+  ["a number parameter", { dependencies: "index", signature: "useDraft(index: number)" }],
+  [
+    "a numeric option path",
+    {
+      dependencies: "options.page",
+      signature: "useDraft(options: Options)",
+      types: "type Options = { page: number | null };",
+    },
+  ],
   [
     "an optional literal union parameter",
     { dependencies: "mode", signature: 'useDraft(mode?: "edit" | "view" | null)' },
@@ -172,16 +181,12 @@ for (const [label, hookCase] of [
     },
   ],
 ] as const satisfies readonly (readonly [string, HookResetCase])[]) {
-  test(`a custom hook reset keyed by ${label} is a change, since equal primitives compare equal`, () => {
+  test(`a custom hook reset keyed by ${label} is a change, since Object.is finds equal primitives equal`, () => {
     assert.equal(hookResetEffect(hookCase).action, "reset-during-render");
   });
 }
 
 for (const [label, hookCase] of [
-  [
-    "a number parameter, which can be NaN",
-    { dependencies: "index", signature: "useDraft(index: number)" },
-  ],
   [
     "an object parameter",
     { dependencies: "options", signature: "useDraft(options: { id: string })" },

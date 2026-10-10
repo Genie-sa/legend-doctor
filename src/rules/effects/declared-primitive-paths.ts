@@ -12,9 +12,9 @@ import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 
 /**
  * Whether the owner's parameter types declare a dependency path, rooted at the binding
- * `declaration` declares, a string, boolean, literal, `null`, or `undefined`. A pure owner that
- * React reruns after a render-phase update computes such a value again and it compares equal; a
- * `number` can be `NaN`, which never equals itself.
+ * `declaration` declares, a primitive or a union of primitives. A pure owner that React reruns
+ * after a render-phase update computes such a value again, and the edit's `Object.is` guard finds
+ * it equal, `NaN` included.
  */
 export function declaresComparablePrimitive(
   dependency: ts.Expression,
@@ -147,5 +147,5 @@ function comparesByValue(type: ts.TypeNode, seen: ReadonlySet<ts.TypeNode>): boo
   if (declaration) {
     return ts.isTypeAliasDeclaration(declaration) && comparesByValue(declaration.type, visited);
   }
-  return current.kind !== ts.SyntaxKind.NumberKeyword && primitiveValueType(current);
+  return primitiveValueType(current);
 }

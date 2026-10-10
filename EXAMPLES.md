@@ -653,9 +653,9 @@ its timing. The comparison settles only when each dependency keeps its identity 
 value, a module binding, a `length` or other primitive constant, a memo that returns only such values, or a component
 prop proves that, since React reruns a component after a render-phase update with the same props; a destructuring
 default must be a primitive or a module binding. A custom hook's parameter qualifies when its declared type is a
-string, boolean, literal, `null`, or `undefined`, which a pure caller recomputes to an equal value; a `number` can be
-`NaN`, which never equals itself. Any other value the owner computes, such as a hook result, leaves a review that asks
-about it. A function, object, or array the owner rebuilds every render keeps the effect.
+string, number, bigint, boolean, literal, `null`, or `undefined`, which a pure caller recomputes to a value the
+`Object.is` guard finds equal, even `NaN`. Any other value the owner computes, such as a hook result, leaves a review
+that asks about it. A function, object, or array the owner rebuilds every render keeps the effect.
 
 ### React to an observable without rendering
 
