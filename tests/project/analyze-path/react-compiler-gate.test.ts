@@ -149,3 +149,44 @@ test("compiler ownership walks up from each file's nearest package", async (test
 
   assert.deepEqual(narrowWriteFiles, [path.join("packages", "ui", "pages.tsx")]);
 });
+
+const LEGACY_HOOK_COMPONENT = `
+import { observable } from "@legendapp/state";
+import { use$ } from "@legendapp/state/react";
+const count$ = observable(0);
+export function Counter() {
+  const count = use$(count$);
+  return <span>{count}</span>;
+}
+`;
+
+test("a use$ rename is a change only in files a compiler package owns", async (testContext) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "legend-doctor-compiler-legacy-"));
+  testContext.after(() => rm(root, { force: true, recursive: true }));
+  await mkdir(path.join(root, "apps", "web"), { recursive: true });
+  await mkdir(path.join(root, "packages", "ui"), { recursive: true });
+  await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "workspace" }), "utf8");
+  await writeFile(
+    path.join(root, "apps", "web", "package.json"),
+    JSON.stringify({ devDependencies: { "babel-plugin-react-compiler": "1.0.0" }, name: "web" }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(root, "packages", "ui", "package.json"),
+    JSON.stringify({ name: "ui" }),
+    "utf8",
+  );
+  await writeFile(path.join(root, "apps", "web", "counter.tsx"), LEGACY_HOOK_COMPONENT, "utf8");
+  await writeFile(path.join(root, "packages", "ui", "counter.tsx"), LEGACY_HOOK_COMPONENT, "utf8");
+
+  const report = await analyzePath(root);
+  const dispositions = report.practices
+    .filter((practice) => practice.action === "replace-legacy-use-value")
+    .map((practice) => [practice.location.file, practice.disposition])
+    .toSorted(([left], [right]) => String(left).localeCompare(String(right)));
+
+  assert.deepEqual(dispositions, [
+    [path.join("apps", "web", "counter.tsx"), "change"],
+    [path.join("packages", "ui", "counter.tsx"), "style"],
+  ]);
+});

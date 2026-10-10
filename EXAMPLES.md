@@ -340,6 +340,14 @@ useSelector(profile$.name); // Before
 useValue(profile$.name); // After
 ```
 
+The rename is `style`, since `useValue` is the same function, except for a `use$` call in a function the React Compiler
+compiles. The Compiler gives hook semantics only to callees named `/^use[A-Z0-9]/`, so it can cache the `use$` result
+and render a stale value; there the rename is `change`. `useSelector`, and an alias whose imported or local name passes
+that test, stay `style`. A function counts as compiled when the project's config enables the Compiler and its default
+`infer` mode compiles it: a component or hook by name that calls a hook or creates JSX, a `memo` or `forwardRef`
+callback, or a `"use memo"` function, with no `"use no memo"` directive and no ESLint suppression of a React hook rule.
+A function passed inline to `observer` is not compiled.
+
 The same-node synchronous selector rewrite without options is `style`: it selects the same value, with no proven
 render or lifecycle saving. Inside `observer`, direct input can use the enclosing observer's tracking instead of a
 separate selector hook. Async selectors and calls with options remain unchanged because their Promise or tracking
@@ -557,7 +565,9 @@ The direct initializer form carries `edits`, including a `useValue` specifier be
 A read inside a conditional, JSX, or iteration callback gets a hoisting instruction: add `const value =
 useValue(path$)` at the top of the owner and read the binding there. Inside `observer` and `reactiveObserver`
 components the read already tracks and `useValue(path$)` performs the same `get()`, so only the direct initializer
-form is reported, as `style` with the same edit. The rule stays silent for paths a `useValue` in the same owner
+form is reported, as `style` with the same edit. When the React Compiler compiles the component (declared, then
+wrapped as `observer(Counter)`) and the read's value reaches the rendered output, the Compiler memoizes the `get()` like
+any call and observer's re-render can reuse the stale result, so the read is a `change`, in JSX too. The rule stays silent for paths a `useValue` in the same owner
 already covers (directly, through a selector, or through a `const` alias), for hook-argument snapshots such as
 `useState(x$.get())`, for reads handed to a Legend input that tracks on its own (`Show if`, `For each`, a `Memo`
 child, a `$` prop, or `when`), for `key` reads, and for `get(true)` or dynamically keyed paths.
@@ -587,6 +597,12 @@ against any element read, a field write against a read of that field. It is a `c
 keeps its identity across renders (module constants, refs, state setters, owned observables) and a `candidate` when
 another dependency could change in the same update and recompute the memo. Writes that replace the value with
 `set(next)`, writes to unread fields, `get(true)` reads, and bindings that are reassigned stay silent.
+
+In a function the React Compiler compiles, the Compiler memoizes by reference without a `useMemo`: a method chain on
+the raw value, or a call that receives it, whose result reaches the rendered output, such as
+`{folders.map((folder) => <Row folder={folder} />)}`, keeps its cached result after an in-place write. The same finding
+covers those calls; reads through a property such as `folders.length`, results that stay inside the render, and
+values handed to hooks stay silent, because the Compiler does not cache them on the raw reference.
 
 ### Re-render a Memo child that reads parent values
 

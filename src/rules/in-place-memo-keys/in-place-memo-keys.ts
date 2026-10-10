@@ -3,6 +3,7 @@ import { isIdentifierNamed, unwrapTransparentExpression } from "../../core/analy
 import { visit, visitSkippingNestedRuntimeFunctions } from "../../core/ast.js";
 import { writeChangesRead, writesBelow } from "./write-conflicts.js";
 import type { LegendPracticeFinding } from "../../core/types.js";
+import { compilerMemos } from "./compiler-memos.js";
 import { inPlaceMemoKeyFinding } from "./finding.js";
 import { isReactHookCall } from "../../core/imports.js";
 import { isStableDependency } from "./memo-dependencies.js";
@@ -41,7 +42,7 @@ function staleMemos(binding: RawValueBinding, scan: InPlaceMemoKeyScan): StaleMe
       memos.push(memo);
     }
   });
-  return memos;
+  return [...memos, ...compilerMemos(binding, writes, scan)];
 }
 
 function staleMemo(
@@ -62,7 +63,7 @@ function staleMemo(
   const otherDependencies = dependencies
     .filter((dependency) => !isStableDependency(dependency, binding.owner, scan.imports))
     .map((dependency) => dependency.getText(scan.sourceFile));
-  return { call, otherDependencies, reads, writes: changing };
+  return { call, kind: "useMemo", otherDependencies, reads, writes: changing };
 }
 
 /** The dependency list of a `useMemo` keyed on the bare binding, without that key. */

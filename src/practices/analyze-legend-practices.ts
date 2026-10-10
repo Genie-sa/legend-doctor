@@ -35,6 +35,7 @@ import ts from "typescript";
 import { withSoleBindingFacts } from "./sole-binding-facts.js";
 
 export interface LegendPracticesSourceRequest {
+  readonly capabilities?: FileCapabilities;
   readonly fileName: string;
   readonly importedObservableArrayPaths?: ReadonlySet<string>;
   readonly importedObservableFactories?: ReadonlySet<string>;
@@ -46,6 +47,7 @@ export interface LegendPracticesSourceRequest {
 const provesNoContextRead = (): boolean => false;
 
 export function analyzeLegendPractices({
+  capabilities = NO_CAPABILITIES,
   fileName,
   importedObservableArrayPaths = new Set(),
   importedObservableFactories = new Set(),
@@ -61,7 +63,7 @@ export function analyzeLegendPractices({
     fileName.endsWith(".tsx") || fileName.endsWith(".jsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   return analyzeParsedLegendPractices({
-    capabilities: NO_CAPABILITIES,
+    capabilities,
     childContracts: null,
     fileName,
     importedObservableArrayPaths,
