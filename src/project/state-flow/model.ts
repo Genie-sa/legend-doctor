@@ -38,6 +38,8 @@ export interface Lowering {
   breakable: boolean;
   left: ts.CallExpression;
   right: ts.CallExpression;
+  /** Further calls whose events paths record alongside `left` and `right`. */
+  others?: readonly ts.CallExpression[];
 }
 
 export interface ClauseRun {

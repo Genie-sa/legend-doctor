@@ -67,6 +67,30 @@ test("a child that also receives a companion setter may write both in one event"
   assert.equal(verdict(source, "lane"), "review-state/atomic-transition-unproven");
 });
 
+test("an event whose branch skips every companion writes the state alone on that path", () => {
+  const source = board(
+    "",
+    `${LANE_LEAF}<button onClick={() => { setLane(id); if (!ready) { setNote("draft"); setNote("draft " + id); } }}>Pick</button>`,
+  );
+  assert.equal(verdict(source, "lane"), "use-observable");
+});
+
+test("an event that writes a companion on every path has no lone write", () => {
+  const source = board(
+    "",
+    `${LANE_LEAF}<button onClick={() => { setLane(id); if (!ready) { setNote("draft"); } else { setNote("ready"); } }}>Pick</button>`,
+  );
+  assert.equal(verdict(source, "lane"), "review-state/atomic-transition-unproven");
+});
+
+test("a companion written through a local helper is not proven skipped", () => {
+  const source = board(
+    'const reset = () => setNote("");',
+    `${LANE_LEAF}<button onClick={() => { setLane(id); if (!ready) reset(); }}>Pick</button>`,
+  );
+  assert.equal(verdict(source, "lane"), "review-state/atomic-transition-unproven");
+});
+
 test("a lone write after the handler suspends runs in another stretch", () => {
   const source = board(
     "",
@@ -126,6 +150,61 @@ test("a dialog's visibility callback mostly closes it and is not a lone write st
           <p>{draft}</p>
           <button onClick={() => { setDraft(""); setOpen(true); }}>New</button>
           <Dialog open={open} onOpenChange={setOpen}><input /></Dialog>
+        </main>
+      );
+    }
+  `;
+  assert.equal(verdict(source, "open"), "review-state/atomic-transition-unproven");
+});
+
+function filterMenu(opener: string): string {
+  return `
+    import { useState } from "react";
+    import { Popover } from "./popover";
+    export function Filters() {
+      const [open, setOpen] = useState(false);
+      const [view, setView] = useState("main");
+      return (
+        <main>
+          ${CHROME}
+          {view === "main" ? <nav><Menu /><Tabs /><Search /></nav> : <aside><Back /><Detail /></aside>}
+          <button onClick={() => setView("date")}>Date</button>
+          ${opener}
+          <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setView("main"); }}>
+            <button>Filters</button>
+          </Popover>
+        </main>
+      );
+    }
+  `;
+}
+
+test("a visibility callback that alone opens the element writes the state alone on opening", () => {
+  assert.equal(verdict(filterMenu(""), "open"), "move-state-down");
+});
+
+test("a visibility callback mostly closes an element another command opens", () => {
+  const opener = '<button onClick={() => { setView("date"); setOpen(true); }}>Pick date</button>';
+  assert.equal(verdict(filterMenu(opener), "open"), "review-state/atomic-transition-unproven");
+});
+
+test("a dialog mounted only while open is opened by its command, not its visibility callback", () => {
+  const source = `
+    import { useState } from "react";
+    import { LandList } from "./land-list";
+    import { TransferDialog } from "./transfer-dialog";
+    export function Details() {
+      const [selected, setSelected] = useState<string | null>(null);
+      const [open, setOpen] = useState(false);
+      const transfer = (land: string) => { setSelected(land); setOpen(true); };
+      return (
+        <main>
+          ${CHROME}
+          <LandList onTransfer={transfer} />
+          <h2>{selected ?? "none"}</h2>
+          {open && (
+            <TransferDialog open land={selected} onOpenChange={(next) => { setOpen(next); if (!next) setSelected(null); }} />
+          )}
         </main>
       );
     }

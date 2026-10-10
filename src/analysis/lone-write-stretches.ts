@@ -1,13 +1,16 @@
 import type { ClassifiedState, SetterMutation, StateCandidate } from "./model.js";
 import { executionUnit, functionEntryKey } from "../core/execution-units.js";
 import { isRuntimeFunctionLike, nodeWithin, visit } from "../core/ast.js";
+import { proveAccompanied, proveUnaccompaniedPath } from "../project/state-flow/state-flow.js";
 import { BROAD_OWNER_JSX_ELEMENTS } from "./constants.js";
 import { EVENT_HANDLER_PROP } from "../rules/state-proofs/event-roots.js";
+import type { ProgramReach } from "../project/source-components/write-units.js";
 import type { RuntimeFunctionLike } from "../core/ast.js";
 import type { SourceAnalysis } from "./proofs/contracts.js";
 import type { StateClassificationInputs } from "./verdicts/classification-context.js";
 import { classifyState } from "./verdicts/classify-state.js";
 import { collectSetterMutations } from "./companion-writes.js";
+import { cowritesShareOneStretch } from "./assumptions/atomic-stretch.js";
 import { fileReach } from "../project/source-components/synchronous-reach.js";
 import { isSynchronousRenderCallback } from "../rules/state-proofs/callback-sites.js";
 import { isVisibilityTransitionAttribute } from "./membership-toggle.js";
@@ -15,7 +18,6 @@ import { lexicalBinding } from "../core/lexical-bindings.js";
 import { localReachResolver } from "../project/source-components/reach-resolvers.js";
 import { mutationsWriteTogether } from "./mutations.js";
 import { programReach } from "../project/source-components/write-units.js";
-import { proveAccompanied } from "../project/state-flow/state-flow.js";
 import ts from "typescript";
 import { unwrapTransparentExpression } from "../core/analysis-ast.js";
 
@@ -112,28 +114,28 @@ function companionRenderProof(
 }
 
 /**
- * The handler of a lone event prop sets more than the initial literal in a top-level statement,
- * or the owner hands the setter bare as an element's only callback, other than as a visibility
- * callback, which mostly closes the element: a reset. The owner keeps a broad owner's JSX mounted
- * around that element.
+ * The handler of a lone event prop sets more than the initial literal in a top-level statement on
+ * a path that writes no other state, or the owner hands the setter bare as an element's only
+ * callback, other than as a visibility callback, which mostly closes the element: a reset. The
+ * owner keeps a broad owner's JSX mounted around that element.
  */
-function hasMaterialLoneWriteStretch(
-  state: StateCandidate,
-  { sourceFile, states }: SourceAnalysis,
-): boolean {
-  const ownerStates = states.filter((other) => other.owner === state.owner && other.setterName);
+function hasMaterialLoneWriteStretch(state: StateCandidate, analysis: SourceAnalysis): boolean {
+  const ownerStates = analysis.states.filter(
+    (other) => other.owner === state.owner && other.setterName,
+  );
   const mutations = collectSetterMutations(state.owner, ownerStates);
-  let companionStretches: ReadonlySet<string> | null = null;
-  const writesAlone = (handler: RuntimeFunctionLike): boolean => {
-    if (!companionStretches) {
-      const reach = programReach([fileReach(sourceFile, localReachResolver)]);
-      companionStretches = new Set(
-        mutations
-          .filter((mutation) => mutation.state !== state)
-          .flatMap(({ call }) => reach.callingUnits(executionUnit(call)).map(({ key }) => key)),
-      );
-    }
-    return !companionStretches.has(functionEntryKey(handler));
+  const companions = mutations.filter((mutation) => mutation.state !== state);
+  const companionsIn = companionsReaching(companions, analysis.sourceFile);
+  const writesAlone = (
+    attribute: ts.JsxAttribute,
+    handler: RuntimeFunctionLike,
+    write: SetterMutation,
+  ): boolean => {
+    const reaching = companionsIn(handler);
+    return (
+      reaching.length === 0 ||
+      skipsEveryCompanion(write, reaching, { analysis, attribute, handler, state })
+    );
   };
   const isLoneEvent = (attribute: ts.JsxAttribute): boolean => {
     const value = attributeValue(attribute);
@@ -143,8 +145,10 @@ function hasMaterialLoneWriteStretch(
       return false;
     }
     return handler
-      ? mutations.some((mutation) => setsOnEveryEvent(mutation, state, handler)) &&
-          writesAlone(handler)
+      ? mutations.some(
+          (mutation) =>
+            setsOnEveryEvent(mutation, state, handler) && writesAlone(attribute, handler, mutation),
+        )
       : handedSetter(value, state) &&
           !isVisibilityTransitionAttribute(attribute.parent.parent, name, state.valueName) &&
           attribute.parent.properties.every(
@@ -160,6 +164,74 @@ function hasMaterialLoneWriteStretch(
     lone ||= ts.isJsxAttribute(node) && isLoneEvent(node) && isMaterialMount(node, state.owner);
   });
   return lone;
+}
+
+/** Looks up the companion writes that run in a handler or in a local function it calls. */
+function companionsReaching(
+  companions: readonly SetterMutation[],
+  sourceFile: ts.SourceFile,
+): (handler: RuntimeFunctionLike) => SetterMutation[] {
+  let reach: ProgramReach | null = null;
+  return (handler) => {
+    reach ??= programReach([fileReach(sourceFile, localReachResolver)]);
+    const units = reach;
+    const key = functionEntryKey(handler);
+    return companions.filter(({ call }) =>
+      units.callingUnits(executionUnit(call)).some((unit) => unit.key === key),
+    );
+  };
+}
+
+interface LonePathScope {
+  readonly analysis: SourceAnalysis;
+  readonly attribute: ts.JsxAttribute;
+  readonly handler: RuntimeFunctionLike;
+  readonly state: StateCandidate;
+}
+
+/**
+ * Every companion that reaches the handler is written in the handler's own stretch, which commits
+ * the co-writes together, and some path through the handler runs `write` without any of them. A
+ * visibility callback mostly closes its element, so its lone path counts only when it is the
+ * state's only writer and every opening therefore runs through it.
+ */
+function skipsEveryCompanion(
+  write: SetterMutation,
+  reaching: readonly SetterMutation[],
+  { analysis, attribute, handler, state }: LonePathScope,
+): boolean {
+  const key = functionEntryKey(handler);
+  return (
+    (!isVisibilityTransitionAttribute(
+      attribute.parent.parent,
+      attribute.name.getText(),
+      state.valueName,
+    ) ||
+      writesOnlyWithin(handler, state, analysis)) &&
+    reaching.every((companion) => executionUnit(companion.call).key === key) &&
+    cowritesShareOneStretch(
+      [state, ...new Set(reaching.map((companion) => companion.state))],
+      analysis,
+    ) &&
+    proveUnaccompaniedPath(
+      handler,
+      write.call,
+      reaching.map((companion) => companion.call),
+    )
+  );
+}
+
+function writesOnlyWithin(
+  handler: RuntimeFunctionLike,
+  state: StateCandidate,
+  { usageByState }: SourceAnalysis,
+): boolean {
+  const usage = usageByState.get(state);
+  return (
+    usage !== undefined &&
+    usage.setterReferences === usage.setterCalls &&
+    collectSetterMutations(state.owner, [state]).every(({ call }) => nodeWithin(call, handler))
+  );
 }
 
 /** Setting the initial literal back usually finds it already set, so React renders nothing. */

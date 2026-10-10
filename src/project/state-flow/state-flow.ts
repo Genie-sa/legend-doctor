@@ -72,6 +72,42 @@ export function proveAccompanied(
   );
 }
 
+/**
+ * Some path through `fn` runs `call` with none of `companions` before its next `await`, so React
+ * commits `call` alone there. Paths are structural: a branch counts even if its condition never holds.
+ */
+export function proveUnaccompaniedPath(
+  fn: RuntimeFunctionLike,
+  call: ts.CallExpression,
+  companions: readonly ts.CallExpression[],
+): boolean {
+  const [first, ...others] = companions;
+  const [last = call] = companions.toSorted((left, right) => right.end - left.end);
+  if (
+    !first ||
+    !fn.body ||
+    !ts.isBlock(fn.body) ||
+    !companions.every((companion) => nodeWithinFunction(companion, fn))
+  ) {
+    return false;
+  }
+  const { paths, unknown } = lowerStatements(
+    relevantStatements(fn.body, call, last),
+    [{ awaitEpoch: 0, events: [], termination: null }],
+    { breakable: false, left: call, others, right: first },
+  );
+  return (
+    !unknown &&
+    paths.some(({ events }) => {
+      const write = events.find((event) => event.call === call);
+      return (
+        write !== undefined &&
+        events.every((event) => event.call === call || event.epoch !== write.epoch)
+      );
+    })
+  );
+}
+
 function proveCoexecution(
   fn: RuntimeFunctionLike,
   left: ts.CallExpression,
