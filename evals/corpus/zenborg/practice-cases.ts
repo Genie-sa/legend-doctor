@@ -176,6 +176,15 @@ export const zenborgPracticeCases = [
     target: "zenborg",
   },
   {
+    action: "peek-unrendered-use-value",
+    disposition: "change",
+    file: "components/MomentCard.tsx",
+    line: 60,
+    rationale:
+      "`allPhaseConfigs` feeds only the initializer of `_phaseConfig`, which nothing reads, so every `phaseConfigs$` write rerenders each card for nothing. No component that renders the card (TimelineCell, MomentStack, the DnDProvider overlay, or their cultivate-page ancestors) subscribes to `phaseConfigs$`, and the store seeds it with plain data under an eager syncObservable. The maintainer deleted this subscription in 4b383b6.",
+    target: "zenborg",
+  },
+  {
     action: "use-peek-for-snapshot",
     disposition: "style",
     file: "components/DnDProvider.tsx",

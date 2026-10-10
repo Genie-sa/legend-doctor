@@ -256,6 +256,12 @@ or an untracked `get()` that could depend on the forced rerender, and when a rea
 by a callback that omits the value from its dependencies. A `path$.get()` directly inside the synchronous selector of
 `useValue`, `use$`, or `useSelector` is tracked by that hook and does not block it.
 
+Two more reads take a snapshot safely. A compare-and-set guard, `if (value !== next) path$.set(next)`, in an inline
+handler or a bare owner-level callback skips only writes Legend drops anyway, since `set` notifies nothing when the
+stored value is identical; `next` must be a literal or a local name, and the comparison must be the guard's last
+condition with no `else`. The initializer of an owner-level `const` that nothing references, and that assigns
+nothing, never reaches output, so its read becomes a `peek()` as well.
+
 ### Split unrelated leaves
 
 `split-use-value-leaves` gives each leaf its own field subscription. It requires an object-literal initial value

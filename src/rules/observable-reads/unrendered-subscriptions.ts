@@ -1,5 +1,6 @@
 import { callbackIsEventRooted, isPlainFunction } from "../state-proofs/event-roots.js";
 import { findAncestor, isRuntimeFunctionLike, nearestNestedFunction } from "../../core/ast.js";
+import { isGuardedWriteRead, isUnusedBindingInitializerRead } from "./snapshot-safe-reads.js";
 import {
   isInertFallback,
   isInvariantFallback,
@@ -22,7 +23,9 @@ type PlainFunction = ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpr
 type UnrenderedRead =
   | { readonly kind: "initializer"; readonly node: ts.Identifier }
   | { readonly kind: "command"; readonly node: ts.Identifier }
-  | { readonly kind: "callback-dependency"; readonly node: ts.Identifier };
+  | { readonly kind: "callback-dependency"; readonly node: ts.Identifier }
+  | { readonly kind: "guarded-write"; readonly node: ts.Identifier }
+  | { readonly kind: "unused-binding"; readonly node: ts.Identifier };
 
 interface ProvenSubscription {
   /** The callee as the source spells it: `useValue`, `use$`, `useSelector`, or an alias. */
@@ -102,7 +105,7 @@ function snapshotEvaluation(
   if (!scan.plainSeedPaths?.has(candidate.subscription.observable)) {
     return blocked("plain-seed-not-proven");
   }
-  const reads = unrenderedReads(candidate.owner, candidate.name, scan.imports);
+  const reads = unrenderedReads(candidate, scan.imports);
   if (!reads) {
     return blocked("read-not-snapshot-safe");
   }
@@ -160,13 +163,15 @@ function provenSubscription(
 }
 
 function unrenderedReads(
-  owner: RuntimeFunctionLike,
-  declarationName: ts.Identifier,
+  candidate: SnapshotCandidate,
   imports: HookImports,
 ): UnrenderedRead[] | null {
+  const { name, owner } = candidate;
   const reads: UnrenderedRead[] = [];
-  for (const reference of ownerLevelReferences(owner, declarationName)) {
-    const read = classifyUnrenderedRead(reference, owner, imports);
+  for (const reference of ownerLevelReferences(owner, name)) {
+    const read =
+      classifyUnrenderedRead(reference, owner, imports) ??
+      classifySnapshotEquivalentRead(reference, candidate, imports);
     if (!read) {
       return null;
     }
@@ -216,6 +221,45 @@ function classifyUnrenderedRead(
     isEventRootedCommand({ callback: command, dependencyName: reference.text, imports, owner })
     ? { kind: "command", node: reference }
     : null;
+}
+
+/**
+ * A read whose snapshot cannot differ from the closure's value in any way output observes: the
+ * initializer of a binding nothing reads, or a compare-and-set guard in a callback that each render
+ * recreates.
+ */
+function classifySnapshotEquivalentRead(
+  reference: ts.Identifier,
+  { owner, subscription }: SnapshotCandidate,
+  imports: HookImports,
+): UnrenderedRead | null {
+  if (isUnusedBindingInitializerRead(reference, owner)) {
+    return { kind: "unused-binding", node: reference };
+  }
+  const command = nearestNestedFunction(reference, owner);
+  return command &&
+    isPlainFunction(command) &&
+    isSynchronous(command) &&
+    isRecreatedEachRender(command, owner, imports) &&
+    isGuardedWriteRead(reference, subscription.observable)
+    ? { kind: "guarded-write", node: reference }
+    : null;
+}
+
+/** An inline JSX handler or a bare owner-level callback: each render recreates its closure. */
+function isRecreatedEachRender(
+  callback: PlainFunction,
+  owner: RuntimeFunctionLike,
+  imports: HookImports,
+): boolean {
+  return (
+    isInlineJsxEventHandler(callback) ||
+    (isOwnerLevelCallback(callback, owner, imports) &&
+      !(
+        ts.isCallExpression(callback.parent) &&
+        isReactHookCall(callback.parent, "useCallback", imports)
+      ))
+  );
 }
 
 /** `useRef(x)`, `useState(x)`, and `useObservable(x)` read their argument on the first render only. */
@@ -328,7 +372,7 @@ function unrenderedFinding(
       `\`${observable}\` is seeded with plain data, so dropping its subscription never delays a lazy source`,
       reads.length === 0
         ? `\`${localName}\` has no reads`
-        : `every read of \`${localName}\` is a hook initial value or a synchronous event-rooted command`,
+        : `every read of \`${localName}\` is a hook initial value, a synchronous event-rooted command, a compare-and-set guard whose write Legend drops when the value is unchanged, or the initializer of a binding nothing reads`,
       `\`${owner}\` renders no ref, peek(), or untracked get() read that could depend on the forced rerender`,
     ],
     location: { column: character + 1, file: scan.fileName, line: line + 1 },
