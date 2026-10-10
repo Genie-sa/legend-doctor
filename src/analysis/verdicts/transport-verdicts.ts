@@ -125,7 +125,7 @@ function setterCallAssignsOneValue(call: ts.CallExpression): boolean {
  * snapshot stays identical only when the state type admits no object, or when every write is a
  * direct boolean literal call.
  */
-function stateValuesStayPrimitive({ state, usage }: StateClassificationContext): boolean {
+export function stateValuesStayPrimitive({ state, usage }: StateClassificationContext): boolean {
   return (
     hasDirectPrimitiveInitializer(state) &&
     (stateTypeIsPrimitive(state) ||

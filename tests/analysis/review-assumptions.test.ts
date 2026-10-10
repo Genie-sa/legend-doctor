@@ -29,7 +29,7 @@ const CO_WRITTEN_DRAWER = `
     const fail = (message: string) => { setError(message); setOpen(true); };
     return <main>${CHROME}
       <button onClick={() => fail("boom")} />
-      {error ? <p role="alert">{error.toUpperCase()}</p> : null}
+      {error ? <p role="alert">{shout(error)}</p> : null}
       <Drawer open={open} onClose={() => setOpen(false)} />
     </main>;
   }

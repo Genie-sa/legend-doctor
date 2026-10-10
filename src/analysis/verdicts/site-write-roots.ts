@@ -129,7 +129,22 @@ export function callbackBindingName(callback: RuntimeFunctionLike): string | nul
  * transition, even when that companion drops its value binding and never becomes a state candidate.
  */
 export function hasHiddenCompanionWrites(state: StateCandidate, usage: StateUsage): boolean {
-  const otherSetters = ownerSetterNames(state);
+  return runsBesideSetter(usage, state, ownerSetterNames(state, { unboundOnly: false }));
+}
+
+/**
+ * A setter that runs beside the setter of a `useState` whose value binding is dropped. That
+ * companion never becomes a state candidate, so the companion-write proofs never see the pair.
+ */
+export function hasUnboundCompanionWrites(state: StateCandidate, usage: StateUsage): boolean {
+  return runsBesideSetter(usage, state, ownerSetterNames(state, { unboundOnly: true }));
+}
+
+function runsBesideSetter(
+  usage: StateUsage,
+  state: StateCandidate,
+  otherSetters: ReadonlySet<string>,
+): boolean {
   return usage.setterCallNodes.some((call) => {
     const region = nearestNestedFunction(call, state.owner) ?? state.owner;
     let companion = false;
@@ -146,7 +161,10 @@ export function hasHiddenCompanionWrites(state: StateCandidate, usage: StateUsag
   });
 }
 
-function ownerSetterNames(state: StateCandidate): ReadonlySet<string> {
+function ownerSetterNames(
+  state: StateCandidate,
+  { unboundOnly }: { readonly unboundOnly: boolean },
+): ReadonlySet<string> {
   const names = new Set<string>();
   visit(state.owner.body, (node) => {
     if (
@@ -158,12 +176,13 @@ function ownerSetterNames(state: StateCandidate): ReadonlySet<string> {
     ) {
       return;
     }
-    const [, setter] = node.name.elements;
+    const [value, setter] = node.name.elements;
     if (
       setter &&
       !ts.isOmittedExpression(setter) &&
       ts.isIdentifier(setter.name) &&
-      setter.name.text !== state.setterName
+      setter.name.text !== state.setterName &&
+      (!unboundOnly || value === undefined || ts.isOmittedExpression(value))
     ) {
       names.add(setter.name.text);
     }

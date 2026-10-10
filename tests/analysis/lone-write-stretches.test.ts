@@ -167,7 +167,7 @@ function filterMenu(opener: string): string {
       return (
         <main>
           ${CHROME}
-          {view === "main" ? <nav><Menu /><Tabs /><Search /></nav> : <aside><Back /><Detail /></aside>}
+          {isMainView(view) ? <nav><Menu /><Tabs /><Search /></nav> : <aside><Back /><Detail /></aside>}
           <button onClick={() => setView("date")}>Date</button>
           ${opener}
           <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setView("main"); }}>

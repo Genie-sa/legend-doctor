@@ -78,9 +78,10 @@ export function classifyCowrittenState(
  */
 function companionRenderProof(
   state: StateCandidate,
-  { stateFlow, states, usageByState }: SourceAnalysis,
+  analysis: SourceAnalysis,
   classifyAlone: (state: StateCandidate) => ClassifiedState,
 ): "bailable" | "fresh" | null {
+  const { stateFlow, states, usageByState } = analysis;
   const ownerStates = states.filter((other) => other.owner === state.owner);
   const mutations = collectSetterMutations(state.owner, ownerStates);
   const writes = mutations.filter((write) => write.state === state);
@@ -88,7 +89,7 @@ function companionRenderProof(
     ({ state: other }) =>
       other !== state &&
       !usageByState.get(other)?.shadowed &&
-      ["keep-state", "review-state"].includes(classifyAlone(other).action),
+      companionRenders(other, analysis, classifyAlone),
   );
   const fresh = rendering.filter(
     ({ call }) =>
@@ -111,6 +112,23 @@ function companionRenderProof(
   )
     ? "bailable"
     : null;
+}
+
+/**
+ * A companion renders the owner unless it leaves React. One that subscribes only when classified
+ * without its co-writes keeps that verdict only with a lone write stretch of its own.
+ */
+function companionRenders(
+  companion: StateCandidate,
+  analysis: SourceAnalysis,
+  classifyAlone: (state: StateCandidate) => ClassifiedState,
+): boolean {
+  const { action } = classifyAlone(companion);
+  return (
+    action === "keep-state" ||
+    action === "review-state" ||
+    (action === "use-observable" && !hasMaterialLoneWriteStretch(companion, analysis))
+  );
 }
 
 /**
