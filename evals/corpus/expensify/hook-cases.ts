@@ -1363,4 +1363,29 @@ export const expensifyHookCases = [
       "The hover flag exists only to be published through `ButtonContext`; the button never reads it itself, and the two primitives that read it (`ButtonText`, `ButtonIcon`) bind it by name through `useButtonContext`. An observable in the context value keeps the value object stable, so hovering re-renders only the primitives that render hover styling instead of the whole button.",
     target: "expensify-button-composed",
   },
+  ...(
+    [
+      [84, "isDisableConfirmModalVisible"],
+      [85, "isOutstandingBalanceModalVisible"],
+    ] as const
+  ).map(([line, name]) => ({
+    action: "use-observable" as const,
+    file: "WorkspaceTravelInvoicingSection.tsx",
+    hook: "useState" as const,
+    line,
+    name,
+    rationale:
+      "Each flag renders only as the `isVisible` prop of its own stable top-level ConfirmModal, like the pay-balance flag beside them. The toggle handler writes them on two early-return branches, so they never publish together; the flow cannot disprove that pair, and converting both primitives into one observable keeps every commit point either way.",
+    target: "expensify-travel-invoicing",
+  })),
+  {
+    action: "keep-effect",
+    file: "WorkspaceTravelInvoicingSection.tsx",
+    hook: "useEffect",
+    line: 321,
+    name: null,
+    rationale:
+      "The effect resumes the enabling flow once personal details arrive after navigation; it must stay a committed effect, and only the modal setters its handler reaches become observable writes.",
+    target: "expensify-travel-invoicing",
+  },
 ] as const satisfies readonly GoldHookCase[];

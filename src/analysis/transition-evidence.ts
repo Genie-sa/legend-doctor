@@ -154,6 +154,19 @@ function mutationRelations(
   return relations;
 }
 
+/** Two writes one atomic `assign` may replace: adjacent, proven-coexecuting literal writes. */
+export function mutationsFuseAsLiterals(
+  left: SetterMutation,
+  right: SetterMutation,
+  stateFlow: StateFlowIndex,
+): boolean {
+  return (
+    left.region === right.region &&
+    canFuseLiterals(left, right) &&
+    stateFlow.proveSynchronousCoexecution(left.region, left.call, right.call) === "proven"
+  );
+}
+
 function canFuseLiterals(left: SetterMutation, right: SetterMutation): boolean {
   return (
     left.state !== right.state &&

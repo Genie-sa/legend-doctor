@@ -246,7 +246,7 @@ test("does not cross an early exit or scheduled reset to prove async status", ()
   }
 });
 
-test("try lowering does not hide the validation helper's companion state write", () => {
+test("try lowering converts the validation helper's companion state with the async flag", () => {
   const findings = analyzeSource(
     `
     import { useState } from "react";
@@ -268,5 +268,7 @@ test("try lowering does not hide the validation helper's companion state write",
   `,
     "fixture.tsx",
   );
-  assert.equal(findings.find((finding) => finding.name === "saving")?.disposition, "candidate");
+  const saving = findings.find((finding) => finding.name === "saving");
+  assert.deepEqual(saving?.group?.members, ["saving", "error"]);
+  assert.match(saving?.message ?? "", /useObservable\(\{ saving: false, error: "" \}\)/u);
 });
