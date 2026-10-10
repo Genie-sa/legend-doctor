@@ -10,16 +10,24 @@ interface ScreenFixture {
   readonly chrome?: string;
   readonly imports: string;
   readonly open?: string;
+  readonly setup?: string;
   readonly site: string;
 }
 
 /** The call site sits in a hoisted element, as in a list header, so no returned-call-site cut applies. */
-function screen({ chrome = CHROME, imports, open = "setOpen(true)", site }: ScreenFixture): string {
+function screen({
+  chrome = CHROME,
+  imports,
+  open = "setOpen(true)",
+  setup = "",
+  site,
+}: ScreenFixture): string {
   return `
     import { useState } from "react";
     ${imports}
     export function Screen() {
       const [open, setOpen] = useState(false);
+      ${setup}
       const header = (
         <header>
           <button onClick={() => ${open}}>Open</button>
@@ -223,6 +231,77 @@ test("abstains when a transition writes the value a suspending child receives", 
     }),
   });
   assert.notEqual(finding.action, "use-observable");
+});
+
+const DETAILS_SOURCE = `
+  export function Details({ open }: { open: boolean }) {
+    return <p data-open={open}>{open ? "Open" : "Closed"}</p>;
+  }
+`;
+
+test("abstains when a transition starts the write a wrapped call site receives", async () => {
+  const transitions = {
+    namespace: {
+      imports: `import * as React from "react";`,
+      open: "React.startTransition(() => setOpen(true))",
+    },
+    tuple: {
+      imports: `import { useTransition } from "react";`,
+      open: "startTransition(() => setOpen(true))",
+      setup: "const [, startTransition] = useTransition();",
+    },
+    moduleHelper: {
+      imports: `
+        import { startTransition } from "react";
+        function inTransition(update: () => void) { startTransition(update); }
+      `,
+      open: "inTransition(() => setOpen(true))",
+    },
+  } satisfies Record<string, Pick<ScreenFixture, "imports" | "open" | "setup">>;
+  const leaves = {
+    passThrough: {
+      files: {},
+      imports: `import { Sheet } from "@acme/sheet";`,
+      site: `<div>${SHEET_SITE}</div>`,
+    },
+    verifiedChild: {
+      files: { "details.tsx": DETAILS_SOURCE },
+      imports: `import { Details } from "./details";`,
+      site: `<div><Details open={open} /></div>`,
+    },
+  } satisfies Record<string, { files: Record<string, string> } & Omit<ScreenFixture, "open">>;
+  for (const [leafName, { files, imports, site }] of Object.entries(leaves)) {
+    const urgent = await openVerdict({ ...files, "screen.tsx": screen({ imports, site }) });
+    assert.equal(urgent.action, "use-observable", leafName);
+    for (const [name, transition] of Object.entries(transitions)) {
+      const finding = await openVerdict({
+        ...files,
+        "screen.tsx": screen({ ...transition, imports: `${transition.imports}\n${imports}`, site }),
+      });
+      assert.notEqual(finding.action, "use-observable", `${leafName} ${name}`);
+    }
+  }
+});
+
+test("abstains when the wrapped child calls the write inside its own transition", async () => {
+  const toggle = (invoke: string): string => `
+    import { startTransition } from "react";
+    export function Toggle({ open, onOpenChange }: { open: boolean; onOpenChange: (next: boolean) => void }) {
+      return <button data-open={open} onClick={() => ${invoke}}>{open ? "On" : "Off"}</button>;
+    }
+  `;
+  const site = `<div><Toggle open={open} onOpenChange={(next) => setOpen(next)} /></div>`;
+  const imports = `import { Toggle } from "./toggle";`;
+  const plain = await openVerdict({
+    "screen.tsx": screen({ imports, site }),
+    "toggle.tsx": toggle("onOpenChange(!open)"),
+  });
+  assert.equal(plain.action, "use-observable");
+  const transitioned = await openVerdict({
+    "screen.tsx": screen({ imports, site }),
+    "toggle.tsx": toggle("startTransition(() => onOpenChange(!open))"),
+  });
+  assert.notEqual(transitioned.action, "use-observable");
 });
 
 test("abstains when the owner is too small for the cut to matter", async () => {
