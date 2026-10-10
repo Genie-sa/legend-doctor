@@ -26,14 +26,10 @@ import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { lexicalBinding } from "../../core/lexical-bindings.js";
 import { passThroughScope } from "./pass-through-leaf.js";
 import ts from "typescript";
+import { typeChangeKeepsMountIdentity } from "./mount-identity.js";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
 type WrapRoot = ts.JsxElement | ts.JsxExpression | ts.JsxFragment | ts.JsxSelfClosingElement;
-
-/** The root of a returned branch that renders no element, so it shares no fiber with the wrap root. */
-const NO_ELEMENT = Symbol("no element");
-
-type BranchRoot = string | typeof NO_ELEMENT | null;
 
 /**
  * A primitive state whose every render read, transport, and conditional mount sits inside one JSX
@@ -139,7 +135,7 @@ function wrapRoot(context: StateClassificationContext): WrapRoot | null {
     rendersWithoutSideEffects(root, context) &&
     rendersOnlyRefreshedOwnerValues(root, owner) &&
     wrappedElementIsPassedThrough(root, passThroughScope(context)) &&
-    mountIdentityAboveIsStable(root, owner) &&
+    typeChangeKeepsMountIdentity(root, owner) &&
     subscriptionSitesAreMaterial([{ kind: "computed", label: "", node: root }], state)
     ? root
     : null;
@@ -241,99 +237,6 @@ function initializerIsRefreshed(
         (!ts.isIdentifier(node) || ownerValueIsRefreshed(node, owner, seen));
   });
   return refreshed;
-}
-
-/**
- * Wrapping changes the slot's element type, which is invisible unless something above can switch
- * between the slot and a same-typed element in the same position: the other arm of an enclosing
- * conditional, or another return of the owner. Arms and returns whose roots differ in type (or
- * render no element) remount everything below them anyway. Any other path to the owner's output,
- * such as a `const` or a fallback operand, abstains.
- */
-function mountIdentityAboveIsStable(root: WrapRoot, owner: RuntimeFunctionLike): boolean {
-  for (let current: ts.Node = root; ; current = current.parent) {
-    const { parent } = current;
-    if (parent === owner) {
-      return true;
-    }
-    if (ts.isReturnStatement(parent)) {
-      return otherReturnsRenderOtherRoots(parent, owner);
-    }
-    if (!passesMountThrough(parent, current)) {
-      return false;
-    }
-  }
-}
-
-function passesMountThrough(parent: ts.Node, child: ts.Node): boolean {
-  if (ts.isConditionalExpression(parent)) {
-    const other = parent.whenTrue === child ? parent.whenFalse : parent.whenTrue;
-    return parent.condition !== child && rootsDiffer(branchRoot(child), branchRoot(other));
-  }
-  if (ts.isBinaryExpression(parent)) {
-    return (
-      parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken && parent.right === child
-    );
-  }
-  return (
-    ts.isParenthesizedExpression(parent) ||
-    ts.isJsxExpression(parent) ||
-    ts.isJsxElement(parent) ||
-    ts.isJsxFragment(parent)
-  );
-}
-
-function otherReturnsRenderOtherRoots(
-  returned: ts.ReturnStatement,
-  owner: RuntimeFunctionLike,
-): boolean {
-  const root = returned.expression ? branchRoot(returned.expression) : NO_ELEMENT;
-  return ownerReturns(owner).every(
-    (other) =>
-      other === returned ||
-      rootsDiffer(root, other.expression ? branchRoot(other.expression) : NO_ELEMENT),
-  );
-}
-
-function ownerReturns(owner: RuntimeFunctionLike): readonly ts.ReturnStatement[] {
-  const returns: ts.ReturnStatement[] = [];
-  if (owner.body) {
-    visitSkippingNestedRuntimeFunctions(owner.body, (node) => {
-      if (ts.isReturnStatement(node)) {
-        returns.push(node);
-      }
-    });
-  }
-  return returns;
-}
-
-function rootsDiffer(left: BranchRoot, right: BranchRoot): boolean {
-  return (
-    left === NO_ELEMENT ||
-    right === NO_ELEMENT ||
-    (left !== null && right !== null && left !== right)
-  );
-}
-
-/** The tag React reconciles at a branch root, `NO_ELEMENT` for an empty branch, `null` if unknown. */
-function branchRoot(node: ts.Node): BranchRoot {
-  if (ts.isJsxElement(node)) {
-    return node.openingElement.tagName.getText();
-  }
-  if (ts.isJsxSelfClosingElement(node)) {
-    return node.tagName.getText();
-  }
-  if (ts.isJsxFragment(node)) {
-    return "";
-  }
-  if (ts.isParenthesizedExpression(node) || ts.isJsxExpression(node)) {
-    return node.expression ? branchRoot(node.expression) : NO_ELEMENT;
-  }
-  return node.kind === ts.SyntaxKind.NullKeyword ||
-    node.kind === ts.SyntaxKind.FalseKeyword ||
-    (ts.isIdentifier(node) && node.text === "undefined")
-    ? NO_ELEMENT
-    : null;
 }
 
 function wrapRootLabel(root: WrapRoot): string {

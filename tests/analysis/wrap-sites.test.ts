@@ -192,25 +192,38 @@ test("wraps a slot that also renders another state, which the block reads fresh"
   assert.equal(finding(propDerived)?.action, "use-observable");
 });
 
-test("does not wrap when an enclosing branch or another return can keep the slot's fiber", () => {
+test("wraps unless an enclosing branch or another return can keep the slot's fiber", () => {
   assertNotWrapped({
     sameTagAlternate: {
       body: `{items.length > 0 ? ${DIALOG} : <Dialog open={false} onOpenChange={() => {}} />}`,
     },
     fallbackOperand: { body: `{items.length === 0 || ${DIALOG}}` },
     nullishOperand: { body: `{items[0] ?? ${DIALOG}}` },
-    sameRootReturn: {
+    sameSlotReturn: {
       body: DIALOG,
-      setup: "if (items.length === 0) return <section>Empty</section>;",
+      setup: `if (items.length === 0) {
+        return <section>${CHROME}<button>Open</button><Dialog open={false} onOpenChange={() => {}} /></section>;
+      }`,
+    },
+    sameSlotArm: {
+      body: `{items.length > 0 ? <div>${DIALOG}</div> : <div><Dialog open={false} onOpenChange={() => {}} /></div>}`,
     },
     attributeSlot: { body: `<Tabs trigger={${DIALOG}} />` },
   });
-  for (const setup of ["", "if (items.length === 0) return null;"]) {
+  for (const setup of [
+    "",
+    "if (items.length === 0) return null;",
+    "if (items.length === 0) return <section>Empty</section>;",
+  ]) {
     const otherRoot = finding(
       panel({ body: `{items.length > 0 ? ${DIALOG} : <p>Empty</p>}`, setup }),
     );
-    assert.match(otherRoot?.message ?? "", WRAP_SITE);
+    assert.match(otherRoot?.message ?? "", WRAP_SITE, setup);
   }
+  const otherSlotArm = finding(
+    panel({ body: `{items.length > 0 ? <div>${DIALOG}</div> : <div><p>Empty</p></div>}` }),
+  );
+  assert.match(otherSlotArm?.message ?? "", WRAP_SITE);
 });
 
 test("does not wrap a slot that renders an owner snapshot the block would leave stale", () => {
