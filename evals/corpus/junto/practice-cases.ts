@@ -154,6 +154,15 @@ export const juntoPracticeCases = [
     target: "junto-renderer",
   },
   {
+    action: "select-primitive-projection",
+    disposition: "change",
+    file: "App.tsx",
+    line: 306,
+    rationale:
+      'App reads `canvasName` only as `booting && !canvasName`. Opening, creating, or following a reference to another canvas sets one non-empty name over another (App.tsx:151, :186, :242), and those stretches write no other App subscription except `state$.error.set("")`, which notifies nothing unless an error shows, so each canvas switch renders App today; `!!state$.canvasName.get()` renders it only when the name turns empty or non-empty.',
+    target: "junto-renderer",
+  },
+  {
     action: "snapshot-mutated-use-value",
     disposition: "change",
     file: "lib/region-rollups.ts",

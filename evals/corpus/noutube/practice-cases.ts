@@ -134,6 +134,15 @@ export const noutubePracticeCases = [
     target,
   })),
   {
+    action: "narrow-use-value-subscription",
+    disposition: "change",
+    file: "useActivePageUrl.ts",
+    line: 9,
+    rationale:
+      "The hook reads the tab list only as `tabs[activeTabIndex]`, and each tab's WebView in MainPageContent writes its own entry by index through setTabLoading, setTabCanGoBack, setTabPageUrl, and setTabMeta (states/tabs.ts:213-245), so a background tab loading or retitling renders NouHeader, LibraryModal, and HistoryModal through this hook today. Subscribing to `tabs$.tabs[activeTabIndex]` after the activeTabIndex subscription keeps the active entry and drops those renders; closing a tab still shifts the entry and renders.",
+    target: "noutube-active-page-url",
+  },
+  {
     action: "split-use-value-leaves",
     disposition: "change",
     file: "SettingsModalTabSettings.tsx",

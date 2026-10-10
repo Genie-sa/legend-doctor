@@ -10,7 +10,7 @@ import ts from "typescript";
 export type ValueDomain = "object" | "primitive";
 
 /** A domain summary: the distinct primitive values it can hold, or `null` when unbounded. */
-interface DomainValues {
+export interface DomainValues {
   readonly objects: boolean;
   readonly primitives: ReadonlySet<string> | null;
 }
@@ -42,19 +42,19 @@ const KEYWORD_VALUES = new Map<ts.SyntaxKind, DomainValues>([
 const BUILTIN_OBJECT_TYPES = new Set(["Array", "Map", "ReadonlyArray", "Record", "Set"]);
 
 /** The domain at `path` under a declared value type, resolving same-file interfaces and aliases. */
-export function typeValueDomain(type: ts.TypeNode, path: readonly string[]): ValueDomain | null {
+export function typeDomainValues(type: ts.TypeNode, path: readonly string[]): DomainValues | null {
   const leaf = memberType(type, path, 0);
-  return leaf ? broadDomain(typeValues(leaf, 0)) : null;
+  return leaf ? typeValues(leaf, 0) : null;
 }
 
 /**
  * The domain at `path` inside an `observable(...)` or `useObservable(...)` declaration: its type
  * argument when present, otherwise the seed TypeScript widens (`"a"` to string, `0` to number).
  */
-export function declarationValueDomain(
+export function declarationDomainValues(
   declaration: ts.VariableDeclaration,
   path: readonly string[],
-): ValueDomain | null {
+): DomainValues | null {
   const call = declaration.initializer
     ? unwrapTransparentExpression(declaration.initializer)
     : null;
@@ -63,25 +63,25 @@ export function declarationValueDomain(
   }
   const [typeArgument] = call.typeArguments ?? [];
   if (typeArgument) {
-    return typeValueDomain(typeArgument, path);
+    return typeDomainValues(typeArgument, path);
   }
   const [seed] = call.arguments;
-  return seed ? seedValueDomain(seed, path) : null;
+  return seed ? seedDomainValues(seed, path) : null;
 }
 
-function seedValueDomain(seed: ts.Expression, path: readonly string[]): ValueDomain | null {
+function seedDomainValues(seed: ts.Expression, path: readonly string[]): DomainValues | null {
   if (ts.isParenthesizedExpression(seed)) {
-    return seedValueDomain(seed.expression, path);
+    return seedDomainValues(seed.expression, path);
   }
   if (ts.isAsExpression(seed) || ts.isTypeAssertionExpression(seed)) {
-    return isConstAssertion(seed.type) ? null : typeValueDomain(seed.type, path);
+    return isConstAssertion(seed.type) ? null : typeDomainValues(seed.type, path);
   }
   const [head, ...rest] = path;
   if (head === undefined) {
-    return seedLeafDomain(seed);
+    return seedLeafValues(seed);
   }
   const member = seedMember(seed, head);
-  return member ? seedValueDomain(member, rest) : null;
+  return member ? seedDomainValues(member, rest) : null;
 }
 
 /** The sole plain `key: value` initializer of an object literal without spreads. */
@@ -101,7 +101,7 @@ function seedMember(seed: ts.Expression, key: string): ts.Expression | null {
     : null;
 }
 
-function seedLeafDomain(seed: ts.Expression): ValueDomain | null {
+function seedLeafValues(seed: ts.Expression): DomainValues | null {
   if (
     ts.isStringLiteralLike(seed) ||
     ts.isNumericLiteral(seed) ||
@@ -110,9 +110,9 @@ function seedLeafDomain(seed: ts.Expression): ValueDomain | null {
       seed.operator === ts.SyntaxKind.MinusToken &&
       ts.isNumericLiteral(seed.operand))
   ) {
-    return "primitive";
+    return UNBOUNDED_PRIMITIVE;
   }
-  return ts.isObjectLiteralExpression(seed) || ts.isArrayLiteralExpression(seed) ? "object" : null;
+  return ts.isObjectLiteralExpression(seed) || ts.isArrayLiteralExpression(seed) ? OBJECT : null;
 }
 
 function isConstAssertion(type: ts.TypeNode): boolean {
@@ -250,7 +250,7 @@ function unionValues(members: readonly (DomainValues | null)[]): DomainValues | 
   return { objects, primitives };
 }
 
-function broadDomain(values: DomainValues | null): ValueDomain | null {
+export function broadDomain(values: DomainValues | null): ValueDomain | null {
   if (!values) {
     return null;
   }
@@ -260,4 +260,48 @@ function broadDomain(values: DomainValues | null): ValueDomain | null {
   return values.primitives === null || values.primitives.size >= MIN_BROAD_FINITE_VALUES
     ? "primitive"
     : null;
+}
+
+/** How truthiness splits a domain, for a selector that keeps only `!!value`. */
+export interface TruthinessDomain {
+  /** Two distinct truthy values exist, so a change between them leaves the boolean unchanged. */
+  readonly keepsTruthinessAcrossChanges: boolean;
+  /** `0`, `NaN`, `""`, or `0n` is possible, which JSX renders as text where `false` renders nothing. */
+  readonly rendersFalsyValue: boolean;
+}
+
+export function truthinessDomain(values: DomainValues | null): TruthinessDomain | null {
+  if (!values) {
+    return null;
+  }
+  const { objects, primitives } = values;
+  if (primitives === null) {
+    return { keepsTruthinessAcrossChanges: true, rendersFalsyValue: true };
+  }
+  const literals = [...primitives];
+  return {
+    keepsTruthinessAcrossChanges:
+      objects || literals.filter((literal) => isTruthyLiteral(literal)).length > 1,
+    rendersFalsyValue: literals.some((literal) => isRenderedFalsyLiteral(literal)),
+  };
+}
+
+function isTruthyLiteral(literal: string): boolean {
+  return (
+    literal === "true" ||
+    (literal.startsWith("string:") && literal !== "string:") ||
+    isNonZeroNumber(literal)
+  );
+}
+
+function isRenderedFalsyLiteral(literal: string): boolean {
+  return literal === "string:" || (literal.startsWith("number:") && !isNonZeroNumber(literal));
+}
+
+function isNonZeroNumber(literal: string): boolean {
+  if (!literal.startsWith("number:")) {
+    return false;
+  }
+  const digits = literal.slice("number:".length).replaceAll("_", "");
+  return digits.endsWith("n") ? BigInt(digits.slice(0, -1)) !== 0n : Number(digits) !== 0;
 }

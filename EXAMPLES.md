@@ -207,6 +207,25 @@ passed in as a prop, a parent that is only replaced whole, and a field only ever
 A single-property destructure such as `const { name } = useValue(profile$)` carries `edits` that produce
 `const name = useValue(profile$.name)`. Renaming reads of a whole-value binding stays prose.
 
+A map read at one key narrows the same way:
+
+```tsx
+// Before: a write to any area wakes this label
+const allAreas = useValue(areas$);
+return <span>{allAreas[areaId]?.name}</span>;
+
+// After: only areas$[areaId] can wake it
+const area = useValue(areas$[areaId]);
+return <span>{area?.name}</span>;
+```
+
+Every read must index the value with the same key, and the key must be fixed for the render: a literal, a prop or
+parameter, or a `const`. When that `const` comes after the subscription, the finding says to declare the narrowed
+subscription after it, which holds only when nothing in between reads the value, returns, or throws. The finding
+needs a production write that changes one entry without replacing the map, and no other subscription, observer
+read, dependency-free effect, ref or `peek()` render read, or subscribing parent that renders the owner on the same
+change.
+
 For a derived primitive, keep the comparison inside the selector:
 
 ```tsx

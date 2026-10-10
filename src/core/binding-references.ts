@@ -8,7 +8,9 @@ import type { RuntimeFunctionLike } from "./ast.js";
 import ts from "typescript";
 import { visit } from "./ast.js";
 
-export function propertyAccessIsWritten(access: ts.PropertyAccessExpression): boolean {
+export function propertyAccessIsWritten(
+  access: ts.ElementAccessExpression | ts.PropertyAccessExpression,
+): boolean {
   const { parent } = access;
   return (
     (ts.isBinaryExpression(parent) &&

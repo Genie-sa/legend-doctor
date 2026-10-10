@@ -1,49 +1,32 @@
 import type { LegendPracticeFinding, TextEdit } from "../../core/types.js";
-import { hasEveryRenderEffect, ownerTracksRelatedPath } from "./subscription-overlap.js";
+import type {
+  MergedProjection,
+  ProjectionScan,
+  RawSubscription,
+} from "./projection-subscriptions.js";
+import {
+  capitalized,
+  isNameTaken,
+  mergedProjection,
+  rawSubscription,
+  rendersOnSameChange,
+  selectorEdits,
+} from "./projection-subscriptions.js";
 import { isRenderStableOperand, projectionSites } from "./projection-sites.js";
-import { isUseValueCall, provenObservablePath } from "../observable-reads/observable-paths.js";
 import { rangeHasComment, replaceNode, replaceRange } from "../../core/text-edits.js";
-import type { ChildContractResolver } from "../child-contract/model.js";
-import type { DomainFacts } from "./projection-domain.js";
-import type { OwnerHookScan } from "./owner-hooks.js";
 import type { ProjectionSites } from "./projection-sites.js";
-import type { RenderOwner } from "../observable-tracking/render-owners.js";
 import type { ValueDomain } from "./value-domains.js";
-import { callsUnprovenHook } from "./owner-hooks.js";
-import { isSynchronous } from "../observable-reads/untracked-render-reads.js";
-import { observableValueDomain } from "./projection-domain.js";
+import { broadDomain } from "./value-domains.js";
+import { observableDomainValues } from "./projection-domain.js";
 import { ownerLevelReferences } from "../../core/scope-references.js";
-import { renderOwnerOf } from "../observable-tracking/render-owners.js";
 import { rendersStaleUntrackedRead } from "./stale-render-reads.js";
-import { staticPropertyPath } from "../../core/analysis-ast.js";
+import { truthinessProjectionFinding } from "./truthiness-projection.js";
 import ts from "typescript";
 import { visit } from "../../core/ast.js";
 
-export interface ProjectionScan extends DomainFacts, OwnerHookScan {
-  readonly childContracts: ChildContractResolver | null;
-  readonly fileName: string;
-  readonly observableBindings: ReadonlySet<string>;
-}
-
-type NamedDeclaration = ts.VariableDeclaration & { readonly name: ts.Identifier };
-
-interface RawSubscription {
-  readonly call: ts.CallExpression;
-  readonly declaration: NamedDeclaration;
-  readonly observable: ts.Expression;
-  readonly owner: RenderOwner;
-  readonly statement: ts.VariableStatement;
-}
-
-/** The `const` a sole comparison initializes; it becomes the selector's binding. */
-interface MergedComparison {
-  readonly declaration: NamedDeclaration;
-  readonly statement: ts.VariableStatement;
-}
-
 interface Projection extends ProjectionSites {
   readonly domain: ValueDomain;
-  readonly merged: MergedComparison | null;
+  readonly merged: MergedProjection | null;
   readonly name: string;
   readonly raw: RawSubscription;
 }
@@ -68,72 +51,25 @@ export function findPrimitiveProjections(scan: ProjectionScan): LegendPracticeFi
   visit(scan.sourceFile, (node) => {
     const raw = ts.isVariableDeclaration(node) ? rawSubscription(node, scan) : null;
     const projection = raw ? confinedProjection(raw, scan) : null;
-    if (projection) {
-      findings.push(projectionFinding(projection, scan));
+    const finding = projection
+      ? projectionFinding(projection, scan)
+      : raw && truthinessProjectionFinding(raw, scan);
+    if (finding) {
+      findings.push(finding);
     }
   });
   return findings;
 }
 
-function rawSubscription(
-  declaration: ts.VariableDeclaration,
-  scan: ProjectionScan,
-): RawSubscription | null {
-  const call = declaration.initializer;
-  const statement = soleConstStatement(declaration);
-  if (
-    !isNamedDeclaration(declaration) ||
-    declaration.type ||
-    !call ||
-    !ts.isCallExpression(call) ||
-    call.typeArguments ||
-    call.arguments.length !== 1 ||
-    !isUseValueCall(call, scan.imports) ||
-    !statement
-  ) {
-    return null;
-  }
-  const observable = provenObservablePath(call.arguments[0]!, scan.observableBindings);
-  const owner = renderOwnerOf(declaration, scan.imports);
-  return observable &&
-    owner?.hops === 0 &&
-    statement.parent === owner.owner.body &&
-    isSynchronous(owner.owner)
-    ? { call, declaration, observable, owner, statement }
-    : null;
-}
-
-function isNamedDeclaration(declaration: ts.VariableDeclaration): declaration is NamedDeclaration {
-  return ts.isIdentifier(declaration.name);
-}
-
-/** The `const` statement that declares only this binding. */
-function soleConstStatement(declaration: ts.VariableDeclaration): ts.VariableStatement | null {
-  const list = declaration.parent;
-  const statement = list.parent;
-  return ts.isVariableDeclarationList(list) &&
-    (list.flags & ts.NodeFlags.Const) !== 0 &&
-    list.declarations.length === 1 &&
-    ts.isVariableStatement(statement)
-    ? statement
-    : null;
-}
-
 function confinedProjection(raw: RawSubscription, scan: ProjectionScan): Projection | null {
   const sites = projectionSites(raw.owner.owner, raw.declaration.name, scan.imports);
-  const path = staticPropertyPath(raw.observable);
-  const domain = observableValueDomain(raw.observable, scan);
+  const domain = broadDomain(observableDomainValues(raw.observable, scan));
   if (
     !sites ||
-    !path ||
     !domain ||
-    raw.owner.tracked ||
     !isRenderStableOperand(sites.operand, raw.owner.owner, raw.statement) ||
     (LOOSE_OPERATORS.has(sites.operator) && !isNullishLiteral(sites.operand)) ||
-    ownerTracksRelatedPath({ call: raw.call, owner: raw.owner, path }, scan.imports) ||
-    hasEveryRenderEffect(raw.owner, scan.imports) ||
-    callsUnprovenHook(raw.owner.owner, scan) ||
-    parentRendersOnSameChange(raw, scan)
+    rendersOnSameChange(raw, scan)
   ) {
     return null;
   }
@@ -145,7 +81,8 @@ function namedProjection(
   scan: ProjectionScan,
 ): Projection | null {
   const { raw } = candidate;
-  const merged = mergedProjection(candidate, raw);
+  const merged =
+    candidate.sites.length === 1 ? mergedProjection(candidate.sites[0].comparison, raw) : null;
   const match = merged?.declaration.name ?? null;
   if (
     (match !== null && ownerLevelReferences(raw.owner.owner, match).length === 0) ||
@@ -171,43 +108,6 @@ function isNullishLiteral(operand: ts.Expression): boolean {
   );
 }
 
-/** When every component that renders the owner subscribes to the same path, no render is removed. */
-function parentRendersOnSameChange(raw: RawSubscription, scan: ProjectionScan): boolean {
-  return (
-    raw.owner.kind === "component" &&
-    scan.childContracts !== null &&
-    scan.childContracts.componentParentRerender(raw.owner.owner, [raw.observable]) !== "absent"
-  );
-}
-
-/** `const selected = raw === id;` in the owner body becomes the selector. */
-function mergedProjection(sites: ProjectionSites, raw: RawSubscription): MergedComparison | null {
-  const [site, ...others] = sites.sites;
-  const comparison = outermostParenthesized(site.comparison);
-  const declaration = comparison.parent;
-  if (
-    others.length > 0 ||
-    !ts.isVariableDeclaration(declaration) ||
-    !isNamedDeclaration(declaration) ||
-    declaration.type ||
-    declaration.initializer !== comparison
-  ) {
-    return null;
-  }
-  const statement = soleConstStatement(declaration);
-  return statement !== null && statement.parent === raw.owner.owner.body
-    ? { declaration, statement }
-    : null;
-}
-
-function outermostParenthesized(expression: ts.Expression): ts.Expression {
-  let current = expression;
-  while (ts.isParenthesizedExpression(current.parent)) {
-    current = current.parent;
-  }
-  return current;
-}
-
 /**
  * `hasItem`/`missingItem` against null or undefined, otherwise `activeMatches`/`activeDiffers`;
  * null when the file already uses that name.
@@ -215,44 +115,42 @@ function outermostParenthesized(expression: ts.Expression): ts.Expression {
 function freshProjectionName(raw: RawSubscription, sites: ProjectionSites): string | null {
   const negated = NEGATED_OPERATORS.has(sites.operator);
   const base = raw.declaration.name.text;
-  const capitalized = `${base.charAt(0).toUpperCase()}${base.slice(1)}`;
   const name = isNullishLiteral(sites.operand)
-    ? `${negated ? "has" : "missing"}${capitalized}`
+    ? `${negated ? "has" : "missing"}${capitalized(base)}`
     : `${base}${negated ? "Differs" : "Matches"}`;
-  let taken = false;
-  visit(raw.declaration.getSourceFile(), (node) => {
-    taken ||= ts.isIdentifier(node) && node.text === name;
-  });
-  return taken ? null : name;
+  return isNameTaken(raw.declaration.getSourceFile(), name) ? null : name;
 }
 
-function selectorSource(projection: Projection, scan: ProjectionScan): string {
+function comparisonSource(projection: Projection, scan: ProjectionScan): string {
   const [site] = projection.sites;
   const read = `${projection.raw.observable.getText(scan.sourceFile)}.get()`;
   const operand = projection.operand.getText(scan.sourceFile);
   const operator = site.comparison.operatorToken.getText(scan.sourceFile);
-  const comparison = site.rawOnLeft
-    ? `${read} ${operator} ${operand}`
-    : `${operand} ${operator} ${read}`;
-  return `${projection.raw.call.expression.getText(scan.sourceFile)}(() => ${comparison})`;
+  return site.rawOnLeft ? `${read} ${operator} ${operand}` : `${operand} ${operator} ${read}`;
+}
+
+function selectorSource(projection: Projection, scan: ProjectionScan): string {
+  return `${projection.raw.call.expression.getText(scan.sourceFile)}(() => ${comparisonSource(projection, scan)})`;
 }
 
 function projectionEdits(projection: Projection, scan: ProjectionScan): readonly TextEdit[] | null {
-  const hook = replaceNode(
+  const hook = selectorEdits(
+    projection.raw,
+    { name: projection.name, selected: comparisonSource(projection, scan) },
     scan,
-    projection.raw.declaration,
-    `${projection.name} = ${selectorSource(projection, scan)}`,
   );
   if (!projection.merged) {
     return [
-      hook,
+      ...hook,
       ...projection.sites.map((site) => replaceNode(scan, site.comparison, projection.name)),
       ...projection.dependencies.map((entry) => replaceNode(scan, entry, projection.name)),
     ];
   }
   const { statement } = projection.merged;
   const removed = { end: statement.getEnd(), pos: statement.getFullStart() };
-  return rangeHasComment(scan.sourceFile, removed) ? null : [hook, replaceRange(scan, removed, "")];
+  return rangeHasComment(scan.sourceFile, removed)
+    ? null
+    : [...hook, replaceRange(scan, removed, "")];
 }
 
 function projectionFinding(projection: Projection, scan: ProjectionScan): LegendPracticeFinding {

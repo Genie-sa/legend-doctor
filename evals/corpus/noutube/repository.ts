@@ -56,6 +56,12 @@ export const noutubeRepository = {
     },
     { effects: 1, id: "noutube-url-modal", root: "components/modal/UrlModal.tsx", states: 1 },
     {
+      effects: 0,
+      id: "noutube-active-page-url",
+      root: "lib/hooks/useActivePageUrl.ts",
+      states: 0,
+    },
+    {
       effects: 2,
       id: "noutube-settings-tree",
       root: "components/modal/SettingsTree.tsx",
