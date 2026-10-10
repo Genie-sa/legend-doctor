@@ -1,3 +1,4 @@
+import type { ChildContractResolver, LeafRenderValues } from "../../rules/child-contract/model.js";
 import type { ClassifiedState, StateUsage } from "../model.js";
 import {
   callSiteIsKeyed,
@@ -7,16 +8,16 @@ import {
 import { competingSubscriptionsNote, isCustomHookOwner } from "../ast-helpers.js";
 import { isStructuralLegendCandidate, legendCandidateMessage } from "../finding-format.js";
 import {
-  passThroughLeaf,
-  passThroughScope,
-  valueCallSitesPassThrough,
-} from "./pass-through-leaf.js";
-import {
+  leafRenderValues,
   setterWritesFitLeafTransport,
   stateHasNoEffectOrDeferredUse,
   stateWritesAreUntracked,
 } from "./transport-verdicts.js";
-import type { ChildContractResolver } from "../../rules/child-contract/model.js";
+import {
+  passThroughLeaf,
+  passThroughScope,
+  valueCallSitesPassThrough,
+} from "./pass-through-leaf.js";
 import type { ForwardedSetterProp } from "./setter-forwarding.js";
 import { SMALL_OWNER_JSX_ELEMENTS } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
@@ -181,6 +182,7 @@ interface VerifiedLeafRenderProp {
 function verifiedLeafRenderProp(
   usage: StateUsage,
   childContracts: ChildContractResolver,
+  values: LeafRenderValues,
 ): VerifiedLeafRenderProp | null {
   const [target] = [...usage.jsxTargets];
   if (target === undefined) {
@@ -190,7 +192,7 @@ function verifiedLeafRenderProp(
   const [propName] = propNames?.size === 1 ? [...propNames] : [];
   if (
     propName === undefined ||
-    !childContracts.componentPropIsLeafRenderConsumer(target, propName)
+    !childContracts.componentPropIsLeafRenderConsumer(target, propName, values)
   ) {
     return null;
   }
@@ -239,18 +241,22 @@ interface LeafTransport {
   readonly target: string;
 }
 
-/** The child contract proves a resolvable child; otherwise the owner-side proof never reads it. */
+/**
+ * The child contract proves a resolvable child; otherwise the owner-side proof never reads it, so it
+ * cannot rule out an identity comparison of an object a forwarded setter writes.
+ */
 function leafTransport(
   context: StateClassificationContext,
   childContracts: ChildContractResolver,
 ): LeafTransport | null {
-  const leafProp = verifiedLeafRenderProp(context.usage, childContracts);
+  const values = leafRenderValues(context);
+  const leafProp = verifiedLeafRenderProp(context.usage, childContracts, values);
   if (leafProp) {
     const proof = `The child contract is verified: \`${leafProp.target}\` renders the \`${leafProp.propName}\` value directly and owns none of its lifecycle.`;
     return { callSites: 1, proof, target: leafProp.target };
   }
   const [target = ""] = context.usage.jsxTargets;
-  const passThrough = passThroughLeaf(context, target);
+  const passThrough = values === "primitive" ? passThroughLeaf(context, target) : null;
   return (
     passThrough && {
       callSites: passThrough.callSites,

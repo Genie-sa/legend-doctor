@@ -4,6 +4,7 @@ import type {
   ContextConsumerSource,
   HookPresentationConsumer,
   HookReturnMembers,
+  LeafRenderValues,
   ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
 import type { ReachResolver } from "../../project/source-components/synchronous-reach.js";
@@ -28,10 +29,14 @@ export class AssumedLeafContracts implements ChildContractResolver {
     return this.#base.reachResolver?.() ?? localReachResolver;
   }
 
-  public componentPropIsLeafRenderConsumer(componentName: string, propName: string): boolean {
+  public componentPropIsLeafRenderConsumer(
+    componentName: string,
+    propName: string,
+    values: LeafRenderValues,
+  ): boolean {
     return (
       this.#assumedLeaves.has(componentName) ||
-      this.#base.componentPropIsLeafRenderConsumer(componentName, propName)
+      this.#base.componentPropIsLeafRenderConsumer(componentName, propName, values)
     );
   }
 

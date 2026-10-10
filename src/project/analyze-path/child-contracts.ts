@@ -5,6 +5,7 @@ import type {
   ContextConsumerSource,
   HookPresentationConsumer,
   HookReturnMembers,
+  LeafRenderValues,
   ParentRerenderProof,
 } from "../../rules/child-contract/model.js";
 import type {
@@ -201,14 +202,19 @@ class ChildContracts implements ChildContractResolver {
     );
   }
 
-  public componentPropIsLeafRenderConsumer(componentName: string, propName: string): boolean {
-    return cached(this.leafRenderContracts, `${componentName}\0${propName}`, () => {
+  public componentPropIsLeafRenderConsumer(
+    componentName: string,
+    propName: string,
+    values: LeafRenderValues,
+  ): boolean {
+    return cached(this.leafRenderContracts, `${componentName}\0${propName}\0${values}`, () => {
       const source = this.resolveComponentSource(this.importerFile, componentName);
       return (
         source !== null &&
-        propIsLeafRenderConsumer(source, propName, (file, name) =>
-          this.resolveComponentSource(file, name),
-        )
+        propIsLeafRenderConsumer(source, propName, {
+          resolver: (file, name) => this.resolveComponentSource(file, name),
+          values,
+        })
       );
     });
   }

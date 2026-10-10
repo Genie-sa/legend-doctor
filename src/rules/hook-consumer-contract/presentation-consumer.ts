@@ -99,9 +99,8 @@ function presentationSites(
     return null;
   }
   const sites = subscriptionSites(usage, {
-    allowUnresolvedComponentCallSite: true,
-    childContracts: null,
     hostTags: imports,
+    isLeafCallSite: () => true,
     pureProjectionImports: new Set([
       ...pureClassNameImports(sourceFile),
       ...scope.pureProjectionImports,

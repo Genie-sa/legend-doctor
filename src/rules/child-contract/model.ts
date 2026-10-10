@@ -12,6 +12,13 @@ export interface ChildComponentSource {
   readonly reactWrapped?: boolean;
 }
 
+/**
+ * What a leaf subscriber passes for a prop. Legend skips notifying for a structurally equal object
+ * or array write, so a `structural` value may keep an earlier reference where React passed the new
+ * one; only reads that never observe identity render the same.
+ */
+export type LeafRenderValues = "primitive" | "structural";
+
 /** Resolves a JSX tag name against the imports of the file that renders it. */
 export type ComponentSourceResolver = (name: string) => ChildComponentSource | null;
 
@@ -105,7 +112,11 @@ export interface ChildContractResolver {
     owner: RuntimeFunctionLike,
     paths: readonly ts.Expression[],
   ) => ParentRerenderProof;
-  componentPropIsLeafRenderConsumer: (componentName: string, propName: string) => boolean;
+  componentPropIsLeafRenderConsumer: (
+    componentName: string,
+    propName: string,
+    values: LeafRenderValues,
+  ) => boolean;
   /** No production source in the closed application package can render this component. */
   componentIsUnreferenced: (owner: RuntimeFunctionLike) => boolean;
   /** A source-resolved custom hook the owner's render calls subscribes to this path or an ancestor. */
