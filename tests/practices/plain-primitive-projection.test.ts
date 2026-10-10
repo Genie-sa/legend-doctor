@@ -128,6 +128,18 @@ for (const [name, source, selector] of [
   });
 }
 
+for (const [name, condition] of [
+  ["mixed operands", 'id === trackId || id === "b"'],
+  ["mixed operators", "id === trackId && !(id !== trackId)"],
+] as const) {
+  test(`selects the joined condition across ${name}`, () => {
+    const [finding, ...rest] = findings(fixture(body.replace("id === trackId", condition)));
+    assert.equal(rest.length, 0);
+    const selector = `const selected = useValue(() => { const id = active$.get(); return ${condition}; })`;
+    assert.ok(finding?.message.includes(selector), finding?.message);
+  });
+}
+
 for (const [name, source] of Object.entries({
   helperOperand: fixture(body.replace("id === trackId", "id === hidden()")),
   laterOperand: fixture(
@@ -157,8 +169,6 @@ for (const [name, source] of Object.entries({
   fakeFactory: fixture(body, 'fakeObservable("a")'),
   injective: fixture(body.replace("id === trackId", 'id + "!"')),
   looseComparison: fixture(body.replace("id === trackId", "id == trackId")),
-  mixedOperands: fixture(body.replace("id === trackId", 'id === trackId || id === "b"')),
-  mixedOperators: fixture(body.replace("id === trackId", "id === trackId && !(id !== trackId)")),
   rawSnapshot: fixture(body.replace("data-selected={selected}", "data-selected={id}")),
   unreadComparison: fixture(body.replace("data-selected={selected}", "")),
   shadowedSource: fixture(body.replace("const id", "const active$ = fake; const id")),

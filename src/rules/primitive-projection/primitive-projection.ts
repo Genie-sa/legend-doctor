@@ -1,4 +1,4 @@
-import type { LegendPracticeFinding, TextEdit } from "../../core/types.js";
+import type { LegendPracticeAction, LegendPracticeFinding, TextEdit } from "../../core/types.js";
 import type {
   MergedProjection,
   ProjectionScan,
@@ -12,11 +12,12 @@ import {
   rendersOnSameChange,
   selectorEdits,
 } from "./projection-subscriptions.js";
-import { isRenderStableOperand, projectionSites } from "./projection-sites.js";
+import { isNullishLiteral, isRenderStableOperand, projectionSites } from "./projection-sites.js";
 import { rangeHasComment, replaceNode, replaceRange } from "../../core/text-edits.js";
 import type { ProjectionSites } from "./projection-sites.js";
 import type { ValueDomain } from "./value-domains.js";
 import { broadDomain } from "./value-domains.js";
+import { conditionProjectionFinding } from "./condition-projection.js";
 import { observableDomainValues } from "./projection-domain.js";
 import { ownerLevelReferences } from "../../core/scope-references.js";
 import { rendersStaleUntrackedRead } from "./stale-render-reads.js";
@@ -30,6 +31,19 @@ interface Projection extends ProjectionSites {
   readonly name: string;
   readonly raw: RawSubscription;
 }
+
+/**
+ * Practices that rewrite or remove a `useValue` subscription. Each edits the declaration a
+ * projection would, so both cannot apply; the projection can follow on the rewritten binding at
+ * the next scan.
+ */
+const SUBSCRIPTION_REWRITES: ReadonlySet<LegendPracticeAction> = new Set([
+  "move-use-value-down",
+  "move-use-value-into-child",
+  "narrow-use-value-subscription",
+  "peek-unrendered-use-value",
+  "split-use-value-leaves",
+]);
 
 const LOOSE_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
   ts.SyntaxKind.EqualsEqualsToken,
@@ -53,7 +67,7 @@ export function findPrimitiveProjections(scan: ProjectionScan): LegendPracticeFi
     const projection = raw ? confinedProjection(raw, scan) : null;
     const finding = projection
       ? projectionFinding(projection, scan)
-      : raw && truthinessProjectionFinding(raw, scan);
+      : raw && (truthinessProjectionFinding(raw, scan) ?? conditionProjectionFinding(raw, scan));
     if (finding) {
       findings.push(finding);
     }
@@ -101,13 +115,6 @@ function namedProjection(
   return name === null ? null : { ...candidate, merged, name };
 }
 
-function isNullishLiteral(operand: ts.Expression): boolean {
-  return (
-    operand.kind === ts.SyntaxKind.NullKeyword ||
-    (ts.isIdentifier(operand) && operand.text === "undefined")
-  );
-}
-
 /**
  * `hasItem`/`missingItem` against null or undefined, otherwise `activeMatches`/`activeDiffers`;
  * null when the file already uses that name.
@@ -136,7 +143,7 @@ function selectorSource(projection: Projection, scan: ProjectionScan): string {
 function projectionEdits(projection: Projection, scan: ProjectionScan): readonly TextEdit[] | null {
   const hook = selectorEdits(
     projection.raw,
-    { name: projection.name, selected: comparisonSource(projection, scan) },
+    [{ name: projection.name, selected: comparisonSource(projection, scan) }],
     scan,
   );
   if (!projection.merged) {
@@ -198,4 +205,23 @@ function projectionEvidence(projection: Projection, scan: ProjectionScan): reado
     `${observable} holds ${projection.domain === "object" ? "objects" : "three or more primitive values"}, so distinct values can leave the comparison unchanged`,
     `no other subscription, observer read, dependency-free effect, or subscribing parent renders ${raw.owner.name} on the same ${observable} change`,
   ];
+}
+
+/** Drops each projection of a subscription that another practice already rewrites. */
+export function withoutSupersededProjections(
+  findings: readonly LegendPracticeFinding[],
+): LegendPracticeFinding[] {
+  const rewritten = new Set(
+    findings
+      .filter((finding) => SUBSCRIPTION_REWRITES.has(finding.action))
+      .map((finding) => locationKey(finding)),
+  );
+  return findings.filter(
+    (finding) =>
+      finding.action !== "select-primitive-projection" || !rewritten.has(locationKey(finding)),
+  );
+}
+
+function locationKey({ location }: LegendPracticeFinding): string {
+  return `${location.file}:${location.line}:${location.column}`;
 }

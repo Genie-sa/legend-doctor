@@ -93,6 +93,15 @@ export const gptmePracticeCases = [
     target: "gptme-webui",
   })),
   {
+    action: "select-primitive-projection",
+    disposition: "change",
+    file: "components/MessageAvatar.tsx",
+    line: 42,
+    rationale:
+      "MessageAvatar reads `chainType` only as `chainType !== 'start' && chainType !== 'standalone'`. Its four values fall into two outcomes, so a message moving between `middle` and `end`, or between `standalone` and `start` as neighbors arrive, renders the avatar today without changing it; the selector renders it only when the avatar appears or disappears.",
+    target: "gptme-webui",
+  },
+  {
     action: "snapshot-mutated-use-value",
     disposition: "change",
     file: "hooks/useMultiServerConversations.ts",

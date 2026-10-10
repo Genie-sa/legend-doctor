@@ -84,7 +84,7 @@ function projectionEdits(
 ): readonly TextEdit[] | null {
   const hook = selectorEdits(
     projection.raw,
-    { name: projection.name, selected: truthinessSource(projection, scan) },
+    [{ name: projection.name, selected: truthinessSource(projection, scan) }],
     scan,
   );
   if (!projection.merged) {

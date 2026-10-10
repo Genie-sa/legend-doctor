@@ -65,12 +65,6 @@ for (const [name, source] of [
     ),
   ],
   ["a compound condition", fixture(body.replace("dragged ?", "dragged && id ?"))],
-  [
-    "an event handler test",
-    fixture(
-      body.replace('className={dragged ? "on" : "off"}', "onClick={() => { if (dragged) go(); }}"),
-    ),
-  ],
   ["a falsy fallback inside a test", fixture(body.replace("dragged ?", "!(dragged || id) ?"))],
   ["an unbounded string domain", fixture(body, 'observable<string>("")')],
   [
@@ -88,6 +82,27 @@ for (const [name, source] of [
     );
   });
 }
+
+test("a test only an event handler runs yields to dropping the subscription", () => {
+  const source = fixture(
+    body.replace('className={dragged ? "on" : "off"}', "onClick={() => { if (dragged) go(); }}"),
+  );
+  assert.deepEqual(findings(source), []);
+  assert.equal(practiceFindings(source, "peek-unrendered-use-value").length, 1);
+});
+
+test("a truthiness test joined with a comparison selects the joined condition", () => {
+  const [finding, ...rest] = findings(
+    fixture(body.replace("dragged ?", "dragged && dragged !== null ?")),
+  );
+  assert.equal(rest.length, 0);
+  assert.ok(
+    requireValue(finding).message.includes(
+      "`const draggedCondition = useValue(() => { const dragged = dragged$.get(); return !!(dragged && dragged !== null); })`",
+    ),
+    finding?.message,
+  );
+});
 
 test("merges a sole named coercion into the selector", () => {
   const [finding] = findings(
@@ -126,7 +141,6 @@ for (const [name, source] of Object.entries({
   ),
   concatenated: fixture(body.replace('"on"', '"track " + dragged'), 'observable<string>("")'),
   lengthRead: fixture(body.replace('"on"', "String(dragged.length)"), 'observable<string>("a")'),
-  mixedComparison: fixture(body.replace("dragged ?", "dragged && dragged !== null ?")),
   numericJsxGuard: fixture(
     body.replace(
       'className={dragged ? "on" : "off"} />',

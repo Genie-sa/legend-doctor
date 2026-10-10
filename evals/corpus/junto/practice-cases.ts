@@ -163,6 +163,15 @@ export const juntoPracticeCases = [
     target: "junto-renderer",
   },
   {
+    action: "select-primitive-projection",
+    disposition: "change",
+    file: "components/rts/RtsControls.tsx",
+    line: 811,
+    rationale:
+      "KindStrip reads `selectedNodeIds` only as `selectedNodeIds.length > 1`. `replaceSelection` (lib/state.ts:143) sets a fresh array on every selection, and resizing a multi-selection leaves `selectedEdgeId` empty and `selectedNodeId` unchanged, so each such change renders KindStrip only to return null again; `selectedNodeIds$.get().length > 1` renders it when the multi-selection starts or ends.",
+    target: "junto-renderer",
+  },
+  {
     action: "snapshot-mutated-use-value",
     disposition: "change",
     file: "lib/region-rollups.ts",
