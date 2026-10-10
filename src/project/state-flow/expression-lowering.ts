@@ -149,7 +149,7 @@ function lowerCall(
     const next = lowerExpression(argument, result.paths, lowering);
     result = { paths: next.paths, unknown: result.unknown || next.unknown };
   }
-  return expression === lowering.left || expression === lowering.right
+  return tracksCall(lowering, expression)
     ? recordCallEvent(result, expression)
     : { ...result, unknown: result.unknown || hidesTrackedWrite(expression, lowering) };
 }
@@ -168,15 +168,22 @@ function hidesTrackedWrite(call: ts.CallExpression, lowering: Lowering): boolean
       return containsOwnerStateWrite(helper.body, {
         before: helper.body.end,
         owner: node,
-        ownerSetters: new Set([
-          lowering.left.expression.getText(),
-          lowering.right.expression.getText(),
-        ]),
+        ownerSetters: new Set(
+          trackedCalls(lowering).map((tracked) => tracked.expression.getText()),
+        ),
         seen: new Set([call.expression.text]),
       });
     }
   }
   return false;
+}
+
+function trackedCalls({ left, others = [], right }: Lowering): ts.CallExpression[] {
+  return [left, right, ...others];
+}
+
+function tracksCall(lowering: Lowering, call: ts.CallExpression): boolean {
+  return trackedCalls(lowering).includes(call);
 }
 
 function recordCallEvent(result: PathResult, call: ts.CallExpression): PathResult {

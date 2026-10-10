@@ -208,15 +208,13 @@ export const hoaluHookCases = [
     target: "hoalu-app",
   },
   {
-    abstentionReason: "atomic-transition-unproven",
-    action: "review-state",
-    assumption: { ifConfirmed: "move-state-down" },
+    action: "move-state-down",
     file: "components/expenses/expense-filter-dropdown.tsx",
     hook: "useState",
     line: 56,
     name: "open",
     rationale:
-      "The dropdown flag is written together with the menu view when the popover closes, so the finding must ask the co-written group question and name that a yes moves the flag down while the view stays under review.",
+      "The popover's visibility callback is the flag's only writer, so every opening runs its lone path and writes the flag alone; closing also resets the menu view in the same synchronous stretch, which React commits in one render. A wrapper that owns the flag re-renders only the popover on opening, while the owner's content keeps its element identity.",
     target: "hoalu-app",
   },
   {
