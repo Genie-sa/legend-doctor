@@ -7,20 +7,25 @@ import {
   unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
-import type { StateClassificationContext } from "./classification-context.js";
+import type { StateClassificationInputs } from "./classification-context.js";
 import { callbackBindingName } from "./site-write-roots.js";
 import { isTransitionReference } from "../../rules/react-commit-sensitivity/direct-transitions.js";
 import { jsxTargetName } from "../ast-helpers.js";
 import { lexicalBinding } from "../../core/lexical-bindings.js";
 import ts from "typescript";
 
+export type CalleeTransitionScope = Pick<
+  StateClassificationInputs,
+  "childContracts" | "hostTags" | "state" | "usage"
+>;
+
 /**
  * A write inside a callback that a same-module or source-resolved imported helper, or a
  * source-resolved child component, invokes runs in that callee's transition when the callee starts
  * one, and an observable `.set()` there would commit urgently instead. Transitions the owner starts
- * fall to the commit-sensitivity override.
+ * are already commit-sensitive.
  */
-export function writesRunInCalleeTransition(context: StateClassificationContext): boolean {
+export function writesRunInCalleeTransition(context: CalleeTransitionScope): boolean {
   return context.usage.setterCallNodes.some((call) =>
     enclosingCallbackRunsInCalleeTransition(call, context, new Set()),
   );
@@ -28,7 +33,7 @@ export function writesRunInCalleeTransition(context: StateClassificationContext)
 
 function enclosingCallbackRunsInCalleeTransition(
   node: ts.Node,
-  context: StateClassificationContext,
+  context: CalleeTransitionScope,
   seen: ReadonlySet<string>,
 ): boolean {
   const { owner } = context.state;
@@ -46,7 +51,7 @@ function enclosingCallbackRunsInCalleeTransition(
 
 function callbackRunsInCalleeTransition(
   callback: RuntimeFunctionLike,
-  context: StateClassificationContext,
+  context: CalleeTransitionScope,
   seen: ReadonlySet<string>,
 ): boolean {
   if (handoffStartsTransition(callback, context)) {
@@ -58,7 +63,7 @@ function callbackRunsInCalleeTransition(
 
 function bindingRunsInCalleeTransition(
   name: string,
-  context: StateClassificationContext,
+  context: CalleeTransitionScope,
   seen: ReadonlySet<string>,
 ): boolean {
   const { body } = context.state.owner;
@@ -81,7 +86,7 @@ function isCalleeReference(reference: ts.Identifier): boolean {
 }
 
 /** The value is an argument of a resolved call, or the direct value of a component attribute. */
-function handoffStartsTransition(value: ts.Node, context: StateClassificationContext): boolean {
+function handoffStartsTransition(value: ts.Node, context: CalleeTransitionScope): boolean {
   let position = value;
   while (ts.isParenthesizedExpression(position.parent)) {
     position = position.parent;
@@ -100,7 +105,7 @@ function handoffStartsTransition(value: ts.Node, context: StateClassificationCon
 
 function componentAttributeStartsTransition(
   attribute: ts.JsxAttribute,
-  context: StateClassificationContext,
+  context: CalleeTransitionScope,
 ): boolean {
   const tag = jsxTargetName(attribute);
   const source =
@@ -112,7 +117,7 @@ function componentAttributeStartsTransition(
 
 function calleeStartsTransition(
   callee: ts.LeftHandSideExpression,
-  context: StateClassificationContext,
+  context: CalleeTransitionScope,
 ): boolean {
   const target = unwrapTransparentExpression(callee);
   const body = ts.isIdentifier(target) ? calleeDeclaration(target, context)?.body : undefined;
@@ -122,7 +127,7 @@ function calleeStartsTransition(
 /** Only the callee's own body is read; a name the source index cannot resolve proves nothing. */
 function calleeDeclaration(
   callee: ts.Identifier,
-  { childContracts }: StateClassificationContext,
+  { childContracts }: CalleeTransitionScope,
 ): RuntimeFunctionLike | null {
   const binding = lexicalBinding(callee);
   if (binding?.kind === "function") {

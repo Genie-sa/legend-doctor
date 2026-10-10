@@ -110,6 +110,22 @@ test("wraps an end-of-return controlled dialog in Computed", () => {
   );
 });
 
+test("keeps a wrapped toggle whose write a helper runs inside a transition in React", () => {
+  const imports = `
+    import { startTransition } from "react";
+    function inTransition(update: () => void) { startTransition(update); }
+    function run(update: () => void) { update(); }
+  `;
+  const handedTo = (helper: string): string =>
+    DIALOG.replace("(next) => setOpen(next)", `(next) => ${helper}(() => setOpen(next))`);
+  const urgent = finding(panel({ body: handedTo("run"), imports }));
+  assert.equal(urgent?.action, "use-observable");
+  assert.match(urgent?.message ?? "", WRAP_SITE);
+  const transitioned = finding(panel({ body: handedTo("inTransition"), imports }));
+  assert.equal(transitioned?.action, "review-state");
+  assert.equal(transitioned?.abstentionReason, "react-commit-sensitive");
+});
+
 test("wraps a menu anchor whose trigger and gated menu both read the toggle", () => {
   const result = finding(panel({ body: MENU }));
   assert.equal(result?.action, "use-observable");
