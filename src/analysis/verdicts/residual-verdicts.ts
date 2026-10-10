@@ -12,7 +12,7 @@ import {
   valueCallSitesPassThrough,
 } from "./pass-through-leaf.js";
 import {
-  setterCallsAssignBooleanLiterals,
+  setterWritesFitLeafTransport,
   stateHasNoEffectOrDeferredUse,
   stateWritesAreUntracked,
 } from "./transport-verdicts.js";
@@ -219,7 +219,7 @@ export function broadTransportVerdict(context: StateClassificationContext): Clas
     !stateMayHoldCallable(state) &&
     !callSiteIsKeyed(ownerCallSite) &&
     wrappedElementIsPassedThrough(ownerCallSite, passThroughScope(context)) &&
-    setterCallsAssignBooleanLiterals(usage)
+    setterWritesFitLeafTransport(context)
   ) {
     const leaf = leafTransport(context, childContracts);
     if (leaf) {

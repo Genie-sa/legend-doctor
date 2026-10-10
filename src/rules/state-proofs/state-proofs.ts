@@ -5,6 +5,7 @@ import {
   identifiersNamed,
   isRuntimeFunctionLike,
   nearestNestedFunction,
+  scriptKindForFile,
   visit,
 } from "../../core/ast.js";
 import {
@@ -16,15 +17,51 @@ import { isHookDependencyReference, isJsxNode } from "./callback-sites.js";
 import { EMPTY_NODES } from "../../analysis/constants.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
+import { primitiveValueType } from "../child-contract/declared-prop-types.js";
 import ts from "typescript";
 
 const EMPTY_RUNTIME_FUNCTIONS: ReadonlySet<RuntimeFunctionLike> = new Set();
+const TYPED_SCRIPT_KINDS: ReadonlySet<ts.ScriptKind> = new Set([
+  ts.ScriptKind.TS,
+  ts.ScriptKind.TSX,
+]);
 
-export { stateMayHoldCallable } from "../callable-state.js";
+export { expressionMayBeCallable, stateMayHoldCallable } from "../callable-state.js";
 
 export function hasDirectPrimitiveInitializer(state: StateCandidate): boolean {
   const [initializer] = state.call.arguments;
   return initializer !== undefined && isDirectPrimitiveExpression(initializer);
+}
+
+/**
+ * The state type admits no object or function value: a primitive type argument, or a literal
+ * initializer that TypeScript widens into a primitive type.
+ */
+export function stateTypeIsPrimitive(state: StateCandidate): boolean {
+  const [type] = state.call.typeArguments ?? [];
+  if (type) {
+    return primitiveValueType(type);
+  }
+  const [initializer] = state.call.arguments;
+  return (
+    initializer !== undefined &&
+    TYPED_SCRIPT_KINDS.has(scriptKindForFile(initializer.getSourceFile().fileName)) &&
+    initializerInfersPrimitiveType(initializer)
+  );
+}
+
+function initializerInfersPrimitiveType(initializer: ts.Expression): boolean {
+  if (
+    ts.isParenthesizedExpression(initializer) ||
+    ts.isSatisfiesExpression(initializer) ||
+    ts.isNonNullExpression(initializer)
+  ) {
+    return initializerInfersPrimitiveType(initializer.expression);
+  }
+  if (ts.isAsExpression(initializer) || ts.isTypeAssertionExpression(initializer)) {
+    return primitiveValueType(initializer.type);
+  }
+  return initializer.kind !== ts.SyntaxKind.NullKeyword && isDirectPrimitiveExpression(initializer);
 }
 
 export function setterCallUsesPreviousValue(call: ts.CallExpression): boolean {

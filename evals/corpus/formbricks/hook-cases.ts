@@ -1576,4 +1576,24 @@ export const formbricksHookCases = [
       "Keep the keyboard-shortcut listener in React; it subscribes to `window` with cleanup keyed on `toggleSidebar`.",
     target: "formbricks-sidebar",
   },
+  {
+    action: "use-observable",
+    file: "share-view.tsx",
+    hook: "useState",
+    line: 45,
+    name: "isLargeScreen",
+    rationale:
+      "A primitive literal initializer and one boolean value per write: the resize listener and its mount-time call write `window.innerWidth >= 1024` from a function nested in the effect, never from the effect body. The value reaches only `SidebarProvider`'s controlled `open` prop under a host div, so a leaf subscriber at that call site spares the tab list and active tab every time the width crosses the breakpoint.",
+    target: "formbricks-share-view",
+  },
+  {
+    action: "keep-effect",
+    file: "share-view.tsx",
+    hook: "useEffect",
+    line: 47,
+    name: null,
+    rationale:
+      "Keep the resize listener in React; it subscribes to `window` on mount and removes the same handler in its cleanup.",
+    target: "formbricks-share-view",
+  },
 ] as const satisfies readonly GoldHookCase[];

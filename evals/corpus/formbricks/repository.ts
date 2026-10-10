@@ -551,6 +551,12 @@ export const formbricksRepository = {
       root: "apps/web/modules/ui/components/sidebar/index.tsx",
       states: 2,
     },
+    {
+      effects: 1,
+      id: "formbricks-share-view",
+      root: "apps/web/app/(app)/workspaces/[workspaceId]/surveys/[surveyId]/(analysis)/summary/components/shareEmbedModal/share-view.tsx",
+      states: 1,
+    },
   ],
   url: "https://github.com/formbricks/formbricks.git",
 } as const satisfies CorpusRepository;
