@@ -1515,6 +1515,16 @@ export const formbricksHookCases = [
   },
   {
     action: "use-observable",
+    file: "response-options-card.tsx",
+    hook: "useState",
+    line: 87,
+    name: "verifyProtectWithPinError",
+    rationale:
+      "The pin error is written only by the pin input's blur handler and read only as `Boolean(verifyProtectWithPinError)` on that `Input` and in the error paragraph below it. `Boolean` is a pure global conversion, so a leaf around the `Input` call site and a `Computed` around the paragraph keep both reads, and a blur no longer re-renders the whole options card.",
+    target: "formbricks-response-options-card",
+  },
+  {
+    action: "use-observable",
     file: "when-to-send-card.tsx",
     hook: "useState",
     line: 45,
