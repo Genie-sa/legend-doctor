@@ -4,7 +4,6 @@ import { campusRallyeRepository } from "./campus-rallye/repository.js";
 import { excalidrawRepository } from "./excalidraw/repository.js";
 import { expensifyRepository } from "./expensify/repository.js";
 import { fontsourceRepository } from "./fontsource/repository.js";
-import { foodAppExpoRepository } from "./food-app-expo/repository.js";
 import { formbricksRepository } from "./formbricks/repository.js";
 import { fractalsRepository } from "./fractals/repository.js";
 import { gptmeRepository } from "./gptme/repository.js";
@@ -39,7 +38,6 @@ export const repositories: readonly CorpusRepository[] = [
   fractalsRepository,
   socialAppRepository,
   fontsourceRepository,
-  foodAppExpoRepository,
   campusRallyeRepository,
   bbplayerRepository,
 ];

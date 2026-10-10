@@ -21,7 +21,7 @@ export const SCAN_TIME_FLOOR_SECONDS = 60;
 /**
  * Whole-app scan wall time of each repository root on ubuntu-latest (4 CPUs, 16 GB), from the scan
  * budget step of CI run 36409722431 with the analyzer at 51f2d32; gptme, zenborg and junto from CI
- * run 36444683516 at c478731; fractals from CI run 36894444846 at 1b0e659; social-app, fontsource, food-app-expo,
+ * run 36444683516 at c478731; fractals from CI run 36894444846 at 1b0e659; social-app, fontsource,
  * campus-rallye and bbplayer from CI run 36936168646 at 16d263d.
  */
 export const SCAN_BASELINE_SECONDS: ReadonlyMap<string, number> = new Map([
@@ -42,7 +42,6 @@ export const SCAN_BASELINE_SECONDS: ReadonlyMap<string, number> = new Map([
   ["fractals", 2],
   ["social-app", 8.2],
   ["fontsource", 2.7],
-  ["food-app-expo", 2.4],
   ["campus-rallye", 2.1],
   ["bbplayer", 4.1],
 ]);

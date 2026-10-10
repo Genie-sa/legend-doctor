@@ -3,7 +3,6 @@ import { bbplayerReplayCommits } from "./bbplayer/replay-commits.js";
 import { campusRallyeReplayCommits } from "./campus-rallye/replay-commits.js";
 import { excalidrawReplayCommits } from "./excalidraw/replay-commits.js";
 import { fontsourceReplayCommits } from "./fontsource/replay-commits.js";
-import { foodAppExpoReplayCommits } from "./food-app-expo/replay-commits.js";
 import { fractalsReplayCommits } from "./fractals/replay-commits.js";
 import { juntoReplayCommits } from "./junto/replay-commits.js";
 import { legendAppsDiffReplayCommits } from "./legend-apps/replay-diff.js";
@@ -33,7 +32,6 @@ export const replayCommits: readonly ReplayCommit[] = [
   ...excalidrawReplayCommits,
   ...socialAppReplayCommits,
   ...fontsourceReplayCommits,
-  ...foodAppExpoReplayCommits,
   ...campusRallyeReplayCommits,
   ...bbplayerReplayCommits,
 ];
