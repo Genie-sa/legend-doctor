@@ -1,52 +1,13 @@
 import { callRootIdentifier, isAssignmentOperator } from "../../core/analysis-ast.js";
+import {
+  isBuiltinReadMethodName,
+  receiverReadsMethod,
+} from "../state-proofs/builtin-read-calls.js";
 import { nodeWithin, visit } from "../../core/ast.js";
 import { expressionContainsJsx } from "./jsx-subtrees.js";
 import ts from "typescript";
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
-
-/** Read-only prototype methods of arrays, strings, maps, and sets; none mutates its receiver. */
-const SAFE_PROJECTION_METHODS: ReadonlySet<string> = new Set([
-  "at",
-  "charAt",
-  "concat",
-  "endsWith",
-  "entries",
-  "every",
-  "filter",
-  "find",
-  "findIndex",
-  "findLast",
-  "flat",
-  "flatMap",
-  "get",
-  "has",
-  "includes",
-  "indexOf",
-  "join",
-  "keys",
-  "lastIndexOf",
-  "localeCompare",
-  "map",
-  "padEnd",
-  "padStart",
-  "replace",
-  "replaceAll",
-  "slice",
-  "some",
-  "split",
-  "startsWith",
-  "substring",
-  "toFixed",
-  "toLocaleLowerCase",
-  "toLocaleUpperCase",
-  "toLowerCase",
-  "toSorted",
-  "toString",
-  "toUpperCase",
-  "trim",
-  "values",
-]);
 
 export interface SafeProjectionQuery {
   readonly allowedIdentifierCalls?: ReadonlySet<string>;
@@ -97,21 +58,27 @@ function isSafeProjectionCall(
   if (!ts.isPropertyAccessExpression(callee)) {
     return false;
   }
-  const name = callee.name.text;
   const root = callRootIdentifier(callee);
   return (
-    (SAFE_PROJECTION_METHODS.has(name) && !isRenderCallbackCall(call)) ||
+    isReadOnlyMethodCall(call, callee) ||
     (ts.isIdentifier(callee.expression) &&
-      allowedPropertyCalls.has(`${callee.expression.text}.${name}`)) ||
+      allowedPropertyCalls.has(`${callee.expression.text}.${callee.name.text}`)) ||
     root === "styles" ||
     root === "cn"
   );
 }
 
 /**
- * A prototype method whose callback produces JSX is a render callback, not a value projection; the
+ * A built-in read the receiver's declared type supports, or any built-in read when that type is
+ * unknown. A method whose callback produces JSX is a render callback, not a value projection; the
  * repeated rows it renders keep their own mount-identity proofs.
  */
-function isRenderCallbackCall(call: ts.CallExpression): boolean {
-  return call.arguments.some((argument) => expressionContainsJsx(argument));
+function isReadOnlyMethodCall(
+  call: ts.CallExpression,
+  callee: ts.PropertyAccessExpression,
+): boolean {
+  return (
+    !call.arguments.some((argument) => expressionContainsJsx(argument)) &&
+    (receiverReadsMethod(callee) ?? isBuiltinReadMethodName(callee.name.text))
+  );
 }

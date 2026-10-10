@@ -1,69 +1,134 @@
-import { hookCallName, unwrapTransparentExpression } from "../../core/analysis-ast.js";
+import {
+  NUMBER_RECEIVER,
+  OBJECT_RECEIVER,
+  STRING_RECEIVER,
+  arrayOf,
+  classReceiver,
+  globalCollectionReceiver,
+  propertyType,
+  sameReceiver,
+  typeReceiver,
+} from "./receiver-types.js";
+import {
+  hookCallName,
+  outermostTransparentParent,
+  unwrapTransparentExpression,
+} from "../../core/analysis-ast.js";
+import type { Receiver } from "./receiver-types.js";
 import { isConstDeclaration } from "../../core/binding-references.js";
 import { lexicalBinding } from "../../core/lexical-bindings.js";
 import ts from "typescript";
 
-type Receiver = "array" | "string";
+/** The argument a built-in invokes, and how many of its leading parameters receive elements. */
+interface InvokedCallback {
+  readonly argument: number;
+  readonly elementParameters: number;
+}
+
+/** `receiver` keeps the receiver's kind, and `element` is one of its elements. */
+type MethodResult = Receiver | "element" | "receiver" | null;
 
 interface ReadMethod {
-  readonly callbackIndex?: number;
+  readonly callback?: InvokedCallback;
+  readonly result: MethodResult;
+}
+
+interface ResolvedRead {
+  readonly method: ReadMethod;
   readonly result: Receiver | null;
 }
 
 /** Bounds alias and call-chain hops, so a cyclic `const` pair cannot recurse forever. */
 const MAX_RECEIVER_HOPS = 8;
 
-const ARRAY_READ_METHODS: ReadonlyMap<string, ReadMethod> = new Map([
-  ["at", { result: null }],
-  ["concat", { result: "array" }],
-  ["every", { callbackIndex: 0, result: null }],
-  ["filter", { callbackIndex: 0, result: "array" }],
-  ["find", { callbackIndex: 0, result: null }],
-  ["findIndex", { callbackIndex: 0, result: null }],
-  ["findLast", { callbackIndex: 0, result: null }],
-  ["flat", { result: "array" }],
-  ["flatMap", { callbackIndex: 0, result: "array" }],
+const ELEMENT_CALLBACK: InvokedCallback = { argument: 0, elementParameters: 1 };
+const COMPARATOR_CALLBACK: InvokedCallback = { argument: 0, elementParameters: 2 };
+const REPLACER_CALLBACK: InvokedCallback = { argument: 1, elementParameters: 0 };
+const UNKNOWN_ARRAY = arrayOf(null);
+
+const ARRAY_READ_METHODS: ReadonlyMap<string, ReadMethod> = new Map<string, ReadMethod>([
+  ["at", { result: "element" }],
+  ["concat", { result: UNKNOWN_ARRAY }],
+  ["entries", { result: null }],
+  ["every", { callback: ELEMENT_CALLBACK, result: null }],
+  ["filter", { callback: ELEMENT_CALLBACK, result: "receiver" }],
+  ["find", { callback: ELEMENT_CALLBACK, result: "element" }],
+  ["findIndex", { callback: ELEMENT_CALLBACK, result: NUMBER_RECEIVER }],
+  ["findLast", { callback: ELEMENT_CALLBACK, result: "element" }],
+  ["flat", { result: UNKNOWN_ARRAY }],
+  ["flatMap", { callback: ELEMENT_CALLBACK, result: UNKNOWN_ARRAY }],
   ["includes", { result: null }],
-  ["indexOf", { result: null }],
-  ["join", { result: "string" }],
-  ["lastIndexOf", { result: null }],
-  ["map", { callbackIndex: 0, result: "array" }],
-  ["slice", { result: "array" }],
-  ["some", { callbackIndex: 0, result: null }],
-  ["toSorted", { callbackIndex: 0, result: "array" }],
+  ["indexOf", { result: NUMBER_RECEIVER }],
+  ["join", { result: STRING_RECEIVER }],
+  ["keys", { result: null }],
+  ["lastIndexOf", { result: NUMBER_RECEIVER }],
+  ["map", { callback: ELEMENT_CALLBACK, result: UNKNOWN_ARRAY }],
+  ["slice", { result: "receiver" }],
+  ["some", { callback: ELEMENT_CALLBACK, result: null }],
+  ["toSorted", { callback: COMPARATOR_CALLBACK, result: "receiver" }],
+  ["toString", { result: STRING_RECEIVER }],
+  ["values", { result: null }],
 ]);
 
-const STRING_READ_METHODS: ReadonlyMap<string, ReadMethod> = new Map([
-  ["at", { result: "string" }],
-  ["charAt", { result: "string" }],
-  ["concat", { result: "string" }],
+const STRING_READ_METHODS: ReadonlyMap<string, ReadMethod> = new Map<string, ReadMethod>([
+  ["at", { result: STRING_RECEIVER }],
+  ["charAt", { result: STRING_RECEIVER }],
+  ["concat", { result: STRING_RECEIVER }],
   ["endsWith", { result: null }],
   ["includes", { result: null }],
-  ["indexOf", { result: null }],
-  ["lastIndexOf", { result: null }],
-  ["localeCompare", { result: null }],
-  ["padEnd", { result: "string" }],
-  ["padStart", { result: "string" }],
-  ["slice", { result: "string" }],
-  ["split", { result: "array" }],
+  ["indexOf", { result: NUMBER_RECEIVER }],
+  ["lastIndexOf", { result: NUMBER_RECEIVER }],
+  ["localeCompare", { result: NUMBER_RECEIVER }],
+  ["padEnd", { result: STRING_RECEIVER }],
+  ["padStart", { result: STRING_RECEIVER }],
+  ["replace", { callback: REPLACER_CALLBACK, result: STRING_RECEIVER }],
+  ["replaceAll", { callback: REPLACER_CALLBACK, result: STRING_RECEIVER }],
+  ["slice", { result: STRING_RECEIVER }],
+  ["split", { result: arrayOf(STRING_RECEIVER) }],
   ["startsWith", { result: null }],
-  ["substring", { result: "string" }],
-  ["toLocaleLowerCase", { result: "string" }],
-  ["toLocaleUpperCase", { result: "string" }],
-  ["toLowerCase", { result: "string" }],
-  ["toUpperCase", { result: "string" }],
-  ["trim", { result: "string" }],
+  ["substring", { result: STRING_RECEIVER }],
+  ["toLocaleLowerCase", { result: STRING_RECEIVER }],
+  ["toLocaleUpperCase", { result: STRING_RECEIVER }],
+  ["toLowerCase", { result: STRING_RECEIVER }],
+  ["toString", { result: STRING_RECEIVER }],
+  ["toUpperCase", { result: STRING_RECEIVER }],
+  ["trim", { result: STRING_RECEIVER }],
+]);
+
+const NUMBER_READ_METHODS: ReadonlyMap<string, ReadMethod> = new Map<string, ReadMethod>([
+  ["toFixed", { result: STRING_RECEIVER }],
+  ["toString", { result: STRING_RECEIVER }],
+]);
+
+const SET_READ_METHODS: ReadonlyMap<string, ReadMethod> = new Map<string, ReadMethod>([
+  ["entries", { result: null }],
+  ["has", { result: null }],
+  ["keys", { result: null }],
+  ["values", { result: null }],
+]);
+
+const MAP_READ_METHODS: ReadonlyMap<string, ReadMethod> = new Map<string, ReadMethod>([
+  ...SET_READ_METHODS,
+  ["get", { result: null }],
 ]);
 
 const RECEIVER_READ_METHODS = {
   array: ARRAY_READ_METHODS,
+  map: MAP_READ_METHODS,
+  number: NUMBER_READ_METHODS,
+  object: new Map<string, ReadMethod>(),
+  set: SET_READ_METHODS,
   string: STRING_READ_METHODS,
-} as const satisfies Record<Receiver, ReadonlyMap<string, ReadMethod>>;
+} as const satisfies Record<Receiver["kind"], ReadonlyMap<string, ReadMethod>>;
 
-const GLOBAL_CONVERSIONS: ReadonlyMap<string, ReadMethod> = new Map([
+const READ_METHOD_NAMES: ReadonlySet<string> = new Set(
+  Object.values(RECEIVER_READ_METHODS).flatMap((methods) => [...methods.keys()]),
+);
+
+const GLOBAL_CONVERSIONS: ReadonlyMap<string, ReadMethod> = new Map<string, ReadMethod>([
   ["Boolean", { result: null }],
-  ["Number", { result: null }],
-  ["String", { result: "string" }],
+  ["Number", { result: NUMBER_RECEIVER }],
+  ["String", { result: STRING_RECEIVER }],
 ]);
 
 /** Deterministic `Math` functions; `Math.random` is deliberately absent. */
@@ -84,22 +149,40 @@ export interface BuiltinCallbackProof {
 }
 
 /**
- * A global conversion, a deterministic `Math` function, or a read-only array or string method on
- * a receiver whose type is proven from literals, written types, `useState` declarations, or
- * earlier read-only calls. Every callback the built-in invokes must itself be proven pure.
+ * A global conversion, a deterministic `Math` function, or a read-only built-in method on a
+ * receiver whose type is proven from literals, written types, `useState` declarations, or earlier
+ * read-only calls. Every callback the built-in invokes must itself be proven pure.
  */
 export function isBuiltinReadCall(call: ts.CallExpression, proof: BuiltinCallbackProof): boolean {
-  const method = builtinReadMethod(call, MAX_RECEIVER_HOPS);
-  if (!method) {
+  const read = builtinRead(call, MAX_RECEIVER_HOPS);
+  if (!read) {
     return false;
   }
-  const callback =
-    method.callbackIndex === undefined ? undefined : call.arguments[method.callbackIndex];
-  return callback === undefined || isPureCallbackArgument(callback, proof);
+  const { callback } = read.method;
+  const argument = callback === undefined ? undefined : call.arguments[callback.argument];
+  return argument === undefined || isPureCallbackArgument(argument, proof);
 }
 
+/**
+ * Whether the receiver's proven kind reads through this method without mutating anything; null
+ * when the receiver's type is not proven, so the method may belong to any built-in.
+ */
+export function receiverReadsMethod(callee: ts.PropertyAccessExpression): boolean | null {
+  const receiver = receiverKind(callee.expression, MAX_RECEIVER_HOPS);
+  return receiver ? RECEIVER_READ_METHODS[receiver.kind].has(callee.name.text) : null;
+}
+
+/** A method name that some built-in receiver reads through without mutating anything. */
+export function isBuiltinReadMethodName(name: string): boolean {
+  return READ_METHOD_NAMES.has(name);
+}
+
+/** A string argument is a value, never a callback the built-in invokes. */
 function isPureCallbackArgument(argument: ts.Expression, proof: BuiltinCallbackProof): boolean {
   const callback = unwrapTransparentExpression(argument);
+  if (ts.isStringLiteralLike(callback) || ts.isTemplateExpression(callback)) {
+    return true;
+  }
   if (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) {
     return (
       callback.asteriskToken === undefined &&
@@ -114,16 +197,18 @@ function isPureCallbackArgument(argument: ts.Expression, proof: BuiltinCallbackP
   );
 }
 
-function builtinReadMethod(call: ts.CallExpression, hops: number): ReadMethod | null {
+function builtinRead(call: ts.CallExpression, hops: number): ResolvedRead | null {
   const callee = unwrapTransparentExpression(call.expression);
   if (ts.isIdentifier(callee)) {
     const conversion = GLOBAL_CONVERSIONS.get(callee.text);
-    return conversion && lexicalBinding(callee) === null ? conversion : null;
+    return conversion && lexicalBinding(callee) === null ? resolvedRead(conversion, null) : null;
   }
   if (!ts.isPropertyAccessExpression(callee)) {
     return null;
   }
-  return isMathCall(callee) ? { result: null } : prototypeRead(callee, hops);
+  return isMathCall(callee)
+    ? { method: { result: NUMBER_RECEIVER }, result: NUMBER_RECEIVER }
+    : prototypeRead(callee, hops);
 }
 
 function isMathCall(callee: ts.PropertyAccessExpression): boolean {
@@ -136,25 +221,79 @@ function isMathCall(callee: ts.PropertyAccessExpression): boolean {
   );
 }
 
-function prototypeRead(callee: ts.PropertyAccessExpression, hops: number): ReadMethod | null {
+function prototypeRead(callee: ts.PropertyAccessExpression, hops: number): ResolvedRead | null {
   const receiver = receiverKind(callee.expression, hops);
-  return receiver ? (RECEIVER_READ_METHODS[receiver].get(callee.name.text) ?? null) : null;
+  const method = receiver ? RECEIVER_READ_METHODS[receiver.kind].get(callee.name.text) : undefined;
+  return method ? resolvedRead(method, receiver) : null;
+}
+
+function resolvedRead(method: ReadMethod, receiver: Receiver | null): ResolvedRead {
+  const { result } = method;
+  if (result === "receiver") {
+    return { method, result: receiver };
+  }
+  if (result === "element") {
+    return { method, result: arrayElement(receiver) };
+  }
+  return { method, result };
+}
+
+function arrayElement(receiver: Receiver | null): Receiver | null {
+  return receiver?.kind === "array" ? receiver.element : null;
 }
 
 function receiverKind(expression: ts.Expression, hops: number): Receiver | null {
   const value = unwrapTransparentExpression(expression);
+  return literalKind(value, hops) ?? (hops > 0 ? derivedReceiverKind(value, hops - 1) : null);
+}
+
+function literalKind(value: ts.Expression, hops: number): Receiver | null {
   if (ts.isArrayLiteralExpression(value)) {
-    return "array";
+    return arrayOf(elementsKind(value.elements, hops));
+  }
+  if (ts.isNewExpression(value)) {
+    return constructedKind(value);
   }
   if (ts.isStringLiteralLike(value) || ts.isTemplateExpression(value)) {
-    return "string";
+    return STRING_RECEIVER;
   }
-  return hops > 0 ? derivedReceiverKind(value, hops - 1) : null;
+  if (ts.isNumericLiteral(value)) {
+    return NUMBER_RECEIVER;
+  }
+  return ts.isObjectLiteralExpression(value) ||
+    ts.isArrowFunction(value) ||
+    ts.isFunctionExpression(value) ||
+    ts.isClassExpression(value)
+    ? OBJECT_RECEIVER
+    : null;
+}
+
+function elementsKind(elements: ts.NodeArray<ts.Expression>, hops: number): Receiver | null {
+  const [first, ...rest] = elements.map((element) =>
+    ts.isSpreadElement(element) || ts.isOmittedExpression(element)
+      ? null
+      : receiverKind(element, hops),
+  );
+  return first !== undefined && rest.every((kind) => sameReceiver(first, kind)) ? first : null;
+}
+
+function constructedKind(construction: ts.NewExpression): Receiver | null {
+  const constructor = unwrapTransparentExpression(construction.expression);
+  if (!ts.isIdentifier(constructor)) {
+    return null;
+  }
+  const binding = lexicalBinding(constructor);
+  if (binding === null) {
+    return globalCollectionReceiver(constructor.text);
+  }
+  return binding.kind === "value" && ts.isClassDeclaration(binding.declaration)
+    ? classReceiver(binding.declaration)
+    : null;
 }
 
 function derivedReceiverKind(value: ts.Expression, hops: number): Receiver | null {
   if (ts.isCallExpression(value)) {
-    return builtinReadMethod(value, hops)?.result ?? null;
+    return builtinRead(value, hops)?.result ?? null;
   }
   if (ts.isIdentifier(value)) {
     return identifierKind(value, hops);
@@ -171,7 +310,7 @@ function derivedReceiverKind(value: ts.Expression, hops: number): Receiver | nul
 
 function sharedKind(left: ts.Expression, right: ts.Expression, hops: number): Receiver | null {
   const kind = receiverKind(left, hops);
-  return kind === receiverKind(right, hops) ? kind : null;
+  return sameReceiver(kind, receiverKind(right, hops)) ? kind : null;
 }
 
 function identifierKind(identifier: ts.Identifier, hops: number): Receiver | null {
@@ -184,7 +323,7 @@ function identifierKind(identifier: ts.Identifier, hops: number): Receiver | nul
     return declaredKind(declaration, hops);
   }
   const element = namedBindingElement(declaration.name, identifier.text);
-  return element ? destructuredKind(declaration, element) : null;
+  return element ? destructuredKind(declaration, element, hops) : null;
 }
 
 function namedBindingElement(pattern: ts.BindingPattern, name: string): ts.BindingElement | null {
@@ -206,19 +345,40 @@ function declaredKind(
   hops: number,
 ): Receiver | null {
   if (declaration.type) {
-    return typeKind(declaration.type);
+    return typeReceiver(declaration.type);
   }
-  return ts.isVariableDeclaration(declaration) &&
-    isConstDeclaration(declaration) &&
-    declaration.initializer
+  if (ts.isParameter(declaration)) {
+    return callbackElementKind(declaration, hops);
+  }
+  return isConstDeclaration(declaration) && declaration.initializer
     ? receiverKind(declaration.initializer, hops)
     : null;
 }
 
-/** The value of `const [value] = useState(...)`, or a field of a parameter typed by a literal. */
+/** An untyped parameter of a callback a built-in array read invokes with its elements. */
+function callbackElementKind(parameter: ts.ParameterDeclaration, hops: number): Receiver | null {
+  const callback = parameter.parent;
+  if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) {
+    return null;
+  }
+  const argument = outermostTransparentParent(callback);
+  const call = argument.parent;
+  if (!ts.isCallExpression(call) || !ts.isPropertyAccessExpression(call.expression)) {
+    return null;
+  }
+  const invoked = ARRAY_READ_METHODS.get(call.expression.name.text)?.callback;
+  return invoked &&
+    call.arguments[invoked.argument] === argument &&
+    callback.parameters.indexOf(parameter) < invoked.elementParameters
+    ? arrayElement(receiverKind(call.expression.expression, hops))
+    : null;
+}
+
+/** The value of `const [value] = useState(...)`, or a field of a parameter with a written type. */
 function destructuredKind(
   declaration: ts.ParameterDeclaration | ts.VariableDeclaration,
   element: ts.BindingElement,
+  hops: number,
 ): Receiver | null {
   const pattern = element.parent;
   if (ts.isArrayBindingPattern(pattern)) {
@@ -228,65 +388,20 @@ function destructuredKind(
       state &&
       ts.isCallExpression(state) &&
       hookCallName(state) === "useState"
-      ? stateKind(state)
+      ? stateKind(state, hops)
       : null;
   }
   const field = element.propertyName?.getText() ?? element.name.getText();
-  const member =
-    ts.isParameter(declaration) && declaration.type && ts.isTypeLiteralNode(declaration.type)
-      ? declaration.type.members.find(
-          (candidate): candidate is ts.PropertySignature =>
-            ts.isPropertySignature(candidate) && candidate.name.getText() === field,
-        )
-      : undefined;
-  return member?.type ? typeKind(member.type) : null;
+  const type =
+    ts.isParameter(declaration) && declaration.type ? propertyType(declaration.type, field) : null;
+  return type ? typeReceiver(type) : null;
 }
 
-function stateKind(call: ts.CallExpression): Receiver | null {
+function stateKind(call: ts.CallExpression, hops: number): Receiver | null {
   const [type] = call.typeArguments ?? [];
   if (type) {
-    return typeKind(type);
+    return typeReceiver(type);
   }
   const [initial] = call.arguments;
-  return initial && !ts.isFunctionLike(initial) ? receiverKind(initial, 0) : null;
-}
-
-function typeKind(type: ts.TypeNode): Receiver | null {
-  if (
-    ts.isParenthesizedTypeNode(type) ||
-    (ts.isTypeOperatorNode(type) && type.operator === ts.SyntaxKind.ReadonlyKeyword)
-  ) {
-    return typeKind(type.type);
-  }
-  if (ts.isUnionTypeNode(type)) {
-    return unionKind(type);
-  }
-  if (
-    ts.isArrayTypeNode(type) ||
-    ts.isTupleTypeNode(type) ||
-    (ts.isTypeReferenceNode(type) && ["Array", "ReadonlyArray"].includes(type.typeName.getText()))
-  ) {
-    return "array";
-  }
-  return type.kind === ts.SyntaxKind.StringKeyword ||
-    ts.isTemplateLiteralTypeNode(type) ||
-    (ts.isLiteralTypeNode(type) && ts.isStringLiteral(type.literal))
-    ? "string"
-    : null;
-}
-
-/** A union whose members share one kind once `null` and `undefined` are set aside. */
-function unionKind(type: ts.UnionTypeNode): Receiver | null {
-  const kinds = new Set(
-    type.types.filter((member) => !isNullishType(member)).map((member) => typeKind(member)),
-  );
-  const [kind] = kinds;
-  return kinds.size === 1 && kind !== undefined ? kind : null;
-}
-
-function isNullishType(type: ts.TypeNode): boolean {
-  return (
-    type.kind === ts.SyntaxKind.UndefinedKeyword ||
-    (ts.isLiteralTypeNode(type) && type.literal.kind === ts.SyntaxKind.NullKeyword)
-  );
+  return initial && !ts.isFunctionLike(initial) ? receiverKind(initial, hops) : null;
 }

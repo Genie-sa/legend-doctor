@@ -170,6 +170,124 @@ test("follows a derived constant built from read-only prototype methods", () => 
   assert.doesNotMatch(mutating?.message ?? "", /render sites/u);
 });
 
+test("follows a derived constant only through methods its receiver's declared type can read", () => {
+  const source = (parameters: string, projection: string, extra = ""): string => `
+    import { useState } from "react";
+    import { store as importedStore } from "./store";
+    interface Store {
+      filter(predicate: (name: string) => boolean): string[];
+    }
+    class Registry {
+      private reads = 0;
+      map(project: (name: string) => boolean): boolean[] {
+        this.reads += 1;
+        return [project("a")];
+      }
+    }
+    ${extra}
+    export function Dashboard(${parameters}) {
+      const [query, setQuery] = useState("");
+      const matches = ${projection};
+      return (
+        <section>
+          ${CHROME}
+          <p>{matches}</p>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} />
+        </section>
+      );
+    }
+  `;
+  const follows = {
+    provenArray: source(
+      "{ names }: { names: readonly string[] }",
+      "names.filter((name) => name.startsWith(query.trim())).length",
+    ),
+    chained: source(
+      "{ names }: { names: string[] }",
+      "names.map((name) => name.trim()).filter((name) => name.startsWith(query.trim())).length",
+    ),
+    importedReceiver: source(
+      "",
+      "importedStore.filter((name) => name.startsWith(query.trim())).length",
+    ),
+    untypedReceiver: source(
+      "{ names }",
+      "names.filter((name) => name.startsWith(query.trim())).length",
+    ),
+  } satisfies Record<string, string>;
+  for (const [name, fixture] of Object.entries(follows)) {
+    const [finding] = states(fixture);
+    assert.match(finding?.message ?? "", /render sites/u, name);
+  }
+  const blocks = {
+    interfaceReceiver: source(
+      "{ store }: { store: Store }",
+      "store.filter((name) => name.startsWith(query.trim())).length",
+    ),
+    aliasedInterfaceReceiver: source(
+      "{ store }: Props",
+      "store.filter((name) => name.startsWith(query.trim())).length",
+      "type Props = { readonly store: Store };",
+    ),
+    classInstanceReceiver: source(
+      "",
+      "registry.map((name) => name.startsWith(query.trim())).length",
+      "const registry = new Registry();",
+    ),
+    objectLiteralReceiver: source(
+      "",
+      "rows.filter((name: string) => name.startsWith(query.trim())).length",
+      "const rows = { filter: (predicate: (name: string) => boolean) => [predicate('a')] };",
+    ),
+  } satisfies Record<string, string>;
+  for (const [name, fixture] of Object.entries(blocks)) {
+    const [finding] = states(fixture);
+    assert.doesNotMatch(finding?.message ?? "", /render sites/u, name);
+  }
+});
+
+test("proves callback elements, aliased state seeds, and collection reads inside wrapped sites", () => {
+  const source = (parameters: string, state: string, site: string): string => `
+    import { useState } from "react";
+    export function Dashboard(${parameters}) {
+      const [value, setValue] = ${state};
+      return (
+        <section>
+          ${CHROME}
+          <p>{${site}}</p>
+          <em>{${site}}</em>
+          <button onClick={() => setValue(value)}>Refresh</button>
+        </section>
+      );
+    }
+  `;
+  const cases = {
+    callbackElement: source(
+      "",
+      "useState<string[]>([])",
+      'value.filter((name) => name.trim() !== "").length',
+    ),
+    aliasedSeed: source(
+      "{ clientName }: { clientName: string }",
+      "useState(clientName)",
+      "value.trim()",
+    ),
+    setRead: source(
+      "",
+      "useState<ReadonlySet<string>>(new Set())",
+      'value.has("draft") ? "picked" : "open"',
+    ),
+  } satisfies Record<string, string>;
+  for (const [name, fixture] of Object.entries(cases)) {
+    const [finding] = states(fixture);
+    assert.match(finding?.message ?? "", /render site/u, name);
+  }
+  const [untypedElement] = states(
+    source("", "useState([])", 'value.filter((name) => name.trim() !== "").length'),
+  );
+  assert.doesNotMatch(untypedElement?.message ?? "", /render site/u);
+});
+
 test("wraps sites that read through read-only built-in calls on proven receivers", () => {
   const [finding] = states(`
     import { useState } from "react";
