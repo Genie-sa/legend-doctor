@@ -646,13 +646,16 @@ if (query !== prevQuery) {
 ```
 
 The effect body must only set the owner's state from pure values, under at most one `if`, with no cleanup, and must
-not read the state it resets. Each value must be the state's own initializer, so the effect's mount write is a no-op
-and the first commit stays the same; an effect that replaces a placeholder after mount keeps its timing. The
-comparison settles only when each dependency keeps its identity while React reruns the owner. A state value, a module
-binding, a `length` or other primitive constant, or a component prop without a destructuring default proves that, since React reruns a component
-after a render-phase update with the same props. A custom hook's parameter or a value the owner computes, such as a
-hook result, leaves a review that asks about it. A function, object, or array the owner rebuilds every render keeps
-the effect.
+not read the state it resets. The effect's mount write must be a no-op so the first commit stays the same: each value
+is the state's own initializer, or the `if` pins one input to literals, as in `kind === "a" || kind === "b"`, under
+each of which the initializer evaluates to the written value. An effect that replaces a placeholder after mount keeps
+its timing. The comparison settles only when each dependency keeps its identity while React reruns the owner. A state
+value, a module binding, a `length` or other primitive constant, a memo that returns only such values, or a component
+prop proves that, since React reruns a component after a render-phase update with the same props; a destructuring
+default must be a primitive or a module binding. A custom hook's parameter qualifies when its declared type is a
+string, boolean, literal, `null`, or `undefined`, which a pure caller recomputes to an equal value; a `number` can be
+`NaN`, which never equals itself. Any other value the owner computes, such as a hook result, leaves a review that asks
+about it. A function, object, or array the owner rebuilds every render keeps the effect.
 
 ### React to an observable without rendering
 

@@ -142,6 +142,16 @@ export const excalidrawHookCases = [
     target: "excalidraw",
   },
   {
+    action: "reset-during-render",
+    file: "components/Tools.tsx",
+    hook: "useEffect",
+    line: 441,
+    name: null,
+    rationale:
+      'Selecting freedraw or autoshape records it as the last drawing tool; the state starts as `activeTool.type === "autoshape" ? "autoshape" : "freedraw"`, which already equals either guarded tool type, so the mount write is a no-op and comparing the activeTool prop during render records it without the stale commit.',
+    target: "excalidraw",
+  },
+  {
     action: "keep-effect",
     file: "components/LibraryMenuItems.tsx",
     hook: "useEffect",

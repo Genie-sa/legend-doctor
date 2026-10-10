@@ -72,6 +72,16 @@ export const juntoHookCases = [
     target: "junto-renderer",
   },
   {
+    action: "reset-during-render",
+    file: "components/InspectorFields.tsx",
+    hook: "useEffect",
+    line: 603,
+    name: null,
+    rationale:
+      "Inspecting another node resets every watch draft to its own initializer; nodeId is declared `string`, so the calling editor recomputes an equal value and comparing it during render resets the drafts without the stale commit.",
+    target: "junto-renderer",
+  },
+  {
     action: "use-observable",
     file: "components/InspectorFields.tsx",
     hook: "useState",

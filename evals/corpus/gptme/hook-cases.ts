@@ -2,6 +2,16 @@ import type { GoldHookCase } from "../contracts.js";
 
 export const gptmeHookCases = [
   {
+    action: "reset-during-render",
+    file: "hooks/useConversationSettings.ts",
+    hook: "useEffect",
+    line: 76,
+    name: null,
+    rationale:
+      "Switching conversations clears configError to its null initializer; conversationId is declared `string`, so the caller recomputes an equal value and comparing it during render clears the error without the stale commit.",
+    target: "gptme-webui",
+  },
+  {
     action: "use-observable",
     file: "components/AgentsView.tsx",
     hook: "useState",
