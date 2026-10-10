@@ -1,4 +1,8 @@
-import type { CallbackContractSourceResolver, ChildComponentSource } from "./model.js";
+import type {
+  CallbackContractSourceResolver,
+  ChildComponentSource,
+  LeafRenderValues,
+} from "./model.js";
 import type { ForwardedPropProof, LeafRenderProof } from "./leaf-render.js";
 import { PATH_DEFERRAL, rootTrace, sourceInputCallbackIsDeferred } from "./path-trace.js";
 import { bindingDeclarationCount, isNonValueIdentifier } from "../../core/analysis-ast.js";
@@ -31,18 +35,26 @@ export type LeafRenderResolver = (file: string, name: string) => ChildComponentS
 
 const MAX_LEAF_FORWARD_DEPTH = 3;
 
-interface LeafRenderQuery {
-  readonly depth: number;
+export interface LeafRenderOptions {
   readonly resolver: LeafRenderResolver | null;
+  readonly values: LeafRenderValues;
+}
+
+interface LeafRenderQuery extends LeafRenderOptions {
+  readonly depth: number;
   readonly visited: ReadonlySet<string>;
 }
 
 export function propIsLeafRenderConsumer(
   source: ChildComponentSource,
   propName: string,
-  resolver: LeafRenderResolver | null = null,
+  options: LeafRenderOptions,
 ): boolean {
-  return propIsLeafRenderConsumerAt(source, propName, { depth: 0, resolver, visited: new Set() });
+  return propIsLeafRenderConsumerAt(source, propName, {
+    ...options,
+    depth: 0,
+    visited: new Set(),
+  });
 }
 
 function propIsLeafRenderConsumerAt(
@@ -56,6 +68,7 @@ function propIsLeafRenderConsumerAt(
   const proof: LeafRenderProof = {
     forwarded: forwardedPropProof(source, query),
     hostTags: collectHookImports(source.owner.getSourceFile()),
+    values: query.values,
   };
   const bound = boundPropIdentifier(source.owner, propName, source.reactWrapped === true);
   if (bound) {
@@ -69,7 +82,7 @@ function propIsLeafRenderConsumerAt(
 
 function forwardedPropProof(
   source: ChildComponentSource,
-  { depth, resolver, visited }: LeafRenderQuery,
+  { depth, resolver, values, visited }: LeafRenderQuery,
 ): ForwardedPropProof | null {
   if (!resolver || depth >= MAX_LEAF_FORWARD_DEPTH) {
     return null;
@@ -86,6 +99,7 @@ function forwardedPropProof(
     return propIsLeafRenderConsumerAt(child, forwardedProp, {
       depth: depth + 1,
       resolver,
+      values,
       visited: new Set([...visited, key]),
     });
   };

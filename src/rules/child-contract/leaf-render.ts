@@ -1,7 +1,9 @@
+import type { ChildComponentSource, LeafRenderValues } from "./model.js";
 import {
   bindingDeclarationCount,
   isAssignmentOperator,
   isNonValueIdentifier,
+  unwrapTransparentExpression,
 } from "../../core/analysis-ast.js";
 import {
   findAncestor,
@@ -11,7 +13,6 @@ import {
   visit,
 } from "../../core/ast.js";
 import { isBindingName, referenceIsWritten } from "./prop-bindings.js";
-import type { ChildComponentSource } from "./model.js";
 import type { HostTagImports } from "../../core/imports.js";
 import { MAX_TRACKED_NAMES } from "./model.js";
 import { isHostTag } from "../../core/imports.js";
@@ -36,7 +37,15 @@ export type ForwardedPropProof = (
 export interface LeafRenderProof {
   readonly forwarded: ForwardedPropProof | null;
   readonly hostTags: HostTagImports;
+  readonly values: LeafRenderValues;
 }
+
+const EQUALITY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.EqualsEqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken,
+]);
 
 export interface LeafRenderScope extends LeafRenderProof {
   readonly tracked: Set<string>;
@@ -50,7 +59,11 @@ export function leafRenderVerdict(
   if (isNonValueIdentifier(node) || isBindingName(node)) {
     return "ignored";
   }
-  if (findAncestor(node, isRuntimeFunctionLike) !== source.owner || referenceIsWritten(node)) {
+  if (
+    findAncestor(node, isRuntimeFunctionLike) !== source.owner ||
+    referenceIsWritten(node) ||
+    (scope.values === "structural" && comparesIdentity(node))
+  ) {
     return "unsafe";
   }
   const attribute = findAncestorUntil(node, ts.isJsxAttribute, source.owner);
@@ -61,6 +74,57 @@ export function leafRenderVerdict(
     return "render-read";
   }
   return tracksPureProjection(node, source.owner, scope.tracked) ? "ignored" : "unsafe";
+}
+
+/**
+ * An equality test of the value, or of anything reached through it, against a non-literal operand
+ * tells an earlier equal reference from the new one.
+ */
+function comparesIdentity(reference: ts.Identifier): boolean {
+  let operand: ts.Expression = reference;
+  while (wrapsOperand(operand.parent, operand)) {
+    operand = operand.parent;
+  }
+  const { parent } = operand;
+  if (!ts.isBinaryExpression(parent) || !EQUALITY_OPERATORS.has(parent.operatorToken.kind)) {
+    return false;
+  }
+  return !isLiteralOperand(parent.left === operand ? parent.right : parent.left);
+}
+
+type OperandWrapper =
+  | ts.AsExpression
+  | ts.ElementAccessExpression
+  | ts.NonNullExpression
+  | ts.ParenthesizedExpression
+  | ts.PropertyAccessExpression
+  | ts.SatisfiesExpression
+  | ts.TypeAssertion;
+
+function wrapsOperand(parent: ts.Node, operand: ts.Expression): parent is OperandWrapper {
+  return (
+    (ts.isParenthesizedExpression(parent) ||
+      ts.isNonNullExpression(parent) ||
+      ts.isAsExpression(parent) ||
+      ts.isSatisfiesExpression(parent) ||
+      ts.isTypeAssertionExpression(parent) ||
+      ts.isPropertyAccessExpression(parent) ||
+      ts.isElementAccessExpression(parent)) &&
+    parent.expression === operand
+  );
+}
+
+function isLiteralOperand(expression: ts.Expression): boolean {
+  const operand = unwrapTransparentExpression(expression);
+  return (
+    ts.isLiteralExpression(operand) ||
+    operand.kind === ts.SyntaxKind.NullKeyword ||
+    operand.kind === ts.SyntaxKind.TrueKeyword ||
+    operand.kind === ts.SyntaxKind.FalseKeyword ||
+    ts.isVoidExpression(operand) ||
+    (ts.isIdentifier(operand) && operand.text === "undefined") ||
+    (ts.isPrefixUnaryExpression(operand) && ts.isNumericLiteral(operand.operand))
+  );
 }
 
 function attributeVerdict(

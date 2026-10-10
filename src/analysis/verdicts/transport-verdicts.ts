@@ -16,6 +16,7 @@ import {
   setterOwnedByValueTransitionCallSite,
 } from "../controlled-leaf-cuts.js";
 import { BROAD_OWNER_JSX_ELEMENTS } from "../constants.js";
+import type { LeafRenderValues } from "../../rules/child-contract/model.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { isLiteralBooleanLeafState } from "../../rules/literal-boolean-leaf/literal-boolean-leaf.js";
 import { isLiteralBooleanSetter } from "../../rules/literal-boolean-leaf/boolean-setters.js";
@@ -125,12 +126,21 @@ function setterCallAssignsOneValue(call: ts.CallExpression): boolean {
  * snapshot stays identical only when the state type admits no object, or when every write is a
  * direct boolean literal call.
  */
-export function stateValuesStayPrimitive({ state, usage }: StateClassificationContext): boolean {
+export function stateValuesStayPrimitive(context: StateClassificationContext): boolean {
+  return hasDirectPrimitiveInitializer(context.state) && stateWritesStayPrimitive(context);
+}
+
+/** No write can store an object or array, so Legend never skips one as structurally equal. */
+function stateWritesStayPrimitive({ state, usage }: StateClassificationContext): boolean {
   return (
-    hasDirectPrimitiveInitializer(state) &&
-    (stateTypeIsPrimitive(state) ||
-      (usage.setterReferences === usage.setterCalls && setterCallsAssignBooleanLiterals(usage)))
+    stateTypeIsPrimitive(state) ||
+    (usage.setterReferences === usage.setterCalls && setterCallsAssignBooleanLiterals(usage))
   );
+}
+
+/** A leaf receives the mount value either way, so only what later writes store decides identity. */
+export function leafRenderValues(context: StateClassificationContext): LeafRenderValues {
+  return stateWritesStayPrimitive(context) ? "primitive" : "structural";
 }
 
 function ownerRenderCutIsMaterial(context: StateClassificationContext): boolean {

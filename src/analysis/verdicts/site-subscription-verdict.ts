@@ -1,7 +1,3 @@
-import type {
-  ChildContractResolver,
-  ComponentSourceResolver,
-} from "../../rules/child-contract/model.js";
 import type { ClassifiedState, StateCandidate, StateUsage } from "../model.js";
 import {
   bindingDeclarationCount,
@@ -21,6 +17,8 @@ import {
   stateMayHoldCallable,
 } from "../../rules/state-proofs/state-proofs.js";
 import { isCustomHookOwner, jsxTargetName } from "../ast-helpers.js";
+import { leafRenderValues, stateWritesAreUntracked } from "./transport-verdicts.js";
+import type { ComponentSourceResolver } from "../../rules/child-contract/model.js";
 import type { HostTagImports } from "../../core/imports.js";
 import { MAX_LEAF_SUBTREE_RATIO } from "../constants.js";
 import type { MaterialityPolicy } from "../constants.js";
@@ -33,7 +31,6 @@ import { isSafeProjectionExpression } from "../../rules/deferred-reveal/safe-pro
 import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { oneHopRenderProjectionReferences } from "../../rules/state-proofs/projection-hops.js";
 import { replacedElementTypeIsUnobserved } from "../../rules/child-contract/element-identity.js";
-import { stateWritesAreUntracked } from "./transport-verdicts.js";
 import ts from "typescript";
 
 type SiteKind = "computed" | "leaf-wrapper" | "reactive-prop";
@@ -48,9 +45,9 @@ interface SubscriptionSite {
 }
 
 interface SiteScope {
-  readonly allowUnresolvedComponentCallSite?: boolean;
-  readonly childContracts: ChildContractResolver | null;
   readonly hostTags: HostTagImports;
+  /** A leaf subscriber may wrap this component call site and pass the prop it computes. */
+  readonly isLeafCallSite: (tag: string, propName: string) => boolean;
   readonly pureProjectionImports: ReadonlySet<string>;
   readonly resolveComponent: ComponentSourceResolver;
   readonly state: StateCandidate;
@@ -77,9 +74,11 @@ export function siteSubscriptionVerdict(
   if (!siteSubscriptionPreconditionsHold(context)) {
     return null;
   }
+  const values = leafRenderValues(context);
   const resolved = subscriptionSites(usage, {
-    childContracts,
     hostTags: context.hostTags,
+    isLeafCallSite: (tag, propName) =>
+      childContracts?.componentPropIsLeafRenderConsumer(tag, propName, values) === true,
     pureProjectionImports: context.pureProjectionImports,
     resolveComponent: (name) => childContracts?.resolveComponent(name) ?? null,
     state,
@@ -267,8 +266,7 @@ function attributeSite(attribute: ts.JsxAttribute, scope: SiteScope): Subscripti
   if (isHostTag(tag, scope.hostTags)) {
     return { kind: "reactive-prop", label: `${propName} on <${tag}>`, node: attribute };
   }
-  return scope.allowUnresolvedComponentCallSite ||
-    scope.childContracts?.componentPropIsLeafRenderConsumer(tag, propName) === true
+  return scope.isLeafCallSite(tag, propName)
     ? {
         kind: "leaf-wrapper",
         label: `<${tag}> call site, computing ${propName}`,
@@ -382,8 +380,7 @@ function transportSite(attribute: ts.JsxAttribute, scope: SiteScope): Subscripti
     return null;
   }
   const propName = attribute.name.getText();
-  return scope.allowUnresolvedComponentCallSite ||
-    scope.childContracts?.componentPropIsLeafRenderConsumer(tag, propName) === true
+  return scope.isLeafCallSite(tag, propName)
     ? { kind: "leaf-wrapper", label: `<${tag}> call site`, node: attribute.parent.parent }
     : null;
 }
