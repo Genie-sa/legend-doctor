@@ -156,6 +156,7 @@ export function collectionMembershipSummaryCall(
 export function collectionSummaryControlsRepeatedRendering(
   summary: ts.Expression,
   owner: RuntimeFunctionLike,
+  pureCalls: ReadonlySet<string>,
 ): boolean {
   if (!owner.body || nearestRepeatedRenderCall(summary, owner)) {
     return true;
@@ -167,13 +168,15 @@ export function collectionSummaryControlsRepeatedRendering(
     !declaration.initializer ||
     !nodeWithin(summary, declaration.initializer)
   ) {
-    return referenceControlsRepeatedRendering(summary, owner);
+    return referenceControlsRepeatedRendering(summary, owner, pureCalls);
   }
   if (bindingDeclarationCount(owner, declaration.name.text) !== 1) {
     return true;
   }
   const references = summaryAliasReferences(owner, declaration.name);
-  return references.some((reference) => referenceControlsRepeatedRendering(reference, owner));
+  return references.some((reference) =>
+    referenceControlsRepeatedRendering(reference, owner, pureCalls),
+  );
 }
 
 function summaryAliasReferences(
@@ -195,14 +198,18 @@ function summaryAliasReferences(
   return references;
 }
 
-function referenceControlsRepeatedRendering(node: ts.Node, owner: RuntimeFunctionLike): boolean {
+function referenceControlsRepeatedRendering(
+  node: ts.Node,
+  owner: RuntimeFunctionLike,
+  pureCalls: ReadonlySet<string>,
+): boolean {
   const repeated = nearestRepeatedRenderCall(node, owner);
   if (repeated) {
     const [callback] = repeated.arguments;
     if (
       callback &&
       (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) &&
-      summaryFeedsStableRowProjection(node, callback)
+      summaryFeedsStableRowProjection(node, callback, pureCalls)
     ) {
       return false;
     }
@@ -234,6 +241,7 @@ function referenceControlsRepeatedRendering(node: ts.Node, owner: RuntimeFunctio
 function summaryFeedsStableRowProjection(
   summaryReference: ts.Node,
   callback: ts.ArrowFunction | ts.FunctionExpression,
+  pureCalls: ReadonlySet<string>,
 ): boolean {
   const declaration = findAncestorUntil(summaryReference, ts.isVariableDeclaration, callback);
   if (
@@ -265,7 +273,7 @@ function summaryFeedsStableRowProjection(
       (reference) =>
         !isMembershipMountGate(reference, callback) &&
         findAncestorUntil(reference, isJsxNode, callback) !== null &&
-        isSafeJsxProjectionReference(reference, callback, new Set(["cn"])),
+        isSafeJsxProjectionReference(reference, callback, pureCalls),
     )
   );
 }

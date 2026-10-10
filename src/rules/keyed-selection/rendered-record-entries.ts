@@ -13,10 +13,11 @@ import { unwrapTransparentExpression } from "../../core/analysis-ast.js";
 export function renderedRecordEntry(
   state: StateCandidate,
   nodes: readonly ts.Node[],
+  pureCalls: ReadonlySet<string>,
 ): KeyedRecordEntry | null {
   let result: KeyedRecordEntry | null = null;
   for (const node of nodes) {
-    const entry = renderedRecordEntryForNode(node, state);
+    const entry = renderedRecordEntryForNode(node, state, pureCalls);
     if (
       !entry ||
       (result && (result.repeated !== entry.repeated || !accessPathsEqual(result.path, entry.path)))
@@ -28,7 +29,11 @@ export function renderedRecordEntry(
   return result;
 }
 
-function renderedRecordEntryForNode(node: ts.Node, state: StateCandidate): KeyedRecordEntry | null {
+function renderedRecordEntryForNode(
+  node: ts.Node,
+  state: StateCandidate,
+  pureCalls: ReadonlySet<string>,
+): KeyedRecordEntry | null {
   if (!ts.isIdentifier(node)) {
     return null;
   }
@@ -48,7 +53,7 @@ function renderedRecordEntryForNode(node: ts.Node, state: StateCandidate): Keyed
     path.length === 0 ||
     !hasMatchingKeyedAncestor(access, render.callback, path) ||
     isMembershipMountGate(access, render.callback) ||
-    !isSafeJsxProjectionReference(node, render.callback, new Set(["cn"]))
+    !isSafeJsxProjectionReference(node, render.callback, pureCalls)
   ) {
     return null;
   }

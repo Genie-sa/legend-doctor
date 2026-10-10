@@ -76,8 +76,6 @@ export const WIDE_OWNER_LINE_SPAN = 150;
 
 export const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
 
-export const SAFE_PROJECTION_CALLS: ReadonlySet<string> = new Set(["cn"]);
-
 export const MEMO_HOOK_NAMES: ReadonlySet<string> = new Set(["useMemo"]);
 
 export const CALLBACK_HOOK_NAMES: ReadonlySet<string> = new Set(["useCallback"]);

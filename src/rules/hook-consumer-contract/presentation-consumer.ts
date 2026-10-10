@@ -12,13 +12,13 @@ import type { RuntimeFunctionLike } from "../../core/ast.js";
 import type { StateCandidate } from "../../analysis/model.js";
 import type { SubscriptionSites } from "../../analysis/verdicts/site-subscription-verdict.js";
 import { collectHookImports } from "../../core/imports.js";
-import { collectPureProjectionImports } from "../../analysis/owner-scan.js";
 import { collectReactCommitContext } from "../react-commit-sensitivity/react-commit-sensitivity.js";
 import { collectStateUsage } from "../../analysis/state-usage.js";
 import { consumerBindingName } from "./consumer-binding.js";
 import { findAncestor } from "../../core/ast.js";
 import { isRuntimeOwner } from "../hook-keyed-cursor-contract/binding-references.js";
 import { jsxElementCount } from "../state-proofs/jsx-subtrees.js";
+import { pureClassNameImports } from "../state-proofs/presentation-calls.js";
 import { runtimeFunctionName } from "../../analysis/ast-helpers.js";
 import ts from "typescript";
 
@@ -103,7 +103,7 @@ function presentationSites(
     childContracts: null,
     hostTags: imports,
     pureProjectionImports: new Set([
-      ...collectPureProjectionImports(sourceFile),
+      ...pureClassNameImports(sourceFile),
       ...scope.pureProjectionImports,
     ]),
     resolveComponent: scope.resolveComponent,

@@ -31,6 +31,7 @@ const MEMO_CALLBACK_HOOKS = new Set(["useCallback", "useMemo"]);
 export function isKeyedLeafCollectionState(
   state: StateCandidate,
   usage: StateUsage | undefined,
+  pureCalls: ReadonlySet<string>,
 ): boolean {
   if (!usage || usage.effectReads > 0) {
     return false;
@@ -46,6 +47,7 @@ export function isKeyedLeafCollectionState(
   return collectionReadsAreKeyedMembership({
     aliasName: arraySetAlias?.declaration.name.getText() ?? null,
     arraySetAlias,
+    pureCalls,
     state,
   });
 }
@@ -53,6 +55,7 @@ export function isKeyedLeafCollectionState(
 interface CollectionReadContext {
   aliasName: string | null;
   arraySetAlias: ArraySetAlias | null;
+  pureCalls: ReadonlySet<string>;
   state: StateCandidate;
 }
 
@@ -99,10 +102,10 @@ function classifyKeyedCollectionRead(
       ? node.parent
       : null;
   if (arraySetAlias && node.text === state.valueName) {
-    return classifyAliasedArrayRead(node, property, state.owner);
+    return classifyAliasedArrayRead(node, property, context);
   }
   if (property && KEYED_COLLECTION_PROPERTIES.has(property.name.text)) {
-    return classifyCollectionPropertyRead(property, state);
+    return classifyCollectionPropertyRead(property, context);
   }
   return classifyPlainCollectionRead(node, state.owner);
 }
@@ -110,10 +113,12 @@ function classifyKeyedCollectionRead(
 function classifyAliasedArrayRead(
   node: ts.Identifier,
   property: ts.PropertyAccessExpression | null,
-  owner: RuntimeFunctionLike,
+  { pureCalls, state: { owner } }: CollectionReadContext,
 ): CollectionReadOutcome {
   if (property?.name.text === "length") {
-    return collectionSummaryControlsRepeatedRendering(property, owner) ? "unsafe" : "ignored";
+    return collectionSummaryControlsRepeatedRendering(property, owner, pureCalls)
+      ? "unsafe"
+      : "ignored";
   }
   return isDeferredCollectionRead(node, owner) ||
     isHookDependencyReference(node, MEMO_CALLBACK_HOOKS) ||
@@ -124,10 +129,16 @@ function classifyAliasedArrayRead(
 
 function classifyCollectionPropertyRead(
   property: ts.PropertyAccessExpression,
-  state: StateCandidate,
+  context: CollectionReadContext,
 ): CollectionReadOutcome {
   if (property.name.text === "size") {
-    return collectionSummaryControlsRepeatedRendering(property, state.owner) ? "unsafe" : "ignored";
+    return collectionSummaryControlsRepeatedRendering(
+      property,
+      context.state.owner,
+      context.pureCalls,
+    )
+      ? "unsafe"
+      : "ignored";
   }
   if (["entries", "keys", "values"].includes(property.name.text)) {
     return "ignored";
@@ -139,16 +150,16 @@ function classifyCollectionPropertyRead(
   ) {
     return "unsafe";
   }
-  return classifyMembershipCall(property.parent, state);
+  return classifyMembershipCall(property.parent, context);
 }
 
 function classifyMembershipCall(
   membershipCall: ts.CallExpression,
-  state: StateCandidate,
+  { pureCalls, state }: CollectionReadContext,
 ): CollectionReadOutcome {
   const summaryCall = collectionMembershipSummaryCall(membershipCall, state.owner);
   if (summaryCall) {
-    return collectionSummaryControlsRepeatedRendering(summaryCall, state.owner)
+    return collectionSummaryControlsRepeatedRendering(summaryCall, state.owner, pureCalls)
       ? "unsafe"
       : "ignored";
   }

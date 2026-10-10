@@ -9,7 +9,6 @@ import {
 } from "../core/ast.js";
 import { calledSubscriptionHook, subscriptionHookCallee } from "../core/use-value-import.js";
 import { collectHookImports, isReactHookCall } from "../core/imports.js";
-import { collectLocalComponents, collectPureProjectionImports } from "./owner-scan.js";
 import {
   collectModuleScopeBindings,
   collectObservableSubscriptionCounts,
@@ -33,11 +32,13 @@ import { collectClusterProofs } from "./proofs/cluster-proofs.js";
 import { collectCommandProofs } from "./proofs/command-proofs.js";
 import { collectEffectProofs } from "./proofs/effect-proofs.js";
 import { collectLeafConsumerProofs } from "./proofs/leaf-consumer-proofs.js";
+import { collectLocalComponents } from "./owner-scan.js";
 import { collectOwnerEventCallbacks } from "./proofs/event-callbacks.js";
 import { collectOwnershipProofs } from "./proofs/ownership-proofs.js";
 import { collectReactCommitContext } from "../rules/react-commit-sensitivity/react-commit-sensitivity.js";
 import { collectStateUsage } from "./state-usage.js";
 import { persistenceSinkEffects } from "../rules/effects/browser-storage-persistence.js";
+import { pureClassNameImports } from "../rules/state-proofs/presentation-calls.js";
 import ts from "typescript";
 
 export function analyzeSource(
@@ -187,7 +188,7 @@ function sourceAnalysisBase(
     materiality,
     nonProductionHarness: isNonProductionHarness(fileName),
     pureProjectionImports: new Set([
-      ...collectPureProjectionImports(sourceFile),
+      ...pureClassNameImports(sourceFile),
       ...(childContracts?.pureProjectionBindings() ?? EMPTY_BINDINGS),
     ]),
     reactCommit,

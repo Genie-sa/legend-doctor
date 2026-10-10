@@ -30,6 +30,7 @@ export function analyzeKeyedSelections(inputs: KeyedSelectionInputs): KeyedSelec
 export interface KeyedSelectionInputs {
   childContracts: ChildContractResolver | null;
   imports: HookImports;
+  pureProjectionImports: ReadonlySet<string>;
   safeCommandStates: ReadonlySet<StateCandidate>;
   states: readonly StateCandidate[];
   statesWithCompanionWrites: ReadonlySet<StateCandidate>;
@@ -37,7 +38,14 @@ export interface KeyedSelectionInputs {
 }
 
 function keyedCollectionStates(inputs: KeyedSelectionInputs): Set<StateCandidate> {
-  const { imports, safeCommandStates, states, statesWithCompanionWrites, usageByState } = inputs;
+  const {
+    imports,
+    pureProjectionImports,
+    safeCommandStates,
+    states,
+    statesWithCompanionWrites,
+    usageByState,
+  } = inputs;
   return new Set(
     states.filter(
       (state) =>
@@ -45,6 +53,7 @@ function keyedCollectionStates(inputs: KeyedSelectionInputs): Set<StateCandidate
         isKeyedCollectionSelection({
           imports,
           ownerSetters: ownerSetterNames(states, state.owner),
+          pureCalls: pureProjectionImports,
           state,
           statesWithCompanionWrites,
           usage: usageByState.get(state),
@@ -54,28 +63,42 @@ function keyedCollectionStates(inputs: KeyedSelectionInputs): Set<StateCandidate
 }
 
 function keyedRecordStates(inputs: KeyedSelectionInputs): Set<StateCandidate> {
-  const { childContracts, states, statesWithCompanionWrites, usageByState } = inputs;
+  const { childContracts, pureProjectionImports, states, statesWithCompanionWrites, usageByState } =
+    inputs;
   return new Set(
     states.filter(
       (state) =>
         !statesWithCompanionWrites.has(state) &&
-        isKeyedLeafRecordState(state, usageByState.get(state), childContracts),
+        isKeyedLeafRecordState(state, usageByState.get(state), {
+          childContracts,
+          pureCalls: pureProjectionImports,
+        }),
     ),
   );
 }
 
 function keyedLeafSelections(
   inputs: KeyedSelectionInputs,
-  isKeyedLeaf: (state: StateCandidate, usage: StateUsage | undefined) => boolean,
+  isKeyedLeaf: (
+    state: StateCandidate,
+    usage: StateUsage | undefined,
+    pureCalls: ReadonlySet<string>,
+  ) => boolean,
 ): Set<StateCandidate> {
-  const { safeCommandStates, states, statesWithCompanionWrites, usageByState } = inputs;
+  const {
+    pureProjectionImports,
+    safeCommandStates,
+    states,
+    statesWithCompanionWrites,
+    usageByState,
+  } = inputs;
   return new Set(
     states.filter((state) => {
       const usage = usageByState.get(state);
       return (
         safeCommandStates.has(state) &&
         writesIndependentlyOfCompanions(state, usage, statesWithCompanionWrites) &&
-        isKeyedLeaf(state, usage)
+        isKeyedLeaf(state, usage, pureProjectionImports)
       );
     }),
   );
@@ -84,16 +107,17 @@ function keyedLeafSelections(
 interface KeyedCollectionSelectionCheck {
   imports: HookImports;
   ownerSetters: ReadonlySet<string>;
+  pureCalls: ReadonlySet<string>;
   state: StateCandidate;
   statesWithCompanionWrites: ReadonlySet<StateCandidate>;
   usage: StateUsage | undefined;
 }
 
 function isKeyedCollectionSelection(check: KeyedCollectionSelectionCheck): boolean {
-  const { imports, ownerSetters, state, statesWithCompanionWrites, usage } = check;
+  const { imports, ownerSetters, pureCalls, state, statesWithCompanionWrites, usage } = check;
   return (
     (hasIndependentCollectionEventWrite(state, usage, ownerSetters) &&
-      isKeyedLeafCollectionState(state, usage)) ||
+      isKeyedLeafCollectionState(state, usage, pureCalls)) ||
     (!statesWithCompanionWrites.has(state) &&
       isImperativeRenderedCollectionState(state, usage, imports))
   );

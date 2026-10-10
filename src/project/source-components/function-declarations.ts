@@ -6,7 +6,7 @@ import {
 } from "./legend-value-bridges.js";
 import { hasDefault, hasExport, isSemanticComponentName } from "./declaration-shapes.js";
 import { isObservableTypeReference } from "./observable-declarations.js";
-import { isPureProjectionDeclaration } from "./pure-projections.js";
+import { isPureProjectionDeclaration } from "../../rules/state-proofs/presentation-calls.js";
 import type ts from "typescript";
 
 export function collectFunctionDeclaration(
@@ -20,7 +20,7 @@ export function collectFunctionDeclaration(
     return;
   }
   collectHookFunctionDeclaration(statement, draft, name);
-  const traits = functionDeclarationTraits(statement, draft, signals);
+  const traits = functionDeclarationTraits(statement, signals);
   recordFunctionTraitDeclarations(draft, traits);
   applyFunctionTraitExports(statement, draft, traits);
   collectObservableFactoryFunction(statement, draft, signals);
@@ -56,7 +56,6 @@ function collectHookFunctionDeclaration(
 
 function functionDeclarationTraits(
   statement: ts.FunctionDeclaration,
-  draft: ModuleRecordDraft,
   signals: ModuleSignals,
 ): FunctionTraits {
   return {
@@ -66,7 +65,7 @@ function functionDeclarationTraits(
     }),
     hookObservable: directLegendValueHookObservable(statement, signals.useValueHooks),
     name: statement.name?.text ?? "",
-    pureProjection: isPureProjectionDeclaration(statement, draft.imports),
+    pureProjection: isPureProjectionDeclaration(statement),
     readContext: directReactContextReader(
       statement,
       signals.reactContextReaders,

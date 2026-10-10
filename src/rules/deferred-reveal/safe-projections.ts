@@ -1,10 +1,15 @@
-import { callRootIdentifier, isAssignmentOperator } from "../../core/analysis-ast.js";
+import {
+  callsStyleSheetTheme,
+  isPureClassNameCallee,
+  styleSheetMember,
+} from "../state-proofs/presentation-calls.js";
 import {
   isBuiltinReadMethodName,
   receiverReadsMethod,
 } from "../state-proofs/builtin-read-calls.js";
 import { nodeWithin, visit } from "../../core/ast.js";
 import { expressionContainsJsx } from "./jsx-subtrees.js";
+import { isAssignmentOperator } from "../../core/analysis-ast.js";
 import ts from "typescript";
 
 const EMPTY_BINDINGS: ReadonlySet<string> = new Set();
@@ -16,29 +21,52 @@ export interface SafeProjectionQuery {
   readonly reference: ts.Node;
 }
 
+interface CallProofs {
+  readonly identifiers: ReadonlySet<string>;
+  readonly properties: ReadonlySet<string>;
+  /**
+   * Inside a style member, calls into the style factory's theme are reads, and other members are
+   * not followed, so members that call each other cannot recurse forever.
+   */
+  readonly insideStyleMember: boolean;
+}
+
+const STYLE_MEMBER_PROOFS: CallProofs = {
+  identifiers: EMPTY_BINDINGS,
+  insideStyleMember: true,
+  properties: EMPTY_BINDINGS,
+};
+
 export function isSafeProjectionExpression({
   allowedIdentifierCalls = EMPTY_BINDINGS,
   allowedPropertyCalls = EMPTY_BINDINGS,
   expression,
   reference,
 }: SafeProjectionQuery): boolean {
-  if (!nodeWithin(reference, expression)) {
-    return false;
-  }
+  return (
+    nodeWithin(reference, expression) &&
+    evaluatesWithoutSideEffects(expression, {
+      identifiers: allowedIdentifierCalls,
+      insideStyleMember: false,
+      properties: allowedPropertyCalls,
+    })
+  );
+}
+
+function evaluatesWithoutSideEffects(node: ts.Node, proofs: CallProofs): boolean {
   let safe = true;
-  visit(expression, (node) => {
+  visit(node, (current) => {
     if (
-      ts.isAwaitExpression(node) ||
-      ts.isYieldExpression(node) ||
-      ts.isNewExpression(node) ||
-      ts.isDeleteExpression(node) ||
-      ts.isPostfixUnaryExpression(node) ||
-      (ts.isPrefixUnaryExpression(node) &&
-        (node.operator === ts.SyntaxKind.PlusPlusToken ||
-          node.operator === ts.SyntaxKind.MinusMinusToken)) ||
-      (ts.isBinaryExpression(node) && isAssignmentOperator(node.operatorToken.kind)) ||
-      (ts.isCallExpression(node) &&
-        !isSafeProjectionCall(node, allowedIdentifierCalls, allowedPropertyCalls))
+      ts.isAwaitExpression(current) ||
+      ts.isYieldExpression(current) ||
+      ts.isNewExpression(current) ||
+      ts.isDeleteExpression(current) ||
+      ts.isPostfixUnaryExpression(current) ||
+      (ts.isPrefixUnaryExpression(current) &&
+        (current.operator === ts.SyntaxKind.PlusPlusToken ||
+          current.operator === ts.SyntaxKind.MinusMinusToken)) ||
+      (ts.isBinaryExpression(current) && isAssignmentOperator(current.operatorToken.kind)) ||
+      (ts.isCallExpression(current) && !isSafeProjectionCall(current, proofs))
     ) {
       safe = false;
     }
@@ -46,26 +74,27 @@ export function isSafeProjectionExpression({
   return safe;
 }
 
-function isSafeProjectionCall(
-  call: ts.CallExpression,
-  allowedIdentifierCalls: ReadonlySet<string>,
-  allowedPropertyCalls: ReadonlySet<string>,
-): boolean {
+function isSafeProjectionCall(call: ts.CallExpression, proofs: CallProofs): boolean {
   const callee = call.expression;
+  if (proofs.insideStyleMember && callsStyleSheetTheme(callee)) {
+    return true;
+  }
   if (ts.isIdentifier(callee)) {
-    return allowedIdentifierCalls.has(callee.text);
+    return proofs.identifiers.has(callee.text) || isPureClassNameCallee(callee);
   }
-  if (!ts.isPropertyAccessExpression(callee)) {
-    return false;
-  }
-  const root = callRootIdentifier(callee);
   return (
-    isReadOnlyMethodCall(call, callee) ||
-    (ts.isIdentifier(callee.expression) &&
-      allowedPropertyCalls.has(`${callee.expression.text}.${callee.name.text}`)) ||
-    root === "styles" ||
-    root === "cn"
+    ts.isPropertyAccessExpression(callee) &&
+    (isReadOnlyMethodCall(call, callee) ||
+      (ts.isIdentifier(callee.expression) &&
+        proofs.properties.has(`${callee.expression.text}.${callee.name.text}`)) ||
+      (!proofs.insideStyleMember && isPureStyleMemberCall(callee)))
   );
+}
+
+/** A style sheet member function that computes its style without writes or foreign calls. */
+function isPureStyleMemberCall(callee: ts.PropertyAccessExpression): boolean {
+  const member = styleSheetMember(callee);
+  return member !== null && evaluatesWithoutSideEffects(member, STYLE_MEMBER_PROOFS);
 }
 
 /**
