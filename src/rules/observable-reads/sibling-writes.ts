@@ -1,3 +1,4 @@
+import { ANY_MEMBER } from "../../project/source-components/observable-in-place-writes.js";
 import type { ObservableReadScan } from "./model.js";
 import { pathsOverlap } from "./field-writes.js";
 import { staticPropertyPath } from "../../core/analysis-ast.js";
@@ -37,6 +38,36 @@ export function independentSiblingWrite(
     }
   }
   return null;
+}
+
+/**
+ * Narrowing `useValue(parent$)` to `useValue(parent$[key])` removes a render whenever a write
+ * changes one entry under the parent and that entry is not the owner's key. A stretch qualifies
+ * when it writes an entry and never the parent itself, an ancestor, or a runtime-keyed member that
+ * could be either, and calls no code out of view.
+ */
+export function entryWrite(parent: ts.Expression, scan: ObservableReadScan): SiblingWrite | null {
+  const [root, ...members] = staticPropertyPath(parent) ?? [];
+  if (root === undefined) {
+    return null;
+  }
+  const provable = (scan.observableFields.writes.get(root) ?? []).filter((group) => !group.opaque);
+  for (const group of provable) {
+    const entry = group.paths.find((path) => isBelow(path, members));
+    const replacesParent = group.paths.some(
+      (path) => !isBelow(path, members) && pathsOverlap(path, members),
+    );
+    if (entry && !replacesParent) {
+      return { path: displayedPath(root, entry), site: group.site };
+    }
+  }
+  return null;
+}
+
+function displayedPath(root: string, members: readonly string[]): string {
+  return [root, ...members.map((member) => (member === ANY_MEMBER ? "[…]" : `.${member}`))].join(
+    "",
+  );
 }
 
 function isBelow(path: readonly string[], members: readonly string[]): boolean {

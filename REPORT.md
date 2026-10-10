@@ -220,15 +220,15 @@ named-import `replace-legacy-use-value` finding in a file carries the whole file
 the shared binding for one call would strand the others. Likewise, when a file's `use-computed-for-parent-reads`
 findings cover every use of its `Memo` import, each carries every rename and the import swap.
 
-| Edited action                   | Edit                                                                                                                               |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `pass-observable-to-use-value`  | `useValue(() => x$.get())` or `useValue(x$.get())` becomes `useValue(x$)`                                                          |
-| `use-peek-for-snapshot`         | `x$.get()` becomes `x$.peek()`                                                                                                     |
-| `use-value-for-render-read`     | A direct render initializer `x$.get()` becomes `useValue(x$)`                                                                      |
-| `narrow-use-value-subscription` | `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)`                                                                 |
-| `replace-legacy-use-value`      | Callees become `useValue`, a direct selector collapses, legacy specifiers leave the import                                         |
-| `select-primitive-projection`   | `const v = useValue(x$)`, read only as `v === id`, becomes `useValue(() => x$.get() === id)`; the comparisons read the new binding |
-| `use-computed-for-parent-reads` | `<Memo>` becomes `<Computed>`; `Computed` replaces the `Memo` specifier when no other `Memo` remains, and otherwise joins it       |
+| Edited action                   | Edit                                                                                                                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pass-observable-to-use-value`  | `useValue(() => x$.get())` or `useValue(x$.get())` becomes `useValue(x$)`                                                                                                         |
+| `use-peek-for-snapshot`         | `x$.get()` becomes `x$.peek()`                                                                                                                                                    |
+| `use-value-for-render-read`     | A direct render initializer `x$.get()` becomes `useValue(x$)`                                                                                                                     |
+| `narrow-use-value-subscription` | `const { a: b } = useValue(x$)` becomes `const b = useValue(x$.a)`                                                                                                                |
+| `replace-legacy-use-value`      | Callees become `useValue`, a direct selector collapses, legacy specifiers leave the import                                                                                        |
+| `select-primitive-projection`   | `const v = useValue(x$)`, read only as `v === id` or for its truthiness, becomes `useValue(() => x$.get() === id)` or `useValue(() => !!x$.get())`; the reads use the new binding |
+| `use-computed-for-parent-reads` | `<Memo>` becomes `<Computed>`; `Computed` replaces the `Memo` specifier when no other `Memo` remains, and otherwise joins it                                                      |
 
 `use$`, `useSelector`, their aliases, and namespace calls from `@legendapp/state/react` are subscription hooks
 like `useValue`. Messages and edits keep the callee the source calls, so `use$(x$.get())` becomes `use$(x$)` and

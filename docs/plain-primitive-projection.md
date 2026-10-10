@@ -66,6 +66,34 @@ Every condition must hold; a missing proof yields no finding.
    allowed only under a test of the comparison's equal side (`if (selected)`, `selected && …`, or the true branch
    of `selected ? … : …`). Object domains allow none, since an in-place change keeps identity.
 
+## Truthiness
+
+The same action selects `!!x$.get()` when every read of the raw value keeps only its truthiness:
+
+```tsx
+const dragged = useValue(dragged$);
+return <div className={dragged ? "on" : "off"}>{dragged && <Badge />}</div>;
+```
+
+becomes
+
+```tsx
+const hasDragged = useValue(() => !!dragged$.get());
+return <div className={hasDragged ? "on" : "off"}>{hasDragged && <Badge />}</div>;
+```
+
+A read keeps only truthiness under `!`, `Boolean()`, an `if`, loop, or ternary condition, or as an operand of `&&`
+or `||` whose result is itself tested. `!!raw` and `Boolean(raw)` are replaced whole; a sole `const shown = !!raw`
+becomes the selector's binding, and otherwise the binding is `hasRaw`. A `{raw && …}` JSX child renders `raw` when it
+is falsy, so it is accepted only when the domain holds no `0`, `NaN`, `""`, or `0n`, where JSX renders the falsy value
+as text while `false` renders nothing. Any other read, including an effect dependency, blocks the finding.
+
+The domain must hold objects or more than one truthy value, so a change can leave the boolean unchanged; a boolean or
+`"a" | null` removes no render. Conditions 1 and 5 above apply unchanged, and no ref, `peek()`, or untracked `get()`
+render read is allowed, since dropped renders fall on both sides of the test.
+`tests/runtime/truthiness-projection.test.ts` shows one object replacing another renders the raw owner and not the
+projected one, with identical markup at every step.
+
 ## Runtime evidence
 
 `tests/runtime/plain-primitive-projection.test.ts` mounts 500 keyed rows under React 19.2.8 and Legend State
@@ -82,7 +110,8 @@ StrictMode). Prop updates stay live through the inline selector and keep mount i
 
 ## Corpus
 
-No pinned application has an enforced projection. `evals/research/plain-primitive-projection.json` records the
+The one enforced projection is a truthiness selector at junto's `App.tsx:306`, where every canvas switch sets one
+non-empty `canvasName` over another and App reads it only as `!canvasName`. `evals/research/plain-primitive-projection.json` records the
 audited research sites at the Legend Music pin. Its `DroppableZone` compares `activeDropZone` and `draggedItem` exactly
 as the reorder-controls package did before the upstream fix. Legend Music's provider, however, subscribes to
 `activeDropZone$` and rebuilds its context value on every render, so every zone renders anyway and the rule abstains.

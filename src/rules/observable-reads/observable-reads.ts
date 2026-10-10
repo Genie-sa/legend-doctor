@@ -14,6 +14,7 @@ import type { ObservableFieldFacts } from "./field-writes.js";
 import type { ObservableReadScan } from "./model.js";
 import type { SubscriptionInventory } from "../../core/subscriptions.js";
 import { isCanonicalUseValueCall } from "./observable-paths.js";
+import { keyedNarrowFinding } from "./keyed-narrowing.js";
 import { moveUseValueDownFinding } from "./move-down.js";
 import { moveUseValueIntoChildFinding } from "./move-into-child.js";
 import { narrowUseValueFinding } from "./narrow-use-value.js";
@@ -76,6 +77,7 @@ function collectReadFindings(
       moveUseValueIntoChildFinding(node, scan) ??
       moveUseValueDownFinding(node, scan) ??
       narrowUseValueFinding(node, scan) ??
+      keyedNarrowFinding(node, scan) ??
       unrenderedUseValueFinding(node, scan);
     if (finding) {
       findings.push(finding);
