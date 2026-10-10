@@ -26,6 +26,7 @@ import { jsxElementCount } from "../../rules/state-proofs/jsx-subtrees.js";
 import { setterOwnedByValueTransitionCallSite } from "../controlled-leaf-cuts.js";
 import { stateMayHoldCallable } from "../../rules/state-proofs/state-proofs.js";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
+import { writesRunInCalleeTransition } from "./callee-transitions.js";
 
 type AbstentionReason = Extract<ClassifiedState, { action: "review-state" }>["abstentionReason"];
 
@@ -215,11 +216,10 @@ export function broadTransportVerdict(context: StateClassificationContext): Clas
     (usage.setterCalls >= 1 || forwardedSetter !== null) &&
     (usage.setterReferences === usage.setterCalls || forwardedSetter !== null) &&
     !usage.repeatedTransport &&
-    stateWritesAreUntracked(usage) &&
     !stateMayHoldCallable(state) &&
     !callSiteIsKeyed(ownerCallSite) &&
     wrappedElementIsPassedThrough(ownerCallSite, passThroughScope(context)) &&
-    setterWritesFitLeafTransport(context)
+    leafTransportWritesKeepTiming(context)
   ) {
     const leaf = leafTransport(context, childContracts);
     if (leaf) {
@@ -231,6 +231,18 @@ export function broadTransportVerdict(context: StateClassificationContext): Clas
     }
   }
   return null;
+}
+
+/**
+ * A leaf subscriber moves no write: each one stays untracked, fits the wrapper, and runs outside any
+ * transition a resolved callee starts around it.
+ */
+function leafTransportWritesKeepTiming(context: StateClassificationContext): boolean {
+  return (
+    stateWritesAreUntracked(context.usage) &&
+    setterWritesFitLeafTransport(context) &&
+    !writesRunInCalleeTransition(context)
+  );
 }
 
 interface LeafTransport {

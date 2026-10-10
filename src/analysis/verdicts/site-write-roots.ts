@@ -110,7 +110,8 @@ function isProvenEventAttribute(attribute: ts.JsxAttribute, scope: WriteRootScop
     : isEventName;
 }
 
-function callbackBindingName(callback: RuntimeFunctionLike): string | null {
+/** The `const` a callback is bound to, directly or through wrapping calls such as `useCallback`. */
+export function callbackBindingName(callback: RuntimeFunctionLike): string | null {
   if (ts.isFunctionDeclaration(callback) && callback.name) {
     return callback.name.text;
   }
