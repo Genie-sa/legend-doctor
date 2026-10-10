@@ -98,6 +98,22 @@ test("keeps the review when another return renders the same type in the call sit
   assert.match(empty.message, LEAF_WRAP);
 });
 
+test("reads the elements an alternate arm's const binding renders", async () => {
+  const sites = `{ready ? <Sheet open={open} /> : fallback}<div>{id && <Sheet open={open} />}</div>`;
+  const otherType = await openVerdict({
+    "screen.tsx": screen({ before: "const fallback = <p>Loading</p>;", sites }),
+  });
+  assert.match(otherType.message, LEAF_WRAP);
+  const sameType = await openVerdict({
+    "screen.tsx": screen({ before: "const fallback = <Sheet open={false} />;", sites }),
+  });
+  assert.equal(sameType.abstentionReason, "mount-identity-unproven");
+  const reassignable = await openVerdict({
+    "screen.tsx": screen({ before: "let fallback = <p>Loading</p>;", sites }),
+  });
+  assert.equal(reassignable.abstentionReason, "mount-identity-unproven");
+});
+
 test("does not wrap a conditional call site that receives an object state", async () => {
   const finding = await openVerdict({
     "screen.tsx": screen({
@@ -141,4 +157,94 @@ test("subscribes a conditional leaf consumer next to the owner's own render read
     `<p>{open ? "Open" : "Closed"}</p>{ready ? <Badge value={open} /> : <Badge value={false} />}`,
   );
   assert.doesNotMatch(sameType.message, /<Badge> call site/u);
+});
+
+interface ReturnedSiteFixture {
+  readonly files: Readonly<Record<string, string>>;
+  readonly message: RegExp;
+  readonly other: string;
+  readonly same: string;
+}
+
+const PICKER = `
+  export function Picker({ value, onChange }: { value: boolean; onChange: (next: boolean) => void }) {
+    return <input type="checkbox" checked={value} onChange={(event) => onChange(event.target.checked)} />;
+  }
+`;
+
+const TOGGLE = `
+  export function Toggle(props: { expanded: boolean; onPress: () => void }) {
+    return <button aria-expanded={props.expanded} onClick={props.onPress} />;
+  }
+`;
+
+const OPENER = `<button onClick={() => setOpen(true)}>Open</button>`;
+
+function returnedScreen(imports: string, site: string, opener = OPENER): string {
+  return `
+    import { useState } from "react";
+    ${imports}
+    export function Screen({ ready, shown }) {
+      const [open, setOpen] = useState(false);
+      if (!shown) {
+        return null;
+      }
+      return (
+        <main>
+          ${CHROME}
+          ${opener}
+          ${site}
+        </main>
+      );
+    }
+  `;
+}
+
+test("does not wrap a returned call site whose other arm renders the same type in its slot", async () => {
+  const sheet = `import { Sheet } from "@acme/sheet";`;
+  const picker = `import { Picker } from "./picker";`;
+  const toggle = `import { Toggle } from "./toggle";`;
+  const toggleSite = `<div><Toggle expanded={open} onPress={() => setOpen(false)} /></div>`;
+  const fixtures = {
+    compactTransport: {
+      files: {},
+      message: /extract one stable call-site leaf wrapper around `Sheet`/u,
+      other: returnedScreen(sheet, `{ready ? <Sheet open={open} /> : <p />}`),
+      same: returnedScreen(
+        sheet,
+        `{ready ? <div><Sheet open={open} /></div> : <div><Sheet open={false} /></div>}`,
+      ),
+    },
+    descendantControlled: {
+      files: { "picker.tsx": PICKER },
+      message: /wrap the branch-local `Picker` call site in a leaf subscriber/u,
+      other: returnedScreen(
+        picker,
+        `{ready ? <Picker value={open} onChange={setOpen} /> : <p />}`,
+        "",
+      ),
+      same: returnedScreen(
+        picker,
+        `{ready ? <Picker value={open} onChange={setOpen} /> : <Picker value={false} onChange={() => {}} />}`,
+        "",
+      ),
+    },
+    literalBooleanLeaf: {
+      files: { "toggle.tsx": TOGGLE },
+      message: /call-site leaf wrapper around `Toggle`/u,
+      other: returnedScreen(toggle, `{ready ? ${toggleSite} : <p />}`),
+      same: returnedScreen(
+        toggle,
+        `{ready ? ${toggleSite} : <div><Toggle expanded={false} onPress={() => {}} /></div>}`,
+      ),
+    },
+  } satisfies Record<string, ReturnedSiteFixture>;
+  for (const [name, { files, message, other, same }] of Object.entries(fixtures)) {
+    const differing = await openVerdict({ ...files, "screen.tsx": other });
+    assert.equal(differing.action, "use-observable", name);
+    assert.match(differing.message, message, name);
+    const reused = await openVerdict({ ...files, "screen.tsx": same });
+    assert.equal(reused.action, "review-state", name);
+    assert.equal(reused.abstentionReason, "mount-identity-unproven", name);
+  }
 });

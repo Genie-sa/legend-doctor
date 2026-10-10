@@ -12,6 +12,10 @@ import {
 } from "../../rules/state-proofs/jsx-subtrees.js";
 import { passThroughScope, valueCallSitesPassThrough } from "./pass-through-leaf.js";
 import {
+  returnedCallSiteKeepsMountIdentity,
+  transportCallSitesKeepMountIdentity,
+} from "./transport-mount-identity.js";
+import {
   setterOwnedByValueCallSite,
   setterOwnedByValueTransitionCallSite,
 } from "../controlled-leaf-cuts.js";
@@ -21,7 +25,6 @@ import type { StateClassificationContext } from "./classification-context.js";
 import { isLiteralBooleanLeafState } from "../../rules/literal-boolean-leaf/literal-boolean-leaf.js";
 import { isLiteralBooleanSetter } from "../../rules/literal-boolean-leaf/boolean-setters.js";
 import { nearestNestedFunction } from "../../core/ast.js";
-import { transportCallSitesKeepMountIdentity } from "./transport-mount-identity.js";
 import ts from "typescript";
 import { wrappedElementIsPassedThrough } from "../../rules/child-contract/element-identity.js";
 
@@ -199,6 +202,7 @@ export function compactTransportCutVerdict(
     stateHasSingleTransportTarget(usage) &&
     branchCallSite !== null &&
     wrappedElementIsPassedThrough(branchCallSite.opening, passThroughScope(context)) &&
+    returnedCallSiteKeepsMountIdentity(branchCallSite, state, usage) &&
     companionWritesAllowTransportCut(context) &&
     hasSafeCommands &&
     stateValuesStayPrimitive(context) &&
@@ -242,6 +246,7 @@ export function descendantControlledCutVerdict(
       transportTargetIsKnownComponent(usage, { localComponents, sourceComponents })) &&
     branchCallSite !== null &&
     (directCallSite === null || usage.unstableTransport) &&
+    returnedCallSiteKeepsMountIdentity(branchCallSite, state, usage) &&
     !hasCompanionWrites &&
     hasSafeCommands &&
     stateValuesStayPrimitive(context) &&
@@ -284,6 +289,8 @@ export function visibilityTransportVerdict(
       materiality,
       sourceComponents,
     }) &&
+    branchCallSite !== null &&
+    returnedCallSiteKeepsMountIdentity(branchCallSite, state, usage) &&
     valueCallSitesPassThrough(context, { editableChildren: false })
   ) {
     const target = [...usage.valueTargets][0] ?? "the receiving child";

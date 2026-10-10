@@ -1,4 +1,4 @@
-import type { StateCandidate, StateUsage } from "../model.js";
+import type { DirectReturnCallSite, StateCandidate, StateUsage } from "../model.js";
 import { identifiersNamed, nearestNestedFunction } from "../../core/ast.js";
 import type { RuntimeFunctionLike } from "../../core/ast.js";
 import { hasUnstableJsxLifetime } from "../ast-helpers.js";
@@ -27,6 +27,23 @@ export function transportCallSitesKeepMountIdentity(
           (!hasUnstableJsxLifetime(node, state.owner) ||
             wrapKeepsMountIdentity(node.parent.parent, state)),
       )
+  );
+}
+
+/**
+ * Whether a leaf wrapper around the returned call site keeps every fiber, including when the
+ * owner's other returns or the other arm of a ternary render a same-typed element in its slot.
+ */
+export function returnedCallSiteKeepsMountIdentity(
+  callSite: DirectReturnCallSite,
+  state: StateCandidate,
+  usage: StateUsage,
+): boolean {
+  const { opening } = callSite;
+  const element = ts.isJsxOpeningElement(opening) ? opening.parent : opening;
+  return (
+    transportCallSitesKeepMountIdentity(state, usage) &&
+    typeChangeKeepsMountIdentity(element, state.owner)
   );
 }
 

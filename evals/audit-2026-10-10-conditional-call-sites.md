@@ -49,3 +49,11 @@ change. Giving each arm a wrapper type of its own would remount it, and only one
 it, so both labels are now non-enforced. Every other pinned app is unchanged.
 
 Corpus abstentions for `mount-identity-unproven` fall from 138 to 53.
+
+## Returned call sites
+
+The compact transport, descendant-controlled, and literal-boolean leaf verdicts wrap the call site a return renders.
+They now require the same proof, so another ternary arm or return that renders the same type in that slot keeps the
+review. An alternate that reads a `const` contributes the elements its initializer renders: social-app's
+`StepInterests` wraps a `Tooltip.Outer` arm whose other arm is the `continueButton` const, a `Button`, so its
+`tooltipVisible` conversion stands. No pinned app changes.
