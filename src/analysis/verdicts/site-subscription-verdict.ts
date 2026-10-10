@@ -26,6 +26,7 @@ import { MAX_LEAF_SUBTREE_RATIO } from "../constants.js";
 import type { MaterialityPolicy } from "../constants.js";
 import type { StateClassificationContext } from "./classification-context.js";
 import { extractedJsxElementCount } from "../subtree/extracted-render-work.js";
+import { isBuiltinReadCall } from "../../rules/state-proofs/builtin-read-calls.js";
 import { isHostTag } from "../../core/imports.js";
 import { isImportedTranslationCall } from "../../rules/effects/command-support-calls.js";
 import { isSafeProjectionExpression } from "../../rules/deferred-reveal/safe-projections.js";
@@ -279,9 +280,10 @@ function attributeSite(attribute: ts.JsxAttribute, scope: SiteScope): Subscripti
 
 /**
  * A wrapped site re-evaluates from the observable instead of the owner render, so it may not run
- * calls, constructors, awaits, or writes of its own. Imported pure projections and the translation
- * function of an imported `useTranslation()` are reads, not effects. Handlers nested inside rendered
- * JSX are skipped: they run on events, not during evaluation.
+ * calls, constructors, awaits, or writes of its own. Imported pure projections, the translation
+ * function of an imported `useTranslation()`, and read-only built-ins with pure callbacks are reads,
+ * not effects. Handlers nested inside rendered JSX are skipped: they run on events, not during
+ * evaluation.
  */
 function rendersWithoutSideEffects(site: ts.Node, scope: SiteScope): boolean {
   let pure = true;
@@ -309,15 +311,21 @@ function rendersWithoutSideEffects(site: ts.Node, scope: SiteScope): boolean {
 }
 
 function isPureSiteCall(call: ts.CallExpression, scope: SiteScope): boolean {
-  const { owner } = scope.state;
-  if (isImportedTranslationCall(call, owner)) {
-    return true;
-  }
   const callee = call.expression;
   return (
-    ts.isIdentifier(callee) &&
+    isImportedTranslationCall(call, scope.state.owner) ||
+    (ts.isIdentifier(callee) && isPureProjectionImport(callee, scope)) ||
+    isBuiltinReadCall(call, {
+      isPureCallback: (callback) => rendersWithoutSideEffects(callback, scope),
+      isPureCallee: (identifier) => isPureProjectionImport(identifier, scope),
+    })
+  );
+}
+
+function isPureProjectionImport(callee: ts.Identifier, scope: SiteScope): boolean {
+  return (
     scope.pureProjectionImports.has(callee.text) &&
-    bindingDeclarationCount(owner, callee.text) === 0
+    bindingDeclarationCount(scope.state.owner, callee.text) === 0
   );
 }
 

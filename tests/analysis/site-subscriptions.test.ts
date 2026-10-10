@@ -169,3 +169,84 @@ test("follows a derived constant built from read-only prototype methods", () => 
   const [mutating] = states(source("names.push(query)"));
   assert.doesNotMatch(mutating?.message ?? "", /render sites/u);
 });
+
+test("wraps sites that read through read-only built-in calls on proven receivers", () => {
+  const [finding] = states(`
+    import { useState } from "react";
+    interface Item { readonly done: boolean; readonly label: string }
+    export function Dashboard() {
+      const [items, setItems] = useState<readonly Item[]>([]);
+      return (
+        <section>
+          ${CHROME}
+          <p>{items.filter((item) => item.done).length} done</p>
+          <em>{Math.max(0, items.length - 3)} more</em>
+          <span title={String(items.length)} />
+          <ul>{items.map((item) => <li key={item.label}>{item.label}</li>)}</ul>
+          <button onClick={() => setItems([])}>Clear</button>
+        </section>
+      );
+    }
+  `);
+  assert.equal(finding?.action, "use-observable");
+  assert.match(finding?.message ?? "", /subscribe at its 4 render sites/u);
+});
+
+test("rejects mutating, impure, nondeterministic, and unproven-receiver calls inside wrapped sites", () => {
+  const source = (body: string, extra = ""): string => `
+    import { useState } from "react";
+    interface Item { readonly done: boolean; readonly label: string }
+    interface Store {
+      filter(predicate: (row: Item) => boolean): Item[];
+      includes(value: Item): boolean;
+    }
+    export function Dashboard({ store }: { store: Store }) {
+      const [items, setItems] = useState<Item[]>([]);
+      const [seen, setSeen] = useState(0);
+      ${extra}
+      return (
+        <section>
+          ${CHROME}
+          <p>{seen}</p>
+          <em>{items.length}</em>
+          ${body}
+          <button onClick={() => setItems([])}>Clear</button>
+        </section>
+      );
+    }
+  `;
+  const cases = {
+    sort: source("<p>{items.sort().length}</p>"),
+    reverse: source("<p>{items.reverse().length}</p>"),
+    splice: source("<p>{items.splice(0, 1).length}</p>"),
+    setterInCallback: source(
+      "<p>{items.map((item) => { setSeen(1); return item.label; }).join()}</p>",
+    ),
+    outerWriteInCallback: source(
+      "<p>{items.map((item) => { total += 1; return item.label; }).join()}</p>",
+      "let total = 0;",
+    ),
+    unprovenFilterReceiver: source(
+      "<p>{items.length > 0 && store.filter((row) => row.done).length}</p>",
+    ),
+    unprovenIncludesReceiver: source("<p>{String(store.includes(items[0]!))}</p>"),
+    unprovenCallback: source(
+      "<p>{items.filter(isDone).length}</p>",
+      "const isDone = (item: Item) => item.done;",
+    ),
+    nondeterministic: source("<p>{Math.random() > 0.5 ? items.length : 0}</p>"),
+    shadowedGlobal: source(
+      "<p>{String(items.length)}</p>",
+      "const String = (value: number) => value.toFixed();",
+    ),
+  } satisfies Record<string, string>;
+  const itemsFinding = (fixture: string): HookFinding | undefined =>
+    states(fixture).find((candidate) => candidate.name === "items");
+  assert.match(
+    itemsFinding(source("<p>{items.filter((item) => item.done).length}</p>"))?.message ?? "",
+    /render site/u,
+  );
+  for (const [name, fixture] of Object.entries(cases)) {
+    assert.doesNotMatch(itemsFinding(fixture)?.message ?? "", /render site/u, name);
+  }
+});

@@ -84,12 +84,6 @@ test("reads that no effect or hook argument captures keep their leaf question", 
         <button onClick={submit} /><button onClick={() => alert(filter)} />
         <p>{rows.filter((row) => row.includes(filter)).length}</p></main>;
     }`,
-    eventCallback: `export function Editor() {
-      const [layers, setLayers] = useState<string[]>([]);
-      const select = useCallback((id: string) => setLayers(layers.filter((layer) => layer !== id)), [layers]);
-      return <main>${CHROME}<Canvas onTap={select} />
-        <ul>{layers.map((layer) => <li key={layer}>{layer}</li>)}</ul></main>;
-    }`,
     unrelatedCallback: `export function Panel({ rows, onSave }: { rows: string[]; onSave: () => void }) {
       const [filter, setFilter] = useState("");
       const save = useCallback(() => onSave(), [onSave]);
@@ -109,6 +103,17 @@ test("reads that no effect or hook argument captures keep their leaf question", 
     assert.deepEqual(assumption?.facts, ["render-cut-unproven"], reads);
     assert.equal(assumption?.ifConfirmed, "use-observable", reads);
   }
+});
+
+test("an event callback that captures the value does not block a proven read-only site", () => {
+  const state = firstState(`export function Editor() {
+    const [layers, setLayers] = useState<string[]>([]);
+    const select = useCallback((id: string) => setLayers(layers.filter((layer) => layer !== id)), [layers]);
+    return <main>${CHROME}<Canvas onTap={select} />
+      <ul>{layers.map((layer) => <li key={layer}>{layer}</li>)}</ul></main>;
+  }`);
+  assert.equal(state.action, "use-observable");
+  assert.match(state.message, /Snapshot command reads with `\.peek\(\)`/u);
 });
 
 test("effect reads the effect-write question already asks about keep the chained leaf question", () => {
